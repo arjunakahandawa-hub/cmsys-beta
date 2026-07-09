@@ -1230,11 +1230,16 @@ function openNewAssignModal() {
     _asSelectedSailors = new Set();
     _asCurrentTrade = 'ALL';
 
+    // Reset form elements
+    document.getElementById('asType').value = 'PROJECT';
+    document.getElementById('asDescription').value = '';
+
     // Populate In-Charge dropdown (PO & LS ranks)
     const supervisors = store.sailors.filter(s => s.rank && (s.rank.includes('PO') || s.rank === 'LS'));
     const supOptions = '<option value="">Select...</option>' +
         supervisors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
     document.getElementById('asIncharge').innerHTML = supOptions;
+    document.getElementById('asIncharge').value = '';
 
     // Render sailor chips
     renderAsSailorChips();
@@ -1250,6 +1255,8 @@ function openNewAssignModal() {
     if (firstTradeBtn) {
         firstTradeBtn.className = 'as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white';
     }
+
+    updateAsPreview();
 
     document.getElementById('assignModal').classList.remove('hidden');
 }
@@ -1356,6 +1363,41 @@ function renderAsSailorChips(filter = '') {
         summary.classList.remove('hidden');
     } else {
         summary.classList.add('hidden');
+    }
+
+    if (typeof updateAsPreview === 'function') {
+        updateAsPreview();
+    }
+}
+
+function updateAsPreview() {
+    const type = document.getElementById('asType').value;
+    const desc = document.getElementById('asDescription').value;
+    const inchargeSelect = document.getElementById('asIncharge');
+    const inchargeText = inchargeSelect.options[inchargeSelect.selectedIndex]?.text || 'None';
+
+    const prevTypeElem = document.getElementById('asPrevType');
+    if (prevTypeElem) prevTypeElem.textContent = type;
+
+    const prevInchargeElem = document.getElementById('asPrevIncharge');
+    if (prevInchargeElem) prevInchargeElem.textContent = inchargeText;
+
+    const prevDescElem = document.getElementById('asPrevDesc');
+    if (prevDescElem) prevDescElem.textContent = desc || 'No description entered yet.';
+
+    const prevSailorsContainer = document.getElementById('asPrevSailors');
+    if (prevSailorsContainer) {
+        if (_asSelectedSailors && _asSelectedSailors.size > 0) {
+            const listHtml = [..._asSelectedSailors].map(id => {
+                const s = store.sailors.find(s => String(s.id ?? s._fbKey) === String(id));
+                if (!s) return '';
+                const offNo = s.official_number || s.officialNumber || s.service_no || '—';
+                return `<span class="inline-block bg-teal-100 text-teal-800 text-[10px] px-2 py-0.5 rounded font-medium">${s.rank || ''} ${s.name} (${offNo})</span>`;
+            }).join('');
+            prevSailorsContainer.innerHTML = listHtml;
+        } else {
+            prevSailorsContainer.innerHTML = '<span class="text-slate-400 text-[10px]">None selected</span>';
+        }
     }
 }
 
