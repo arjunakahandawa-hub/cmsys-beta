@@ -1,4 +1,15 @@
 // =============================================
+// PWA SERVICE WORKER REGISTRATION
+// =============================================
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log('⚓ NCW-PS PWA Service Worker: REGISTERED (', reg.scope, ')'))
+            .catch(err => console.error('⚠️ NCW-PS PWA Service Worker: REGISTRATION FAILED:', err));
+    });
+}
+
+// =============================================
 // NCW-PS v2.2 - Naval Civil Works Productivity Suite
 // Main Application JavaScript
 // =============================================

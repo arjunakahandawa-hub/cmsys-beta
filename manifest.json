@@ -1,0 +1,17 @@
+{
+  "short_name": "NCW-PS",
+  "name": "Naval Civil Works Productivity Suite",
+  "icons": [
+    {
+      "src": "navy_crest.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#0a1628",
+  "theme_color": "#0a1628",
+  "display": "standalone",
+  "orientation": "portrait"
+}

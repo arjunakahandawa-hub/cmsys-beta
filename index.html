@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a1628">
+    <link rel="manifest" href="manifest.json">
     <title>NCW-PS v2.2 | Naval Civil Works Productivity Suite — SLN Trincomalee</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
@@ -63,6 +67,51 @@
         * { font-family: 'Inter', 'Noto Sans Sinhala', sans-serif; }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .sinhala { font-family: 'Noto Sans Sinhala', sans-serif; }
+
+        /* ===== Mobile App Optimizations (APK feeling) ===== */
+        html, body {
+            overflow-x: hidden;
+            overscroll-behavior-y: contain; /* Disable pull-to-refresh */
+            -webkit-tap-highlight-color: transparent; /* Remove mobile gray tap highlight */
+        }
+        
+        /* Disable text selection on UI controls to feel like a real app */
+        body {
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        input, textarea, select {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+
+        /* 100dvh App Height Lock on Mobile to avoid scrolling top and bottom bars */
+        @media (max-width: 767px) {
+            body {
+                height: 100dvh;
+                display: flex;
+                flex-direction: column;
+            }
+            header {
+                flex-shrink: 0;
+            }
+            /* Main scroll container inside page content */
+            main {
+                flex-grow: 1;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 5rem !important; /* spacing for bottom nav */
+            }
+        }
+
+        /* Tactile Active press feedback for buttons, tabs, select boxes and clicks */
+        button, select, .nav-pill, [onclick] {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        button:active, .nav-pill:active, [onclick]:active {
+            transform: scale(0.96);
+            opacity: 0.9;
+        }
 
         /* ===== Page Background ===== */
         body {
