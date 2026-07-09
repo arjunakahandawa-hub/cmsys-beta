@@ -616,50 +616,11 @@ function renderQuickAssignments() {
 
     if (quickOrders.length === 0) {
         container.innerHTML = `
-            <div class="col-span-full py-6 text-center">
-                <p class="text-slate-400 text-sm italic">No active quick assignments in this zone.</p>
-            </div>`;
+            <p class="text-slate-400 text-center py-4 text-sm italic">No assignments</p>`;
         return;
     }
 
-    container.innerHTML = quickOrders.map(wo => {
-        const assignedIds = (wo.assigned || []).map(String);
-        const assignedSailors = store.sailors.filter(s =>
-            assignedIds.includes(String(s.id)) ||
-            assignedIds.includes(String(s._fbKey))
-        );
-        const woKey = wo._fbKey || wo.id;
-        
-        // Find In-Charge name
-        const inchargeSailor = store.sailors.find(s => String(s.id) === String(wo.incharge));
-        const inchargeText = inchargeSailor ? `${inchargeSailor.rank} ${inchargeSailor.name}` : 'None';
-
-        return `
-            <div class="p-3 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-all cursor-pointer flex flex-col justify-between"
-                onclick="openWorkOrderDetail('${woKey}')">
-                <div>
-                    <div class="flex items-center justify-between mb-1.5">
-                        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">💼 ${wo.assign_type}</span>
-                        <span class="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">${wo.status}</span>
-                    </div>
-                    <h4 class="font-semibold text-slate-800 text-xs leading-snug mb-1 line-clamp-2">${wo.description}</h4>
-                    <p class="text-[10px] text-slate-400">👤 In-Charge: <span class="font-medium text-slate-600">${inchargeText}</span></p>
-                </div>
-                
-                <div class="mt-3 border-t border-slate-100 pt-2">
-                    <p class="text-[10px] text-slate-400 mb-1">👷 ${assignedSailors.length} assigned</p>
-                    <div class="flex flex-wrap gap-1">
-                        ${assignedSailors.slice(0, 3).map(s => `
-                            <span class="inline-block bg-teal-50 text-teal-800 text-[9px] px-1.5 py-0.5 rounded-full font-medium">
-                                ${s.name.split(' ').slice(1,2).join('')}
-                            </span>
-                        `).join('')}
-                        ${assignedSailors.length > 3 ? `<span class="text-[9px] text-slate-400 font-medium">+${assignedSailors.length - 3}</span>` : ''}
-                    </div>
-                </div>
-            </div>
-        `;
-    }).join('');
+    container.innerHTML = quickOrders.map(wo => renderWorkOrderCard(wo)).join('');
 }
 
 function renderWorkOrderCard(wo) {
