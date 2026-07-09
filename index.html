@@ -646,6 +646,22 @@
                             <div id="tasksColumn" class="kanban-column p-3 space-y-3 min-h-[450px]" style="background:rgba(13,148,136,0.04)"
                                 ondragover="handleDragOver(event)" ondrop="handleDrop(event, 'TASK')">
                             </div>
+                    </div>
+
+                    <!-- Quick Assignments Card -->
+                    <div class="mt-6 glass-card overflow-hidden">
+                        <div class="bg-gradient-to-r from-indigo-800 to-indigo-700 text-white px-4 py-3 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <span class="text-lg">📋</span>
+                                <div>
+                                    <h3 class="font-semibold text-sm">Quick Assignments (Admin Staff / Utility / Stores)</h3>
+                                    <p class="text-xs text-indigo-200">Daily duty roster & special assignments</p>
+                                </div>
+                            </div>
+                            <span id="quickAssignCountBadge" class="bg-white/20 text-white px-2 py-0.5 rounded-full text-xs font-bold">0 Active</span>
+                        </div>
+                        <div id="quickAssignmentsList" class="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[350px] overflow-y-auto scrollbar-thin">
+                            <!-- Populated dynamically by JS -->
                         </div>
                     </div>
                 </div>
