@@ -1,0 +1,2531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NCW-PS v2.2 | Naval Civil Works Productivity Suite — SLN Trincomalee</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+    <script>
+    // =============================================
+    // NCW-PS DUAL FIREBASE CONFIGURATION
+    // =============================================
+
+    // Firebase DB #1 — Sailors / Personnel (READ ONLY)
+    // Project: ce-admin-panel2025
+    const sailorsFirebaseConfig = {
+        apiKey:            "AIzaSyDmHdg1FfgR_-4pKJ5z0inI8-BZ21MUtvg",
+        authDomain:        "ce-admin-panel2025.firebaseapp.com",
+        databaseURL:       "https://ce-admin-panel2025-default-rtdb.firebaseio.com",
+        projectId:         "ce-admin-panel2025",
+        storageBucket:     "ce-admin-panel2025.firebasestorage.app",
+        messagingSenderId: "1093761746400",
+        appId:             "1:1093761746400:web:1984fad8019641b2ca5785"
+    };
+
+    // Firebase DB #2 — NCW-PS Operations (READ + WRITE)
+    // Project: ncw-ps-operations
+    const opsFirebaseConfig = {
+        apiKey:            "AIzaSyCRgW9qcd42Ks_C56csNL85jXd5OsLD8q0",
+        authDomain:        "ncw-ps-operations.firebaseapp.com",
+        databaseURL:       "https://ncw-ps-operations-default-rtdb.asia-southeast1.firebasedatabase.app",
+        projectId:         "ncw-ps-operations",
+        storageBucket:     "ncw-ps-operations.firebasestorage.app",
+        messagingSenderId: "992132561625",
+        appId:             "1:992132561625:web:5b4f0c753c568cea66dcc8"
+    };
+
+    // Initialize Firebase App #1 — Sailors DB (named 'sailors')
+    const sailorsApp = firebase.initializeApp(sailorsFirebaseConfig, 'sailors');
+    const sailorsDB  = firebase.database(sailorsApp);
+
+    // Initialize Firebase App #2 — NCW-PS Operations DB (named 'operations')
+    const opsApp = firebase.initializeApp(opsFirebaseConfig, 'operations');
+    const opsDB  = firebase.database(opsApp);
+
+    console.log('✅ NCW-PS: Dual Firebase initialized');
+    console.log('   DB#1 (Sailors):', sailorsFirebaseConfig.projectId);
+    console.log('   DB#2 (Ops):', opsFirebaseConfig.projectId);
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Sinhala:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --navy-900: #0a1628;
+            --navy-800: #0f2040;
+            --navy-700: #152a55;
+            --navy-600: #1e3a6e;
+            --teal-primary: #0d9488;
+            --teal-light: #14b8a6;
+            --gold: #d4a017;
+            --gold-light: #f0c040;
+        }
+        * { font-family: 'Inter', 'Noto Sans Sinhala', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .sinhala { font-family: 'Noto Sans Sinhala', sans-serif; }
+
+        /* ===== Page Background ===== */
+        body {
+            background: linear-gradient(135deg, #e8f4f8 0%, #dbeafe 30%, #e0f2fe 60%, #f0fdf4 100%);
+            min-height: 100vh;
+        }
+
+        /* ===== Naval Header Accents ===== */
+        .nav-header {
+            background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 60%, #1a3a6e 100%);
+            border-bottom: 2px solid var(--teal-primary);
+        }
+        .header-glow {
+            box-shadow: 0 4px 24px rgba(13, 148, 136, 0.3), 0 1px 0 rgba(212,160,23,0.2);
+        }
+        .logo-badge {
+            background: linear-gradient(135deg, var(--teal-primary), var(--teal-light));
+            box-shadow: 0 0 16px rgba(13,148,136,0.5);
+        }
+        .brand-tag {
+            font-size: 0.6rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: var(--gold-light);
+        }
+
+        /* ===== Navigation Pills ===== */
+        .nav-pill { transition: all 0.2s cubic-bezier(.4,0,.2,1); border-radius: 8px; }
+        .nav-pill:hover { background: rgba(13,148,136,0.25); color: #5eead4; }
+        .tab-active {
+            background: linear-gradient(135deg, rgba(13,148,136,0.35), rgba(20,184,166,0.2));
+            color: #2dd4bf !important;
+            box-shadow: 0 0 12px rgba(13,148,136,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+            border-bottom: 2px solid var(--teal-light);
+        }
+
+        /* ===== Cards ===== */
+        .glass-card {
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.7);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(15,32,64,0.08), 0 1px 0 rgba(255,255,255,0.9) inset;
+        }
+        .glass-card:hover { box-shadow: 0 16px 48px rgba(15,32,64,0.14), 0 1px 0 rgba(255,255,255,0.9) inset; }
+        .stat-card {
+            background: linear-gradient(135deg, #fff 60%, rgba(220,252,255,0.6));
+            border: 1px solid rgba(14,165,233,0.15);
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(15,32,64,0.07);
+            transition: all 0.25s cubic-bezier(.4,0,.2,1);
+        }
+        .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(15,32,64,0.15); }
+        .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(15,32,64,0.15); transition: all 0.25s; }
+
+        /* ===== Sailor Drag Cards ===== */
+        .drag-over { border: 2px dashed #0d9488 !important; background: rgba(13,148,136,0.07) !important; }
+        .dragging { opacity: 0.5; transform: scale(0.95); }
+        .sailor-card { cursor: grab; transition: all 0.2s cubic-bezier(.4,0,.2,1); }
+        .sailor-card:active { cursor: grabbing; transform: scale(0.97); }
+        .sailor-card:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.12); }
+
+        /* ===== Work-order Strips ===== */
+        .work-card-active {
+            border-left: 4px solid #0d9488;
+            background: linear-gradient(to right, rgba(13,148,136,0.06), transparent);
+        }
+        .work-card-pending { border-left: 4px solid #f59e0b; }
+
+        /* ===== Kanban ===== */
+        .kanban-column { min-height: 400px; }
+
+        /* ===== Scrollbars ===== */
+        .scrollbar-thin::-webkit-scrollbar { width: 5px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #e2e8f0; border-radius: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+
+        /* ===== Performance Slider ===== */
+        .slider-track { -webkit-appearance: none; height: 10px; border-radius: 5px;
+            background: linear-gradient(to right, #dc2626 0%, #f59e0b 50%, #059669 100%); }
+        .slider-track::-webkit-slider-thumb { -webkit-appearance: none; width: 24px; height: 24px;
+            border-radius: 50%; background: var(--navy-700); cursor: pointer;
+            border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
+
+        /* ===== Badges & Indicators ===== */
+        .performance-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 9999px; font-weight: 600; }
+        .zone-team-badge { background: linear-gradient(135deg, #0d9488, #14b8a6); }
+        .attendance-present { background: linear-gradient(135deg, #059669, #10b981); }
+        .attendance-leave   { background: linear-gradient(135deg, #d97706, #f59e0b); }
+        .attendance-sick    { background: linear-gradient(135deg, #dc2626, #ef4444); }
+
+        /* ===== Pulse Animations ===== */
+        @keyframes pulse-teal { 0%,100% { box-shadow: 0 0 0 0 rgba(13,148,136,0.5); } 50% { box-shadow: 0 0 0 9px rgba(13,148,136,0); } }
+        @keyframes pulse-gold { 0%,100% { box-shadow: 0 0 0 0 rgba(212,160,23,0.5); } 50% { box-shadow: 0 0 0 7px rgba(212,160,23,0); } }
+        .pulse-online { animation: pulse-teal 2.2s infinite; }
+        .pulse-gold   { animation: pulse-gold 2s infinite; }
+
+        /* ===== Water-ripple stat decoration ===== */
+        @keyframes ripple { 0% { transform: scale(0.8); opacity: 0.7; } 100% { transform: scale(2.2); opacity: 0; } }
+        .ripple-dot::after {
+            content: ''; position: absolute; inset: 0; border-radius: 50%;
+            border: 2px solid rgba(13,148,136,0.6);
+            animation: ripple 2s infinite;
+        }
+
+        /* ===== Modal ===== */
+        .modal-overlay { backdrop-filter: blur(6px); background: rgba(10,22,40,0.55); }
+        @keyframes modal-in {
+            from { opacity: 0; transform: scale(0.94) translateY(12px); }
+            to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        .modal-overlay > div { animation: modal-in 0.2s cubic-bezier(.4,0,.2,1); }
+
+        /* ===== Gradient header panels ===== */
+        .panel-header-navy { background: linear-gradient(135deg, var(--navy-800), var(--navy-600)); }
+        .panel-header-teal { background: linear-gradient(135deg, #0d9488, #0891b2); }
+        .panel-header-amber { background: linear-gradient(135deg, #d97706, #b45309); }
+        .panel-header-green { background: linear-gradient(135deg, #059669, #0d9488); }
+        .panel-header-blue  { background: linear-gradient(135deg, #2563eb, #4f46e5); }
+        .panel-header-rose  { background: linear-gradient(135deg, #e11d48, #9f1239); }
+
+        /* ===== Eval-time active indicator ===== */
+        .eval-time-active { background: linear-gradient(135deg, #0d9488, #14b8a6); }
+
+        /* ===== Status chips ===== */
+        .chip-active    { background: #dcfce7; color: #15803d; }
+        .chip-pending   { background: #fef9c3; color: #854d0e; }
+        .chip-hold      { background: #fee2e2; color: #991b1b; }
+        .chip-completed { background: #dbeafe; color: #1d4ed8; }
+
+        /* ===== Priority chips ===== */
+        .priority-high   { background: #fee2e2; color: #dc2626; }
+        .priority-medium { background: #fef9c3; color: #d97706; }
+        .priority-low    { background: #dcfce7; color: #059669; }
+
+        /* ===== Typewriter / loading dot ===== */
+        @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0; } }
+        .blink { animation: blink 1s step-end infinite; }
+
+        /* ===== Print ===== */
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; }
+        }
+
+        /* ===== Button Hover & Active Effects ===== */
+        button, [role="button"] {
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(.4,0,.2,1);
+        }
+        button:not(:disabled):hover {
+            filter: brightness(1.1);
+            transform: translateY(-1px);
+        }
+        button:not(:disabled):active {
+            transform: translateY(0) scale(0.97);
+            filter: brightness(0.92);
+        }
+        button:focus-visible {
+            outline: 2px solid var(--teal-light);
+            outline-offset: 2px;
+        }
+        /* Cancel / secondary buttons - no lift */
+        .btn-secondary:hover { transform: none; filter: brightness(1.05); }
+        .btn-secondary:active { transform: scale(0.98); }
+
+        /* ===== Sailor Chip Selector ===== */
+        .sailor-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+            border: 2px solid transparent; cursor: pointer;
+            transition: all 0.15s ease;
+            background: #f1f5f9; color: #475569;
+        }
+        .sailor-chip:hover { background: #e2e8f0; transform: translateY(-1px); }
+        .sailor-chip.selected {
+            background: linear-gradient(135deg, #0d9488, #0891b2);
+            color: white; border-color: rgba(255,255,255,0.3);
+            box-shadow: 0 2px 8px rgba(13,148,136,0.35);
+        }
+        .sailor-chip.selected:hover { filter: brightness(1.1); }
+
+        /* Card-style chip (used in sailor picker) */
+        .sailor-chip-card { transition: all 0.15s ease; }
+        .sailor-chip-card:hover {
+            border-color: #0d9488 !important;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(13,148,136,0.15) !important;
+        }
+        .sailor-chip-card:active { transform: scale(0.97); }
+        .sailor-chip-card.selected:hover { filter: brightness(1.05); }
+
+        /* Chip container — responsive grid */
+        #woSailorChips {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(175px, 1fr));
+            gap: 6px;
+        }
+
+        /* ===== Smooth view transitions ===== */
+        .view-content { animation: fadeSlideIn 0.22s ease-out; }
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== Gold accent line for header ===== */
+        .gold-line { height: 2px; background: linear-gradient(90deg, transparent, var(--gold), var(--gold-light), var(--gold), transparent); }
+        /* ===== Settings Tabs ===== */
+        .settings-tab-btn { background: #f1f5f9; color: #64748b; transition: all 0.2s; }
+        .settings-tab-btn:hover { background: #e2e8f0; color: #334155; }
+        .active-stab { background: linear-gradient(135deg,#0a1628,#152a55) !important; color: #5eead4 !important; }
+    </style>
+</head>
+<body class="min-h-screen" style="background:linear-gradient(160deg,#e8f4f8 0%,#dbeafe 25%,#e0f2fe 55%,#ecfdf5 100%)">
+    <!-- ==================== PREMIUM LOGIN SCREEN ==================== -->
+    <div id="loginScreen" class="fixed inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 z-50 flex items-center justify-center p-4">
+        <div class="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center">
+            
+            <!-- Crest and Title -->
+            <div class="flex flex-col items-center gap-3 mb-6">
+                <div class="w-16 h-16 rounded-full bg-white shadow-lg overflow-hidden border-2 border-white/20 flex items-center justify-center">
+                    <img src="navy_crest.jpg" alt="Navy Crest" class="w-full h-full object-cover scale-[1.85] translate-y-[2px]">
+                </div>
+                <div>
+                    <h2 class="text-xl font-bold text-white tracking-wide">NCW-PS Portal</h2>
+                    <p class="text-xs text-teal-400 font-medium">Naval Civil Works Management Hub</p>
+                </div>
+            </div>
+
+            <!-- Profile Avatar Preview -->
+            <div class="mb-6 flex justify-center">
+                <div id="loginAvatarContainer" class="w-24 h-24 rounded-full border-4 border-teal-500/30 overflow-hidden shadow-inner flex items-center justify-center bg-slate-800 text-slate-300">
+                    <span class="text-3xl">⚓</span>
+                </div>
+            </div>
+
+            <form onsubmit="submitLogin(event)" class="space-y-4">
+                <!-- Profile Dropdown Selection -->
+                <div>
+                    <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Select Profile</label>
+                    <select id="loginProfileSelect" onchange="onLoginProfileChange(this.value)" required class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 cursor-pointer">
+                        <option value="">-- Choose Profile --</option>
+                    </select>
+                </div>
+
+                <!-- Password Input -->
+                <div id="loginPasswordGroup" class="hidden">
+                    <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Password</label>
+                    <input type="password" id="loginPasswordInput" placeholder="Enter password" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 text-center tracking-widest font-bold">
+                </div>
+
+                <!-- Login Button -->
+                <button type="submit" class="w-full py-3 bg-gradient-to-r from-teal-600 to-cyan-500 hover:from-teal-500 hover:to-cyan-400 text-white font-bold rounded-xl shadow-lg transform transition-all active:scale-95 text-sm mt-2">
+                    Access Portal
+                </button>
+            </form>
+        </div>
+    </div>
+    <!-- ========== NAVAL HEADER ========== -->
+    <header class="nav-header header-glow sticky top-0 z-50 no-print">
+        <div class="container mx-auto px-4">
+            <div class="flex items-center justify-between h-[68px]">
+
+                <!-- Brand -->
+                <div class="flex items-center gap-3">
+                    <div class="w-[60px] h-[60px] rounded-full shadow-[0_0_15px_rgba(0,0,0,0.4)] border-[3px] border-white/20 overflow-hidden flex-shrink-0 bg-white -ml-1 flex items-center justify-center">
+                        <img src="navy_crest.jpg" alt="Navy Crest" class="w-full h-full object-cover" style="transform: scale(1.85) translateY(3px);">
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h1 class="text-[15px] font-bold text-white tracking-wide">NCW-PS <span class="text-teal-400 font-extrabold">v2.2</span></h1>
+                            <span class="hidden md:inline text-[10px] border border-yellow-400/50 text-yellow-300 px-1.5 py-0.5 rounded font-medium">SLN CONFIDENTIAL</span>
+                        </div>
+                        <p class="brand-tag leading-none hidden sm:block">Naval Civil Works · Miss Garrison · Trincomalee</p>
+                    </div>
+                </div>
+
+                <!-- Navigation -->
+                <nav class="hidden md:flex gap-0.5 bg-white/5 backdrop-blur rounded-xl p-1 border border-white/10">
+                    <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300 tab-active">
+                        <span class="hidden xl:inline">📊 </span>Dashboard
+                    </button>
+                    <button onclick="switchView('jobcards')" id="tab-jobcards" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">📋 </span>Job Cards
+                    </button>
+                    <button onclick="switchView('inventory')" id="tab-inventory" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">📦 </span>Inventory
+                    </button>
+                    <button onclick="switchView('estimates')" id="tab-estimates" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">📐 </span>Estimates
+                    </button>
+                    <button onclick="switchView('maintenance')" id="tab-maintenance" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">🔧 </span>Maintenance
+                    </button>
+                    <button onclick="switchView('reports')" id="tab-reports" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">📈 </span>Reports
+                    </button>
+                    <button onclick="switchView('settings')" id="tab-settings" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">⚙️ </span>Settings
+                    </button>
+                </nav>
+
+                <!-- Right Controls -->
+                <div class="flex items-center gap-3">
+                    <div id="modeIndicator" class="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5">
+                        <span class="w-2 h-2 rounded-full bg-teal-400 pulse-online"></span>
+                        <span id="modeText" class="text-slate-300">Active</span>
+                    </div>
+                    <select id="zoneSelector" onchange="changeZone()" class="text-xs rounded-lg px-2.5 py-1.5 border border-teal-600/50 font-medium cursor-pointer"
+                        style="background:rgba(13,148,136,0.18);color:#5eead4;">
+                    </select>
+                    <div class="relative">
+                        <button onclick="toggleProfileDropdown()" id="profileMenuBtn" class="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-[10px] font-bold text-white shadow-lg cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                            style="background:linear-gradient(135deg,#0d9488,#0891b2)" title="Profile Actions">OIC</button>
+                        <div id="profileDropdown" class="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 hidden">
+                            <div class="px-4 py-2 border-b border-slate-100 text-left">
+                                <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Active Profile</p>
+                                <p id="profileActiveName" class="text-xs font-bold text-slate-800 mt-0.5 truncate">Command / OIC</p>
+                                <p id="profileActiveRole" class="text-[10px] text-teal-600 font-semibold uppercase">System Administrator</p>
+                            </div>
+                            <div class="max-h-60 overflow-y-auto divide-y divide-slate-50 text-left" id="profileOptionsList">
+                                <!-- Dynamic options loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="gold-line"></div>
+    </header>
+
+    <!-- ===== Tactical Status Bar ===== -->
+    <div class="no-print" style="background:linear-gradient(90deg,#0a1628 0%,#152a55 50%,#0a1628 100%);border-bottom:1px solid rgba(13,148,136,0.3)">
+        <div class="container mx-auto px-4 py-1.5 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-5 text-slate-400">
+                <span class="mono">📅 <span id="currentDate" class="text-teal-300"></span></span>
+                <span class="mono">🕐 <span id="currentTime" class="text-teal-300"></span></span>
+                <span class="text-slate-600">|</span>
+                <span class="text-slate-400">Miss Garrison Naval Station · ~10,000 Personnel · 750+ Ha</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.35)">
+                    ⚓ NET: <span id="netForce">24</span>
+                </span>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.35)">
+                    🔨 TASK: <span id="assignedCount">18</span>
+                </span>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(59,130,246,0.2);color:#93c5fd;border:1px solid rgba(59,130,246,0.35)">
+                    ✅ AVAIL: <span id="availableCount">6</span>
+                </span>
+                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(168,85,247,0.2);color:#d8b4fe;border:1px solid rgba(168,85,247,0.35)">
+                    👥 TEAM: <span id="zoneTeamCount">12</span>
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <main class="container mx-auto px-4 py-5 pb-20 md:pb-5">
+        
+        <!-- ==================== DASHBOARD VIEW ==================== -->
+        <div id="view-dashboard" class="view-content">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                
+                <!-- Left Panel - Available Sailors -->
+                <div class="col-span-12 md:col-span-3">
+                    <div class="glass-card overflow-hidden">
+                        <div class="text-white px-4 py-3" style="background:linear-gradient(135deg,#0a1628,#152a55)">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h2 class="font-bold text-sm tracking-wide">⚓ Available Force</h2>
+                                    <p class="text-[10px] text-teal-300 mt-0.5">Drag to assign · Score: Avg</p>
+                                </div>
+                                <span class="text-sm font-extrabold text-teal-300" id="availableBadge">6</span>
+                            </div>
+                        </div>
+
+                        <!-- Filter Tabs -->
+                        <div class="p-3 border-b border-slate-200" style="background:rgba(248,250,252,0.8)">
+                            <div class="flex gap-1.5 mb-2">
+                                <button onclick="filterSailors('all')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium" style="background:#0a1628;color:#5eead4">All</button>
+                                <button onclick="filterSailors('zone-team')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Zone Team</button>
+                                <button onclick="filterSailors('continuation')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Continue</button>
+                            </div>
+                            <div class="flex flex-wrap gap-1">
+                                <button onclick="filterTrade('ALL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-700 text-white">ALL</button>
+                                <button onclick="filterTrade('MA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">MA</button>
+                                <button onclick="filterTrade('CA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">CA</button>
+                                <button onclick="filterTrade('PA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PA</button>
+                                <button onclick="filterTrade('PL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PL</button>
+                                <button onclick="filterTrade('WE')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">WE</button>
+                                <button onclick="filterTrade('RW')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">RW</button>
+                            </div>
+                        </div>
+
+                        <!-- Search -->
+                        <div class="p-3 border-b border-slate-200">
+                            <input type="text" id="sailorSearch" placeholder="Search by name or ID..." 
+                                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
+                                onkeyup="searchSailors()">
+                        </div>
+
+                        <!-- Sailor List -->
+                        <div id="availableSailors" class="p-3 space-y-2 max-h-[450px] overflow-y-auto scrollbar-thin">
+                        </div>
+                    </div>
+
+                    <!-- Zone Team Panel (Add / Remove enabled) -->
+                    <div class="mt-4 glass-card overflow-hidden">
+                        <div class="panel-header-green text-white px-4 py-3">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h3 class="font-semibold">Zone Team</h3>
+                                    <p class="text-xs text-green-100">Fixed team members (15 max)</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="bg-white/20 px-2 py-1 rounded text-xs" id="zoneTeamBadge">12/15</span>
+                                    <button onclick="openZoneTeamManager()" class="bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-xs font-medium" title="Add or remove team members">⚙ Manage</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="zoneTeamList" class="p-3 space-y-2 max-h-60 overflow-y-auto scrollbar-thin">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Center Panel - Work Orders Board -->
+                <div class="col-span-12 md:col-span-9">
+                    <!-- Action Bar -->
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-4">
+                            <h2 class="text-xl font-bold text-slate-800">🪖 Work Order Board</h2>
+                            <button onclick="continueYesterdayJobs()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                                Continue Yesterday
+                            </button>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <!-- Evening Evaluation Button (Shows 18:00-20:00) -->
+                            <button id="evalModeBtn" onclick="toggleEvaluationMode()" class="hidden text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-lg" style="background:linear-gradient(135deg,#d97706,#b45309);animation:pulse-gold 2s infinite">
+                                📝 Evening Evaluation
+                            </button>
+                            <button onclick="openNewWorkOrderModal()" class="text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all" style="background:linear-gradient(135deg,#0d9488,#0891b2)">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                New Work Order
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Ongoing Tasks Summary -->
+                    <div class="rounded-xl p-4 mb-4 text-white" style="background:linear-gradient(135deg,#0a1628 0%,#152a55 50%,#0d4f6e 100%);border:1px solid rgba(13,148,136,0.35);box-shadow:0 8px 32px rgba(10,22,40,0.35)">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="font-bold text-[15px] text-teal-300">Today's Operational Summary</h3>
+                                <p class="text-sm text-slate-400 mt-0.5" id="workSummaryText">Miss Garrison Naval Dockyard — Click any work order to manage</p>
+                            </div>
+                            <div class="flex items-center gap-6">
+                                <div class="text-center">
+                                    <p class="text-2xl font-extrabold text-teal-300" id="ongoingProjects">2</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5">Projects</p>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-2xl font-extrabold text-amber-300" id="ongoingJobs">5</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5">Jobs</p>
+                                </div>
+                                <div class="text-center">
+                                    <p class="text-2xl font-extrabold text-blue-300" id="ongoingTasks">8</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5">Tasks</p>
+                                </div>
+                                <div class="text-center pl-5" style="border-left:1px solid rgba(13,148,136,0.4)">
+                                    <p class="text-2xl font-extrabold text-rose-300" id="pendingEvals">0</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5">Pending Evals</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-3 gap-4">
+                        <!-- Projects Column -->
+                        <div class="glass-card overflow-hidden">
+                            <div class="panel-header-blue text-white px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-lg">📐</span>
+                                    <div>
+                                        <h3 class="font-semibold">Projects (Type P)</h3>
+                                        <p class="text-xs text-blue-200">Vote-funded Capital Works</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="projectsColumn" class="kanban-column p-3 space-y-3 min-h-[450px]" style="background:rgba(37,99,235,0.04)"
+                                ondragover="handleDragOver(event)" ondrop="handleDrop(event, 'PROJECT')">
+                            </div>
+                        </div>
+
+                        <!-- Jobs Column -->
+                        <div class="glass-card overflow-hidden">
+                            <div class="panel-header-amber text-white px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-lg">🔧</span>
+                                    <div>
+                                        <h3 class="font-semibold">Jobs (Type J)</h3>
+                                        <p class="text-xs text-amber-200">Routine Maintenance</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="jobsColumn" class="kanban-column p-3 space-y-3 min-h-[450px]" style="background:rgba(245,158,11,0.04)"
+                                ondragover="handleDragOver(event)" ondrop="handleDrop(event, 'JOB')">
+                            </div>
+                        </div>
+
+                        <!-- Tasks Column -->
+                        <div class="glass-card overflow-hidden">
+                            <div class="bg-gradient-to-r from-slate-600 to-slate-500 text-white px-4 py-3">
+                                <div class="flex items-center gap-2">
+                                    <span class="text-lg">📋</span>
+                                    <div>
+                                        <h3 class="font-semibold">Tasks (Type T)</h3>
+                                        <p class="text-xs text-slate-300">Zero-cost Petty Items</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="tasksColumn" class="kanban-column p-3 space-y-3 min-h-[450px]" style="background:rgba(13,148,136,0.04)"
+                                ondragover="handleDragOver(event)" ondrop="handleDrop(event, 'TASK')">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== JOB CARDS VIEW ==================== -->
+        <div id="view-jobcards" class="view-content hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold" style="color:#0a1628">Job Cards Management</h2>
+                    <p class="text-slate-500 text-sm">Track materials and labor • Send feedback links for completed jobs</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="exportJobCardReport()" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        📥 Export Report
+                    </button>
+                </div>
+            </div>
+
+            <!-- Job Cards Tabs -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+                <div class="border-b border-slate-200 flex">
+                    <button onclick="switchJobCardsTab('active')" class="jc-main-tab flex-1 py-3 text-center font-medium border-b-2 border-green-600 text-green-600 bg-green-50">
+                        🔄 Active Jobs
+                    </button>
+                    <button onclick="switchJobCardsTab('completed')" class="jc-main-tab flex-1 py-3 text-center font-medium text-slate-500 hover:bg-slate-50">
+                        ✅ Recently Completed
+                    </button>
+                    <button onclick="switchJobCardsTab('records')" class="jc-main-tab flex-1 py-3 text-center font-medium text-slate-500 hover:bg-slate-50">
+                        📁 Records (With Feedback)
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <!-- Job Cards List -->
+                <div class="col-span-12 md:col-span-4">
+                    <div class="glass-card overflow-hidden">
+                        <div class="panel-header-navy text-white px-4 py-3">
+                            <h3 class="font-semibold" id="jobCardsListTitle">Active Job Cards</h3>
+                        </div>
+                        <div id="jobCardsList" class="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Job Card Details -->
+                <div class="col-span-12 md:col-span-8">
+                    <div class="glass-card overflow-hidden">
+                        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-blue-200">Job Card</p>
+                                    <h3 class="text-xl font-bold" id="selectedJobNumber">Select a Job Card</h3>
+                                    <p class="text-sm text-blue-200" id="selectedJobDesc"></p>
+                                    <div id="selectedJobEstimateContainer" class="mt-2 hidden">
+                                        <span class="text-xs bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded border border-amber-500/30 font-medium">📄 Estimate: <span id="selectedJobEstimateNo"></span></span>
+                                    </div>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm text-blue-200">Total Material Cost</p>
+                                    <p class="text-2xl font-bold" id="totalMaterialCost">Rs. 0.00</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Tabs -->
+                        <div class="border-b border-slate-200 px-6">
+                            <div class="flex gap-4">
+                                <button onclick="switchJobCardTab('materials')" class="jc-tab py-3 px-4 text-sm font-medium border-b-2 border-green-600 text-green-600">
+                                    📦 Materials Log
+                                </button>
+                                <button onclick="switchJobCardTab('labor')" class="jc-tab py-3 px-4 text-sm font-medium text-slate-500 hover:text-slate-700">
+                                    👷 Labor Log
+                                </button>
+                                <button onclick="switchJobCardTab('summary')" class="jc-tab py-3 px-4 text-sm font-medium text-slate-500 hover:text-slate-700">
+                                    📊 Summary
+                                </button>
+                                <button onclick="switchJobCardTab('feedback')" class="jc-tab py-3 px-4 text-sm font-medium text-slate-500 hover:text-slate-700" id="feedbackTabBtn">
+                                    💬 User Feedback
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Materials Tab -->
+                        <div id="jcTab-materials" class="jc-tab-content p-6">
+                            <div class="flex justify-between mb-4">
+                                <h4 class="font-semibold text-slate-700">Material Usage Log</h4>
+                                <button onclick="openAddMaterialToJobModal()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg text-sm" id="addMaterialBtn">
+                                    + Add Material
+                                </button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-100">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left">Date</th>
+                                            <th class="px-4 py-2 text-left">Material</th>
+                                            <th class="px-4 py-2 text-center">Qty</th>
+                                            <th class="px-4 py-2 text-center">Unit</th>
+                                            <th class="px-4 py-2 text-right">Unit Cost</th>
+                                            <th class="px-4 py-2 text-right">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="jobCardMaterials" class="divide-y divide-slate-100">
+                                    </tbody>
+                                    <tfoot class="bg-green-50">
+                                        <tr>
+                                            <td colspan="5" class="px-4 py-2 text-right font-semibold">Total:</td>
+                                            <td class="px-4 py-2 text-right font-bold text-green-600" id="materialsTotalFooter">Rs. 0.00</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Labor Tab -->
+                        <div id="jcTab-labor" class="jc-tab-content p-6 hidden">
+                            <div class="flex justify-between mb-4">
+                                <h4 class="font-semibold text-slate-700">Labor Deployment Log</h4>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-100">
+                                        <tr>
+                                            <th class="px-4 py-2 text-left">Date</th>
+                                            <th class="px-4 py-2 text-left">Sailor</th>
+                                            <th class="px-4 py-2 text-center">Trade</th>
+                                            <th class="px-4 py-2 text-center">Role</th>
+                                            <th class="px-4 py-2 text-center">Hours</th>
+                                            <th class="px-4 py-2 text-center">Performance</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="jobCardLabor" class="divide-y divide-slate-100">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Summary Tab -->
+                        <div id="jcTab-summary" class="jc-tab-content p-6 hidden">
+                            <div id="jobCardSummary" class="grid grid-cols-2 gap-6">
+                            </div>
+                        </div>
+
+                        <!-- Feedback Tab -->
+                        <div id="jcTab-feedback" class="jc-tab-content p-6 hidden">
+                            <div id="jobCardFeedback">
+                                <div class="text-center py-8" id="feedbackSection">
+                                    <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <span class="text-3xl">💬</span>
+                                    </div>
+                                    <h4 class="font-semibold text-slate-700 mb-2">User Feedback</h4>
+                                    <p class="text-slate-500 mb-4" id="feedbackStatusText">Generate a feedback link to send to the end user</p>
+                                    <button onclick="generateFeedbackLink()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium" id="genFeedbackBtn">
+                                        🔗 Generate Feedback Link
+                                    </button>
+                                    <div id="feedbackLinkBox" class="mt-4 hidden">
+                                        <input type="text" id="generatedFeedbackLink" readonly class="w-full px-4 py-2 bg-slate-100 border rounded-lg text-sm mono">
+                                        <div class="flex gap-2 mt-2">
+                                            <button onclick="copyFeedbackLink()" class="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg text-sm">
+                                                📋 Copy Link
+                                            </button>
+                                            <button onclick="sendFeedbackWhatsApp()" class="flex-1 bg-green-500 hover:bg-green-600 text-white py-2 rounded-lg text-sm">
+                                                📱 WhatsApp
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div id="receivedFeedbackSection" class="hidden">
+                                    <!-- Shows when feedback is received -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== INVENTORY VIEW ==================== -->
+        <div id="view-inventory" class="view-content hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold" style="color:#0a1628">Inventory Management</h2>
+                    <p class="text-slate-500">Materials and Tools tracking by category</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="openBulkUploadModal('inventory')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        📤 Bulk Upload
+                    </button>
+                    <button onclick="openAddInventoryModal()" class="text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
+                        + Add Item
+                    </button>
+                </div>
+            </div>
+
+            <!-- Inventory Category Tabs -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-4">
+                <div id="inventoryCategoryTabsContainer" class="border-b border-slate-200 flex overflow-x-auto"></div>
+            </div>
+
+            <!-- Search & Filter Bar -->
+            <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
+                <div class="flex gap-4">
+                    <input type="text" id="inventorySearch" placeholder="Search by description..." 
+                        class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        onkeyup="filterInventory()">
+                    <select id="inventoryLocation" onchange="filterInventory()" class="px-4 py-2 border border-slate-300 rounded-lg">
+                        <option value="">All Locations</option>
+                        <option value="Zone Store">Zone Store</option>
+                        <option value="Ready Use Store">Ready Use Store</option>
+                        <option value="Balance Store">Balance Store</option>
+                        <option value="Workshop">Workshop</option>
+                    </select>
+                    <select id="inventorySort" onchange="filterInventory()" class="px-4 py-2 border border-slate-300 rounded-lg">
+                        <option value="description">Sort: Description</option>
+                        <option value="quantity">Sort: Quantity</option>
+                        <option value="cost">Sort: Cost</option>
+                        <option value="date">Sort: Date Added</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Inventory Table -->
+            <div class="glass-card overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead class="bg-slate-100">
+                            <tr>
+                                <th class="px-4 py-3 text-left font-semibold">Description</th>
+                                <th class="px-4 py-3 text-center font-semibold">Category</th>
+                                <th class="px-4 py-3 text-center font-semibold">Deno</th>
+                                <th class="px-4 py-3 text-center font-semibold">Qty</th>
+                                <th class="px-4 py-3 text-right font-semibold">Cost (Rs)</th>
+                                <th class="px-4 py-3 text-center font-semibold">Location</th>
+                                <th class="px-4 py-3 text-center font-semibold">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryTableBody" class="divide-y divide-slate-100">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== ESTIMATES VIEW ==================== -->
+        <div id="view-estimates" class="view-content hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold" style="color:#0a1628">Estimating & Approval</h2>
+                    <p class="text-slate-500">Material costs with availability • Labor requirements</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="bulkPrintEstimates()" id="bulkPrintBtn" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        🖨️ Bulk Print (<span id="bulkPrintCount">0</span>)
+                    </button>
+                    <button onclick="openNewEstimateModal()" class="text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
+                        + New Estimate
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <!-- Estimates List -->
+                <div class="col-span-12 md:col-span-4">
+                    <div class="glass-card overflow-hidden">
+                        <div class="panel-header-navy text-white px-4 py-3">
+                            <h3 class="font-semibold">Estimates</h3>
+                        </div>
+                        <div id="estimatesList" class="divide-y divide-slate-100 max-h-[600px] overflow-y-auto">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Estimate Details -->
+                <div class="col-span-12 md:col-span-8">
+                    <div class="glass-card overflow-hidden" id="estimateDetailsPanel">
+                        <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-sm text-amber-200">Estimate</p>
+                                    <h3 class="text-xl font-bold" id="selectedEstimateNumber">Select an Estimate</h3>
+                                </div>
+                                <div class="flex gap-2">
+                                    <button onclick="editEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm" id="editEstimateBtn">
+                                        ✏️ Edit
+                                    </button>
+                                    <button onclick="approveEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm" id="approveEstimateBtn">
+                                        ✅ Approve
+                                    </button>
+                                    <button onclick="printEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm">
+                                        🖨️ Print This
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="p-6" id="estimateContent">
+                            <p class="text-slate-500 text-center py-8">Select an estimate to view details</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== MAINTENANCE RECORDS VIEW ==================== -->
+        <div id="view-maintenance" class="view-content hidden">
+            <div class="flex items-center justify-between mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold" style="color:#0a1628">Last Maintenance Records</h2>
+                    <p class="text-slate-500 text-sm">Track maintenance history by location</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="openZoneManager()" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        ⚙ Manage Zones
+                    </button>
+                    <button onclick="openBulkUploadModal('locations')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        📤 Bulk Upload Locations
+                    </button>
+                    <button onclick="openAddLocationModal()" class="text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
+                        + Add Location
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <!-- Locations Tree -->
+                <div class="col-span-12 md:col-span-4">
+                    <div class="glass-card overflow-hidden">
+                        <div class="panel-header-navy text-white px-4 py-3">
+                            <h3 class="font-semibold">Locations</h3>
+                            <p class="text-xs text-slate-300">Buildings & Sub-locations</p>
+                        </div>
+                        <div class="p-3">
+                            <input type="text" id="locationSearch" placeholder="Search locations..." 
+                                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" onkeyup="searchLocations()">
+                        </div>
+                        <div id="locationsList" class="divide-y divide-slate-100 max-h-[500px] overflow-y-auto">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Maintenance History -->
+                <div class="col-span-12 md:col-span-8">
+                    <div class="glass-card overflow-hidden">
+                        <div class="bg-gradient-to-r from-teal-600 to-cyan-600 text-white px-6 py-4">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <h3 class="font-semibold" id="selectedLocationName">Select a Location</h3>
+                                    <p class="text-sm text-teal-200" id="selectedLocationZone"></p>
+                                </div>
+                                <button onclick="addMaintenanceRecord()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm" id="addMaintenanceBtn" style="display:none">
+                                    + Add Record
+                                </button>
+                            </div>
+                        </div>
+                        <div id="maintenanceHistory" class="p-6">
+                            <p class="text-slate-500 text-center py-8">Select a location to view maintenance history</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== REPORTS VIEW ==================== -->
+        <!-- ==================== SETTINGS VIEW ==================== -->
+        <div id="view-settings" class="view-content hidden">
+            <div class="max-w-5xl mx-auto">
+                <!-- Header -->
+                <div class="flex items-center gap-4 mb-6">
+                    <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style="background:linear-gradient(135deg,#0a1628,#152a55)">⚙️</div>
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-800">System Settings</h2>
+                        <p class="text-sm text-slate-500">Configure your NCW-PS system preferences</p>
+                    </div>
+                    <div class="ml-auto">
+                        <span id="settingsSaveStatus" class="hidden text-xs text-green-600 font-medium bg-green-50 px-3 py-1.5 rounded-full">✓ Saved to Firebase</span>
+                    </div>
+                </div>
+
+                <!-- Settings Tabs -->
+                <div class="flex gap-2 mb-6 flex-wrap">
+                    <button onclick="switchSettingsTab('identity')" id="stab-identity" class="settings-tab-btn active-stab px-4 py-2 rounded-lg text-sm font-medium">⚙️ System Identity</button>
+                    <button onclick="switchSettingsTab('user')" id="stab-user" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">👤 User Profile</button>
+                    <button onclick="switchSettingsTab('zones')" id="stab-zones" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🗺️ Zones</button>
+                    <button onclick="switchSettingsTab('offcharge')" id="stab-offcharge" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🚢 Off-Charge</button>
+                    <button onclick="switchSettingsTab('workorder')" id="stab-workorder" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📋 Work Orders</button>
+                    <button onclick="switchSettingsTab('display')" id="stab-display" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🎨 Display</button>
+                    <button onclick="switchSettingsTab('data')" id="stab-data" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">💾 Data</button>
+                </div>
+
+                <!-- ── Tab: System Identity ── -->
+                <div id="stab-content-identity" class="settings-tab-content">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="font-bold text-slate-800 text-lg mb-1">⚙️ System Identity</h3>
+                        <p class="text-sm text-slate-500 mb-6">System top bar එකේ පෙන්වන ආයතන විස්තර</p>
+                        <div class="grid grid-cols-1 gap-5 max-w-lg">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">System Title</label>
+                                <input type="text" id="cfg-systemTitle" placeholder="NCW-PS v2.2" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('systemTitle',this.value)">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Station Name</label>
+                                <input type="text" id="cfg-stationName" placeholder="SLN Docyard" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('stationName',this.value)">
+                                <p class="text-xs text-slate-400 mt-1">Header sub-line text (e.g., Naval Civil Works · Miss Garrison · Trincomalee)</p>
+                            </div>
+                            <hr class="border-slate-100">
+                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Officer-In-Charge</p>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">OIC Name</label>
+                                <input type="text" id="cfg-oicName" placeholder="Cdr. A.B. Perera" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicName',this.value)">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">OIC Rank</label>
+                                <input type="text" id="cfg-oicRank" placeholder="Commander" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicRank',this.value)">
+                            </div>
+                                <input type="text" id="cfg-oicServiceNo" placeholder="NRX 00001" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicServiceNo',this.value)">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Command / OIC Profile Password</label>
+                                <input type="password" id="cfg-oicPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicPassword',this.value)">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: User Profile ── -->
+                <div id="stab-content-user" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="font-bold text-slate-800 text-lg mb-1">👤 Zone In-Charge Profile</h3>
+                        <p class="text-sm text-slate-500 mb-6">Select a Zone and assign its In-Charge (EC Sailors only). Auto-fills Rank and Service No.</p>
+                        <div class="grid grid-cols-1 gap-5 max-w-lg">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Select Zone</label>
+                                <select id="cfg-userZone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onchange="changeSettingsUserZone(this.value)">
+                                    <option value="">-- Select Zone --</option>
+                                </select>
+                            </div>
+                            <div class="relative">
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Full Name (EC Sailors Only)</label>
+                                <input type="text" id="cfg-userName" placeholder="Type name or Off No to search..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showSettingsSailorResults()" oninput="filterSettingsSailorResults(this.value)" autocomplete="off">
+                                <input type="hidden" id="cfg-userSailorId">
+                                <div id="cfg-sailorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Rank</label>
+                                <input type="text" id="cfg-userRank" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Service No (Off No)</label>
+                                <input type="text" id="cfg-userServiceNo" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Profile Password</label>
+                                <input type="password" id="cfg-userPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" oninput="saveSettingsUserPassword(this.value)">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Zones ── -->
+                <div id="stab-content-zones" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="font-bold text-slate-800 text-lg mb-1">🗺️ Zone Management</h3>
+                        <p class="text-sm text-slate-500 mb-6">System Zone list — Firebase DB2 හි save කෙරේ</p>
+                        <div class="flex gap-3 mb-4">
+                            <input type="text" id="newZoneNameSettings" placeholder="New Zone name..." class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            <button onclick="addZoneFromSettings()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ Add Zone</button>
+                        </div>
+                        <div id="settingsZoneList" class="space-y-2"></div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Off-Charge Destinations ── -->
+                <div id="stab-content-offcharge" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="font-bold text-slate-800 text-lg mb-1">🚢 Off-Charge Destinations</h3>
+                        <p class="text-sm text-slate-500 mb-6">Items Off-Charge කරද්දී select කළ හැකි destinations</p>
+                        <div class="flex gap-3 mb-4">
+                            <input type="text" id="newOffChargeDest" placeholder="e.g., SLNS Tissa" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            <button onclick="addOffChargeDestination()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ Add</button>
+                        </div>
+                        <div id="settingsOffChargeList" class="space-y-2"></div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Work Order Settings ── -->
+                <div id="stab-content-workorder" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-8">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg mb-1">📋 Approval Authorities</h3>
+                            <p class="text-sm text-slate-500 mb-4">Work Order approval list (CCED(E), CENA etc.)</p>
+                            <div class="flex gap-3 mb-3">
+                                <input type="text" id="newApprovalAuth" placeholder="e.g., CCED(E)" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                <button onclick="addApprovalAuthority()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ Add</button>
+                            </div>
+                            <div id="settingsAuthList" class="space-y-2"></div>
+                        </div>
+                        <hr class="border-slate-100">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg mb-1">📋 Work Order Types</h3>
+                            <p class="text-sm text-slate-500 mb-4">PROJECT, ROUTINE, EMERGENCY, REPAIR etc.</p>
+                            <div class="flex gap-3 mb-3">
+                                <input type="text" id="newWoType" placeholder="e.g., INSPECTION" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                <button onclick="addWorkOrderType()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ Add</button>
+                            </div>
+                            <div id="settingsWoTypeList" class="space-y-2 flex flex-wrap gap-2"></div>
+                        </div>
+                        <hr class="border-slate-100">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg mb-1">🔴 Priority Levels</h3>
+                            <p class="text-sm text-slate-500 mb-4">Work Order Priority options</p>
+                            <div class="flex gap-3 mb-3">
+                                <input type="text" id="newPriorityLevel" placeholder="e.g., Critical" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                <button onclick="addPriorityLevel()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ Add</button>
+                            </div>
+                            <div id="settingsPriorityList" class="flex flex-wrap gap-2"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Display ── -->
+                <div id="stab-content-display" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="font-bold text-slate-800 text-lg mb-1">🎨 Display Preferences</h3>
+                        <p class="text-sm text-slate-500 mb-6">System-wide display options</p>
+                        <div class="grid grid-cols-1 gap-6 max-w-md">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">Currency Symbol</label>
+                                <select id="cfg-currency" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" onchange="saveSettingField('currency',this.value)">
+                                    <option value="Rs.">Rs.</option>
+                                    <option value="LKR">LKR</option>
+                                    <option value="USD">USD $</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">Date Format</label>
+                                <select id="cfg-dateFormat" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" onchange="saveSettingField('dateFormat',this.value)">
+                                    <option value="YYYY-MM-DD">YYYY-MM-DD (2026-07-08)</option>
+                                    <option value="DD-MM-YYYY">DD-MM-YYYY (08-07-2026)</option>
+                                    <option value="DD/MM/YYYY">DD/MM/YYYY (08/07/2026)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-2">Low Stock Alert Level</label>
+                                <div class="flex items-center gap-3">
+                                    <input type="number" id="cfg-lowStockLevel" min="1" max="100" value="10" class="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('lowStockLevel',parseInt(this.value))">
+                                    <span class="text-sm text-slate-500">Qty ට වඩා අඩු නම් "⚠️ Low" පෙන්වයි</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Data Management ── -->
+                <div id="stab-content-data" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+                        <h3 class="font-bold text-slate-800 text-lg mb-1">💾 Data Management</h3>
+
+                        <!-- Firebase Status -->
+                        <div class="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-xl" id="fbStatusIcon" style="background:#dcfce7">✅</div>
+                            <div>
+                                <p class="font-semibold text-slate-700 text-sm">Firebase Connection</p>
+                                <p class="text-xs text-slate-500" id="fbStatusText">Connected to ncw-ps-operations</p>
+                            </div>
+                            <button onclick="checkFirebaseStatus()" class="ml-auto text-xs bg-white border border-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-50">Refresh</button>
+                        </div>
+
+                        <!-- Export JSON -->
+                        <div class="p-4 bg-blue-50 rounded-xl border border-blue-200">
+                            <h4 class="font-semibold text-blue-800 mb-1">📤 Export All Data</h4>
+                            <p class="text-xs text-blue-600 mb-3">Inventory, Work Orders, Locations, Settings ආදී සෑම දත්තයක්ම JSON file එකක් ලෙස download කරගන්න</p>
+                            <button onclick="exportAllDataJson()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">📤 Export JSON Backup</button>
+                        </div>
+
+                        <!-- Clear Completed WOs -->
+                        <div class="p-4 bg-amber-50 rounded-xl border border-amber-200">
+                            <h4 class="font-semibold text-amber-800 mb-1">🗂️ Archive Completed Work Orders</h4>
+                            <p class="text-xs text-amber-600 mb-3">Status 'Completed' ලෙස ඇති Work Orders Database එකෙන් ඉවත් කිරීම. (ඉවත් කිරීමට පෙර Export කිරීම නිර්දේශිතයි)</p>
+                            <button onclick="confirmArchiveCompleted()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium">🗃️ Archive Completed WOs</button>
+                        </div>
+
+                        <!-- Danger Zone -->
+                        <div class="p-4 bg-red-50 rounded-xl border border-red-200">
+                            <h4 class="font-semibold text-red-800 mb-1">⚠️ Danger Zone</h4>
+                            <p class="text-xs text-red-600 mb-3">Inventory data සම්පූර්ණයෙන්ම clear කිරීම. <strong>undo කළ නොහැක!</strong></p>
+                            <button onclick="confirmClearInventory()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">🗑️ Clear All Inventory</button>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+<div id="view-reports" class="view-content hidden">
+            <!-- Report Tabs -->
+            <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+                <div class="border-b border-slate-200 flex">
+                    <button onclick="switchReportTab('daily')" class="report-tab flex-1 py-3 text-center font-medium border-b-2 border-green-600 text-green-600 bg-green-50">
+                        📊 Daily Summary
+                    </button>
+                    <button onclick="switchReportTab('monthly')" class="report-tab flex-1 py-3 text-center font-medium text-slate-500 hover:bg-slate-50">
+                        📅 Monthly Engagements
+                    </button>
+                    <button onclick="switchReportTab('inventory')" class="report-tab flex-1 py-3 text-center font-medium text-slate-500 hover:bg-slate-50">
+                        📦 Inventory Stock
+                    </button>
+                </div>
+            </div>
+
+            <!-- Daily Summary Tab -->
+            <div id="reportTab-daily" class="report-tab-content">
+                <div class="grid grid-cols-12 gap-6">
+                    <!-- Summary Cards -->
+                    <div class="col-span-12">
+                        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4 mb-6">
+                            <div class="bg-white rounded-xl shadow-lg p-5 card-hover transition-all">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-slate-500">Active Projects</p>
+                                        <p class="text-3xl font-bold text-blue-600" id="rptActiveProjects">4</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
+                                        <span class="text-2xl">📐</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-lg p-5 card-hover transition-all">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-slate-500">Active Jobs</p>
+                                        <p class="text-3xl font-bold text-amber-600" id="rptActiveJobs">12</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+                                        <span class="text-2xl">🔧</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-lg p-5 card-hover transition-all">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-slate-500">Today's Tasks</p>
+                                        <p class="text-3xl font-bold text-slate-600" id="rptTodayTasks">18</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center">
+                                        <span class="text-2xl">📋</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-lg p-5 card-hover transition-all">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-slate-500">Avg. Performance</p>
+                                        <p class="text-3xl font-bold text-green-600" id="rptAvgPerf">7.8</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
+                                        <span class="text-2xl">⭐</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-lg p-5 card-hover transition-all">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-sm text-slate-500">User Feedback</p>
+                                        <p class="text-3xl font-bold text-purple-600" id="rptUserFeedback">4.5</p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
+                                        <span class="text-2xl">💬</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Daily State Board -->
+                    <div class="col-span-12 md:col-span-8">
+                        <div class="glass-card overflow-hidden">
+                            <div class="bg-slate-700 text-white px-4 py-3 flex items-center justify-between">
+                                <h2 class="font-semibold">Daily State Board - <span id="reportDate"></span></h2>
+                                <button onclick="exportDailyReport()" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm">Export PDF</button>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-sm">
+                                    <thead class="bg-slate-100">
+                                        <tr>
+                                            <th class="px-4 py-3 text-left font-semibold">Trade</th>
+                                            <th class="px-4 py-3 text-center font-semibold">Strength</th>
+                                            <th class="px-4 py-3 text-center font-semibold">Present</th>
+                                            <th class="px-4 py-3 text-center font-semibold">Leave</th>
+                                            <th class="px-4 py-3 text-center font-semibold">Sick</th>
+                                            <th class="px-4 py-3 text-center font-semibold">Deployed</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="stateBoard" class="divide-y divide-slate-100">
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Top Performers -->
+                        <div class="bg-white rounded-xl shadow-lg mt-4 overflow-hidden">
+                            <div class="panel-header-green text-white px-4 py-3">
+                                <h2 class="font-semibold">🏆 Top Performers Today</h2>
+                            </div>
+                            <div id="topPerformers" class="divide-y divide-slate-100">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Feedback Summary -->
+                    <div class="col-span-12 md:col-span-4">
+                        <div class="glass-card overflow-hidden">
+                            <div class="bg-purple-600 text-white px-4 py-3">
+                                <h2 class="font-semibold">💬 User Feedback Summary</h2>
+                            </div>
+                            <div id="userFeedbackSummary" class="p-4">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Monthly Engagements Tab -->
+            <div id="reportTab-monthly" class="report-tab-content hidden">
+                <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
+                    <div class="flex items-center gap-4">
+                        <select id="monthSelect" class="px-4 py-2 border border-slate-300 rounded-lg">
+                            <option value="01">January</option>
+                            <option value="02">February</option>
+                            <option value="03">March</option>
+                            <option value="04">April</option>
+                            <option value="05">May</option>
+                            <option value="06">June</option>
+                            <option value="07">July</option>
+                            <option value="08">August</option>
+                            <option value="09">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                        <select id="yearSelect" class="px-4 py-2 border border-slate-300 rounded-lg">
+                            <option value="2024">2024</option>
+                            <option value="2025">2025</option>
+                            <option value="2026">2026</option>
+                        </select>
+                        <button onclick="loadMonthlyReport()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg">
+                            Load Report
+                        </button>
+                        <button onclick="exportMonthlyReport()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                            📥 Export
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
+                    <div class="col-span-12 md:col-span-8">
+                        <!-- Job Card Cost Summary -->
+                        <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-4">
+                            <div class="panel-header-navy text-white px-4 py-3">
+                                <h2 class="font-semibold">Job Card Cost Summary</h2>
+                            </div>
+                            <div id="monthlyJobCardCosts" class="p-4">
+                            </div>
+                        </div>
+
+                        <!-- Labor Involvement -->
+                        <div class="glass-card overflow-hidden">
+                            <div class="panel-header-navy text-white px-4 py-3">
+                                <h2 class="font-semibold">Labor Involvement (Man-Days)</h2>
+                            </div>
+                            <div id="monthlyLaborInvolvement" class="p-4">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-span-12 md:col-span-4">
+                        <!-- Monthly Top Performers -->
+                        <div class="glass-card overflow-hidden">
+                            <div class="panel-header-green text-white px-4 py-3">
+                                <h2 class="font-semibold">🏆 Monthly Top Performers</h2>
+                            </div>
+                            <div id="monthlyTopPerformers" class="divide-y divide-slate-100">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Inventory Stock Tab -->
+            <div id="reportTab-inventory" class="report-tab-content hidden">
+                <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
+                    <div class="flex items-center gap-4">
+                        <input type="text" id="invReportSearch" placeholder="Search inventory..." 
+                            class="flex-1 px-4 py-2 border border-slate-300 rounded-lg" onkeyup="filterInventoryReport()">
+                        <select id="invReportCategory" onchange="filterInventoryReport()" class="px-4 py-2 border border-slate-300 rounded-lg">
+                            <option value="">All Categories</option>
+                            <option value="BMS">BMS</option>
+                            <option value="Plumbing">Plumbing</option>
+                            <option value="Metal">Metal</option>
+                            <option value="General">General</option>
+                            <option value="Aluminium">Aluminium</option>
+                            <option value="Paint">Paint</option>
+                            <option value="Electrical">Electrical</option>
+                            <option value="Tools">Tools</option>
+                        </select>
+                        <select id="invReportSort" onchange="filterInventoryReport()" class="px-4 py-2 border border-slate-300 rounded-lg">
+                            <option value="description">Sort: Description</option>
+                            <option value="quantity_asc">Sort: Qty (Low-High)</option>
+                            <option value="quantity_desc">Sort: Qty (High-Low)</option>
+                            <option value="value">Sort: Total Value</option>
+                        </select>
+                        <button onclick="exportInventoryReport()" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg">
+                            📥 Export
+                        </button>
+                    </div>
+                </div>
+
+                <div class="glass-card overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-100">
+                                <tr>
+                                    <th class="px-4 py-3 text-left font-semibold">Description</th>
+                                    <th class="px-4 py-3 text-center font-semibold">Category</th>
+                                    <th class="px-4 py-3 text-center font-semibold">Deno</th>
+                                    <th class="px-4 py-3 text-center font-semibold">In Stock</th>
+                                    <th class="px-4 py-3 text-right font-semibold">Unit Cost</th>
+                                    <th class="px-4 py-3 text-right font-semibold">Total Value</th>
+                                    <th class="px-4 py-3 text-center font-semibold">Location</th>
+                                    <th class="px-4 py-3 text-center font-semibold">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="inventoryReportBody" class="divide-y divide-slate-100">
+                            </tbody>
+                            <tfoot class="bg-slate-100 font-semibold">
+                                <tr>
+                                    <td colspan="5" class="px-4 py-3 text-right">Total Inventory Value:</td>
+                                    <td class="px-4 py-3 text-right text-green-600" id="totalInventoryValue">Rs. 0.00</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ==================== MODALS ==================== -->
+
+    <!-- Work Order Detail/Edit Modal -->
+    <div id="workOrderDetailModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto">
+            <div class="panel-header-blue text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-20">
+                <div>
+                    <h2 class="font-bold text-lg" id="woDetailTitle">Work Order Details</h2>
+                    <p class="text-sm text-blue-200" id="woDetailRef"></p>
+                </div>
+                <button onclick="closeModal('workOrderDetailModal')" class="text-blue-200 hover:text-white">✕</button>
+            </div>
+
+            <!-- Tab bar (req 1: Evaluation tab on every Project/Job/Task) -->
+            <div class="border-b border-slate-200 flex sticky top-[68px] bg-white z-10">
+                <button onclick="switchWoTab('details')" id="woTab-details-btn" class="wo-tab-btn px-6 py-3 text-sm font-medium border-b-2 border-blue-600 text-blue-600">
+                    📋 Details & Assignment
+                </button>
+                <button onclick="switchWoTab('evaluation')" id="woTab-evaluation-btn" class="wo-tab-btn px-6 py-3 text-sm font-medium border-b-2 border-transparent text-slate-500 hover:text-slate-700">
+                    📝 Daily Evaluation <span id="woEvalPendingBadge" class="ml-1 text-[10px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full hidden"></span>
+                </button>
+            </div>
+
+            <div class="p-6">
+                <input type="hidden" id="woDetailId">
+
+                <!-- ============ DETAILS TAB ============ -->
+                <div id="woTab-details">
+                    <!-- Status / Priority -->
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Status</label>
+                            <select id="woDetailStatus" class="w-full px-3 py-2 border border-slate-300 rounded-lg" onchange="updateWorkOrderStatus()">
+                                <option value="Pending">⏳ Pending</option>
+                                <option value="Active">✅ Active (Proceed)</option>
+                                <option value="Hold">⏸️ On Hold</option>
+                                <option value="Completed">🏁 Completed</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Priority</label>
+                            <select id="woDetailPriority" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                                <option value="High">🔴 High</option>
+                                <option value="Medium">🟡 Medium</option>
+                                <option value="Low">🟢 Low</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Description / meta -->
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                        <textarea id="woDetailDescription" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
+                    </div>
+                    <div class="grid grid-cols-3 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Authority</label>
+                            <input type="text" id="woDetailAuthority" placeholder="CCED(E)" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Budget (Rs)</label>
+                            <input type="number" id="woDetailBudget" step="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Duration (days)</label>
+                            <input type="number" id="woDetailDuration" min="1" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        </div>
+                    </div>
+
+                    <!-- Current Job Card Cost (req 2) -->
+                    <div class="mb-5 p-4 bg-gradient-to-r from-emerald-50 to-green-50 border border-green-200 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-xs text-slate-500">Current Job Card Cost</p>
+                                <p class="font-mono text-sm text-slate-600" id="woJobCardNo">—</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-2xl font-bold text-green-700" id="woJobCardCost">Rs. 0.00</p>
+                                <p class="text-[11px] text-slate-500"><span id="woJobMatCost">Rs.0</span> materials + <span id="woJobLabCost">Rs.0</span> labour</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress -->
+                    <div class="mb-5">
+                        <div class="flex justify-between mb-2">
+                            <span class="text-sm font-medium text-slate-700">Progress</span>
+                            <span class="text-sm font-bold" id="woDetailProgressText">0%</span>
+                        </div>
+                        <input type="range" id="woDetailProgress" min="0" max="100" value="0"
+                            class="w-full h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                            oninput="document.getElementById('woDetailProgressText').textContent = this.value + '%'; if(typeof toggleCompleteButton === 'function') toggleCompleteButton(this.value);">
+                    </div>
+
+                    <!-- In-charge / Supervisor -->
+                    <div class="grid grid-cols-2 gap-4 mb-5">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">In-Charge</label>
+                            <select id="woDetailIncharge" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                                <option value="">Select In-Charge...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Supervisor</label>
+                            <select id="woDetailSupervisor" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                                <option value="">Select Supervisor...</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Assign NEW labour -->
+                    <div class="mb-5 border border-slate-200 rounded-xl overflow-hidden">
+                        <div class="px-4 py-2.5 flex items-center justify-between" style="background:linear-gradient(135deg,#0a1628,#152a55)">
+                            <div class="flex items-center gap-2">
+                                <span class="text-white text-sm font-bold">⚓ Assign New Labour</span>
+                            </div>
+                            <input type="text" id="detailSailorSearch" placeholder="Search name / number..."
+                                oninput="filterDetailSailors()"
+                                class="text-xs px-2.5 py-1.5 rounded-lg border-0 bg-white/15 text-white placeholder-white/50 focus:outline-none focus:bg-white/25 w-44">
+                        </div>
+                        <!-- Trade filter pills -->
+                        <div class="px-3 py-2 flex gap-1.5 flex-wrap border-b border-slate-100 bg-slate-50">
+                            <button type="button" onclick="filterDetailTrade('ALL')" class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white">ALL</button>
+                            <button type="button" onclick="filterDetailTrade('MA')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">MA</button>
+                            <button type="button" onclick="filterDetailTrade('CA')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">CA</button>
+                            <button type="button" onclick="filterDetailTrade('PA')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PA</button>
+                            <button type="button" onclick="filterDetailTrade('PL')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
+                            <button type="button" onclick="filterDetailTrade('WE')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
+                            <button type="button" onclick="filterDetailTrade('RW')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                        </div>
+                        <!-- Sailor chips -->
+                        <div id="detailSailorChips" class="p-3 flex flex-wrap gap-2 max-h-36 overflow-y-auto scrollbar-thin" style="background:rgba(248,250,252,0.8)">
+                            <p class="text-slate-400 text-xs">Loading sailors...</p>
+                        </div>
+                    </div>
+
+                    <!-- Assigned Labour list -->
+                    <div class="mb-2">
+                        <div class="flex items-center justify-between mb-3">
+                            <h4 class="font-semibold text-slate-700">Assigned Labour</h4>
+                            <span class="text-sm text-slate-500" id="assignedLaborCount">0 assigned</span>
+                        </div>
+                        <div id="woDetailAssigned" class="space-y-2 max-h-56 overflow-y-auto p-3 bg-slate-50 rounded-xl"></div>
+                    </div>
+                </div>
+
+                <!-- ============ EVALUATION TAB (req 1) ============ -->
+                <div id="woTab-evaluation" class="hidden">
+                    <div class="bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-200 mb-4">
+                        <h4 class="font-semibold text-amber-800 flex items-center gap-2">
+                            📝 Daily Performance Evaluation
+                            <span class="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded">1–10 Scale</span>
+                        </h4>
+                        <p class="text-xs text-amber-700 mt-1">Evaluate each assigned sailor on quality, efficiency, discipline, material care, attitude and skill.</p>
+                    </div>
+                    <div id="laborEvalList" class="space-y-3"></div>
+                </div>
+            </div>
+
+            <!-- Sticky footer: Save + Proceed -->
+            <div class="px-6 py-4 border-t border-slate-200 bg-white sticky bottom-0 flex gap-3">
+                <button onclick="saveWorkOrderChanges()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium">
+                    💾 Save Changes
+                </button>
+                <button id="btnProceedWo" onclick="proceedWorkOrder()" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">
+                    🚀 Proceed - Commit Daily Labour
+                </button>
+                <button id="btnForwardComplete" onclick="forwardToComplete()" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium hidden">
+                    ✅ Forward to Complete
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Work Order Modal -->
+    <div id="workOrderModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-slate-700 to-slate-600 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0">
+                <h2 class="font-bold text-lg">New Work Order</h2>
+                <button onclick="closeModal('workOrderModal')" class="text-slate-300 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="createWorkOrder(event)" class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Type *</label>
+                        <select id="woType" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="PROJECT">Project (Type P)</option>
+                            <option value="JOB">Job (Type J)</option>
+                            <option value="TASK">Task (Type T)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Priority *</label>
+                        <select id="woPriority" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="High">🔴 High</option>
+                            <option value="Medium" selected>🟡 Medium</option>
+                            <option value="Low">🟢 Low</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Reference Type</label>
+                        <select id="woRefType" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="Minute Sheet">Minute Sheet</option>
+                            <option value="Signal">Signal</option>
+                            <option value="Letter">Letter</option>
+                            <option value="Verbal">Verbal Order</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Reference No</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="woReference" placeholder="MS/NCW/2024/..." 
+                                class="flex-1 px-3 py-2 border border-slate-300 rounded-lg">
+                            <select id="woApprovedRef" onchange="selectApprovedJob()" class="px-3 py-2 border border-slate-300 rounded-lg">
+                                <option value="">📋 Approved</option>
+                            </select>
+                </div>
+                </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Link Approved Estimate</label>
+                    <select id="woEstimateSelect" onchange="autofillFromEstimate(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                        <option value="">-- Select Approved Estimate (Optional) --</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
+                    <textarea id="woDescription" required rows="3" placeholder="Describe the work..."
+                        class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Authority</label>
+                        <input type="text" id="woAuthority" placeholder="CCED(E)"
+                            class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Est. Cost (Rs)</label>
+                        <input type="number" id="woBudget" placeholder="0.00" step="0.01"
+                            class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Duration (Days)</label>
+                        <input type="number" id="woDuration" min="1" value="1"
+                            class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Location</label>
+                    <input type="text" id="woLocationSelect" list="locationsDatalist" class="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="Type or select location...">
+                    <datalist id="locationsDatalist">
+                    </datalist>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">In-Charge</label>
+                        <select id="woIncharge" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="">Select...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Supervisor</label>
+                        <select id="woSupervisor" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="">Select...</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- ===== Sailor Assignment ===== -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="px-4 py-2.5 flex items-center justify-between"
+                        style="background:linear-gradient(135deg,#0a1628,#152a55)">
+                        <div class="flex items-center gap-2">
+                            <span class="text-white text-sm font-bold">⚓ Assign Sailors</span>
+                            <span id="woAssignedCount" class="text-xs bg-teal-500 text-white px-2 py-0.5 rounded-full font-bold">0 selected</span>
+                        </div>
+                        <input type="text" id="woSailorSearch" placeholder="Search name / number..."
+                            oninput="filterWoSailors()"
+                            class="text-xs px-2.5 py-1.5 rounded-lg border-0 bg-white/15 text-white placeholder-white/50 focus:outline-none focus:bg-white/25 w-44">
+                    </div>
+                    <!-- Trade filter pills -->
+                    <div class="px-3 py-2 flex gap-1.5 flex-wrap border-b border-slate-100 bg-slate-50">
+                        <button type="button" onclick="filterWoTrade('ALL')" class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white">ALL</button>
+                        <button type="button" onclick="filterWoTrade('MA')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">MA</button>
+                        <button type="button" onclick="filterWoTrade('CA')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">CA</button>
+                        <button type="button" onclick="filterWoTrade('PA')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PA</button>
+                        <button type="button" onclick="filterWoTrade('PL')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
+                        <button type="button" onclick="filterWoTrade('WE')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
+                        <button type="button" onclick="filterWoTrade('RW')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                    </div>
+                    <!-- Sailor chips -->
+                    <div id="woSailorChips" class="p-3 flex flex-wrap gap-2 max-h-36 overflow-y-auto scrollbar-thin"
+                        style="background:rgba(248,250,252,0.8)">
+                        <p class="text-slate-400 text-xs">Loading sailors...</p>
+                    </div>
+                    <!-- Selected summary -->
+                    <div id="woSelectedSummary" class="hidden px-3 py-2 bg-teal-50 border-t border-teal-100">
+                        <p class="text-xs text-teal-700 font-semibold">Selected: <span id="woSelectedNames"></span></p>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-2 border-t">
+                    <button type="button" onclick="closeModal('workOrderModal')" class="btn-secondary flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-slate-700 font-medium">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 text-white rounded-lg font-bold shadow-md"
+                        style="background:linear-gradient(135deg,#059669,#0d9488)">
+                        ⚓ Create Work Order
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Performance Evaluation Modal (1-10 Scale) -->
+    <div id="evaluationModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-green-600 to-emerald-500 text-white px-6 py-4 rounded-t-2xl sticky top-0">
+                <h2 class="font-bold text-lg sinhala">ක්‍රියාකාරීත්ව ඇගයීම</h2>
+                <p class="text-sm text-green-200">Performance Evaluation (1-10 Scale)</p>
+            </div>
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-6 p-3 bg-slate-100 rounded-lg">
+                    <div class="w-12 h-12 bg-slate-600 text-white rounded-full flex items-center justify-center text-lg font-bold" id="evalSailorInitial">AB</div>
+                    <div>
+                        <p class="font-semibold" id="evalSailorName">AB Kamal Perera</p>
+                        <p class="text-sm text-slate-500" id="evalWorkOrder">Job Description</p>
+                        <div class="flex gap-2 mt-1">
+                            <span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Avg: <span id="evalAvgScore">7.5</span></span>
+                            <span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded">Yesterday: <span id="evalYestScore">8.0</span></span>
+                        </div>
+                    </div>
+                </div>
+
+                <form onsubmit="submitEvaluation(event)" class="space-y-4">
+                    <input type="hidden" id="evalSailorId">
+                    <input type="hidden" id="evalWorkOrderId">
+                    
+                    <!-- Evaluation Sliders -->
+                    <div class="space-y-4">
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label class="text-sm font-medium sinhala">වැඩහි ගුණාත්මකභාවය (Quality)</label>
+                                <span class="text-lg font-bold" id="qualityValue">5</span>
+                            </div>
+                            <input type="range" id="qualityScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('quality')">
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label class="text-sm font-medium sinhala">කාර්යක්ෂමතාව (Efficiency)</label>
+                                <span class="text-lg font-bold" id="efficiencyValue">5</span>
+                            </div>
+                            <input type="range" id="efficiencyScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('efficiency')">
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label class="text-sm font-medium sinhala">විනය (Discipline)</label>
+                                <span class="text-lg font-bold" id="disciplineValue">5</span>
+                            </div>
+                            <input type="range" id="disciplineScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('discipline')">
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label class="text-sm font-medium sinhala">ද්‍රව්‍ය පරිහරණය (Material Care)</label>
+                                <span class="text-lg font-bold" id="materialValue">5</span>
+                            </div>
+                            <input type="range" id="materialScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('material')">
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label class="text-sm font-medium sinhala">ආකල්ප (Attitude)</label>
+                                <span class="text-lg font-bold" id="attitudeValue">5</span>
+                            </div>
+                            <input type="range" id="attitudeScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('attitude')">
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <label class="text-sm font-medium sinhala">නිපුණතාව (Skill)</label>
+                                <span class="text-lg font-bold" id="skillValue">5</span>
+                            </div>
+                            <input type="range" id="skillScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('skill')">
+                        </div>
+                    </div>
+
+                    <!-- Special Score Reasons -->
+                    <div id="specialScoreReasons" class="hidden space-y-3">
+                        <div id="score1Box" class="hidden">
+                            <label class="block text-sm font-medium text-red-600 mb-1">⚠️ Reason for Score 1 (Required)</label>
+                            <textarea id="score1Reason" rows="2" class="w-full px-3 py-2 border border-red-300 rounded-lg text-sm"></textarea>
+                        </div>
+                        <div id="score2Box" class="hidden">
+                            <label class="block text-sm font-medium text-amber-600 mb-1">⚠️ Reason for Score 2 (Required)</label>
+                            <textarea id="score2Reason" rows="2" class="w-full px-3 py-2 border border-amber-300 rounded-lg text-sm"></textarea>
+                        </div>
+                        <div id="score10Box" class="hidden">
+                            <label class="block text-sm font-medium text-green-600 mb-1">🌟 Reason for Score 10 (Required)</label>
+                            <textarea id="score10Reason" rows="2" class="w-full px-3 py-2 border border-green-300 rounded-lg text-sm"></textarea>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Comments</label>
+                        <textarea id="evalComment" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm"></textarea>
+                    </div>
+
+                    <div class="flex gap-3 pt-2">
+                        <button type="button" onclick="closeModal('evaluationModal')" class="flex-1 px-4 py-3 border border-slate-300 rounded-lg">Cancel</button>
+                        <button type="submit" class="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium">Submit ✓</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Material to Job Modal -->
+    <div id="addMaterialModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg">Add Material to Job Card</h2>
+                <button onclick="closeModal('addMaterialModal')" class="text-amber-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="addMaterialToJob(event)" class="p-6 space-y-4">
+                <input type="hidden" id="matJobCardId">
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Select from Inventory</label>
+                    <select id="matFromInventory" onchange="fillMaterialFromInventory()" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <option value="">-- Select Material --</option>
+                    </select>
+                </div>
+                
+                <div class="text-center text-slate-400 text-sm">— OR enter manually —</div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Material Name *</label>
+                    <input type="text" id="matName" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Quantity *</label>
+                        <input type="number" id="matQuantity" required min="0.01" step="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Unit</label>
+                        <select id="matUnit" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="nos">Nos</option>
+                            <option value="bags">Bags</option>
+                            <option value="meters">Meters</option>
+                            <option value="kg">Kg</option>
+                            <option value="Ltr">Ltr</option>
+                            <option value="cubic meters">Cubic M</option>
+                            <option value="sheets">Sheets</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Unit Cost (Rs)</label>
+                        <input type="number" id="matCost" step="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-lg">
+                    <div class="flex justify-between">
+                        <span class="text-slate-600">Total Cost:</span>
+                        <span class="font-bold text-green-600" id="matTotalCost">Rs. 0.00</span>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeModal('addMaterialModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg font-medium">Add Material</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Inventory Item Modal -->
+    <!-- Bulk Upload Modal -->
+    <div id="bulkUploadModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div class="bg-gradient-to-r from-purple-600 to-indigo-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h3 class="text-xl font-bold flex items-center gap-2">
+                    ?? Bulk Upload <span id="bulkUploadTitle">Inventory</span>
+                </h3>
+                <button onclick="closeModal('bulkUploadModal')" class="text-white/80 hover:text-white">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            <div class="p-6">
+                <div class="mb-6">
+                    <p class="text-sm text-slate-600 mb-4">
+                        Upload a CSV file to add multiple records at once. Download the template below to ensure your data is formatted correctly.
+                    </p>
+                    <button onclick="downloadCsvTemplate()" class="text-purple-600 hover:text-purple-800 text-sm font-medium flex items-center gap-2 mb-4">
+                        ?? Download CSV Template
+                    </button>
+                    <input type="hidden" id="bulkUploadType" value="">
+                    <label class="block w-full border-2 border-dashed border-purple-300 rounded-xl p-8 text-center cursor-pointer hover:bg-purple-50 transition-colors">
+                        <span class="block text-4xl mb-2">??</span>
+                        <span class="block text-sm font-medium text-purple-700 mb-1">Click to select CSV file</span>
+                        <span class="block text-xs text-slate-500">Only .csv files are supported</span>
+                        <input type="file" id="bulkUploadFile" accept=".csv" class="hidden" onchange="handleBulkFileSelect(event)">
+                    </label>
+                    <div id="bulkFileName" class="mt-2 text-sm text-center text-slate-700 hidden"></div>
+                </div>
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('bulkUploadModal')" class="px-4 py-2 text-slate-500 hover:text-slate-700 font-medium">Cancel</button>
+                    <button type="button" onclick="processCsvUpload()" id="bulkUploadBtn" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg font-medium opacity-50 cursor-not-allowed" disabled>
+                        Upload Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="inventoryModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div class="bg-gradient-to-r from-green-600 to-emerald-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg">Add Inventory Item</h2>
+                <button onclick="closeModal('inventoryModal')" class="text-green-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="saveInventoryItem(event)" class="p-6 space-y-4">
+                <input type="hidden" id="invId">
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Category *</label>
+                        <input type="text" id="invCategory" list="invCategoryList" required placeholder="Select or type new..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <datalist id="invCategoryList">
+                            <option value="BMS">
+                            <option value="Plumbing">
+                            <option value="Metal">
+                            <option value="General">
+                            <option value="Aluminium">
+                            <option value="Paint">
+                            <option value="Electrical">
+                            <option value="Tools">
+                        </datalist>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Date Added</label>
+                        <input type="date" id="invDate" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
+                    <input type="text" id="invDescription" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Deno (Unit)</label>
+                        <select id="invDeno" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="nos">Nos</option>
+                            <option value="Ltr">Ltr</option>
+                            <option value="meters">Meters</option>
+                            <option value="kg">Kg</option>
+                            <option value="bags">Bags</option>
+                            <option value="sheets">Sheets</option>
+                            <option value="cubic meters">Cubic M</option>
+                            <option value="rolls">Rolls</option>
+                            <option value="sets">Sets</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Quantity *</label>
+                        <input type="number" id="invQuantity" required step="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Cost (Rs VAT)</label>
+                        <input type="number" id="invCost" step="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Requirement (Project)</label>
+                        <select id="invRequirement" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="">-- Select Project --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Or Type Requirement</label>
+                        <input type="text" id="invRequirementText" placeholder="e.g., Wardroom Reno" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Location</label>
+                        <select id="invLocation" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="Zone Store">Zone Store</option>
+                            <option value="Ready Use Store">Ready Use Store</option>
+                            <option value="Balance Store">Balance Store</option>
+                            <option value="Workshop">Workshop</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">On Charge Ref</label>
+                        <input type="text" id="invOnCharge" placeholder="Nav 254/255" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Zone *</label>
+                        <select id="invZone" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-blue-50 border-blue-300">
+                        </select>
+                    </div>
+                    <div class="flex items-end">
+                        <p class="text-xs text-slate-400 italic">Item will be visible only to the selected zone</p>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeModal('inventoryModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium">Save Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Inventory Item Detail Popup -->
+    <div id="inventoryDetailModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg">Item Details</h2>
+                <button onclick="closeModal('inventoryDetailModal')" class="text-blue-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6" id="inventoryDetailContent">
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Location Modal -->
+    <div id="addLocationModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="panel-header-teal text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg">Add Location</h2>
+                <button onclick="closeModal('addLocationModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="saveLocation(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Zone *</label>
+                    <select id="locZone" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <option value="A-Zone">A-Zone</option>
+                        <option value="BC-Zone">BC-Zone</option>
+                        <option value="Carpentry-Shop">Carpentry Shop</option>
+                        <option value="Welding-Shop">Welding Shop</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Building Name *</label>
+                    <input type="text" id="locBuilding" required placeholder="e.g., Wardroom Building" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Sub-location</label>
+                    <input type="text" id="locSubLocation" placeholder="e.g., Ground Floor, Room 101" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                    <textarea id="locDescription" rows="2" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
+                </div>
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeModal('addLocationModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg font-medium">Save Location</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- New Estimate Modal -->
+    <div id="newEstimateModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
+                <h2 class="font-bold text-lg">New Estimate</h2>
+                <button onclick="closeModal('newEstimateModal')" class="text-amber-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="saveEstimate(event)" class="p-6 space-y-4">
+                <input type="hidden" id="estId">
+                
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
+                        <input type="text" id="estDescription" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Reference Document</label>
+                        <input type="text" id="estReference" placeholder="MS/NCW/2024/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <!-- Location & End User (req 8) -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Location *</label>
+                        <input type="text" id="estLocation" required placeholder="e.g., Wardroom Building, A-Zone" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">End User *</label>
+                        <input type="text" id="estEndUser" required placeholder="e.g., Officers Wardroom / Mess Secretary" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <!-- Work Scope -->
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Work Scope</label>
+                    <textarea id="estWorkScope" rows="3" placeholder="Describe the scope of work..." class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
+                </div>
+
+                <!-- Signatories (req 8) -->
+                <div class="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                    <h4 class="font-semibold text-slate-700 mb-3">Signatories (Name • Rank • Service No.)</h4>
+                    <div class="space-y-3">
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 mb-1">Created By <span class="text-slate-400">(person who visited & created)</span></p>
+                            <div class="grid grid-cols-3 gap-2">
+                                <select id="estCreatedName" onchange="autoFillSignatory('Created')" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white cursor-pointer">
+                                    <option value="">Select Name...</option>
+                                </select>
+                                <input type="text" id="estCreatedRank" placeholder="Rank" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
+                                <input type="text" id="estCreatedSvc" placeholder="Service No." class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 mb-1">Checked By <span class="text-slate-400">(person who checked the estimate)</span></p>
+                            <div class="grid grid-cols-3 gap-2">
+                                <select id="estCheckedName" onchange="autoFillSignatory('Checked')" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white cursor-pointer">
+                                    <option value="">Select Name...</option>
+                                </select>
+                                <input type="text" id="estCheckedRank" placeholder="Rank" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
+                                <input type="text" id="estCheckedSvc" placeholder="Service No." class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
+                            </div>
+                        </div>
+                        <div>
+                            <p class="text-xs font-medium text-slate-500 mb-1">Approved By <span class="text-slate-400">(officer approving for further process)</span></p>
+                            <div class="grid grid-cols-3 gap-2">
+                                <input type="text" id="estApprovedName" placeholder="Name" class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                <input type="text" id="estApprovedRank" placeholder="Rank" class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                                <input type="text" id="estApprovedSvc" placeholder="Service No." class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Materials Section -->
+                <div class="border border-slate-200 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-semibold text-slate-700">Materials</h4>
+                        <button type="button" onclick="addEstimateMaterialRow()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">+ Add Material</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-100">
+                                <tr>
+                                    <th class="px-2 py-2 text-left">Material</th>
+                                    <th class="px-2 py-2 text-center">Qty</th>
+                                    <th class="px-2 py-2 text-center">Unit</th>
+                                    <th class="px-2 py-2 text-right">Unit Cost</th>
+                                    <th class="px-2 py-2 text-right">Total</th>
+                                    <th class="px-2 py-2 text-center">Availability</th>
+                                    <th class="px-2 py-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="estMaterialsBody">
+                            </tbody>
+                            <tfoot class="bg-green-50">
+                                <tr>
+                                    <td colspan="4" class="px-2 py-2 text-right font-semibold">Materials Total:</td>
+                                    <td class="px-2 py-2 text-right font-bold text-green-600" id="estMaterialsTotal">Rs. 0.00</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Labor Section -->
+                <div class="border border-slate-200 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-semibold text-slate-700">Labor Requirement</h4>
+                        <button type="button" onclick="addEstimateLaborRow()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">+ Add Labor</button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-slate-100">
+                                <tr>
+                                    <th class="px-2 py-2 text-left">Trade/Role</th>
+                                    <th class="px-2 py-2 text-center">No. of Workers</th>
+                                    <th class="px-2 py-2 text-center">Man-Days</th>
+                                    <th class="px-2 py-2 text-left">Task Description</th>
+                                    <th class="px-2 py-2"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="estLaborBody">
+                            </tbody>
+                            <tfoot class="bg-blue-50">
+                                <tr>
+                                    <td colspan="2" class="px-2 py-2 text-right font-semibold">Total Man-Days:</td>
+                                    <td class="px-2 py-2 text-center font-bold text-blue-600" id="estLaborTotal">0</td>
+                                    <td colspan="2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Summary -->
+                <div class="bg-slate-100 p-4 rounded-xl">
+                    <div class="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                            <p class="text-sm text-slate-500">Materials Cost</p>
+                            <p class="text-xl font-bold text-green-600" id="estSummaryMaterials">Rs. 0.00</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-500">Labor (Man-Days)</p>
+                            <p class="text-xl font-bold text-blue-600" id="estSummaryLabor">0</p>
+                        </div>
+                        <div>
+                            <p class="text-sm text-slate-500">Total Estimate</p>
+                            <p class="text-xl font-bold text-amber-600" id="estSummaryTotal">Rs. 0.00</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4">
+                    <button type="button" onclick="closeModal('newEstimateModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-amber-500 text-white rounded-lg font-medium">Save Estimate</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== ZONE TEAM MANAGER MODAL (req 3) ==================== -->
+    <div id="zoneTeamModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-green-600 to-emerald-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
+                <div>
+                    <h2 class="font-bold text-lg">Manage Zone Team</h2>
+                    <p class="text-sm text-green-100"><span id="ztmZoneName">A-Zone</span> • availability pulled from personnel records</p>
+                </div>
+                <button onclick="closeModal('zoneTeamModal')" class="text-green-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 grid grid-cols-2 gap-6">
+                <div>
+                    <h3 class="font-semibold text-slate-700 mb-2 flex items-center gap-2">✅ Current Team</h3>
+                    <div id="ztmCurrentList" class="space-y-2 max-h-[400px] overflow-y-auto pr-1"></div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-700 mb-2 flex items-center gap-2">➕ Add From Zone</h3>
+                    <div id="ztmAvailableList" class="space-y-2 max-h-[400px] overflow-y-auto pr-1"></div>
+                </div>
+            </div>
+            <div class="px-6 pb-6">
+                <button onclick="closeModal('zoneTeamModal')" class="w-full px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== OFF-CHARGE MODAL (req 5) ==================== -->
+    <div id="offChargeModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-rose-600 to-red-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg">Off-Charge Material (Nav 254)</h2>
+                <button onclick="closeModal('offChargeModal')" class="text-rose-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="submitOffCharge(event)" class="p-6 space-y-4">
+                <input type="hidden" id="ocItemId">
+                <div class="p-3 bg-slate-50 rounded-lg">
+                    <p class="text-sm text-slate-500">Item</p>
+                    <p class="font-medium" id="ocItemName">—</p>
+                    <p class="text-xs text-slate-500 mt-1">Available: <span id="ocItemAvail" class="font-semibold">0</span></p>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Quantity *</label>
+                        <input type="number" id="ocQty" required step="0.01" min="0.01" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Nav 254 Ref *</label>
+                        <input type="text" id="ocRef" required placeholder="Nav254/2024/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Issue To (Base / Zone) *</label>
+                    <select id="ocDest" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <option value="">Select destination...</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Date</label>
+                    <input type="date" id="ocDate" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Remarks</label>
+                    <input type="text" id="ocRemarks" placeholder="e.g., transfer to BC-Zone store" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('offChargeModal')" class="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 bg-rose-600 text-white rounded-lg font-medium">Off-Charge</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== ZONE MANAGER MODAL (req 10) ==================== -->
+    <div id="zoneManagerModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="panel-header-teal text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg">Manage Zones</h2>
+                <button onclick="closeModal('zoneManagerModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="flex gap-2">
+                    <input type="text" id="newZoneName" placeholder="New zone name (e.g., D-Zone)" class="flex-1 px-3 py-2 border border-slate-300 rounded-lg">
+                    <button onclick="addZone()" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ Add</button>
+                </div>
+                <div id="zoneManagerList" class="space-y-2 max-h-[320px] overflow-y-auto"></div>
+                <button onclick="closeModal('zoneManagerModal')" class="w-full px-4 py-2.5 bg-teal-600 text-white rounded-lg font-medium">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== ADD MAINTENANCE RECORD MODAL (req 10 support) ==================== -->
+    <div id="maintenanceRecordModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="panel-header-teal text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg">Add Maintenance Record</h2>
+                <button onclick="closeModal('maintenanceRecordModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="saveMaintenanceRecord(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Maintenance Type *</label>
+                    <select id="mrType" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <option value="Repair">Repair</option>
+                        <option value="Preventive">Preventive</option>
+                        <option value="Emergency">Emergency</option>
+                        <option value="Routine">Routine</option>
+                        <option value="Upgrade">Upgrade</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
+                    <textarea id="mrDescription" required rows="3" class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Date *</label>
+                        <input type="date" id="mrDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Job Card No.</label>
+                        <input type="text" id="mrJobNumber" placeholder="JC/2024/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('maintenanceRecordModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg font-medium">Save Record</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== PROFILE PASSWORD PROMPT MODAL ==================== -->
+    <div id="profilePasswordModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div class="bg-gradient-to-r from-teal-600 to-cyan-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg" id="pwdModalTitle">Profile Authentication</h2>
+                <button onclick="closeModal('profilePasswordModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="submitProfilePassword(event)" class="p-6 space-y-4">
+                <input type="hidden" id="pwdModalTargetType">
+                <input type="hidden" id="pwdModalTargetZone">
+                <div class="text-center">
+                    <p class="text-xs text-slate-500 mb-1">Enter password to access profile:</p>
+                    <p class="font-bold text-slate-700 text-sm" id="pwdModalProfileName">—</p>
+                </div>
+                <div>
+                    <input type="password" id="profilePasswordInput" required placeholder="Enter password" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-center font-bold tracking-widest text-base focus:outline-teal-500">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('profilePasswordModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg font-medium">Verify</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== ESTIMATE APPROVAL MODAL (req 9) ==================== -->
+    <div id="approvalModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-green-600 to-emerald-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg">Approve Estimate</h2>
+                <button onclick="closeModal('approvalModal')" class="text-green-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="submitApproval(event)" class="p-6 space-y-4">
+                <div class="p-3 bg-slate-50 rounded-lg">
+                    <p class="text-sm text-slate-500">Estimate</p>
+                    <p class="font-medium" id="apvEstNumber">—</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Approving Authority *</label>
+                    <select id="apvAuthority" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <option value="">Select authority...</option>
+                        <option value="CCED(E)">CCED(E)</option>
+                        <option value="CENA">CENA</option>
+                        <option value="DAC(E)">DAC(E)</option>
+                        <option value="DGCE">DGCE</option>
+                        <option value="CCEO(E)">CCEO(E)</option>
+                    </select>
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('approvalModal')" class="flex-1 px-4 py-2.5 border border-slate-300 rounded-lg">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium">Confirm Approval</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg hidden transform transition-all z-50">
+        <div class="flex items-center gap-2">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+            </svg>
+            <span id="toastMessage">Action completed successfully</span>
+        </div>
+    </div>
+
+    <script src="app.js?v=20260708022"></script>
+    <!-- Firebase connection status indicator -->
+    <script>
+    // Show Firebase connection status in console on load
+    opsDB.ref('.info/connected').on('value', snap => {
+        if (snap.val() === true) {
+            console.log('🔥 NCW-PS DB#2 (Operations): CONNECTED');
+        } else {
+            console.warn('⚠️ NCW-PS DB#2 (Operations): DISCONNECTED - check internet/Firebase config');
+        }
+    });
+    sailorsDB.ref('.info/connected').on('value', snap => {
+        if (snap.val() === true) {
+            console.log('⚓ NCW-PS DB#1 (Sailors): CONNECTED');
+        } else {
+            console.warn('⚠️ NCW-PS DB#1 (Sailors): DISCONNECTED');
+        }
+    </script>
+    
+    <!-- Bottom Mobile Navigation Bar (visible only on mobile) -->
+    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-4 py-2 flex justify-around items-center z-40 backdrop-blur bg-opacity-95 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] no-print">
+        <button onclick="switchView('dashboard')" id="mobile-tab-dashboard" class="flex flex-col items-center gap-0.5 text-teal-400 flex-1">
+            <span class="text-lg">📊</span>
+            <span class="text-[9px] font-semibold">Dashboard</span>
+        </button>
+        <button onclick="switchView('jobcards')" id="mobile-tab-jobcards" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">📋</span>
+            <span class="text-[9px] font-semibold">Job Cards</span>
+        </button>
+        <button onclick="switchView('inventory')" id="mobile-tab-inventory" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">📦</span>
+            <span class="text-[9px] font-semibold">Inventory</span>
+        </button>
+        <button onclick="switchView('reports')" id="mobile-tab-reports" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">📈</span>
+            <span class="text-[9px] font-semibold">Reports</span>
+        </button>
+        <button onclick="switchView('settings')" id="mobile-tab-settings" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">⚙️</span>
+            <span class="text-[9px] font-semibold">Settings</span>
+        </button>
+    </div>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
