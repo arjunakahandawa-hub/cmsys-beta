@@ -557,6 +557,9 @@
                             <button id="evalModeBtn" onclick="toggleEvaluationMode()" class="hidden text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-lg" style="background:linear-gradient(135deg,#d97706,#b45309);animation:pulse-gold 2s infinite">
                                 📝 Evening Evaluation
                             </button>
+                            <button onclick="openNewAssignModal()" class="text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+                                ➕ New Assign
+                            </button>
                             <button onclick="openNewWorkOrderModal()" class="text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all" style="background:linear-gradient(135deg,#0d9488,#0891b2)">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -1805,6 +1808,80 @@
                     <button type="submit" class="flex-1 px-4 py-2.5 text-white rounded-lg font-bold shadow-md"
                         style="background:linear-gradient(135deg,#059669,#0d9488)">
                         ⚓ Create Work Order
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- New Assign Modal (Simplified Work Order Modal) -->
+    <div id="assignModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0">
+                <h2 class="font-bold text-lg">New Assignment</h2>
+                <button onclick="closeModal('assignModal')" class="text-indigo-300 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="createAssignment(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Assign Type *</label>
+                    <select id="asType" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <option value="PROJECT">Project (Type P)</option>
+                        <option value="JOB">Job (Type J)</option>
+                        <option value="TASK">Task (Type T)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
+                    <textarea id="asDescription" required rows="4" placeholder="Describe the work..."
+                        class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">In-Charge</label>
+                    <select id="asIncharge" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <option value="">Select...</option>
+                    </select>
+                </div>
+
+                <!-- ===== Sailor Assignment ===== -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="px-4 py-2.5 flex items-center justify-between"
+                        style="background:linear-gradient(135deg,#0a1628,#152a55)">
+                        <div class="flex items-center gap-2">
+                            <span class="text-white text-sm font-bold">⚓ Assign Sailors</span>
+                            <span id="asAssignedCount" class="text-xs bg-teal-500 text-white px-2 py-0.5 rounded-full font-bold">0 selected</span>
+                        </div>
+                        <input type="text" id="asSailorSearch" placeholder="Search name / number..."
+                            oninput="filterAsSailors()"
+                            class="text-xs px-2.5 py-1.5 rounded-lg border-0 bg-white/15 text-white placeholder-white/50 focus:outline-none focus:bg-white/25 w-44">
+                    </div>
+                    <!-- Trade filter pills -->
+                    <div class="px-3 py-2 flex gap-1.5 flex-wrap border-b border-slate-100 bg-slate-50">
+                        <button type="button" onclick="filterAsTrade('ALL')" class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white">ALL</button>
+                        <button type="button" onclick="filterAsTrade('MA')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">MA</button>
+                        <button type="button" onclick="filterAsTrade('CA')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">CA</button>
+                        <button type="button" onclick="filterAsTrade('PA')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PA</button>
+                        <button type="button" onclick="filterAsTrade('PL')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
+                        <button type="button" onclick="filterAsTrade('WE')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
+                        <button type="button" onclick="filterAsTrade('RW')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                    </div>
+                    <!-- Sailor chips -->
+                    <div id="asSailorChips" class="p-3 flex flex-wrap gap-2 max-h-40 overflow-y-auto scrollbar-thin"
+                        style="background:rgba(248,250,252,0.8)">
+                        <p class="text-slate-400 text-xs">Loading sailors...</p>
+                    </div>
+                    <!-- Selected summary -->
+                    <div id="asSelectedSummary" class="hidden px-3 py-2 bg-teal-50 border-t border-teal-100">
+                        <p class="text-xs text-teal-700 font-semibold">Selected: <span id="asSelectedNames"></span></p>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-2 border-t">
+                    <button type="button" onclick="closeModal('assignModal')" class="btn-secondary flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-slate-700 font-medium">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 text-white rounded-lg font-bold shadow-md"
+                        style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+                        ⚓ Create Assignment
                     </button>
                 </div>
             </form>

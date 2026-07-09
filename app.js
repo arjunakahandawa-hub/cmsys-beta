@@ -1220,6 +1220,225 @@ function createWorkOrder(event) {
     });
 }
 
+// =============================================
+// NEW SIMPLIFIED ASSIGNMENT WORKFLOW
+// =============================================
+let _asSelectedSailors = new Set();
+let _asCurrentTrade = 'ALL';
+
+function openNewAssignModal() {
+    _asSelectedSailors = new Set();
+    _asCurrentTrade = 'ALL';
+
+    // Populate In-Charge dropdown (PO & LS ranks)
+    const supervisors = store.sailors.filter(s => s.rank && (s.rank.includes('PO') || s.rank === 'LS'));
+    const supOptions = '<option value="">Select...</option>' +
+        supervisors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
+    document.getElementById('asIncharge').innerHTML = supOptions;
+
+    // Render sailor chips
+    renderAsSailorChips();
+
+    // Clear search
+    document.getElementById('asSailorSearch').value = '';
+
+    // Reset trade filter UI
+    document.querySelectorAll('.as-trade-btn').forEach(b => {
+        b.className = 'as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600';
+    });
+    const firstTradeBtn = document.querySelector('.as-trade-btn');
+    if (firstTradeBtn) {
+        firstTradeBtn.className = 'as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white';
+    }
+
+    document.getElementById('assignModal').classList.remove('hidden');
+}
+
+function renderAsSailorChips(filter = '') {
+    const tradeBgMap = {
+        'MA':'#0d9488','CA':'#7c3aed','PA':'#b45309','PL':'#0891b2',
+        'WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8'
+    };
+
+    let sailors = store.sailors.filter(s =>
+        (s.attendance === 'Present' || !s.attendance) &&
+        (_asCurrentTrade === 'ALL' || s.trade === _asCurrentTrade)
+    );
+
+    if (filter) {
+        const q = filter.toLowerCase().trim();
+        sailors = sailors.filter(s =>
+            (s._searchIndex || '').includes(q) ||
+            s.name.toLowerCase().includes(q) ||
+            (s.official_number || '').toLowerCase().includes(q) ||
+            (s.rank || '').toLowerCase().includes(q) ||
+            (s.trade || '').toLowerCase().includes(q)
+        );
+    }
+
+    const container = document.getElementById('asSailorChips');
+    if (sailors.length === 0) {
+        container.innerHTML = `
+            <div class="w-full py-4 text-center">
+                <div style="font-size:28px">🔍</div>
+                <p class="text-slate-400 text-xs mt-1">No sailors found for <strong>${filter || _asCurrentTrade}</strong></p>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = sailors.map(s => {
+        const isSelected = _asSelectedSailors.has(String(s.id ?? s._fbKey));
+        const tradeBg    = tradeBgMap[s.trade] || '#475569';
+        const offNo      = s.official_number || s.officialNumber || s.service_no || '—';
+        const fullName   = s.name || 'Unknown';
+        const rank       = s.rank || '';
+
+        return `
+        <button type="button"
+            onclick="toggleAsSailor('${s.id ?? s._fbKey}')"
+            title="${rank} ${fullName} | ${offNo}"
+            class="sailor-chip-card ${isSelected ? 'selected' : ''}"
+            style="
+                display:flex; align-items:center; gap:8px;
+                padding:7px 10px; border-radius:10px; cursor:pointer;
+                border:2px solid ${isSelected ? 'rgba(13,148,136,0.6)' : '#e2e8f0'};
+                background:${isSelected ? 'linear-gradient(135deg,rgba(13,148,136,0.12),rgba(8,145,178,0.12))' : '#fff'};
+                box-shadow: ${isSelected ? '0 0 0 2px rgba(13,148,136,0.25)' : '0 1px 3px rgba(0,0,0,0.06)'};
+                transition:all 0.15s ease; min-width:140px; position:relative;
+                text-align:left;
+            ">
+
+            <!-- Trade badge -->
+            <span style="
+                width:32px; height:32px; border-radius:8px;
+                background:${isSelected ? '#0d9488' : tradeBg};
+                color:white; display:flex; align-items:center; justify-content:center;
+                font-size:9px; font-weight:800; flex-shrink:0;
+                box-shadow:0 2px 4px ${tradeBg}66;
+            ">${s.trade}</span>
+
+            <!-- Name + Off No -->
+            <div style="min-width:0; flex:1">
+                <div style="
+                    font-size:11px; font-weight:700; line-height:1.2;
+                    color:${isSelected ? '#0d9488' : '#1e293b'};
+                    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                    max-width:130px;
+                ">${rank} ${fullName}</div>
+                <div style="font-size:9.5px; color:#94a3b8; font-weight:500; letter-spacing:0.3px">${offNo}</div>
+            </div>
+
+            <!-- Checkmark -->
+            ${isSelected ? `
+            <span style="
+                width:18px; height:18px; border-radius:50%;
+                background:#0d9488; color:white;
+                display:flex; align-items:center; justify-content:center;
+                font-size:11px; font-weight:900; flex-shrink:0;
+            ">✓</span>` : ''}
+        </button>`;
+    }).join('');
+
+    // Update counter
+    const count = _asSelectedSailors.size;
+    document.getElementById('asAssignedCount').textContent = `${count} selected`;
+
+    // Update summary strip
+    const summary = document.getElementById('asSelectedSummary');
+    if (count > 0) {
+        const details = [..._asSelectedSailors].map(id => {
+            const s = store.sailors.find(s => String(s.id ?? s._fbKey) === String(id));
+            if (!s) return id;
+            const offNo = s.official_number || s.service_no || '?';
+            return `${s.rank || ''} ${s.name} (${offNo})`;
+        }).join(' • ');
+        document.getElementById('asSelectedNames').textContent = details;
+        summary.classList.remove('hidden');
+    } else {
+        summary.classList.add('hidden');
+    }
+}
+
+function toggleAsSailor(sailorId) {
+    const key = String(sailorId);
+    if (_asSelectedSailors.has(key)) {
+        _asSelectedSailors.delete(key);
+    } else {
+        _asSelectedSailors.add(key);
+    }
+    renderAsSailorChips(document.getElementById('asSailorSearch').value);
+}
+
+function filterAsSailors() {
+    renderAsSailorChips(document.getElementById('asSailorSearch').value);
+}
+
+function filterAsTrade(trade) {
+    _asCurrentTrade = trade;
+    document.querySelectorAll('.as-trade-btn').forEach(b => {
+        b.className = 'as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600';
+    });
+    event.target.className = 'as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white';
+    renderAsSailorChips(document.getElementById('asSailorSearch').value);
+}
+
+function createAssignment(event) {
+    event.preventDefault();
+
+    const newOrder = {
+        type:               document.getElementById('asType').value,
+        reference_no:       null,
+        description:        document.getElementById('asDescription').value,
+        status:             'Pending',
+        priority:           'Medium',
+        zone_id:            store.currentZone,
+        estimated_duration: 1,
+        budget_allocation:  0,
+        progress:           0,
+        assigned:           [..._asSelectedSailors],
+        location:           '',
+        incharge:           document.getElementById('asIncharge').value || null,
+        supervisor:         null,
+        estimate_id:        null,
+    };
+
+    // Mark selected sailors as Assigned in store (optimistic update)
+    _asSelectedSailors.forEach(id => {
+        const s = store.sailors.find(s => String(s.id ?? s._fbKey) === String(id));
+        if (s) { s.status = 'Assigned'; s.evaluated = false; }
+    });
+    _asSelectedSailors = new Set(); // reset
+
+    // Save Work Order to Firebase DB#2
+    fbSaveWorkOrder(newOrder).then(ref => {
+        const fbKey = ref ? ref.key : null;
+
+        // Also create a Job Card automatically
+        const jobNumber = `JC/${new Date().getFullYear()}/${String(Date.now()).slice(-4).padStart(4,'0')}`;
+        const newJobCard = {
+            job_number:       jobNumber,
+            work_order_id:    fbKey,
+            description:      newOrder.description,
+            location:         '',
+            zone_id:          store.currentZone,
+            status:           'Active',
+            start_date:       new Date().toISOString().split('T')[0],
+            total_material_cost: 0,
+            feedbackSent:     false,
+            feedbackReceived: false,
+            estimate_id:      null,
+        };
+        fbSaveJobCard(newJobCard);
+
+        closeModal('assignModal');
+        showToast(`Assignment and Job Card ${jobNumber} created! 🔥`);
+        event.target.reset();
+    }).catch(err => {
+        console.error('❌ Assignment save failed:', err);
+        showToast('Save failed — check Firebase connection', 'error');
+    });
+}
+
 // Nominal labour rate (Rs per man-hour) used for Job Card cost roll-up
 const LABOR_RATE_PER_HOUR = 150;
 
