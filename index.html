@@ -397,14 +397,14 @@
 
     <!-- ===== Tactical Status Bar ===== -->
     <div class="no-print" style="background:linear-gradient(90deg,#0a1628 0%,#152a55 50%,#0a1628 100%);border-bottom:1px solid rgba(13,148,136,0.3)">
-        <div class="container mx-auto px-4 py-1.5 flex items-center justify-between text-xs">
-            <div class="flex items-center gap-5 text-slate-400">
+        <div class="container mx-auto px-4 py-2 flex flex-col md:flex-row items-center justify-between gap-2.5 text-xs">
+            <div class="flex flex-wrap items-center justify-center md:justify-start gap-3 md:gap-5 text-slate-400">
                 <span class="mono">📅 <span id="currentDate" class="text-teal-300"></span></span>
                 <span class="mono">🕐 <span id="currentTime" class="text-teal-300"></span></span>
-                <span class="text-slate-600">|</span>
-                <span class="text-slate-400">Miss Garrison Naval Station · ~10,000 Personnel · 750+ Ha</span>
+                <span class="hidden sm:inline text-slate-600">|</span>
+                <span class="hidden sm:inline text-slate-400">Miss Garrison Naval Station · ~10,000 Personnel · 750+ Ha</span>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center justify-center gap-1.5 md:gap-2">
                 <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.35)">
                     ⚓ NET: <span id="netForce">24</span>
                 </span>
@@ -493,23 +493,23 @@
                 <!-- Center Panel - Work Orders Board -->
                 <div class="col-span-12 md:col-span-9">
                     <!-- Action Bar -->
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-4">
+                    <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-4">
+                        <div class="flex flex-wrap items-center gap-3">
                             <h2 class="text-xl font-bold text-slate-800">🪖 Work Order Board</h2>
-                            <button onclick="continueYesterdayJobs()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <button onclick="continueYesterdayJobs()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 shadow-sm transition-all">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                                 </svg>
                                 Continue Yesterday
                             </button>
                         </div>
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2.5">
                             <!-- Evening Evaluation Button (Shows 18:00-20:00) -->
-                            <button id="evalModeBtn" onclick="toggleEvaluationMode()" class="hidden text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-lg" style="background:linear-gradient(135deg,#d97706,#b45309);animation:pulse-gold 2s infinite">
+                            <button id="evalModeBtn" onclick="toggleEvaluationMode()" class="hidden text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-lg" style="background:linear-gradient(135deg,#d97706,#b45309);animation:pulse-gold 2s infinite">
                                 📝 Evening Evaluation
                             </button>
-                            <button onclick="openNewWorkOrderModal()" class="text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all" style="background:linear-gradient(135deg,#0d9488,#0891b2)">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <button onclick="openNewWorkOrderModal()" class="text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all" style="background:linear-gradient(135deg,#0d9488,#0891b2)">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                                 </svg>
                                 New Work Order
@@ -519,12 +519,12 @@
 
                     <!-- Ongoing Tasks Summary -->
                     <div class="rounded-xl p-4 mb-4 text-white" style="background:linear-gradient(135deg,#0a1628 0%,#152a55 50%,#0d4f6e 100%);border:1px solid rgba(13,148,136,0.35);box-shadow:0 8px 32px rgba(10,22,40,0.35)">
-                        <div class="flex items-center justify-between">
-                            <div>
+                        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div class="text-center md:text-left">
                                 <h3 class="font-bold text-[15px] text-teal-300">Today's Operational Summary</h3>
-                                <p class="text-sm text-slate-400 mt-0.5" id="workSummaryText">Miss Garrison Naval Dockyard — Click any work order to manage</p>
+                                <p class="text-xs md:text-sm text-slate-400 mt-0.5" id="workSummaryText">Miss Garrison Naval Dockyard — Click any work order to manage</p>
                             </div>
-                            <div class="flex items-center gap-6">
+                            <div class="flex flex-wrap items-center justify-center gap-4 md:gap-6">
                                 <div class="text-center">
                                     <p class="text-2xl font-extrabold text-teal-300" id="ongoingProjects">2</p>
                                     <p class="text-[11px] text-slate-400 mt-0.5">Projects</p>
@@ -537,7 +537,7 @@
                                     <p class="text-2xl font-extrabold text-blue-300" id="ongoingTasks">8</p>
                                     <p class="text-[11px] text-slate-400 mt-0.5">Tasks</p>
                                 </div>
-                                <div class="text-center pl-5" style="border-left:1px solid rgba(13,148,136,0.4)">
+                                <div class="text-center pl-4 md:pl-5" style="border-left:1px solid rgba(13,148,136,0.4)">
                                     <p class="text-2xl font-extrabold text-rose-300" id="pendingEvals">0</p>
                                     <p class="text-[11px] text-slate-400 mt-0.5">Pending Evals</p>
                                 </div>
@@ -545,7 +545,7 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <!-- Projects Column -->
                         <div class="glass-card overflow-hidden">
                             <div class="panel-header-blue text-white px-4 py-3">
@@ -774,16 +774,16 @@
 
         <!-- ==================== INVENTORY VIEW ==================== -->
         <div id="view-inventory" class="view-content hidden">
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between mb-6">
                 <div>
                     <h2 class="text-2xl font-bold" style="color:#0a1628">Inventory Management</h2>
-                    <p class="text-slate-500">Materials and Tools tracking by category</p>
+                    <p class="text-sm text-slate-500">Materials and Tools tracking by category</p>
                 </div>
-                <div class="flex gap-3">
-                    <button onclick="openBulkUploadModal('inventory')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <div class="flex gap-2">
+                    <button onclick="openBulkUploadModal('inventory')" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium">
                         📤 Bulk Upload
                     </button>
-                    <button onclick="openAddInventoryModal()" class="text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
+                    <button onclick="openAddInventoryModal()" class="text-white px-3.5 py-2.5 rounded-xl text-xs font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
                         + Add Item
                     </button>
                 </div>
@@ -796,23 +796,25 @@
 
             <!-- Search & Filter Bar -->
             <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
-                <div class="flex gap-4">
+                <div class="flex flex-col sm:flex-row gap-3">
                     <input type="text" id="inventorySearch" placeholder="Search by description..." 
-                        class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
                         onkeyup="filterInventory()">
-                    <select id="inventoryLocation" onchange="filterInventory()" class="px-4 py-2 border border-slate-300 rounded-lg">
-                        <option value="">All Locations</option>
-                        <option value="Zone Store">Zone Store</option>
-                        <option value="Ready Use Store">Ready Use Store</option>
-                        <option value="Balance Store">Balance Store</option>
-                        <option value="Workshop">Workshop</option>
-                    </select>
-                    <select id="inventorySort" onchange="filterInventory()" class="px-4 py-2 border border-slate-300 rounded-lg">
-                        <option value="description">Sort: Description</option>
-                        <option value="quantity">Sort: Quantity</option>
-                        <option value="cost">Sort: Cost</option>
-                        <option value="date">Sort: Date Added</option>
-                    </select>
+                    <div class="flex gap-2">
+                        <select id="inventoryLocation" onchange="filterInventory()" class="flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                            <option value="">All Locations</option>
+                            <option value="Zone Store">Zone Store</option>
+                            <option value="Ready Use Store">Ready Use Store</option>
+                            <option value="Balance Store">Balance Store</option>
+                            <option value="Workshop">Workshop</option>
+                        </select>
+                        <select id="inventorySort" onchange="filterInventory()" class="flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                            <option value="description">Sort: Description</option>
+                            <option value="quantity">Sort: Quantity</option>
+                            <option value="cost">Sort: Cost</option>
+                            <option value="date">Sort: Date Added</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -2495,26 +2497,34 @@
     </script>
     
     <!-- Bottom Mobile Navigation Bar (visible only on mobile) -->
-    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-4 py-2 flex justify-around items-center z-40 backdrop-blur bg-opacity-95 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] no-print">
+    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-2 py-2 flex justify-around items-center z-40 backdrop-blur bg-opacity-95 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] no-print">
         <button onclick="switchView('dashboard')" id="mobile-tab-dashboard" class="flex flex-col items-center gap-0.5 text-teal-400 flex-1">
             <span class="text-lg">📊</span>
-            <span class="text-[9px] font-semibold">Dashboard</span>
+            <span class="text-[8px] font-semibold">Dashboard</span>
         </button>
         <button onclick="switchView('jobcards')" id="mobile-tab-jobcards" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📋</span>
-            <span class="text-[9px] font-semibold">Job Cards</span>
+            <span class="text-[8px] font-semibold">Job Cards</span>
         </button>
         <button onclick="switchView('inventory')" id="mobile-tab-inventory" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📦</span>
-            <span class="text-[9px] font-semibold">Inventory</span>
+            <span class="text-[8px] font-semibold">Inventory</span>
+        </button>
+        <button onclick="switchView('estimates')" id="mobile-tab-estimates" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">📐</span>
+            <span class="text-[8px] font-semibold">Estimates</span>
+        </button>
+        <button onclick="switchView('maintenance')" id="mobile-tab-maintenance" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">🔧</span>
+            <span class="text-[8px] font-semibold">Maint.</span>
         </button>
         <button onclick="switchView('reports')" id="mobile-tab-reports" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📈</span>
-            <span class="text-[9px] font-semibold">Reports</span>
+            <span class="text-[8px] font-semibold">Reports</span>
         </button>
         <button onclick="switchView('settings')" id="mobile-tab-settings" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">⚙️</span>
-            <span class="text-[9px] font-semibold">Settings</span>
+            <span class="text-[8px] font-semibold">Settings</span>
         </button>
     </div>
 </body>
