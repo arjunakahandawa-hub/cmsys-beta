@@ -622,6 +622,9 @@ function renderWorkOrderCard(wo) {
     const pm = priorityMap[wo.priority] || priorityMap['Medium'];
     const sm = statusMap[wo.status] || statusMap['Pending'];
     const progressColor = progress >= 75 ? '#059669' : progress >= 40 ? '#0d9488' : '#2563eb';
+    const assignTypeBadge = wo.assign_type 
+        ? `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">💼 ${wo.assign_type}</span>`
+        : '';
     // Use _fbKey for the click handler (Firebase primary key)
     const woKey = wo._fbKey || wo.id;
 
@@ -636,6 +639,7 @@ function renderWorkOrderCard(wo) {
                 <div class="flex items-center gap-1.5 flex-wrap">
                     <span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${pm.chip}">${pm.icon} ${wo.priority}</span>
                     <span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${sm.chip}">${wo.status}</span>
+                    ${assignTypeBadge}
                 </div>
                 <span class="text-[10px] text-slate-400 mono font-medium flex-shrink-0">${wo.reference_no || '—'}</span>
             </div>
@@ -1231,7 +1235,7 @@ function openNewAssignModal() {
     _asCurrentTrade = 'ALL';
 
     // Reset form elements
-    document.getElementById('asType').value = 'PROJECT';
+    document.getElementById('asType').value = 'Admin Staff';
     document.getElementById('asDescription').value = '';
 
     // Populate In-Charge dropdown (PO & LS ranks)
@@ -1427,8 +1431,11 @@ function filterAsTrade(trade) {
 function createAssignment(event) {
     event.preventDefault();
 
+    const assignType = document.getElementById('asType').value;
+
     const newOrder = {
-        type:               document.getElementById('asType').value,
+        type:               'TASK', // Always save as TASK so it lists under Tasks board column
+        assign_type:        assignType, // Store specific assignment category
         reference_no:       null,
         description:        document.getElementById('asDescription').value,
         status:             'Pending',
@@ -1529,7 +1536,7 @@ function openWorkOrderDetail(workOrderId) {
 
     document.getElementById('woDetailId').value = wo.id;
     document.getElementById('woDetailTitle').textContent = wo.description;
-    document.getElementById('woDetailRef').textContent = (wo.type + ' • ' + (wo.reference_no || 'No reference'));
+    document.getElementById('woDetailRef').textContent = ((wo.assign_type || wo.type) + ' • ' + (wo.reference_no || 'No reference'));
     document.getElementById('woDetailStatus').value = wo.status;
     document.getElementById('woDetailPriority').value = wo.priority || 'Medium';
     document.getElementById('woDetailDescription').value = wo.description || '';
