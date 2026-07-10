@@ -544,6 +544,23 @@ function updateDashboardButtons() {
     }
 }
 
+function getSailorCurrentAssignment(sailorId) {
+    if (!store.workOrders) return null;
+    const activeWo = store.workOrders.find(wo => {
+        if (wo.status !== 'Active' && wo.status !== 'Pending') return false;
+        const assignedIds = (wo.assigned || []).map(String);
+        return assignedIds.includes(String(sailorId));
+    });
+    if (activeWo) {
+        return {
+            ref: activeWo.reference_no || 'Active WO',
+            title: activeWo.description || '',
+            zone: activeWo.zone_id || ''
+        };
+    }
+    return null;
+}
+
 function renderAvailableSailors() {
     const container = document.getElementById('availableSailors');
     // Only Present sailors are assignable; those on Leave/Sick are excluded from the pool
@@ -568,6 +585,32 @@ function renderAvailableSailors() {
             'PL': '#0891b2', 'WE': '#dc2626', 'RW': '#374151',
             'SW': '#065f46', 'BB': '#1d4ed8', 'AL': '#ec4899'
         }[sailor.trade] || '#475569';
+
+        const assignment = getSailorCurrentAssignment(sailor.id ?? sailor._fbKey);
+        if (assignment) {
+            return `
+            <div class="sailor-card rounded-xl p-2.5 border bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed select-none relative group"
+                title="Already assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}">
+                <div class="flex items-center gap-2.5">
+                    <div class="relative flex-shrink-0">
+                        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold text-white shadow-sm bg-slate-400">${sailor.trade}</div>
+                        ${sailor.isZoneTeam ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 rounded-full flex items-center justify-center text-white text-[8px] shadow">★</span>' : ''}
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <p class="font-semibold text-slate-500 text-xs truncate leading-tight">${sailor.name}</p>
+                        <div class="flex items-center gap-1.5 mt-0.5">
+                            <span class="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full font-bold">⚠️ Busy: ${assignment.zone}</span>
+                        </div>
+                    </div>
+                    <div class="text-right flex-shrink-0">
+                        <div class="text-sm font-extrabold text-slate-400">${sailor.avgScore.toFixed(1)}</div>
+                        <div class="text-[9px] text-slate-400 mt-0.5">${sailor.category}</div>
+                    </div>
+                </div>
+            </div>
+            `;
+        }
+
         return `
         <div class="sailor-card rounded-xl p-2.5 hover:shadow-md transition-all border"
             style="background:rgba(255,255,255,0.88);border-color:rgba(255,255,255,0.7);backdrop-filter:blur(6px)"
@@ -597,7 +640,8 @@ function renderAvailableSailors() {
         `;
     }).join('') || '<div class="text-center py-6"><p class="text-slate-400 text-sm">No sailors available</p><p class="text-slate-300 text-xs mt-1">Check attendance status</p></div>';
 
-    document.getElementById('availableBadge').textContent = sailors.length;
+    const freeCount = sailors.filter(s => !getSailorCurrentAssignment(s.id ?? s._fbKey)).length;
+    document.getElementById('availableBadge').textContent = freeCount;
 }
 
 function renderWorkOrders() {
@@ -952,6 +996,12 @@ function updatePendingEvals() {
 let draggedSailorId = null;
 
 function handleDragStart(event, sailorId) {
+    const assignment = getSailorCurrentAssignment(sailorId);
+    if (assignment) {
+        event.preventDefault();
+        showToast(`${store.sailors.find(s => s.id === sailorId)?.name || 'Sailor'} is already busy in ${assignment.zone}!`, 'error');
+        return;
+    }
     draggedSailorId = sailorId;
     event.target.classList.add('dragging');
     event.dataTransfer.effectAllowed = 'move';
@@ -977,6 +1027,12 @@ function handleDropOnCard(event, workOrderId) {
     document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
 
     if (!draggedSailorId) return;
+
+    const assignment = getSailorCurrentAssignment(draggedSailorId);
+    if (assignment) {
+        showToast('This sailor is already assigned elsewhere!', 'error');
+        return;
+    }
 
     const sailor = store.sailors.find(s => s.id === draggedSailorId);
     const workOrder = store.workOrders.find(wo => wo.id === workOrderId);
@@ -1250,6 +1306,43 @@ function renderWoSailorChips(filter = '') {
         const fullName   = s.name || 'Unknown';
         const rank       = s.rank || '';
 
+        const assignment = getSailorCurrentAssignment(s.id ?? s._fbKey);
+        if (assignment) {
+            return `
+            <button type="button"
+                disabled
+                title="Already assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}"
+                class="sailor-chip-card opacity-50 cursor-not-allowed"
+                style="
+                    display:flex; align-items:center; gap:8px;
+                    padding:7px 10px; border-radius:10px;
+                    border:2px solid #e2e8f0;
+                    background:#f1f5f9;
+                    box-shadow: none;
+                    transition:all 0.15s ease; min-width:140px; position:relative;
+                    text-align:left;
+                ">
+                <!-- Trade badge -->
+                <span style="
+                    width:32px; height:32px; border-radius:8px;
+                    background:#94a3b8;
+                    color:white; display:flex; align-items:center; justify-content:center;
+                    font-size:9px; font-weight:800; flex-shrink:0;
+                ">${s.trade}</span>
+
+                <!-- Name + Off No + assignment info -->
+                <div style="min-width:0; flex:1">
+                    <div style="
+                        font-size:11px; font-weight:700; line-height:1.2;
+                        color:#64748b;
+                        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                        max-width:130px;
+                    ">${rank} ${fullName}</div>
+                    <div style="font-size:8px; color:#b45309; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">⚠️ Busy: ${assignment.zone}</div>
+                </div>
+            </button>`;
+        }
+
         return `
         <button type="button"
             onclick="toggleWoSailor('${s.id ?? s._fbKey}')"
@@ -1321,6 +1414,11 @@ function toggleWoSailor(sailorId, name) {
     if (_woSelectedSailors.has(key)) {
         _woSelectedSailors.delete(key);
     } else {
+        const assignment = getSailorCurrentAssignment(sailorId);
+        if (assignment) {
+            showToast(`${store.sailors.find(s => String(s.id ?? s._fbKey) === key)?.name || 'Sailor'} is already busy in ${assignment.zone}!`, 'error');
+            return;
+        }
         _woSelectedSailors.add(key);
     }
     renderWoSailorChips(document.getElementById('woSailorSearch').value);
@@ -1936,6 +2034,35 @@ function renderDetailSailorChips(filter = '') {
         const fullName   = s.name || 'Unknown';
         const rank       = s.rank || '';
 
+        const assignment = getSailorCurrentAssignment(s.id ?? s._fbKey);
+        if (assignment) {
+            return `
+            <button type="button"
+                disabled
+                title="Already assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}"
+                class="sailor-chip-card opacity-50 cursor-not-allowed"
+                style="
+                    display:flex; align-items:center; gap:8px;
+                    padding:7px 10px; border-radius:10px;
+                    border:2px solid #e2e8f0;
+                    background:#f1f5f9;
+                    box-shadow: none;
+                    transition:all 0.15s ease; min-width:140px; position:relative;
+                    text-align:left;
+                ">
+                <div style="background:#94a3b8; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:0.5px; flex-shrink:0;">
+                    ${s.trade}
+                </div>
+                <div style="flex:1; overflow:hidden;">
+                    <div style="font-size:11px; font-weight:700; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;">
+                        ${rank} ${fullName}
+                    </div>
+                    <div style="font-size:8px; color:#b45309; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">⚠️ Busy: ${assignment.zone}</div>
+                </div>
+            </button>
+            `;
+        }
+
         return `
         <button type="button"
             onclick="assignSingleLabor('${s.id ?? s._fbKey}')"
@@ -1965,6 +2092,12 @@ function renderDetailSailorChips(filter = '') {
 }
 
 function assignSingleLabor(sailorId) {
+    const assignment = getSailorCurrentAssignment(sailorId);
+    if (assignment) {
+        showToast('This sailor is already assigned elsewhere!', 'error');
+        return;
+    }
+
     const wo = store.workOrders.find(w => String(w.id) === String(store.selectedWorkOrder) || String(w._fbKey) === String(store.selectedWorkOrder));
     const sailor = store.sailors.find(s => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
     
