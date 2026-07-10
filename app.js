@@ -655,6 +655,16 @@ function updateBoardEmptyState() {
     const tasks = store.workOrders.filter(wo => wo.type === 'TASK' && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
     const assigns = store.workOrders.filter(wo => wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
 
+    // Explicitly toggle hidden class on wrappers to ensure they are hidden on mobile
+    const projWrapper = document.getElementById('projectColumnWrapper');
+    if (projWrapper) projWrapper.classList.toggle('hidden', projects === 0);
+    const jobWrapper = document.getElementById('jobColumnWrapper');
+    if (jobWrapper) jobWrapper.classList.toggle('hidden', jobs === 0);
+    const taskWrapper = document.getElementById('taskColumnWrapper');
+    if (taskWrapper) taskWrapper.classList.toggle('hidden', tasks === 0);
+    const assignWrapper = document.getElementById('assignmentColumnWrapper');
+    if (assignWrapper) assignWrapper.classList.toggle('hidden', assigns === 0);
+
     const visibleColumns = [];
     if (projects > 0) visibleColumns.push('project');
     if (jobs > 0) visibleColumns.push('job');
@@ -690,6 +700,13 @@ function updateBoardEmptyState() {
     }
 }
 
+function handleCardClick(event, workOrderId) {
+    if (event.type === 'touchend') {
+        event.preventDefault();
+    }
+    openWorkOrderDetail(workOrderId);
+}
+
 function renderWorkOrderCard(wo) {
     const priorityMap = {
         'High':   { bar: '#dc2626', chip: 'priority-high',   icon: '🔴' },
@@ -722,7 +739,8 @@ function renderWorkOrderCard(wo) {
     return `
         <div class="work-order-card ${sm.stripe} rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer group"
             style="background:rgba(255,255,255,0.9);border:1px solid rgba(255,255,255,0.8);backdrop-filter:blur(6px)"
-            onclick="openWorkOrderDetail('${woKey}')"
+            onclick="handleCardClick(event, '${woKey}')"
+            ontouchend="handleCardClick(event, '${woKey}')"
             ondragover="handleDragOver(event)" ondrop="handleDropOnCard(event, '${woKey}')">
 
             <!-- Header row -->
