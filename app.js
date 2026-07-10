@@ -670,7 +670,7 @@ function renderWorkOrderCard(wo) {
 
             <div class="px-3 pb-2">
                 <h4 class="font-semibold text-slate-800 text-sm leading-snug mb-0.5 group-hover:text-teal-700 transition-colors">${wo.description}</h4>
-                <p class="text-[11px] text-slate-500">📍 ${wo.location || 'Location not set'}</p>
+                <p class="text-[11px] text-slate-500">📍 ${wo.location || 'Location not set'}${wo.sub_location ? ' — ' + wo.sub_location : ''}</p>
             </div>
 
             <!-- Progress -->
@@ -980,16 +980,29 @@ function openNewWorkOrderModal() {
     document.getElementById('woEstimateSelect').value = '';
 
     // Populate Location dropdown
+    const uniqueBuildings = [...new Set(store.locations.filter(l => l.zone_id === store.currentZone).map(l => l.building_name))];
     document.getElementById('woLocationSelect').innerHTML = '<option value="">Select Location...</option>' +
-        store.locations.filter(l => l.zone_id === store.currentZone)
-            .map(l => `<option value="${l.id}">${l.building_name}${l.sub_location ? ' — ' + l.sub_location : ''}</option>`).join('');
+        uniqueBuildings.map(name => `<option value="${name}">${name}</option>`).join('');
+    document.getElementById('woSubLocation').value = '';
 
-    // Populate In-Charge / Supervisor dropdowns (PO & LS ranks)
-    const supervisors = store.sailors.filter(s => s.rank && (s.rank.includes('PO') || s.rank === 'LS'));
-    const supOptions = '<option value="">Select...</option>' +
-        supervisors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
-    document.getElementById('woSupervisor').innerHTML = supOptions;
-    document.getElementById('woIncharge').innerHTML   = supOptions;
+    // Populate In-Charge / Supervisor dropdowns (Off No starts with 'EC')
+    const ecSailors = store.sailors.filter(s => {
+        const off = String(s.official_number || '').trim().toUpperCase();
+        return off.startsWith('EC');
+    });
+    const ecOptions = '<option value="">Select...</option>' +
+        ecSailors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
+    document.getElementById('woSupervisor').innerHTML = ecOptions;
+    document.getElementById('woIncharge').innerHTML   = ecOptions;
+
+    // Populate Project Artificer dropdown (Off No starts with 'AC')
+    const acSailors = store.sailors.filter(s => {
+        const off = String(s.official_number || '').trim().toUpperCase();
+        return off.startsWith('AC');
+    });
+    const acOptions = '<option value="">Select...</option>' +
+        acSailors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
+    document.getElementById('woArtificer').innerHTML = acOptions;
 
     // Render sailor chips
     renderWoSailorChips();
@@ -1025,11 +1038,15 @@ function autofillFromEstimate(estimateId) {
                 (l.building_name + (l.sub_location ? ' - ' + l.sub_location : '')) === est.location
             );
             if (matchedLoc) {
-                locInput.value = matchedLoc.id;
+                locInput.value = matchedLoc.building_name;
+                document.getElementById('woSubLocation').value = matchedLoc.sub_location || '';
             } else {
                 const matchedBuild = store.locations.find(l => l.building_name === est.location);
                 if (matchedBuild) {
-                    locInput.value = matchedBuild.id;
+                    locInput.value = matchedBuild.building_name;
+                    document.getElementById('woSubLocation').value = matchedBuild.sub_location || '';
+                } else {
+                    locInput.value = est.location || '';
                 }
             }
         }
@@ -1196,8 +1213,10 @@ function createWorkOrder(event) {
         progress:           0,
         assigned:           [..._woSelectedSailors],   // ← selected sailors from chip picker
         location:           document.getElementById('woLocationSelect').value || '',
+        sub_location:       document.getElementById('woSubLocation').value || '',
         incharge:           document.getElementById('woIncharge').value || null,
         supervisor:         document.getElementById('woSupervisor').value || null,
+        project_artificer:  document.getElementById('woArtificer').value || null,
         estimate_id:        estimateId,
     };
 
@@ -1262,10 +1281,13 @@ function openNewAssignModal() {
     document.getElementById('asType').value = 'Admin Staff';
     document.getElementById('asDescription').value = '';
 
-    // Populate In-Charge dropdown (PO & LS ranks)
-    const supervisors = store.sailors.filter(s => s.rank && (s.rank.includes('PO') || s.rank === 'LS'));
+    // Populate In-Charge dropdown (Off No starts with 'EC')
+    const ecSailors = store.sailors.filter(s => {
+        const off = String(s.official_number || '').trim().toUpperCase();
+        return off.startsWith('EC');
+    });
     const supOptions = '<option value="">Select...</option>' +
-        supervisors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
+        ecSailors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
     document.getElementById('asIncharge').innerHTML = supOptions;
     document.getElementById('asIncharge').value = '';
 
@@ -1582,12 +1604,23 @@ function openWorkOrderDetail(workOrderId) {
         renderDetailSailorChips();
     }
     
-    // Supervisor dropdowns
-    const supervisors = store.sailors.filter(s => s.rank.includes('PO') || s.rank === 'LS');
+    // Supervisor and Incharge dropdowns (Off No starts with 'EC')
+    const ecSailors = store.sailors.filter(s => {
+        const off = String(s.official_number || '').trim().toUpperCase();
+        return off.startsWith('EC');
+    });
     document.getElementById('woDetailIncharge').innerHTML = '<option value="">Select...</option>' +
-        supervisors.map(s => `<option value="${s.id}" ${wo.incharge == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+        ecSailors.map(s => `<option value="${s.id}" ${wo.incharge == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
     document.getElementById('woDetailSupervisor').innerHTML = '<option value="">Select...</option>' +
-        supervisors.map(s => `<option value="${s.id}" ${wo.supervisor == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+        ecSailors.map(s => `<option value="${s.id}" ${wo.supervisor == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+
+    // Project Artificer dropdown (Off No starts with 'AC')
+    const acSailors = store.sailors.filter(s => {
+        const off = String(s.official_number || '').trim().toUpperCase();
+        return off.startsWith('AC');
+    });
+    document.getElementById('woDetailArtificer').innerHTML = '<option value="">Select...</option>' +
+        acSailors.map(s => `<option value="${s.id}" ${wo.project_artificer == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
 
     if (typeof renderDetailSailorChips === 'function') { renderDetailSailorChips(); }
 
@@ -1786,6 +1819,7 @@ function saveWorkOrderChanges() {
         wo.progress = parseInt(document.getElementById('woDetailProgress').value);
         wo.incharge = document.getElementById('woDetailIncharge').value || null;
         wo.supervisor = document.getElementById('woDetailSupervisor').value || null;
+        wo.project_artificer = document.getElementById('woDetailArtificer').value || null;
 
         // Sync status to the linked Job Card
         const jc = getJobCardForWorkOrder(wo._fbKey || wo.id);
