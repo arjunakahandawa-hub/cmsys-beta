@@ -1108,15 +1108,38 @@ function openNewWorkOrderModal() {
         uniqueBuildings.map(name => `<option value="${name}">${name}</option>`).join('');
     document.getElementById('woSubLocation').value = '';
 
-    // Populate In-Charge / Supervisor dropdowns (Off No starts with 'EC')
+    // Populate In-Charge / Supervisor dropdowns (filtered to Settings assignments, with fallback to all EC sailors)
     const ecSailors = store.sailors.filter(s => {
         const off = String(s.official_number || '').trim().toUpperCase();
         return off.startsWith('EC');
     });
-    const ecOptions = '<option value="">Select...</option>' +
-        ecSailors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
-    document.getElementById('woSupervisor').innerHTML = ecOptions;
-    document.getElementById('woIncharge').innerHTML   = ecOptions;
+
+    const inc = (store.settings.zoneInCharges || {})[store.currentZone];
+    
+    // Incharge option
+    let inchargeOptions = '<option value="">Select...</option>';
+    if (inc && inc.woInchargeId) {
+        const s = store.sailors.find(x => String(x.id ?? x._fbKey) === String(inc.woInchargeId));
+        if (s) {
+            inchargeOptions += `<option value="${s.id}">${s.rank} ${s.name}</option>`;
+        }
+    } else {
+        inchargeOptions += ecSailors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
+    }
+
+    // Supervisor option
+    let supervisorOptions = '<option value="">Select...</option>';
+    if (inc && inc.woSupervisorId) {
+        const s = store.sailors.find(x => String(x.id ?? x._fbKey) === String(inc.woSupervisorId));
+        if (s) {
+            supervisorOptions += `<option value="${s.id}">${s.rank} ${s.name}</option>`;
+        }
+    } else {
+        supervisorOptions += ecSailors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
+    }
+
+    document.getElementById('woSupervisor').innerHTML = supervisorOptions;
+    document.getElementById('woIncharge').innerHTML   = inchargeOptions;
 
     // Populate Project Artificer dropdown (Off No starts with 'AC')
     const acSailors = store.sailors.filter(s => {
@@ -1729,15 +1752,44 @@ function openWorkOrderDetail(workOrderId) {
         renderDetailSailorChips();
     }
     
-    // Supervisor and Incharge dropdowns (Off No starts with 'EC')
+    // Supervisor and Incharge dropdowns (filtered to Settings assignments, with fallback to all EC sailors)
     const ecSailors = store.sailors.filter(s => {
         const off = String(s.official_number || '').trim().toUpperCase();
         return off.startsWith('EC');
     });
-    document.getElementById('woDetailIncharge').innerHTML = '<option value="">Select...</option>' +
-        ecSailors.map(s => `<option value="${s.id}" ${wo.incharge == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
-    document.getElementById('woDetailSupervisor').innerHTML = '<option value="">Select...</option>' +
-        ecSailors.map(s => `<option value="${s.id}" ${wo.supervisor == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+
+    const inc = (store.settings.zoneInCharges || {})[store.currentZone];
+    
+    // Incharge dropdown
+    let inchargeOptions = '<option value="">Select...</option>';
+    const assignedInchargeId = wo.incharge;
+    const eligibleInchargeIds = new Set();
+    if (inc && inc.woInchargeId) eligibleInchargeIds.add(String(inc.woInchargeId));
+    if (assignedInchargeId) eligibleInchargeIds.add(String(assignedInchargeId));
+    
+    if (eligibleInchargeIds.size > 0) {
+        const selectedSailors = store.sailors.filter(s => eligibleInchargeIds.has(String(s.id ?? s._fbKey)));
+        inchargeOptions += selectedSailors.map(s => `<option value="${s.id}" ${wo.incharge == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+    } else {
+        inchargeOptions += ecSailors.map(s => `<option value="${s.id}" ${wo.incharge == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+    }
+    
+    // Supervisor dropdown
+    let supervisorOptions = '<option value="">Select...</option>';
+    const assignedSupervisorId = wo.supervisor;
+    const eligibleSupervisorIds = new Set();
+    if (inc && inc.woSupervisorId) eligibleSupervisorIds.add(String(inc.woSupervisorId));
+    if (assignedSupervisorId) eligibleSupervisorIds.add(String(assignedSupervisorId));
+    
+    if (eligibleSupervisorIds.size > 0) {
+        const selectedSailors = store.sailors.filter(s => eligibleSupervisorIds.has(String(s.id ?? s._fbKey)));
+        supervisorOptions += selectedSailors.map(s => `<option value="${s.id}" ${wo.supervisor == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+    } else {
+        supervisorOptions += ecSailors.map(s => `<option value="${s.id}" ${wo.supervisor == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+    }
+    
+    document.getElementById('woDetailIncharge').innerHTML = inchargeOptions;
+    document.getElementById('woDetailSupervisor').innerHTML = supervisorOptions;
 
     // Project Artificer dropdown (Off No starts with 'AC')
     const acSailors = store.sailors.filter(s => {
@@ -4498,12 +4550,22 @@ function changeSettingsUserZone(zoneId) {
         setValue('cfg-userRank', inc.rank || '');
         setValue('cfg-userServiceNo', inc.serviceNo || '');
         setValue('cfg-userPassword', inc.password || '');
+        
+        setValue('cfg-woInchargeId', inc.woInchargeId || '');
+        setValue('cfg-woInchargeName', inc.woInchargeName || '');
+        setValue('cfg-woSupervisorId', inc.woSupervisorId || '');
+        setValue('cfg-woSupervisorName', inc.woSupervisorName || '');
     } else {
         setValue('cfg-userSailorId', '');
         setValue('cfg-userName', '');
         setValue('cfg-userRank', '');
         setValue('cfg-userServiceNo', '');
         setValue('cfg-userPassword', '');
+        
+        setValue('cfg-woInchargeId', '');
+        setValue('cfg-woInchargeName', '');
+        setValue('cfg-woSupervisorId', '');
+        setValue('cfg-woSupervisorName', '');
     }
 }
 
@@ -4749,6 +4811,203 @@ function selectSettingsSailor(sailorId, displayName) {
     }
     
     document.getElementById('cfg-sailorSearchResults').classList.add('hidden');
+}
+
+// Autocomplete for Settings Work Order Incharge
+function showWoInchargeResults() {
+    const resultsDiv = document.getElementById('cfg-woInchargeSearchResults');
+    if (!resultsDiv) return;
+    resultsDiv.classList.remove('hidden');
+    
+    const inputVal = document.getElementById('cfg-woInchargeName').value.trim();
+    if (inputVal.includes('(')) {
+        filterWoInchargeResults('');
+    } else {
+        filterWoInchargeResults(inputVal);
+    }
+}
+
+function filterWoInchargeResults(query) {
+    const resultsDiv = document.getElementById('cfg-woInchargeSearchResults');
+    if (!resultsDiv) return;
+    
+    const ecSailors = getEcSailors();
+    const q = query.toLowerCase().trim();
+    
+    let filtered = ecSailors;
+    if (q && !query.includes('(')) {
+        filtered = ecSailors.filter(s => {
+            const name = (s.name || '').toLowerCase();
+            const offNo = (s.official_number || s.officialNumber || s.service_no || '').toLowerCase();
+            const rank = (s.rank || '').toLowerCase();
+            return name.includes(q) || offNo.includes(q) || rank.includes(q);
+        });
+    }
+    
+    let html = `<div onclick="selectWoIncharge('', '')" class="p-2.5 text-xs hover:bg-red-50 cursor-pointer text-red-600 font-semibold border-b border-slate-100 transition-colors flex items-center gap-1">
+        ✕ Clear / Remove In-Charge
+    </div>`;
+    
+    if (filtered.length === 0) {
+        html += '<div class="p-3 text-sm text-slate-400 italic">No sailors found</div>';
+    } else {
+        html += filtered.map(s => {
+            const displayName = `${s.rank} ${s.name} (${s.official_number || s.service_no})`;
+            const escDisplayName = displayName.replace(/'/g, "\\'").replace(/"/g, '\\"');
+            return `<div onclick="selectWoIncharge('${s.id ?? s._fbKey}', '${escDisplayName}')" class="p-2.5 text-sm hover:bg-slate-50 cursor-pointer text-slate-700 transition-colors">
+                <span class="font-semibold text-slate-800">${s.rank} ${s.name}</span>
+                <span class="text-xs text-slate-400 font-mono ml-2">${s.official_number || s.service_no}</span>
+            </div>`;
+        }).join('');
+    }
+    
+    resultsDiv.innerHTML = html;
+}
+
+function selectWoIncharge(sailorId, displayName) {
+    const zoneId = document.getElementById('cfg-userZone').value;
+    if (!zoneId) {
+        showToast('Please select a Zone first', 'error');
+        document.getElementById('cfg-woInchargeName').value = '';
+        document.getElementById('cfg-woInchargeSearchResults').classList.add('hidden');
+        return;
+    }
+    
+    if (!store.settings.zoneInCharges) store.settings.zoneInCharges = {};
+    if (!store.settings.zoneInCharges[zoneId]) {
+        showToast('Please set the Profile Sailor first', 'error');
+        document.getElementById('cfg-woInchargeName').value = '';
+        document.getElementById('cfg-woInchargeSearchResults').classList.add('hidden');
+        return;
+    }
+    
+    if (sailorId) {
+        const sailor = store.sailors.find(s => String(s.id ?? s._fbKey) === String(sailorId));
+        if (sailor) {
+            setValue('cfg-woInchargeName', displayName);
+            setValue('cfg-woInchargeId', sailorId);
+            
+            store.settings.zoneInCharges[zoneId].woInchargeId = sailorId;
+            store.settings.zoneInCharges[zoneId].woInchargeName = displayName;
+            
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/woInchargeId`).set(sailorId);
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/woInchargeName`).set(displayName).then(() => {
+                applySettings();
+                showToast(`Work Order In-Charge for ${zoneId} updated`);
+            });
+        }
+    } else {
+        setValue('cfg-woInchargeName', '');
+        setValue('cfg-woInchargeId', '');
+        delete store.settings.zoneInCharges[zoneId].woInchargeId;
+        delete store.settings.zoneInCharges[zoneId].woInchargeName;
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/woInchargeId`).remove();
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/woInchargeName`).remove().then(() => {
+            applySettings();
+            showToast(`Work Order In-Charge for ${zoneId} removed`);
+        });
+    }
+    
+    document.getElementById('cfg-woInchargeSearchResults').classList.add('hidden');
+}
+
+
+// Autocomplete for Settings Work Order Supervisor
+function showWoSupervisorResults() {
+    const resultsDiv = document.getElementById('cfg-woSupervisorSearchResults');
+    if (!resultsDiv) return;
+    resultsDiv.classList.remove('hidden');
+    
+    const inputVal = document.getElementById('cfg-woSupervisorName').value.trim();
+    if (inputVal.includes('(')) {
+        filterWoSupervisorResults('');
+    } else {
+        filterWoSupervisorResults(inputVal);
+    }
+}
+
+function filterWoSupervisorResults(query) {
+    const resultsDiv = document.getElementById('cfg-woSupervisorSearchResults');
+    if (!resultsDiv) return;
+    
+    const ecSailors = getEcSailors();
+    const q = query.toLowerCase().trim();
+    
+    let filtered = ecSailors;
+    if (q && !query.includes('(')) {
+        filtered = ecSailors.filter(s => {
+            const name = (s.name || '').toLowerCase();
+            const offNo = (s.official_number || s.officialNumber || s.service_no || '').toLowerCase();
+            const rank = (s.rank || '').toLowerCase();
+            return name.includes(q) || offNo.includes(q) || rank.includes(q);
+        });
+    }
+    
+    let html = `<div onclick="selectWoSupervisor('', '')" class="p-2.5 text-xs hover:bg-red-50 cursor-pointer text-red-600 font-semibold border-b border-slate-100 transition-colors flex items-center gap-1">
+        ✕ Clear / Remove Supervisor
+    </div>`;
+    
+    if (filtered.length === 0) {
+        html += '<div class="p-3 text-sm text-slate-400 italic">No sailors found</div>';
+    } else {
+        html += filtered.map(s => {
+            const displayName = `${s.rank} ${s.name} (${s.official_number || s.service_no})`;
+            const escDisplayName = displayName.replace(/'/g, "\\'").replace(/"/g, '\\"');
+            return `<div onclick="selectWoSupervisor('${s.id ?? s._fbKey}', '${escDisplayName}')" class="p-2.5 text-sm hover:bg-slate-50 cursor-pointer text-slate-700 transition-colors">
+                <span class="font-semibold text-slate-800">${s.rank} ${s.name}</span>
+                <span class="text-xs text-slate-400 font-mono ml-2">${s.official_number || s.service_no}</span>
+            </div>`;
+        }).join('');
+    }
+    
+    resultsDiv.innerHTML = html;
+}
+
+function selectWoSupervisor(sailorId, displayName) {
+    const zoneId = document.getElementById('cfg-userZone').value;
+    if (!zoneId) {
+        showToast('Please select a Zone first', 'error');
+        document.getElementById('cfg-woSupervisorName').value = '';
+        document.getElementById('cfg-woSupervisorSearchResults').classList.add('hidden');
+        return;
+    }
+    
+    if (!store.settings.zoneInCharges) store.settings.zoneInCharges = {};
+    if (!store.settings.zoneInCharges[zoneId]) {
+        showToast('Please set the Profile Sailor first', 'error');
+        document.getElementById('cfg-woSupervisorName').value = '';
+        document.getElementById('cfg-woSupervisorSearchResults').classList.add('hidden');
+        return;
+    }
+    
+    if (sailorId) {
+        const sailor = store.sailors.find(s => String(s.id ?? s._fbKey) === String(sailorId));
+        if (sailor) {
+            setValue('cfg-woSupervisorName', displayName);
+            setValue('cfg-woSupervisorId', sailorId);
+            
+            store.settings.zoneInCharges[zoneId].woSupervisorId = sailorId;
+            store.settings.zoneInCharges[zoneId].woSupervisorName = displayName;
+            
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/woSupervisorId`).set(sailorId);
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/woSupervisorName`).set(displayName).then(() => {
+                applySettings();
+                showToast(`Work Order Supervisor for ${zoneId} updated`);
+            });
+        }
+    } else {
+        setValue('cfg-woSupervisorName', '');
+        setValue('cfg-woSupervisorId', '');
+        delete store.settings.zoneInCharges[zoneId].woSupervisorId;
+        delete store.settings.zoneInCharges[zoneId].woSupervisorName;
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/woSupervisorId`).remove();
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/woSupervisorName`).remove().then(() => {
+            applySettings();
+            showToast(`Work Order Supervisor for ${zoneId} removed`);
+        });
+    }
+    
+    document.getElementById('cfg-woSupervisorSearchResults').classList.add('hidden');
 }
 
 // ── Zone Management ──
@@ -5030,6 +5289,22 @@ document.addEventListener('click', (e) => {
     if (searchInput && resultsDiv) {
         if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
             resultsDiv.classList.add('hidden');
+        }
+    }
+
+    const woIncInput = document.getElementById('cfg-woInchargeName');
+    const woIncDiv = document.getElementById('cfg-woInchargeSearchResults');
+    if (woIncInput && woIncDiv) {
+        if (!woIncInput.contains(e.target) && !woIncDiv.contains(e.target)) {
+            woIncDiv.classList.add('hidden');
+        }
+    }
+
+    const woSupInput = document.getElementById('cfg-woSupervisorName');
+    const woSupDiv = document.getElementById('cfg-woSupervisorSearchResults');
+    if (woSupInput && woSupDiv) {
+        if (!woSupInput.contains(e.target) && !woSupDiv.contains(e.target)) {
+            woSupDiv.classList.add('hidden');
         }
     }
 });
