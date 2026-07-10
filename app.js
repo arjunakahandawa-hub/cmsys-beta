@@ -420,26 +420,12 @@ function updateDateTime() {
     
     // Check time for evening mode (18:00 - 20:00)
     const hour = now.getHours();
-    const modeIndicator = document.getElementById('modeIndicator');
-    const modeText = document.getElementById('modeText');
     const evalBtn = document.getElementById('evalModeBtn');
     
     if (hour >= 18 && hour < 20) {
-        modeIndicator.className = 'flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-amber-500';
-        modeIndicator.querySelector('span').className = 'w-2 h-2 rounded-full bg-white animate-pulse';
-        modeText.textContent = 'Evening Evaluation (18:00-20:00)';
         if (evalBtn) evalBtn.classList.remove('hidden');
         store.isEveningMode = true;
-    } else if (hour >= 6 && hour < 18) {
-        modeIndicator.className = 'flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-green-600';
-        modeIndicator.querySelector('span').className = 'w-2 h-2 rounded-full bg-white';
-        modeText.textContent = 'Working Hours';
-        if (evalBtn) evalBtn.classList.add('hidden');
-        store.isEveningMode = false;
     } else {
-        modeIndicator.className = 'flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg bg-slate-600';
-        modeIndicator.querySelector('span').className = 'w-2 h-2 rounded-full bg-slate-400';
-        modeText.textContent = 'Off Hours';
         if (evalBtn) evalBtn.classList.add('hidden');
         store.isEveningMode = false;
     }
@@ -577,7 +563,7 @@ function renderAvailableSailors() {
         const tradeBg = {
             'MA': '#0d9488', 'CA': '#7c3aed', 'PA': '#b45309',
             'PL': '#0891b2', 'WE': '#dc2626', 'RW': '#374151',
-            'SW': '#065f46', 'BB': '#1d4ed8'
+            'SW': '#065f46', 'BB': '#1d4ed8', 'AL': '#ec4899'
         }[sailor.trade] || '#475569';
         return `
         <div class="sailor-card rounded-xl p-2.5 hover:shadow-md transition-all border"
@@ -805,7 +791,7 @@ function renderZoneTeam() {
         'Sick':    { dot: 'bg-rose-500',  text: 'Sick',      textColor: 'text-rose-700',  bg: 'rgba(244,63,94,0.07)',  border: 'rgba(244,63,94,0.2)' },
         'Duty':    { dot: 'bg-blue-500',  text: 'On Duty',   textColor: 'text-blue-700',  bg: 'rgba(59,130,246,0.07)', border: 'rgba(59,130,246,0.2)' },
     };
-    const tradeBg = { 'MA':'#0d9488','CA':'#7c3aed','PA':'#b45309','PL':'#0891b2','WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8' };
+    const tradeBg = { 'MA':'#0d9488','CA':'#7c3aed','PA':'#b45309','PL':'#0891b2','WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8','AL':'#ec4899' };
 
     container.innerHTML = zoneTeamMembers.map(s => {
         const att = s.attendance || 'Present';
@@ -1145,7 +1131,8 @@ function autofillFromEstimate(estimateId) {
 function renderWoSailorChips(filter = '') {
     const tradeBgMap = {
         'MA':'#0d9488','CA':'#7c3aed','PA':'#b45309','PL':'#0891b2',
-        'WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8'
+        'WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8',
+        'AL':'#ec4899'
     };
 
     let sailors = store.sailors.filter(s =>
@@ -1403,7 +1390,8 @@ function openNewAssignModal() {
 function renderAsSailorChips(filter = '') {
     const tradeBgMap = {
         'MA':'#0d9488','CA':'#7c3aed','PA':'#b45309','PL':'#0891b2',
-        'WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8'
+        'WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8',
+        'AL':'#ec4899'
     };
 
     let sailors = store.sailors.filter(s =>
@@ -1789,7 +1777,8 @@ function filterDetailSailors() {
 function renderDetailSailorChips(filter = '') {
     const tradeBgMap = {
         'MA':'#0d9488','CA':'#7c3aed','PA':'#b45309','PL':'#0891b2',
-        'WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8'
+        'WE':'#dc2626','RW':'#374151','SW':'#065f46','BB':'#1d4ed8',
+        'AL':'#ec4899'
     };
 
     const wo = store.workOrders.find(w => String(w.id) === String(store.selectedWorkOrder) || String(w._fbKey) === String(store.selectedWorkOrder));

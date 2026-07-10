@@ -417,10 +417,7 @@
 
                 <!-- Right Controls -->
                 <div class="flex items-center gap-3">
-                    <div id="modeIndicator" class="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5">
-                        <span class="w-2 h-2 rounded-full bg-teal-400 pulse-online"></span>
-                        <span id="modeText" class="text-slate-300">Active</span>
-                    </div>
+
                     <select id="zoneSelector" onchange="changeZone()" class="text-xs rounded-lg px-2.5 py-1.5 border border-teal-600/50 font-medium cursor-pointer"
                         style="background:rgba(13,148,136,0.18);color:#5eead4;">
                     </select>
@@ -505,6 +502,7 @@
                                 <button onclick="filterTrade('PL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PL</button>
                                 <button onclick="filterTrade('WE')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">WE</button>
                                 <button onclick="filterTrade('RW')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">RW</button>
+                                <button onclick="filterTrade('AL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">AL</button>
                                 <button onclick="filterTrade('SW')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">SW</button>
                                 <button onclick="filterTrade('BB')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">BB</button>
                             </div>
@@ -1656,6 +1654,7 @@
                             <button type="button" onclick="filterDetailTrade('PL')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
                             <button type="button" onclick="filterDetailTrade('WE')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
                             <button type="button" onclick="filterDetailTrade('RW')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                            <button type="button" onclick="filterDetailTrade('AL')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">AL</button>
                         </div>
                         <!-- Sailor chips -->
                         <div id="detailSailorChips" class="p-3 flex flex-wrap gap-2 max-h-36 overflow-y-auto scrollbar-thin" style="background:rgba(248,250,252,0.8)">
@@ -1836,6 +1835,7 @@
                         <button type="button" onclick="filterWoTrade('PL')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
                         <button type="button" onclick="filterWoTrade('WE')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
                         <button type="button" onclick="filterWoTrade('RW')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                        <button type="button" onclick="filterWoTrade('AL')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">AL</button>
                         <button type="button" onclick="filterWoTrade('SW')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">SW</button>
                         <button type="button" onclick="filterWoTrade('BB')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">BB</button>
                     </div>
@@ -1912,6 +1912,7 @@
                         <button type="button" onclick="filterAsTrade('PL')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
                         <button type="button" onclick="filterAsTrade('WE')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
                         <button type="button" onclick="filterAsTrade('RW')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                        <button type="button" onclick="filterAsTrade('AL')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">AL</button>
                         <button type="button" onclick="filterAsTrade('SW')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">SW</button>
                         <button type="button" onclick="filterAsTrade('BB')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">BB</button>
                     </div>
