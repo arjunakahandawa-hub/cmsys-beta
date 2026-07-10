@@ -529,6 +529,30 @@ function renderDashboard() {
     updateCounters();
     updatePendingEvals();
     updateBoardEmptyState();
+    updateDashboardButtons();
+}
+
+function updateDashboardButtons() {
+    const currentZoneObj = store.zones.find(z => z.id === store.currentZone);
+    const zoneName = currentZoneObj ? currentZoneObj.name : '';
+    const zoneId = store.currentZone;
+
+    const isAdminStaff = (
+        zoneName === 'Admin & Staff Duties' ||
+        zoneId === 'Admin & Staff Duties' ||
+        zoneId === 'Admin-Staff-Duties' ||
+        (zoneName.includes('Admin') && zoneName.includes('Staff'))
+    );
+
+    const newAssignBtn = document.getElementById('newAssignBtn');
+    const newWorkOrderBtn = document.getElementById('newWorkOrderBtn');
+
+    if (newAssignBtn) {
+        newAssignBtn.classList.toggle('hidden', !isAdminStaff);
+    }
+    if (newWorkOrderBtn) {
+        newWorkOrderBtn.classList.toggle('hidden', isAdminStaff);
+    }
 }
 
 function renderAvailableSailors() {
