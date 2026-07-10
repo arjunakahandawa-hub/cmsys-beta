@@ -2640,6 +2640,47 @@ function renderInventoryTable() {
             </td>
         </tr>`;
     }).join('') || '<tr><td colspan="7" class="px-4 py-10 text-center text-slate-400">No inventory items found</td></tr>';
+
+    // Calculate total valuation
+    const totalValuation = items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.cost_per_unit || 0)), 0);
+    const grandTotalItems = store.inventory.filter(i => !i.zone_id || i.zone_id === store.currentZone);
+    const grandTotalValuation = grandTotalItems.reduce((sum, item) => sum + ((item.quantity || 0) * (item.cost_per_unit || 0)), 0);
+    
+    // Check if category or search or location is active (meaning it is filtered)
+    const isFiltered = store.currentInventoryCategory !== 'all' || 
+                       (document.getElementById('inventorySearch')?.value || '') !== '' ||
+                       (document.getElementById('inventoryLocation')?.value || '') !== '';
+    
+    const footEl = document.getElementById('inventoryTableFoot');
+    if (footEl) {
+        if (isFiltered) {
+            footEl.innerHTML = `
+                <tr class="bg-slate-50 border-t border-slate-200">
+                    <td colspan="4" class="px-4 py-3 text-left font-bold text-slate-800 text-sm">
+                        Total Valuation (Filtered)
+                    </td>
+                    <td class="px-4 py-3 text-right font-extrabold text-teal-700 text-sm">
+                        ${formatCurrency(totalValuation)}
+                    </td>
+                    <td colspan="2" class="px-4 py-3 text-center text-xs text-slate-500 font-normal">
+                        Grand Total: <span class="font-bold text-slate-700">${formatCurrency(grandTotalValuation)}</span>
+                    </td>
+                </tr>
+            `;
+        } else {
+            footEl.innerHTML = `
+                <tr class="bg-slate-50 border-t border-slate-200">
+                    <td colspan="4" class="px-4 py-3 text-left font-bold text-slate-800 text-sm">
+                        Total Inventory Valuation
+                    </td>
+                    <td class="px-4 py-3 text-right font-extrabold text-teal-700 text-sm">
+                        ${formatCurrency(totalValuation)}
+                    </td>
+                    <td colspan="2" class="px-4 py-3"></td>
+                </tr>
+            `;
+        }
+    }
 }
 
 function filterInventory() {
