@@ -4307,17 +4307,26 @@ const defaultSettings = {
 store.settings = { ...defaultSettings };
 
 // ── Load settings from Firebase DB2 ──
+function ensureArray(val) {
+    if (!val) return [];
+    if (Array.isArray(val)) return val.filter(item => item !== null && item !== undefined);
+    if (typeof val === 'object') {
+        return Object.values(val).filter(item => item !== null && item !== undefined);
+    }
+    return [];
+}
+
 function initSettingsListener() {
     opsDB.ref('settings').on('value', snapshot => {
         if (snapshot.exists()) {
             const saved = snapshot.val();
             store.settings = { ...defaultSettings, ...saved };
             // Restore arrays and objects properly
-            if (saved.zones) store.settings.zones = saved.zones;
-            if (saved.offChargeDestinations) store.settings.offChargeDestinations = saved.offChargeDestinations;
-            if (saved.approvalAuthorities) store.settings.approvalAuthorities = saved.approvalAuthorities;
-            if (saved.workOrderTypes) store.settings.workOrderTypes = saved.workOrderTypes;
-            if (saved.priorityLevels) store.settings.priorityLevels = saved.priorityLevels;
+            if (saved.zones) store.settings.zones = ensureArray(saved.zones);
+            if (saved.offChargeDestinations) store.settings.offChargeDestinations = ensureArray(saved.offChargeDestinations);
+            if (saved.approvalAuthorities) store.settings.approvalAuthorities = ensureArray(saved.approvalAuthorities);
+            if (saved.workOrderTypes) store.settings.workOrderTypes = ensureArray(saved.workOrderTypes);
+            if (saved.priorityLevels) store.settings.priorityLevels = ensureArray(saved.priorityLevels);
             store.settings.zoneInCharges = saved.zoneInCharges || {};
             store.settings.selectedSettingsZone = saved.selectedSettingsZone || '';
             store.settings.oicProfiles = saved.oicProfiles || {};
@@ -5035,25 +5044,42 @@ function renderProfileDropdown() {
     const s = store.settings || {};
     let html = '';
 
-    // 1. Command Option
-    const isOicActive = !store.activeProfileType || store.activeProfileType === 'OIC';
-    const oicSettingsCleanNo = s.oicServiceNo ? s.oicServiceNo.replace(/[^a-zA-Z0-9]/g, '') : '';
-    const oicShortRank = s.oicRank ? s.oicRank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'OIC';
-    const oicFallbackText = `<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${oicShortRank}</div>`;
-    const oicAvatarHtml = oicSettingsCleanNo ? 
-        `<img src="images/${oicSettingsCleanNo}.JPG" data-fallback="${oicFallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${oicSettingsCleanNo}')">` :
-        oicFallbackText;
+    // 1. Command / OIC Profiles List
+    const oicProfs = getOicProfiles();
+    oicProfs.forEach(p => {
+        const isThisOicActive = store.activeProfileType === 'OIC' && store.activeOicProfileId === p.id;
+        const cleanNo = p.serviceNo ? p.serviceNo.replace(/[^a-zA-Z0-9]/g, '') : '';
+        const shortRank = p.rank ? p.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'OIC';
+        const fallbackText = `<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
+        const avatarHtml = cleanNo ? 
+            `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` :
+            fallbackText;
 
-    html += `
-        <div onclick="switchActiveProfile('OIC')" class="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-3 ${isOicActive ? 'bg-teal-50/50' : ''}">
-            ${oicAvatarHtml}
-            <div class="text-left flex-1 min-w-0">
-                <p class="text-xs font-bold text-slate-800">Command / OIC</p>
-                <p class="text-[10px] text-slate-400">System Admin • View All Zones</p>
+        html += `
+            <div onclick="switchActiveProfile('OIC', '', '${p.id}')" class="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-3 ${isThisOicActive ? 'bg-teal-50/50' : ''}">
+                ${avatarHtml}
+                <div class="text-left flex-1 min-w-0">
+                    <p class="text-xs font-bold text-slate-800">${p.rank} ${p.name}</p>
+                    <p class="text-[10px] text-slate-400">Officer Profile • View All Zones</p>
+                </div>
+                ${isThisOicActive ? '<span class="text-teal-600 font-bold">✓</span>' : ''}
             </div>
-            ${isOicActive ? '<span class="text-teal-600 font-bold">✓</span>' : ''}
-        </div>
-    `;
+        `;
+    });
+
+    if (oicProfs.length === 0) {
+        const isOicActive = !store.activeProfileType || store.activeProfileType === 'OIC';
+        html += `
+            <div onclick="switchActiveProfile('OIC')" class="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-3 ${isOicActive ? 'bg-teal-50/50' : ''}">
+                <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">OIC</div>
+                <div class="text-left flex-1 min-w-0">
+                    <p class="text-xs font-bold text-slate-800">Command / OIC</p>
+                    <p class="text-[10px] text-slate-400">System Admin • View All Zones</p>
+                </div>
+                ${isOicActive ? '<span class="text-teal-600 font-bold">✓</span>' : ''}
+            </div>
+        `;
+    }
 
     // 2. Zone In-Charge Options
     if (store.settings && store.settings.zoneInCharges) {
@@ -5113,14 +5139,22 @@ function saveSettingsUserPassword(password) {
     });
 }
 
-function switchActiveProfile(type, zoneId = '') {
+function switchActiveProfile(type, zoneId = '', oicProfileId = '') {
     const s = store.settings || {};
     let targetPassword = '';
     let targetName = '';
     
     if (type === 'OIC') {
-        targetPassword = s.oicPassword || '';
-        targetName = s.oicName ? `${s.oicRank} ${s.oicName}` : 'Command / OIC';
+        if (oicProfileId) {
+            const profile = getOicProfiles().find(p => p.id === oicProfileId);
+            if (profile) {
+                targetPassword = profile.password || '';
+                targetName = `${profile.rank} ${profile.name}`;
+            }
+        } else {
+            targetPassword = s.oicPassword || '';
+            targetName = s.oicName ? `${s.oicRank} ${s.oicName}` : 'Command / OIC';
+        }
     } else if (type === 'ZoneInCharge' && zoneId) {
         const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
         if (inc) {
@@ -5133,6 +5167,7 @@ function switchActiveProfile(type, zoneId = '') {
     if (targetPassword) {
         document.getElementById('pwdModalTargetType').value = type;
         document.getElementById('pwdModalTargetZone').value = zoneId;
+        document.getElementById('pwdModalTargetOicProfileId').value = oicProfileId;
         document.getElementById('pwdModalProfileName').textContent = targetName;
         document.getElementById('profilePasswordInput').value = '';
         
@@ -5147,20 +5182,26 @@ function switchActiveProfile(type, zoneId = '') {
     }
     
     // No password, switch immediately
-    performProfileSwitch(type, zoneId);
+    performProfileSwitch(type, zoneId, oicProfileId);
 }
 
 function submitProfilePassword(e) {
     e.preventDefault();
     const type = document.getElementById('pwdModalTargetType').value;
     const zoneId = document.getElementById('pwdModalTargetZone').value;
+    const oicProfileId = document.getElementById('pwdModalTargetOicProfileId').value;
     const inputPwd = document.getElementById('profilePasswordInput').value;
     
     const s = store.settings || {};
     let correctPassword = '';
     
     if (type === 'OIC') {
-        correctPassword = s.oicPassword || '';
+        if (oicProfileId) {
+            const profile = getOicProfiles().find(p => p.id === oicProfileId);
+            correctPassword = profile ? (profile.password || '') : '';
+        } else {
+            correctPassword = s.oicPassword || '';
+        }
     } else if (type === 'ZoneInCharge' && zoneId) {
         const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
         correctPassword = inc ? (inc.password || '') : '';
@@ -5168,7 +5209,7 @@ function submitProfilePassword(e) {
     
     if (inputPwd === correctPassword) {
         closeModal('profilePasswordModal');
-        performProfileSwitch(type, zoneId);
+        performProfileSwitch(type, zoneId, oicProfileId);
     } else {
         showToast('Incorrect Password! Authentication failed.', 'error');
         document.getElementById('profilePasswordInput').value = '';
@@ -5229,14 +5270,12 @@ function applyActiveProfile() {
     const zoneSelector = document.getElementById('zoneSelector');
 
     if (type === 'ZoneInCharge' && zoneId) {
-        // We no longer lock the zone dropdown or hide the settings tab for Zone In-Charges,
-        // giving all authenticated officers full access (same as overall OIC).
         store.currentZone = zoneId;
         if (zoneSelector) {
             zoneSelector.value = zoneId;
-            zoneSelector.disabled = false;
-            zoneSelector.title = "Select Zone";
-            zoneSelector.classList.remove('opacity-75', 'cursor-not-allowed');
+            zoneSelector.disabled = true;
+            zoneSelector.title = "Zone locked to your assigned zone";
+            zoneSelector.classList.add('opacity-75', 'cursor-not-allowed');
         }
 
         // Set active user info from settings
@@ -5252,14 +5291,19 @@ function applyActiveProfile() {
             store.currentUser = { name: s.userName, rank: s.userRank, serviceNo: s.userServiceNo };
         }
 
-        // Settings tab remains visible for everyone (OIC-level access)
+        // Hide settings tab for Zone In-Charges
         const settingsTabBtn = document.getElementById('tab-settings');
         if (settingsTabBtn) {
-            settingsTabBtn.classList.remove('hidden');
+            settingsTabBtn.classList.add('hidden');
         }
         const mobileSettingsTabBtn = document.getElementById('mobile-tab-settings');
         if (mobileSettingsTabBtn) {
-            mobileSettingsTabBtn.classList.remove('hidden');
+            mobileSettingsTabBtn.classList.add('hidden');
+        }
+
+        // If they are on settings view, redirect them to dashboard
+        if (store.currentView === 'settings') {
+            switchView('dashboard');
         }
 
         // Update profile menu button text or picture to rank + zone
