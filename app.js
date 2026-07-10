@@ -4256,6 +4256,7 @@ const defaultSettings = {
     oicName: '',
     oicRank: '',
     oicServiceNo: '',
+    oicProfiles: {},
     userName: 'Sanjeewa Bandara',
     userRank: 'PO1 (CE)',
     userServiceNo: 'NRX 12345',
@@ -4292,9 +4293,13 @@ function initSettingsListener() {
             if (saved.priorityLevels) store.settings.priorityLevels = saved.priorityLevels;
             store.settings.zoneInCharges = saved.zoneInCharges || {};
             store.settings.selectedSettingsZone = saved.selectedSettingsZone || '';
+            store.settings.oicProfiles = saved.oicProfiles || {};
         }
         applySettings();
         renderZoneSelectors();
+        if (_currentSettingsTab === 'identity') {
+            renderSettingsOicProfilesList();
+        }
     });
 }
 
@@ -4370,10 +4375,7 @@ function switchSettingsTab(tab) {
     if (tab === 'identity') {
         setValue('cfg-systemTitle', s.systemTitle);
         setValue('cfg-stationName', s.stationName);
-        setValue('cfg-oicName', s.oicName);
-        setValue('cfg-oicRank', s.oicRank);
-        setValue('cfg-oicServiceNo', s.oicServiceNo);
-        setValue('cfg-oicPassword', s.oicPassword || '');
+        renderSettingsOicProfilesList();
     } else if (tab === 'user') {
         // Populate Zone dropdown
         const zoneDropdown = document.getElementById('cfg-userZone');
@@ -4445,7 +4447,143 @@ function changeSettingsUserZone(zoneId) {
 }
 
 function getEcSailors() {
-    return store.sailors || [];
+    return store.sailors.filter(sailor => {
+        const offNo = (sailor.official_number || sailor.officialNumber || sailor.service_no || '').trim();
+        // Remove leading non-alphanumeric characters (like spaces, slashes, dashes)
+        const cleanOffNo = offNo.replace(/^[^a-zA-Z0-9]+/, '');
+        return cleanOffNo.toUpperCase().startsWith('EC');
+    });
+}
+
+// Helper to retrieve all OIC profiles
+function getOicProfiles() {
+    const s = store.settings || {};
+    let profiles = [];
+    if (s.oicProfiles) {
+        profiles = Object.values(s.oicProfiles);
+    }
+    // Backward compatibility for the legacy single OIC
+    if (profiles.length === 0 && (s.oicName || s.oicServiceNo)) {
+        profiles.push({
+            id: 'legacy_oic',
+            name: s.oicName || '',
+            rank: s.oicRank || '',
+            serviceNo: s.oicServiceNo || '',
+            password: s.oicPassword || ''
+        });
+    }
+    return profiles;
+}
+
+// Render OIC Profiles Management List
+function renderSettingsOicProfilesList() {
+    const listEl = document.getElementById('cfg-oicProfilesList');
+    if (!listEl) return;
+
+    const profiles = getOicProfiles();
+    if (profiles.length === 0) {
+        listEl.innerHTML = `<div class="p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">No Officer-In-Charge profiles added yet.</div>`;
+        return;
+    }
+
+    listEl.innerHTML = profiles.map(p => {
+        const cleanNo = p.serviceNo ? p.serviceNo.replace(/[^a-zA-Z0-9]/g, '') : '';
+        const shortRank = p.rank ? p.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'OIC';
+        const fallbackText = `<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
+        const avatarHtml = cleanNo ? 
+            `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` :
+            fallbackText;
+
+        return `
+            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                <div class="flex items-center gap-3 min-w-0">
+                    ${avatarHtml}
+                    <div class="min-w-0 text-left">
+                        <p class="text-sm font-bold text-slate-800 truncate">${p.rank} ${p.name}</p>
+                        <p class="text-[11px] text-slate-400 font-semibold font-mono">${p.serviceNo} ${p.password ? '• 🔒 Password Protected' : '• 🔓 No Password'}</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button onclick="editOicProfile('${p.id}')" class="text-blue-500 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50" title="Edit">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    </button>
+                    <button onclick="deleteOicProfile('${p.id}')" class="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50" title="Delete">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function openOicProfileModal() {
+    document.getElementById('oicProfileModalTitle').textContent = 'Add Officer Profile';
+    document.getElementById('oicProfId').value = '';
+    document.getElementById('oicProfName').value = '';
+    document.getElementById('oicProfRank').value = '';
+    document.getElementById('oicProfServiceNo').value = '';
+    document.getElementById('oicProfPassword').value = '';
+    document.getElementById('oicProfileModal').classList.remove('hidden');
+}
+
+function editOicProfile(id) {
+    const profile = getOicProfiles().find(p => p.id === id);
+    if (!profile) return;
+
+    document.getElementById('oicProfileModalTitle').textContent = 'Edit Officer Profile';
+    document.getElementById('oicProfId').value = profile.id;
+    document.getElementById('oicProfName').value = profile.name;
+    document.getElementById('oicProfRank').value = profile.rank;
+    document.getElementById('oicProfServiceNo').value = profile.serviceNo;
+    document.getElementById('oicProfPassword').value = profile.password || '';
+    document.getElementById('oicProfileModal').classList.remove('hidden');
+}
+
+function saveOicProfile(event) {
+    event.preventDefault();
+    const id = document.getElementById('oicProfId').value;
+    const name = document.getElementById('oicProfName').value.trim();
+    const rank = document.getElementById('oicProfRank').value.trim();
+    const serviceNo = document.getElementById('oicProfServiceNo').value.trim();
+    const password = document.getElementById('oicProfPassword').value;
+
+    const profileId = id || 'oic_' + Date.now();
+
+    if (!store.settings.oicProfiles) store.settings.oicProfiles = {};
+    store.settings.oicProfiles[profileId] = {
+        id: profileId,
+        name,
+        rank,
+        serviceNo,
+        password
+    };
+
+    opsDB.ref(`settings/oicProfiles/${profileId}`).set({
+        id: profileId,
+        name,
+        rank,
+        serviceNo,
+        password
+    }).then(() => {
+        closeModal('oicProfileModal');
+        applySettings();
+        renderSettingsOicProfilesList();
+        showToast('Officer Profile saved successfully');
+    });
+}
+
+function deleteOicProfile(id) {
+    if (!confirm('Are you sure you want to delete this officer profile?')) return;
+
+    if (store.settings.oicProfiles) {
+        delete store.settings.oicProfiles[id];
+    }
+
+    opsDB.ref(`settings/oicProfiles/${id}`).remove().then(() => {
+        applySettings();
+        renderSettingsOicProfilesList();
+        showToast('Officer Profile deleted');
+    });
 }
 
 function showSettingsSailorResults() {
@@ -5011,13 +5149,14 @@ function submitProfilePassword(e) {
     }
 }
 
-function performProfileSwitch(type, zoneId = '') {
+function performProfileSwitch(type, zoneId = '', oicProfileId = '') {
     store.activeProfileType = type;
     store.activeProfileZone = zoneId;
 
     // Save to localStorage
     localStorage.setItem('ncw_ps_active_profile_type', type);
     localStorage.setItem('ncw_ps_active_profile_zone', zoneId);
+    localStorage.setItem('ncw_ps_active_oic_profile_id', oicProfileId);
 
     // Apply active profile rules
     applyActiveProfile();
@@ -5054,6 +5193,7 @@ function applyActiveProfile() {
         if (loginScreen) loginScreen.classList.add('hidden');
         store.activeProfileType = savedType;
         store.activeProfileZone = savedZone || '';
+        store.activeOicProfileId = localStorage.getItem('ncw_ps_active_oic_profile_id') || '';
     }
 
     const type = store.activeProfileType;
@@ -5128,10 +5268,23 @@ function applyActiveProfile() {
         }
 
         // Set active user info to overall OIC
+        let oicName = s.oicName || s.userName;
+        let oicRank = s.oicRank || s.userRank;
+        let oicServiceNo = s.oicServiceNo || s.userServiceNo;
+
+        if (oicProfileId) {
+            const profile = getOicProfiles().find(p => p.id === oicProfileId);
+            if (profile) {
+                oicName = profile.name;
+                oicRank = profile.rank;
+                oicServiceNo = profile.serviceNo;
+            }
+        }
+
         store.currentUser = {
-            name: s.oicName || s.userName,
-            rank: s.oicRank || s.userRank,
-            serviceNo: s.oicServiceNo || s.userServiceNo
+            name: oicName,
+            rank: oicRank,
+            serviceNo: oicServiceNo
         };
 
         // Enable settings tab (Desktop & Mobile)
@@ -5197,8 +5350,15 @@ function populateLoginProfiles() {
     const s = store.settings || {};
     let options = '<option value="">-- Choose Profile --</option>';
 
-    // 1. Command / OIC
-    options += `<option value="OIC" data-service-no="${s.oicServiceNo || ''}" data-rank="${s.oicRank || 'OIC'}" data-name="${s.oicName || ''}">Command / OIC</option>`;
+    // 1. Command / OIC Profiles
+    const oicProfs = getOicProfiles();
+    oicProfs.forEach(p => {
+        options += `<option value="OICProfile:${p.id}" data-service-no="${p.serviceNo || ''}" data-rank="${p.rank || 'OIC'}" data-name="${p.name || ''}">OIC Profile: ${p.rank} ${p.name}</option>`;
+    });
+    
+    if (oicProfs.length === 0) {
+        options += `<option value="OIC" data-service-no="${s.oicServiceNo || ''}" data-rank="${s.oicRank || 'OIC'}" data-name="${s.oicName || ''}">Command / OIC</option>`;
+    }
 
     // 2. Zone In-Charges
     if (s.zoneInCharges) {
@@ -5235,6 +5395,10 @@ function onLoginProfileChange(val) {
     
     if (val === 'OIC') {
         hasPassword = !!s.oicPassword;
+    } else if (val.startsWith('OICProfile:')) {
+        const profileId = val.split(':')[1];
+        const profile = getOicProfiles().find(p => p.id === profileId);
+        hasPassword = profile && !!profile.password;
     } else if (val.startsWith('ZoneInCharge:')) {
         const zoneId = val.split(':')[1];
         const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
@@ -5275,8 +5439,14 @@ function submitLogin(e) {
     let type = 'OIC';
     let zoneId = '';
     
+    let oicProfileId = '';
     if (val === 'OIC') {
         correctPassword = s.oicPassword || '';
+        type = 'OIC';
+    } else if (val.startsWith('OICProfile:')) {
+        oicProfileId = val.split(':')[1];
+        const profile = getOicProfiles().find(p => p.id === oicProfileId);
+        correctPassword = profile ? (profile.password || '') : '';
         type = 'OIC';
     } else if (val.startsWith('ZoneInCharge:')) {
         zoneId = val.split(':')[1];
@@ -5293,7 +5463,7 @@ function submitLogin(e) {
     }
     
     // Login successful!
-    performProfileSwitch(type, zoneId);
+    performProfileSwitch(type, zoneId, oicProfileId);
     
     // Hide login screen
     document.getElementById('loginScreen').classList.add('hidden');
@@ -5302,8 +5472,10 @@ function submitLogin(e) {
 function logoutProfile() {
     localStorage.removeItem('ncw_ps_active_profile_type');
     localStorage.removeItem('ncw_ps_active_profile_zone');
+    localStorage.removeItem('ncw_ps_active_oic_profile_id');
     store.activeProfileType = null;
     store.activeProfileZone = null;
+    store.activeOicProfileId = null;
     
     // Show login screen
     const loginScreen = document.getElementById('loginScreen');

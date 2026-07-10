@@ -1081,20 +1081,14 @@
                                 <p class="text-xs text-slate-400 mt-1">Header sub-line text (e.g., Naval Civil Works · Miss Garrison · Trincomalee)</p>
                             </div>
                             <hr class="border-slate-100">
-                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Officer-In-Charge</p>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">OIC Name</label>
-                                <input type="text" id="cfg-oicName" placeholder="Cdr. A.B. Perera" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicName',this.value)">
+                            <div class="flex items-center justify-between">
+                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">Officer-In-Charge Profiles</p>
+                                <button onclick="openOicProfileModal()" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1">
+                                    ➕ Add Officer
+                                </button>
                             </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">OIC Rank</label>
-                                <input type="text" id="cfg-oicRank" placeholder="Commander" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicRank',this.value)">
-                            </div>
-                                <input type="text" id="cfg-oicServiceNo" placeholder="NRX 00001" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicServiceNo',this.value)">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Command / OIC Profile Password</label>
-                                <input type="password" id="cfg-oicPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicPassword',this.value)">
+                            <div id="cfg-oicProfilesList" class="space-y-3">
+                                <!-- Dynamic List -->
                             </div>
                         </div>
                     </div>
@@ -1104,7 +1098,7 @@
                 <div id="stab-content-user" class="settings-tab-content hidden">
                     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                         <h3 class="font-bold text-slate-800 text-lg mb-1">👤 Zone In-Charge Profile</h3>
-                        <p class="text-sm text-slate-500 mb-6">Select a Zone and assign its In-Charge/Officer. Auto-fills Rank and Service No.</p>
+                        <p class="text-sm text-slate-500 mb-6">Select a Zone and assign its In-Charge (EC Sailors only). Auto-fills Rank and Service No.</p>
                         <div class="grid grid-cols-1 gap-5 max-w-lg">
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Select Zone</label>
@@ -1113,7 +1107,7 @@
                                 </select>
                             </div>
                             <div class="relative">
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Full Name (Officers / Sailors)</label>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Full Name (EC Sailors Only)</label>
                                 <input type="text" id="cfg-userName" placeholder="Type name or Off No to search..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showSettingsSailorResults()" oninput="filterSettingsSailorResults(this.value)" autocomplete="off">
                                 <input type="hidden" id="cfg-userSailorId">
                                 <div id="cfg-sailorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
@@ -2731,6 +2725,41 @@
             <span class="text-lg">⚙️</span>
             <span class="text-[8px] font-semibold">Settings</span>
         </button>
+    </div>
+
+    <!-- OIC Profile Modal -->
+    <div id="oicProfileModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-teal-600 to-cyan-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg" id="oicProfileModalTitle">Add Officer Profile</h2>
+                <button onclick="closeModal('oicProfileModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="saveOicProfile(event)" class="p-6 space-y-4">
+                <input type="hidden" id="oicProfId">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Full Name</label>
+                    <input type="text" id="oicProfName" required placeholder="Cdr. A.B. Perera" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Rank</label>
+                    <input type="text" id="oicProfRank" required placeholder="Commander / SCE (WW)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Service No (Off No)</label>
+                    <input type="text" id="oicProfServiceNo" required placeholder="NRX 00001 / NRC 3576" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Profile Password</label>
+                    <input type="password" id="oicProfPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                </div>
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('oicProfileModal')" class="px-4 py-2 text-slate-500 hover:text-slate-700 font-medium">Cancel</button>
+                    <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg font-medium">
+                        Save Officer
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </body>
 </html>
