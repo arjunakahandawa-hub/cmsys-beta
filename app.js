@@ -894,14 +894,22 @@ function handleDropOnCard(event, workOrderId) {
 }
 
 function removeSailorFromOrder(sailorId, workOrderId) {
-    const sailor = store.sailors.find(s => s.id === sailorId);
-    const workOrder = store.workOrders.find(wo => wo.id === workOrderId);
+    const sailor = store.sailors.find(s => String(s.id) === String(sailorId));
+    const workOrder = store.workOrders.find(wo => String(wo.id) === String(workOrderId) || String(wo._fbKey) === String(workOrderId));
 
     if (sailor && workOrder) {
-        workOrder.assigned = workOrder.assigned.filter(id => id !== sailorId);
+        workOrder.assigned = (workOrder.assigned || []).filter(id => String(id) !== String(sailorId));
         sailor.status = 'Available';
-        renderDashboard();
-        showToast(`${sailor.name} removed from assignment`);
+        
+        if (window.fbSaveWorkOrder) {
+            fbSaveWorkOrder(workOrder).then(() => {
+                renderDashboard();
+                showToast(`${sailor.name} removed from assignment`);
+            });
+        } else {
+            renderDashboard();
+            showToast(`${sailor.name} removed from assignment`);
+        }
     }
 }
 
@@ -1660,7 +1668,7 @@ function openWorkOrderDetail(workOrderId) {
             </div>
             <div class="flex items-center gap-2">
                 ${s.evaluated ? '<span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">✓ Evaluated</span>' : '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">Pending</span>'}
-                <button onclick="removeSailorFromOrder(${s.id}, ${wo.id}); openWorkOrderDetail(${wo.id});" class="text-red-500 hover:text-red-700 text-lg">×</button>
+                <button onclick="removeSailorFromOrder('${s.id}', '${wo._fbKey || wo.id}'); openWorkOrderDetail('${wo._fbKey || wo.id}');" class="text-red-500 hover:text-red-700 text-lg">×</button>
             </div>
         </div>
     `).join('') || '<p class="text-slate-500 text-center py-4">No labour assigned</p>';
