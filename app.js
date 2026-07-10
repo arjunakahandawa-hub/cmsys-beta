@@ -886,8 +886,35 @@ function toggleZoneTeam(sailorId, addToTeam) {
 }
 
 function updateCounters() {
-    const available = store.sailors.filter(s => s.status === 'Available').length;
-    const assigned = store.sailors.filter(s => s.status === 'Assigned').length;
+    const activeWo = store.workOrders || [];
+    const activeJc = store.jobCards || [];
+
+    const assignedIds = new Set();
+    activeWo.forEach(wo => {
+        if (wo.status === 'Active' && wo.assigned) {
+            wo.assigned.forEach(id => assignedIds.add(String(id)));
+        }
+    });
+    activeJc.forEach(jc => {
+        if (jc.status === 'Active' && jc.assigned) {
+            jc.assigned.forEach(id => assignedIds.add(String(id)));
+        }
+    });
+
+    if (store.sailors) {
+        store.sailors.forEach(s => {
+            if (s.status !== 'Leave' && s.status !== 'Sick') {
+                if (assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey))) {
+                    s.status = 'Assigned';
+                } else {
+                    s.status = 'Available';
+                }
+            }
+        });
+    }
+
+    const available = store.sailors ? store.sailors.filter(s => s.status === 'Available').length : 0;
+    const assigned = store.sailors ? store.sailors.filter(s => s.status === 'Assigned').length : 0;
     document.getElementById('netForce').textContent = available + assigned;
     document.getElementById('assignedCount').textContent = assigned;
     document.getElementById('availableCount').textContent = available;
@@ -4252,7 +4279,7 @@ function resetBulkUploadBtn() {
 // Default settings (used if Firebase has nothing)
 const defaultSettings = {
     systemTitle: 'NCW-PS v2.2',
-    stationName: 'Naval Civil Works \u00b7 Miss Garrison \u00b7 Trincomalee',
+    stationName: 'Naval Civil Works · Miss Garrison · Trincomalee',
     oicName: '',
     oicRank: '',
     oicServiceNo: '',
