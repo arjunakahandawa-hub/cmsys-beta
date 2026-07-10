@@ -81,8 +81,24 @@ const store = {
 function snapshotToArray(snapshot) {
     if (!snapshot.exists()) return [];
     const val = snapshot.val();
-    if (Array.isArray(val)) return val.filter(Boolean);
-    return Object.entries(val).map(([key, item]) => ({ ...item, _fbKey: key }));
+    if (Array.isArray(val)) {
+        return val.map((item, idx) => {
+            if (!item) return null;
+            const fbKey = String(idx);
+            return {
+                ...item,
+                _fbKey: fbKey,
+                id: item.id ?? fbKey
+            };
+        }).filter(Boolean);
+    }
+    return Object.entries(val).map(([key, item]) => {
+        return {
+            ...item,
+            _fbKey: key,
+            id: item.id ?? key
+        };
+    });
 }
 
 // ── Helper: generate NCW-PS numeric id from Firebase key ──
