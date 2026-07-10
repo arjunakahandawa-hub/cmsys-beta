@@ -84,21 +84,16 @@ function snapshotToArray(snapshot) {
     if (Array.isArray(val)) {
         return val.map((item, idx) => {
             if (!item) return null;
-            const fbKey = String(idx);
             return {
                 ...item,
-                _fbKey: fbKey,
-                id: item.id ?? fbKey
+                _fbKey: String(idx)
             };
         }).filter(Boolean);
     }
-    return Object.entries(val).map(([key, item]) => {
-        return {
-            ...item,
-            _fbKey: key,
-            id: item.id ?? key
-        };
-    });
+    return Object.entries(val).map(([key, item]) => ({
+        ...item,
+        _fbKey: key
+    }));
 }
 
 // ── Helper: generate NCW-PS numeric id from Firebase key ──
