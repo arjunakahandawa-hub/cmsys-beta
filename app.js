@@ -4445,12 +4445,7 @@ function changeSettingsUserZone(zoneId) {
 }
 
 function getEcSailors() {
-    return store.sailors.filter(sailor => {
-        const offNo = (sailor.official_number || sailor.officialNumber || sailor.service_no || '').trim();
-        // Remove leading non-alphanumeric characters (like spaces, slashes, dashes)
-        const cleanOffNo = offNo.replace(/^[^a-zA-Z0-9]+/, '');
-        return cleanOffNo.toUpperCase().startsWith('EC');
-    });
+    return store.sailors || [];
 }
 
 function showSettingsSailorResults() {
