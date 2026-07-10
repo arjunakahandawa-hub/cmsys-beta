@@ -4460,7 +4460,7 @@ function getOicProfiles() {
     const s = store.settings || {};
     let profiles = [];
     if (s.oicProfiles) {
-        profiles = Object.values(s.oicProfiles);
+        profiles = Object.values(s.oicProfiles).filter(p => p !== null && p !== undefined);
     }
     // Backward compatibility for the legacy single OIC
     if (profiles.length === 0 && (s.oicName || s.oicServiceNo)) {
