@@ -4354,7 +4354,11 @@ function applySettings() {
     const titleEl = document.querySelector('h1');
     if (titleEl && s.systemTitle) {
         const vSpan = titleEl.querySelector('span');
-        titleEl.childNodes[0].textContent = s.systemTitle.replace(/v\S+$/, '').trim() + ' ';
+        if (titleEl.childNodes && titleEl.childNodes.length > 0) {
+            titleEl.childNodes[0].textContent = s.systemTitle.replace(/v\S+$/, '').trim() + ' ';
+        } else {
+            titleEl.textContent = s.systemTitle + ' ';
+        }
         if (vSpan) vSpan.textContent = s.systemTitle.match(/v[\d.]+/) ? s.systemTitle.match(/v[\d.]+/)[0] : 'v2.2';
     }
     const brandTag = document.querySelector('.brand-tag');
