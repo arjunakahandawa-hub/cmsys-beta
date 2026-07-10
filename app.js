@@ -1605,6 +1605,43 @@ function renderAsSailorChips(filter = '') {
         const fullName   = s.name || 'Unknown';
         const rank       = s.rank || '';
 
+        const assignment = getSailorCurrentAssignment(s.id ?? s._fbKey);
+        if (assignment) {
+            return `
+            <button type="button"
+                disabled
+                title="Already assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}"
+                class="sailor-chip-card opacity-50 cursor-not-allowed"
+                style="
+                    display:flex; align-items:center; gap:8px;
+                    padding:7px 10px; border-radius:10px;
+                    border:2px solid #e2e8f0;
+                    background:#f1f5f9;
+                    box-shadow: none;
+                    transition:all 0.15s ease; min-width:140px; position:relative;
+                    text-align:left;
+                ">
+                <!-- Trade badge -->
+                <span style="
+                    width:32px; height:32px; border-radius:8px;
+                    background:#94a3b8;
+                    color:white; display:flex; align-items:center; justify-content:center;
+                    font-size:9px; font-weight:800; flex-shrink:0;
+                ">${s.trade}</span>
+
+                <!-- Name + Off No + assignment info -->
+                <div style="min-width:0; flex:1">
+                    <div style="
+                        font-size:11px; font-weight:700; line-height:1.2;
+                        color:#64748b;
+                        white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+                        max-width:130px;
+                    ">${rank} ${fullName}</div>
+                    <div style="font-size:8px; color:#b45309; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">⚠️ Busy: ${assignment.zone}</div>
+                </div>
+            </button>`;
+        }
+
         return `
         <button type="button"
             onclick="toggleAsSailor('${s.id ?? s._fbKey}')"
@@ -1711,6 +1748,11 @@ function toggleAsSailor(sailorId) {
     if (_asSelectedSailors.has(key)) {
         _asSelectedSailors.delete(key);
     } else {
+        const assignment = getSailorCurrentAssignment(sailorId);
+        if (assignment) {
+            showToast(`${store.sailors.find(s => String(s.id ?? s._fbKey) === key)?.name || 'Sailor'} is already busy in ${assignment.zone}!`, 'error');
+            return;
+        }
         _asSelectedSailors.add(key);
     }
     renderAsSailorChips(document.getElementById('asSailorSearch').value);
