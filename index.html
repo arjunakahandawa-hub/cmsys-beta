@@ -599,9 +599,9 @@
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div id="boardGridContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                         <!-- Projects Column -->
-                        <div class="glass-card overflow-hidden">
+                        <div id="projectColumnWrapper" class="glass-card overflow-hidden">
                             <div class="panel-header-blue text-white px-4 py-3">
                                 <div class="flex items-center gap-2">
                                     <span class="text-lg">📐</span>
@@ -617,7 +617,7 @@
                         </div>
 
                         <!-- Jobs Column -->
-                        <div class="glass-card overflow-hidden">
+                        <div id="jobColumnWrapper" class="glass-card overflow-hidden">
                             <div class="panel-header-amber text-white px-4 py-3">
                                 <div class="flex items-center gap-2">
                                     <span class="text-lg">🔧</span>
@@ -633,7 +633,7 @@
                         </div>
 
                         <!-- Tasks Column -->
-                        <div class="glass-card overflow-hidden">
+                        <div id="taskColumnWrapper" class="glass-card overflow-hidden">
                             <div class="bg-gradient-to-r from-slate-600 to-slate-500 text-white px-4 py-3">
                                 <div class="flex items-center gap-2">
                                     <span class="text-lg">📋</span>
@@ -649,7 +649,7 @@
                         </div>
 
                         <!-- Quick Assignments Column -->
-                        <div class="glass-card overflow-hidden">
+                        <div id="assignmentColumnWrapper" class="glass-card overflow-hidden">
                             <div class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white px-4 py-3">
                                 <div class="flex items-center justify-between">
                                     <div class="flex items-center gap-2">
@@ -666,6 +666,12 @@
                                 <!-- Populated dynamically by JS -->
                             </div>
                         </div>
+                    </div>
+                    <!-- Empty State for Board -->
+                    <div id="boardEmptyState" class="hidden py-16 text-center bg-white/60 backdrop-blur-md border border-slate-200 rounded-2xl p-6 shadow-sm">
+                        <span class="text-5xl">⚓</span>
+                        <h3 class="mt-4 text-base font-bold text-slate-800">No Active Work in this Zone</h3>
+                        <p class="mt-1 text-sm text-slate-500">Create a new Work Order or Assignment to get started.</p>
                     </div>
                 </div>
             </div>

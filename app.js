@@ -528,6 +528,7 @@ function renderDashboard() {
     renderZoneTeam();
     updateCounters();
     updatePendingEvals();
+    updateBoardEmptyState();
 }
 
 function renderAvailableSailors() {
@@ -597,8 +598,13 @@ function renderWorkOrders() {
 
     Object.keys(columns).forEach(type => {
         const orders = store.workOrders.filter(wo => wo.type === type && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed');
-        columns[type].innerHTML = orders.map(wo => renderWorkOrderCard(wo)).join('') || 
-            '<p class="text-slate-400 text-center py-4 text-sm italic">No ' + type.toLowerCase() + 's</p>';
+        columns[type].innerHTML = orders.map(wo => renderWorkOrderCard(wo)).join('');
+        
+        const wrapperId = type === 'PROJECT' ? 'projectColumnWrapper' : type === 'JOB' ? 'jobColumnWrapper' : 'taskColumnWrapper';
+        const wrapper = document.getElementById(wrapperId);
+        if (wrapper) {
+            wrapper.classList.toggle('hidden', orders.length === 0);
+        }
         
         const activeOrders = orders.filter(o => o.status === 'Active');
         if (type === 'PROJECT') projectCount = activeOrders.length;
@@ -625,13 +631,53 @@ function renderQuickAssignments() {
     const badge = document.getElementById('quickAssignCountBadge');
     if (badge) badge.textContent = `${quickOrders.length} Active`;
 
-    if (quickOrders.length === 0) {
-        container.innerHTML = `
-            <p class="text-slate-400 text-center py-4 text-sm italic">No assignments</p>`;
-        return;
+    const wrapper = document.getElementById('assignmentColumnWrapper');
+    if (wrapper) {
+        wrapper.classList.toggle('hidden', quickOrders.length === 0);
     }
 
     container.innerHTML = quickOrders.map(wo => renderWorkOrderCard(wo)).join('');
+}
+
+function updateBoardEmptyState() {
+    const projects = store.workOrders.filter(wo => wo.type === 'PROJECT' && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
+    const jobs = store.workOrders.filter(wo => wo.type === 'JOB' && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
+    const tasks = store.workOrders.filter(wo => wo.type === 'TASK' && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
+    const assigns = store.workOrders.filter(wo => wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
+
+    const visibleColumns = [];
+    if (projects > 0) visibleColumns.push('project');
+    if (jobs > 0) visibleColumns.push('job');
+    if (tasks > 0) visibleColumns.push('task');
+    if (assigns > 0) visibleColumns.push('assignment');
+
+    const visibleCount = visibleColumns.length;
+    const emptyState = document.getElementById('boardEmptyState');
+    const boardGrid = document.getElementById('boardGridContainer');
+
+    if (emptyState && boardGrid) {
+        if (visibleCount === 0) {
+            emptyState.classList.remove('hidden');
+            boardGrid.classList.add('hidden');
+        } else {
+            emptyState.classList.add('hidden');
+            boardGrid.classList.remove('hidden');
+
+            // Reset classes first
+            boardGrid.className = 'grid gap-4';
+
+            // Set grid columns dynamically based on number of active columns
+            if (visibleCount === 1) {
+                boardGrid.classList.add('grid-cols-1', 'max-w-xl', 'mx-auto');
+            } else if (visibleCount === 2) {
+                boardGrid.classList.add('grid-cols-1', 'md:grid-cols-2', 'max-w-5xl', 'mx-auto');
+            } else if (visibleCount === 3) {
+                boardGrid.classList.add('grid-cols-1', 'md:grid-cols-2', 'lg:grid-cols-3', 'max-w-7xl', 'mx-auto');
+            } else {
+                boardGrid.classList.add('grid-cols-1', 'md:grid-cols-2', 'xl:grid-cols-4');
+            }
+        }
+    }
 }
 
 function renderWorkOrderCard(wo) {
