@@ -5347,6 +5347,7 @@ function applyActiveProfile() {
         let oicRank = s.oicRank || s.userRank;
         let oicServiceNo = s.oicServiceNo || s.userServiceNo;
 
+        const oicProfileId = store.activeOicProfileId;
         if (oicProfileId) {
             const profile = getOicProfiles().find(p => p.id === oicProfileId);
             if (profile) {
