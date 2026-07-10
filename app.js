@@ -465,6 +465,9 @@ function getPerformanceTextColor(score) {
 // VIEW MANAGEMENT
 // =============================================
 function switchView(view) {
+    if (typeof toggleLeftSidebar === 'function') {
+        toggleLeftSidebar(false);
+    }
     document.querySelectorAll('.view-content').forEach(v => v.classList.add('hidden'));
     document.getElementById(`view-${view}`).classList.remove('hidden');
     
@@ -5585,6 +5588,31 @@ function logoutProfile() {
     if (dropdown) dropdown.classList.add('hidden');
     
     showToast('Logged out successfully.');
+}
+
+function toggleLeftSidebar(open) {
+    const sidebar = document.getElementById('leftSidebarContainer');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const arrow = document.getElementById('sidebarToggleArrow');
+    if (!sidebar) return;
+
+    const isOpen = open !== undefined ? open : sidebar.classList.contains('-translate-x-full');
+
+    if (isOpen) {
+        sidebar.classList.remove('-translate-x-full');
+        sidebar.classList.add('translate-x-0');
+        if (backdrop) backdrop.classList.remove('hidden');
+        if (arrow) {
+            arrow.textContent = '◀';
+        }
+    } else {
+        sidebar.classList.remove('translate-x-0');
+        sidebar.classList.add('-translate-x-full');
+        if (backdrop) backdrop.classList.add('hidden');
+        if (arrow) {
+            arrow.textContent = '➔';
+        }
+    }
 }
 
 
