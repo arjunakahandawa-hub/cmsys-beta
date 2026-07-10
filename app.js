@@ -2631,7 +2631,7 @@ function renderInventoryTable() {
         const catCls = catColors[item.category] || 'bg-slate-100 text-slate-600';
         return `
         <tr class="hover:bg-teal-50/40 cursor-pointer transition-colors border-b border-slate-100"
-            onclick="showInventoryDetail('${item.id}')">
+            onclick="if (!event.target.closest('button')) showInventoryDetail('${item.id}')">
             <td class="px-4 py-2.5 font-medium text-slate-800 text-sm">${item.description}</td>
             <td class="px-4 py-2.5 text-center"><span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${catCls}">${item.category}</span></td>
             <td class="px-4 py-2.5 text-center text-xs text-slate-500">${item.deno}</td>
