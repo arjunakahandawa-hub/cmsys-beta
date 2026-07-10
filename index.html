@@ -384,7 +384,6 @@
                     <div>
                         <div class="flex items-center gap-2">
                             <h1 class="text-[15px] font-bold text-white tracking-wide">NCW-PS <span class="text-teal-400 font-extrabold">v2.2</span></h1>
-                            <span class="hidden md:inline text-[10px] border border-yellow-400/50 text-yellow-300 px-1.5 py-0.5 rounded font-medium">SLN CONFIDENTIAL</span>
                         </div>
                         <p class="brand-tag leading-none hidden sm:block">Naval Civil Works · Miss Garrison · Trincomalee</p>
                     </div>
@@ -1131,6 +1130,23 @@
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Service No (Off No)</label>
                                 <input type="text" id="cfg-userServiceNo" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
                             </div>
+                            
+                            <!-- Zone Sub In-Charge Profile Section -->
+                            <div class="relative">
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Zone Sub In-Charge Full Name (EC Sailors Only)</label>
+                                <input type="text" id="cfg-userSubName" placeholder="Type name or Off No to search..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showSettingsSubSailorResults()" oninput="filterSettingsSubSailorResults(this.value)" autocomplete="off">
+                                <input type="hidden" id="cfg-userSubSailorId">
+                                <div id="cfg-subSailorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Sub In-Charge Rank</label>
+                                <input type="text" id="cfg-userSubRank" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Sub In-Charge Service No (Off No)</label>
+                                <input type="text" id="cfg-userSubServiceNo" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
+                            </div>
+
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Profile Password</label>
                                 <input type="password" id="cfg-userPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" oninput="saveSettingsUserPassword(this.value)">
@@ -1149,6 +1165,14 @@
                                     <input type="text" id="cfg-woSupervisorName" placeholder="Search Supervisor..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showWoSupervisorResults()" oninput="filterWoSupervisorResults(this.value)" autocomplete="off">
                                     <input type="hidden" id="cfg-woSupervisorId">
                                     <div id="cfg-woSupervisorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Work Order Artificer (AC Sailors Only)</label>
+                                <div class="relative">
+                                    <input type="text" id="cfg-woArtificerName" placeholder="Search Artificer..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showWoArtificerResults()" oninput="filterWoArtificerResults(this.value)" autocomplete="off">
+                                    <input type="hidden" id="cfg-woArtificerId">
+                                    <div id="cfg-woArtificerSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
                                 </div>
                             </div>
                         </div>
@@ -2704,7 +2728,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260710005"></script>
+    <script src="app.js?v=20260710006"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

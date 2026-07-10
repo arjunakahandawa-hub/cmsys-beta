@@ -1141,14 +1141,23 @@ function openNewWorkOrderModal() {
     document.getElementById('woSupervisor').innerHTML = supervisorOptions;
     document.getElementById('woIncharge').innerHTML   = inchargeOptions;
 
-    // Populate Project Artificer dropdown (Off No starts with 'AC')
+    // Populate Project Artificer dropdown (filtered to Settings assignments, with fallback to all AC sailors)
     const acSailors = store.sailors.filter(s => {
         const off = String(s.official_number || '').trim().toUpperCase();
         return off.startsWith('AC');
     });
-    const acOptions = '<option value="">Select...</option>' +
-        acSailors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
-    document.getElementById('woArtificer').innerHTML = acOptions;
+
+    let artificerOptions = '<option value="">Select...</option>';
+    if (inc && inc.woArtificerId) {
+        const s = store.sailors.find(x => String(x.id ?? x._fbKey) === String(inc.woArtificerId));
+        if (s) {
+            artificerOptions += `<option value="${s.id}">${s.rank} ${s.name}</option>`;
+        }
+    } else {
+        artificerOptions += acSailors.map(s => `<option value="${s.id}">${s.rank} ${s.name}</option>`).join('');
+    }
+
+    document.getElementById('woArtificer').innerHTML = artificerOptions;
 
     // Render sailor chips
     renderWoSailorChips();
@@ -1791,13 +1800,26 @@ function openWorkOrderDetail(workOrderId) {
     document.getElementById('woDetailIncharge').innerHTML = inchargeOptions;
     document.getElementById('woDetailSupervisor').innerHTML = supervisorOptions;
 
-    // Project Artificer dropdown (Off No starts with 'AC')
+    // Project Artificer dropdown (filtered to Settings assignments, with fallback to all AC sailors)
     const acSailors = store.sailors.filter(s => {
         const off = String(s.official_number || '').trim().toUpperCase();
         return off.startsWith('AC');
     });
-    document.getElementById('woDetailArtificer').innerHTML = '<option value="">Select...</option>' +
-        acSailors.map(s => `<option value="${s.id}" ${wo.project_artificer == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+
+    let artificerOptions = '<option value="">Select...</option>';
+    const assignedArtificerId = wo.project_artificer;
+    const eligibleArtificerIds = new Set();
+    if (inc && inc.woArtificerId) eligibleArtificerIds.add(String(inc.woArtificerId));
+    if (assignedArtificerId) eligibleArtificerIds.add(String(assignedArtificerId));
+
+    if (eligibleArtificerIds.size > 0) {
+        const selectedSailors = store.sailors.filter(s => eligibleArtificerIds.has(String(s.id ?? s._fbKey)));
+        artificerOptions += selectedSailors.map(s => `<option value="${s.id}" ${wo.project_artificer == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+    } else {
+        artificerOptions += acSailors.map(s => `<option value="${s.id}" ${wo.project_artificer == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
+    }
+    
+    document.getElementById('woDetailArtificer').innerHTML = artificerOptions;
 
     if (typeof renderDetailSailorChips === 'function') { renderDetailSailorChips(); }
 
@@ -4549,23 +4571,42 @@ function changeSettingsUserZone(zoneId) {
         setValue('cfg-userName', displayName || '');
         setValue('cfg-userRank', inc.rank || '');
         setValue('cfg-userServiceNo', inc.serviceNo || '');
+        
+        setValue('cfg-userSubSailorId', inc.subSailorId || '');
+        const subDisplayName = inc.subRank ? `${inc.subRank} ${inc.subName} (${inc.subServiceNo})` : (inc.subName || '');
+        setValue('cfg-userSubName', subDisplayName || '');
+        setValue('cfg-userSubRank', inc.subRank || '');
+        setValue('cfg-userSubServiceNo', inc.subServiceNo || '');
+
         setValue('cfg-userPassword', inc.password || '');
         
         setValue('cfg-woInchargeId', inc.woInchargeId || '');
         setValue('cfg-woInchargeName', inc.woInchargeName || '');
         setValue('cfg-woSupervisorId', inc.woSupervisorId || '');
         setValue('cfg-woSupervisorName', inc.woSupervisorName || '');
+        
+        setValue('cfg-woArtificerId', inc.woArtificerId || '');
+        setValue('cfg-woArtificerName', inc.woArtificerName || '');
     } else {
         setValue('cfg-userSailorId', '');
         setValue('cfg-userName', '');
         setValue('cfg-userRank', '');
         setValue('cfg-userServiceNo', '');
+        
+        setValue('cfg-userSubSailorId', '');
+        setValue('cfg-userSubName', '');
+        setValue('cfg-userSubRank', '');
+        setValue('cfg-userSubServiceNo', '');
+
         setValue('cfg-userPassword', '');
         
         setValue('cfg-woInchargeId', '');
         setValue('cfg-woInchargeName', '');
         setValue('cfg-woSupervisorId', '');
         setValue('cfg-woSupervisorName', '');
+        
+        setValue('cfg-woArtificerId', '');
+        setValue('cfg-woArtificerName', '');
     }
 }
 
@@ -4811,6 +4852,224 @@ function selectSettingsSailor(sailorId, displayName) {
     }
     
     document.getElementById('cfg-sailorSearchResults').classList.add('hidden');
+}
+
+// Autocomplete for Settings Zone Sub In-Charge Profile
+function showSettingsSubSailorResults() {
+    const resultsDiv = document.getElementById('cfg-subSailorSearchResults');
+    if (!resultsDiv) return;
+    resultsDiv.classList.remove('hidden');
+    
+    const inputVal = document.getElementById('cfg-userSubName').value.trim();
+    if (inputVal.includes('(')) {
+        filterSettingsSubSailorResults('');
+    } else {
+        filterSettingsSubSailorResults(inputVal);
+    }
+}
+
+function filterSettingsSubSailorResults(query) {
+    const resultsDiv = document.getElementById('cfg-subSailorSearchResults');
+    if (!resultsDiv) return;
+    
+    const ecSailors = getEcSailors();
+    const q = query.toLowerCase().trim();
+    
+    let filtered = ecSailors;
+    if (q && !query.includes('(')) {
+        filtered = ecSailors.filter(s => {
+            const name = (s.name || '').toLowerCase();
+            const offNo = (s.official_number || s.officialNumber || s.service_no || '').toLowerCase();
+            const rank = (s.rank || '').toLowerCase();
+            return name.includes(q) || offNo.includes(q) || rank.includes(q);
+        });
+    }
+    
+    let html = `<div onclick="selectSettingsSubSailor('', '')" class="p-2.5 text-xs hover:bg-red-50 cursor-pointer text-red-600 font-semibold border-b border-slate-100 transition-colors flex items-center gap-1">
+        ✕ Clear / Remove Sub In-Charge
+    </div>`;
+    
+    if (filtered.length === 0) {
+        html += '<div class="p-3 text-sm text-slate-400 italic">No sailors found</div>';
+    } else {
+        html += filtered.map(s => {
+            const displayName = `${s.rank} ${s.name} (${s.official_number || s.service_no})`;
+            const escDisplayName = displayName.replace(/'/g, "\\'").replace(/"/g, '\\"');
+            return `<div onclick="selectSettingsSubSailor('${s.id ?? s._fbKey}', '${escDisplayName}')" class="p-2.5 text-sm hover:bg-slate-50 cursor-pointer text-slate-700 transition-colors">
+                <span class="font-semibold text-slate-800">${s.rank} ${s.name}</span>
+                <span class="text-xs text-slate-400 font-mono ml-2">${s.official_number || s.service_no}</span>
+            </div>`;
+        }).join('');
+    }
+    
+    resultsDiv.innerHTML = html;
+}
+
+function selectSettingsSubSailor(sailorId, displayName) {
+    const zoneId = document.getElementById('cfg-userZone').value;
+    if (!zoneId) {
+        showToast('Please select a Zone first', 'error');
+        document.getElementById('cfg-userSubName').value = '';
+        document.getElementById('cfg-subSailorSearchResults').classList.add('hidden');
+        return;
+    }
+    
+    if (!store.settings.zoneInCharges) store.settings.zoneInCharges = {};
+    if (!store.settings.zoneInCharges[zoneId]) {
+        showToast('Please set the Profile In-Charge Sailor first', 'error');
+        document.getElementById('cfg-userSubName').value = '';
+        document.getElementById('cfg-subSailorSearchResults').classList.add('hidden');
+        return;
+    }
+    
+    if (sailorId) {
+        const sailor = store.sailors.find(s => String(s.id ?? s._fbKey) === String(sailorId));
+        if (sailor) {
+            setValue('cfg-userSubName', displayName);
+            setValue('cfg-userSubSailorId', sailorId);
+            setValue('cfg-userSubRank', sailor.rank || '');
+            setValue('cfg-userSubServiceNo', sailor.official_number || sailor.service_no || '');
+            
+            store.settings.zoneInCharges[zoneId].subName = sailor.name;
+            store.settings.zoneInCharges[zoneId].subRank = sailor.rank || '';
+            store.settings.zoneInCharges[zoneId].subServiceNo = sailor.official_number || sailor.service_no || '';
+            store.settings.zoneInCharges[zoneId].subSailorId = sailorId;
+            
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/subName`).set(sailor.name);
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/subRank`).set(sailor.rank || '');
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/subServiceNo`).set(sailor.official_number || sailor.service_no || '');
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/subSailorId`).set(sailorId).then(() => {
+                applySettings();
+                showToast(`Sub In-Charge for ${zoneId} updated to ${sailor.rank} ${sailor.name}`);
+            });
+        }
+    } else {
+        setValue('cfg-userSubName', '');
+        setValue('cfg-userSubSailorId', '');
+        setValue('cfg-userSubRank', '');
+        setValue('cfg-userSubServiceNo', '');
+        
+        delete store.settings.zoneInCharges[zoneId].subName;
+        delete store.settings.zoneInCharges[zoneId].subRank;
+        delete store.settings.zoneInCharges[zoneId].subServiceNo;
+        delete store.settings.zoneInCharges[zoneId].subSailorId;
+        
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/subName`).remove();
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/subRank`).remove();
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/subServiceNo`).remove();
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/subSailorId`).remove().then(() => {
+            applySettings();
+            showToast(`Sub In-Charge for ${zoneId} removed`);
+        });
+    }
+    
+    document.getElementById('cfg-subSailorSearchResults').classList.add('hidden');
+}
+
+function getAcSailors() {
+    return store.sailors.filter(sailor => {
+        const offNo = (sailor.official_number || sailor.officialNumber || sailor.service_no || '').trim();
+        const cleanOffNo = offNo.replace(/^[^a-zA-Z0-9]+/, '');
+        return cleanOffNo.toUpperCase().startsWith('AC');
+    });
+}
+
+// Autocomplete for Settings Work Order Artificer
+function showWoArtificerResults() {
+    const resultsDiv = document.getElementById('cfg-woArtificerSearchResults');
+    if (!resultsDiv) return;
+    resultsDiv.classList.remove('hidden');
+    
+    const inputVal = document.getElementById('cfg-woArtificerName').value.trim();
+    if (inputVal.includes('(')) {
+        filterWoArtificerResults('');
+    } else {
+        filterWoArtificerResults(inputVal);
+    }
+}
+
+function filterWoArtificerResults(query) {
+    const resultsDiv = document.getElementById('cfg-woArtificerSearchResults');
+    if (!resultsDiv) return;
+    
+    const acSailors = getAcSailors();
+    const q = query.toLowerCase().trim();
+    
+    let filtered = acSailors;
+    if (q && !query.includes('(')) {
+        filtered = acSailors.filter(s => {
+            const name = (s.name || '').toLowerCase();
+            const offNo = (s.official_number || s.officialNumber || s.service_no || '').toLowerCase();
+            const rank = (s.rank || '').toLowerCase();
+            return name.includes(q) || offNo.includes(q) || rank.includes(q);
+        });
+    }
+    
+    let html = `<div onclick="selectWoArtificer('', '')" class="p-2.5 text-xs hover:bg-red-50 cursor-pointer text-red-600 font-semibold border-b border-slate-100 transition-colors flex items-center gap-1">
+        ✕ Clear / Remove Artificer
+    </div>`;
+    
+    if (filtered.length === 0) {
+        html += '<div class="p-3 text-sm text-slate-400 italic">No sailors found</div>';
+    } else {
+        html += filtered.map(s => {
+            const displayName = `${s.rank} ${s.name} (${s.official_number || s.service_no})`;
+            const escDisplayName = displayName.replace(/'/g, "\\'").replace(/"/g, '\\"');
+            return `<div onclick="selectWoArtificer('${s.id ?? s._fbKey}', '${escDisplayName}')" class="p-2.5 text-sm hover:bg-slate-50 cursor-pointer text-slate-700 transition-colors">
+                <span class="font-semibold text-slate-800">${s.rank} ${s.name}</span>
+                <span class="text-xs text-slate-400 font-mono ml-2">${s.official_number || s.service_no}</span>
+            </div>`;
+        }).join('');
+    }
+    
+    resultsDiv.innerHTML = html;
+}
+
+function selectWoArtificer(sailorId, displayName) {
+    const zoneId = document.getElementById('cfg-userZone').value;
+    if (!zoneId) {
+        showToast('Please select a Zone first', 'error');
+        document.getElementById('cfg-woArtificerName').value = '';
+        document.getElementById('cfg-woArtificerSearchResults').classList.add('hidden');
+        return;
+    }
+    
+    if (!store.settings.zoneInCharges) store.settings.zoneInCharges = {};
+    if (!store.settings.zoneInCharges[zoneId]) {
+        showToast('Please set the Profile Sailor first', 'error');
+        document.getElementById('cfg-woArtificerName').value = '';
+        document.getElementById('cfg-woArtificerSearchResults').classList.add('hidden');
+        return;
+    }
+    
+    if (sailorId) {
+        const sailor = store.sailors.find(s => String(s.id ?? s._fbKey) === String(sailorId));
+        if (sailor) {
+            setValue('cfg-woArtificerName', displayName);
+            setValue('cfg-woArtificerId', sailorId);
+            
+            store.settings.zoneInCharges[zoneId].woArtificerId = sailorId;
+            store.settings.zoneInCharges[zoneId].woArtificerName = displayName;
+            
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/woArtificerId`).set(sailorId);
+            opsDB.ref(`settings/zoneInCharges/${zoneId}/woArtificerName`).set(displayName).then(() => {
+                applySettings();
+                showToast(`Work Order Artificer for ${zoneId} updated`);
+            });
+        }
+    } else {
+        setValue('cfg-woArtificerName', '');
+        setValue('cfg-woArtificerId', '');
+        delete store.settings.zoneInCharges[zoneId].woArtificerId;
+        delete store.settings.zoneInCharges[zoneId].woArtificerName;
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/woArtificerId`).remove();
+        opsDB.ref(`settings/zoneInCharges/${zoneId}/woArtificerName`).remove().then(() => {
+            applySettings();
+            showToast(`Work Order Artificer for ${zoneId} removed`);
+        });
+    }
+    
+    document.getElementById('cfg-woArtificerSearchResults').classList.add('hidden');
 }
 
 // Autocomplete for Settings Work Order Incharge
@@ -5292,6 +5551,14 @@ document.addEventListener('click', (e) => {
         }
     }
 
+    const searchSubInput = document.getElementById('cfg-userSubName');
+    const resultsSubDiv = document.getElementById('cfg-subSailorSearchResults');
+    if (searchSubInput && resultsSubDiv) {
+        if (!searchSubInput.contains(e.target) && !resultsSubDiv.contains(e.target)) {
+            resultsSubDiv.classList.add('hidden');
+        }
+    }
+
     const woIncInput = document.getElementById('cfg-woInchargeName');
     const woIncDiv = document.getElementById('cfg-woInchargeSearchResults');
     if (woIncInput && woIncDiv) {
@@ -5305,6 +5572,14 @@ document.addEventListener('click', (e) => {
     if (woSupInput && woSupDiv) {
         if (!woSupInput.contains(e.target) && !woSupDiv.contains(e.target)) {
             woSupDiv.classList.add('hidden');
+        }
+    }
+
+    const woArtInput = document.getElementById('cfg-woArtificerName');
+    const woArtDiv = document.getElementById('cfg-woArtificerSearchResults');
+    if (woArtInput && woArtDiv) {
+        if (!woArtInput.contains(e.target) && !woArtDiv.contains(e.target)) {
+            woArtDiv.classList.add('hidden');
         }
     }
 });
@@ -5381,29 +5656,56 @@ function renderProfileDropdown() {
         `;
     }
 
-    // 2. Zone In-Charge Options
+    // 2. Zone In-Charge & Sub In-Charge Options
     if (store.settings && store.settings.zoneInCharges) {
         Object.entries(store.settings.zoneInCharges).forEach(([zoneId, inc]) => {
-            if (!inc || !inc.name) return;
-            const isActive = store.activeProfileType === 'ZoneInCharge' && store.activeProfileZone === zoneId;
-            const incCleanNo = inc.serviceNo ? inc.serviceNo.replace(/[^a-zA-Z0-9]/g, '') : '';
-            const incShortRank = inc.rank ? inc.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'OIC';
-            const incFallbackText = `<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${incShortRank}</div>`;
-            const incAvatarHtml = incCleanNo ? 
-                `<img src="images/${incCleanNo}.JPG" data-fallback="${incFallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${incCleanNo}')">` :
-                incFallbackText;
+            if (!inc) return;
+            
+            // Main In-Charge
+            if (inc.name) {
+                const isActive = store.activeProfileType === 'ZoneInCharge' && store.activeProfileZone === zoneId;
+                const incCleanNo = inc.serviceNo ? inc.serviceNo.replace(/[^a-zA-Z0-9]/g, '') : '';
+                const incShortRank = inc.rank ? inc.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'OIC';
+                const incFallbackText = `<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${incShortRank}</div>`;
+                const incAvatarHtml = incCleanNo ? 
+                    `<img src="images/${incCleanNo}.JPG" data-fallback="${incFallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${incCleanNo}')">` :
+                    incFallbackText;
 
-            html += `
-                <div onclick="switchActiveProfile('ZoneInCharge', '${zoneId}')" class="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-3 ${isActive ? 'bg-teal-50/50' : ''}">
-                    ${incAvatarHtml}
-                    <div class="min-w-0 flex-1 text-left">
-                        <p class="text-xs font-bold text-slate-800 truncate">${zoneId} In-Charge</p>
-                        <p class="text-[10px] text-slate-505 truncate">${inc.rank} ${inc.name}</p>
-                        <p class="text-[9px] text-slate-400 font-mono">${inc.serviceNo}</p>
+                html += `
+                    <div onclick="switchActiveProfile('ZoneInCharge', '${zoneId}')" class="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-3 ${isActive ? 'bg-teal-50/50' : ''}">
+                        ${incAvatarHtml}
+                        <div class="min-w-0 flex-1 text-left">
+                            <p class="text-xs font-bold text-slate-800 truncate">${zoneId} In-Charge</p>
+                            <p class="text-[10px] text-slate-505 truncate">${inc.rank} ${inc.name}</p>
+                            <p class="text-[9px] text-slate-400 font-mono">${inc.serviceNo}</p>
+                        </div>
+                        ${isActive ? '<span class="text-teal-600 font-bold">✓</span>' : ''}
                     </div>
-                    ${isActive ? '<span class="text-teal-600 font-bold">✓</span>' : ''}
-                </div>
-            `;
+                `;
+            }
+
+            // Sub In-Charge
+            if (inc.subName) {
+                const isSubActive = store.activeProfileType === 'ZoneSubInCharge' && store.activeProfileZone === zoneId;
+                const subCleanNo = inc.subServiceNo ? inc.subServiceNo.replace(/[^a-zA-Z0-9]/g, '') : '';
+                const subShortRank = inc.subRank ? inc.subRank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'OIC';
+                const subFallbackText = `<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${subShortRank}</div>`;
+                const subAvatarHtml = subCleanNo ? 
+                    `<img src="images/${subCleanNo}.JPG" data-fallback="${subFallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${subCleanNo}')">` :
+                    subFallbackText;
+
+                html += `
+                    <div onclick="switchActiveProfile('ZoneSubInCharge', '${zoneId}')" class="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-3 ${isSubActive ? 'bg-teal-50/50' : ''}">
+                        ${subAvatarHtml}
+                        <div class="min-w-0 flex-1 text-left">
+                            <p class="text-xs font-bold text-slate-800 truncate">${zoneId} Sub In-Charge</p>
+                            <p class="text-[10px] text-slate-505 truncate">${inc.subRank} ${inc.subName}</p>
+                            <p class="text-[9px] text-slate-400 font-mono">${inc.subServiceNo}</p>
+                        </div>
+                        ${isSubActive ? '<span class="text-teal-600 font-bold">✓</span>' : ''}
+                    </div>
+                `;
+            }
         });
     }
 
@@ -5455,11 +5757,13 @@ function switchActiveProfile(type, zoneId = '', oicProfileId = '') {
             targetPassword = s.oicPassword || '';
             targetName = s.oicName ? `${s.oicRank} ${s.oicName}` : 'Command / OIC';
         }
-    } else if (type === 'ZoneInCharge' && zoneId) {
+    } else if ((type === 'ZoneInCharge' || type === 'ZoneSubInCharge') && zoneId) {
         const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
         if (inc) {
             targetPassword = inc.password || '';
-            targetName = `${inc.rank} ${inc.name} (${zoneId})`;
+            targetName = type === 'ZoneSubInCharge'
+                ? `${inc.subRank} ${inc.subName} (Sub In-Charge - ${zoneId})`
+                : `${inc.rank} ${inc.name} (${zoneId})`;
         }
     }
     
@@ -5502,7 +5806,7 @@ function submitProfilePassword(e) {
         } else {
             correctPassword = s.oicPassword || '';
         }
-    } else if (type === 'ZoneInCharge' && zoneId) {
+    } else if ((type === 'ZoneInCharge' || type === 'ZoneSubInCharge') && zoneId) {
         const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
         correctPassword = inc ? (inc.password || '') : '';
     }
@@ -5538,6 +5842,8 @@ function performProfileSwitch(type, zoneId = '', oicProfileId = '') {
     // Show toast
     if (type === 'OIC') {
         showToast('Switched to Command / OIC Profile');
+    } else if (type === 'ZoneSubInCharge') {
+        showToast(`Logged in as Sub In-Charge for ${zoneId}`);
     } else {
         showToast(`Logged in as In-Charge for ${zoneId}`);
     }
@@ -5569,7 +5875,7 @@ function applyActiveProfile() {
     const s = store.settings || {};
     const zoneSelector = document.getElementById('zoneSelector');
 
-    if (type === 'ZoneInCharge' && zoneId) {
+    if ((type === 'ZoneInCharge' || type === 'ZoneSubInCharge') && zoneId) {
         store.currentZone = zoneId;
         if (zoneSelector) {
             zoneSelector.value = zoneId;
@@ -5581,11 +5887,19 @@ function applyActiveProfile() {
         // Set active user info from settings
         const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
         if (inc) {
-            store.currentUser = {
-                name: inc.name,
-                rank: inc.rank,
-                serviceNo: inc.serviceNo
-            };
+            if (type === 'ZoneSubInCharge') {
+                store.currentUser = {
+                    name: inc.subName,
+                    rank: inc.subRank,
+                    serviceNo: inc.subServiceNo
+                };
+            } else {
+                store.currentUser = {
+                    name: inc.name,
+                    rank: inc.rank,
+                    serviceNo: inc.serviceNo
+                };
+            }
         } else {
             // Fallback if settings are deleted
             store.currentUser = { name: s.userName, rank: s.userRank, serviceNo: s.userServiceNo };
@@ -5732,11 +6046,16 @@ function populateLoginProfiles() {
         options += `<option value="OIC" data-service-no="${s.oicServiceNo || ''}" data-rank="${s.oicRank || 'OIC'}" data-name="${s.oicName || ''}">Command / OIC</option>`;
     }
 
-    // 2. Zone In-Charges
+    // 2. Zone In-Charges & Sub In-Charges
     if (s.zoneInCharges) {
         Object.entries(s.zoneInCharges).forEach(([zoneId, inc]) => {
-            if (!inc || !inc.name) return;
-            options += `<option value="ZoneInCharge:${zoneId}" data-service-no="${inc.serviceNo || ''}" data-rank="${inc.rank || 'OIC'}" data-name="${inc.name || ''}">${zoneId} In-Charge (${inc.name})</option>`;
+            if (!inc) return;
+            if (inc.name) {
+                options += `<option value="ZoneInCharge:${zoneId}" data-service-no="${inc.serviceNo || ''}" data-rank="${inc.rank || 'OIC'}" data-name="${inc.name || ''}">${zoneId} In-Charge (${inc.name})</option>`;
+            }
+            if (inc.subName) {
+                options += `<option value="ZoneSubInCharge:${zoneId}" data-service-no="${inc.subServiceNo || ''}" data-rank="${inc.subRank || 'OIC'}" data-name="${inc.subName || ''}">${zoneId} Sub In-Charge (${inc.subName})</option>`;
+            }
         });
     }
 
@@ -5771,7 +6090,7 @@ function onLoginProfileChange(val) {
         const profileId = val.split(':')[1];
         const profile = getOicProfiles().find(p => p.id === profileId);
         hasPassword = profile && !!profile.password;
-    } else if (val.startsWith('ZoneInCharge:')) {
+    } else if (val.startsWith('ZoneInCharge:') || val.startsWith('ZoneSubInCharge:')) {
         const zoneId = val.split(':')[1];
         const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
         hasPassword = inc && !!inc.password;
@@ -5820,11 +6139,11 @@ function submitLogin(e) {
         const profile = getOicProfiles().find(p => p.id === oicProfileId);
         correctPassword = profile ? (profile.password || '') : '';
         type = 'OIC';
-    } else if (val.startsWith('ZoneInCharge:')) {
+    } else if (val.startsWith('ZoneInCharge:') || val.startsWith('ZoneSubInCharge:')) {
         zoneId = val.split(':')[1];
         const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
         correctPassword = inc ? (inc.password || '') : '';
-        type = 'ZoneInCharge';
+        type = val.startsWith('ZoneSubInCharge:') ? 'ZoneSubInCharge' : 'ZoneInCharge';
     }
     
     if (correctPassword && inputPwd !== correctPassword) {
