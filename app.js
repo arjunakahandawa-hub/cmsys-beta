@@ -2630,23 +2630,22 @@ function renderInventoryTable() {
         const catColors = { 'BMS':'bg-amber-100 text-amber-800','Plumbing':'bg-blue-100 text-blue-800','Metal':'bg-slate-200 text-slate-700','Paint':'bg-rose-100 text-rose-700','Electrical':'bg-yellow-100 text-yellow-800','Tools':'bg-purple-100 text-purple-800','Aluminium':'bg-cyan-100 text-cyan-800','General':'bg-green-100 text-green-700' };
         const catCls = catColors[item.category] || 'bg-slate-100 text-slate-600';
         return `
-        <tr class="hover:bg-teal-50/40 cursor-pointer transition-colors border-b border-slate-100"
-            onclick="if (!event.target.closest('button')) showInventoryDetail('${item.id}')">
-            <td class="px-4 py-2.5 font-medium text-slate-800 text-sm">${item.description}</td>
-            <td class="px-4 py-2.5 text-center"><span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${catCls}">${item.category}</span></td>
-            <td class="px-4 py-2.5 text-center text-xs text-slate-500">${item.deno}</td>
-            <td class="px-4 py-2.5 text-center">
+        <tr class="hover:bg-teal-50/40 cursor-pointer transition-colors border-b border-slate-100">
+            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 font-medium text-slate-800 text-sm">${item.description}</td>
+            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center"><span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${catCls}">${item.category}</span></td>
+            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center text-xs text-slate-500">${item.deno}</td>
+            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center">
                 <span class="font-bold text-sm ${isLow ? 'text-rose-600' : 'text-slate-800'}">${item.totalQty}</span>
                 ${isLow ? '<span class="ml-1 text-[10px] text-rose-500 font-medium">⚠ Low</span>' : ''}
             </td>
-            <td class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm">${formatCurrency(item.cost_per_unit)}</td>
-            <td class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}${item.zone_id && item.zone_id !== store.currentZone ? ` (${item.zone_id})` : ''}</span></td>
+            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm">${formatCurrency(item.cost_per_unit)}</td>
+            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}${item.zone_id && item.zone_id !== store.currentZone ? ` (${item.zone_id})` : ''}</span></td>
             <td class="px-4 py-2.5 text-center">
                 <div class="flex items-center justify-center gap-2">
-                    <button onclick="event.stopPropagation(); editInventoryItem('${item.id}')" class="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50" title="Edit">
+                    <button onclick="editInventoryItem('${item.id}')" class="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50" title="Edit">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </button>
-                    <button onclick="event.stopPropagation(); showInventoryDetail('${item.id}')" class="text-teal-600 hover:text-teal-800 p-1 rounded hover:bg-teal-50" title="View Detail">
+                    <button onclick="showInventoryDetail('${item.id}')" class="text-teal-600 hover:text-teal-800 p-1 rounded hover:bg-teal-50" title="View Detail">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                     </button>
                 </div>
