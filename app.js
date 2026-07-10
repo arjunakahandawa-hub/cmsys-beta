@@ -2550,25 +2550,39 @@ function renderInventoryCategories() {
 
     container.innerHTML = html;
 
-    // Also update the datalist so new categories appear in the Add Item dropdown automatically
-    let datalist = document.getElementById('invCategoryList');
-    let catInput = document.getElementById('invCategory');
-    
-    if (catInput && catInput.tagName === 'SELECT') {
-        const inputHtml = `<input type="text" id="invCategory" list="invCategoryList" required placeholder="Select or type new..." class="${catInput.className}">`;
-        const datalistHtml = `<datalist id="invCategoryList"></datalist>`;
-        catInput.outerHTML = inputHtml + datalistHtml;
-        datalist = document.getElementById('invCategoryList');
-    }
-
-    if (datalist) {
-        datalist.innerHTML = allCats.map(c => `<option value="${c}">`).join('');
+    // Also update the select dropdown options, keeping standard ones and dynamically adding any database custom ones
+    const catSelect = document.getElementById('invCategory');
+    if (catSelect) {
+        const standardCats = ['BMS', 'Plumbing', 'Metal', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
+        const customCats = allCats.filter(c => !standardCats.includes(c));
+        
+        let optionsHtml = '<option value="">-- Select Category --</option>';
+        standardCats.forEach(c => {
+            optionsHtml += `<option value="${c}">${c}</option>`;
+        });
+        if (customCats.length > 0) {
+            optionsHtml += '<option disabled>──────────</option>';
+            customCats.forEach(c => {
+                optionsHtml += `<option value="${c}">${c}</option>`;
+            });
+        }
+        
+        const prevVal = catSelect.value;
+        catSelect.innerHTML = optionsHtml;
+        if (prevVal) catSelect.value = prevVal;
     }
 }
 
 function renderInventoryTable() {
-    // Filter by current zone first
-    let items = store.inventory.filter(i => !i.zone_id || i.zone_id === store.currentZone);
+    const location = document.getElementById('inventoryLocation')?.value || '';
+    let items = [];
+    
+    // Filter by current zone or allow cross-zone query if ALL_ZONES is selected
+    if (location === 'ALL_ZONES') {
+        items = [...store.inventory];
+    } else {
+        items = store.inventory.filter(i => !i.zone_id || i.zone_id === store.currentZone);
+    }
     
     // Filter by category
     if (store.currentInventoryCategory !== 'all') {
@@ -2582,8 +2596,7 @@ function renderInventoryTable() {
     }
     
     // Filter by location
-    const location = document.getElementById('inventoryLocation')?.value || '';
-    if (location) {
+    if (location && location !== 'ALL_ZONES') {
         items = items.filter(i => i.location === location);
     }
     
@@ -2627,7 +2640,7 @@ function renderInventoryTable() {
                 ${isLow ? '<span class="ml-1 text-[10px] text-rose-500 font-medium">⚠ Low</span>' : ''}
             </td>
             <td class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm">${formatCurrency(item.cost_per_unit)}</td>
-            <td class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}</span></td>
+            <td class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}${item.zone_id && item.zone_id !== store.currentZone ? ` (${item.zone_id})` : ''}</span></td>
             <td class="px-4 py-2.5 text-center">
                 <div class="flex items-center justify-center gap-2">
                     <button onclick="event.stopPropagation(); editInventoryItem('${item.id}')" class="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50" title="Edit">
@@ -2688,7 +2701,7 @@ function filterInventory() {
 }
 
 function showInventoryDetail(itemId) {
-    const item = store.inventory.find(i => i.id === itemId);
+    const item = store.inventory.find(i => String(i.id) === String(itemId) || String(i._fbKey) === String(itemId));
     if (!item) return;
     
     document.getElementById('inventoryDetailContent').innerHTML = `
@@ -2835,7 +2848,7 @@ function openAddInventoryModal() {
 }
 
 function editInventoryItem(itemId) {
-    const item = store.inventory.find(i => i.id === itemId);
+    const item = store.inventory.find(i => String(i.id) === String(itemId) || String(i._fbKey) === String(itemId));
     if (!item) return;
     
     document.getElementById('invId').value = item.id;
@@ -5055,13 +5068,14 @@ function applyActiveProfile() {
     const zoneSelector = document.getElementById('zoneSelector');
 
     if (type === 'ZoneInCharge' && zoneId) {
-        // Enforce the zone lock
+        // We no longer lock the zone dropdown or hide the settings tab for Zone In-Charges,
+        // giving all authenticated officers full access (same as overall OIC).
         store.currentZone = zoneId;
         if (zoneSelector) {
             zoneSelector.value = zoneId;
-            zoneSelector.disabled = true;
-            zoneSelector.title = "Locked to your assigned zone";
-            zoneSelector.classList.add('opacity-75', 'cursor-not-allowed');
+            zoneSelector.disabled = false;
+            zoneSelector.title = "Select Zone";
+            zoneSelector.classList.remove('opacity-75', 'cursor-not-allowed');
         }
 
         // Set active user info from settings
@@ -5077,14 +5091,14 @@ function applyActiveProfile() {
             store.currentUser = { name: s.userName, rank: s.userRank, serviceNo: s.userServiceNo };
         }
 
-        // Hide settings tab for Zone In-Charges (Desktop & Mobile)
+        // Settings tab remains visible for everyone (OIC-level access)
         const settingsTabBtn = document.getElementById('tab-settings');
         if (settingsTabBtn) {
-            settingsTabBtn.classList.add('hidden');
+            settingsTabBtn.classList.remove('hidden');
         }
         const mobileSettingsTabBtn = document.getElementById('mobile-tab-settings');
         if (mobileSettingsTabBtn) {
-            mobileSettingsTabBtn.classList.add('hidden');
+            mobileSettingsTabBtn.classList.remove('hidden');
         }
 
         // Update profile menu button text or picture to rank + zone
