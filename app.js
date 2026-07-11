@@ -166,7 +166,10 @@ function initSailorsListener() {
                 official_number: offNo             ?? `ID/${idx}`,
                 name:            fullName,
                 rank:            rank,
-                trade:           s.trade           ?? s.tradeName  ?? s.trade_name ?? 'MA',
+                trade:           (() => {
+                    const t = (s.trade ?? s.tradeName ?? s.trade_name ?? 'MA').trim().toUpperCase();
+                    return t === 'WEL' ? 'WE' : t;
+                })(),
                 category:        s.category        ?? s.cat        ?? 'Regular',
                 status:          s.status          ?? 'Available',
                 attendance:      s.attendance      ?? s.att        ?? 'Present',
@@ -567,7 +570,7 @@ function renderAvailableSailors() {
     let sailors = store.sailors.filter(s => s.status === 'Available' && (s.attendance || 'Present') === 'Present');
     
     if (store.currentFilter === 'zone-team') {
-        sailors = sailors.filter(s => s.isZoneTeam);
+        sailors = sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone);
     } else if (store.currentFilter === 'continuation') {
         sailors = sailors.filter(s => s.yesterdayJob !== null);
     }
@@ -892,15 +895,24 @@ function removeFromZoneTeam(sailorId) {
     const sailor = store.sailors.find(s => s.id === sailorId);
     if (sailor) {
         sailor.isZoneTeam = false;
+        sailor.zone_assigned = 'A-Zone';
+
+        const fbKey = sailor._fbKey || sailor.id;
+        if (fbKey) {
+            sailorsDB.ref(`sailors/${fbKey}`).update({
+                isZoneTeam: false,
+                zone_assigned: 'A-Zone'
+            }).catch(err => console.error("Error removing from zone team:", err));
+        }
+
         renderZoneTeam();
         renderAvailableSailors();
         showToast(`${sailor.name} removed from Zone Team`, 'info');
-        // syncToFirebase('zone_teams', sailorId, { isZoneTeam: false });
     }
 }
 
 function openZoneTeamManager() {
-    const eligible = store.sailors.filter(s => !s.isZoneTeam && s.zone_assigned === store.currentZone);
+    const eligible = store.sailors.filter(s => !s.isZoneTeam);
     const current = store.sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone);
 
     const attLabel = { 'Present':'Available', 'Leave':'On Leave', 'Sick':'Sick', 'Duty':'Duty' };
@@ -930,7 +942,7 @@ function openZoneTeamManager() {
             </div>
             <button onclick="toggleZoneTeam(${s.id}, true)" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200">+ Add</button>
         </div>
-    `).join('') || '<p class="text-center text-xs text-slate-400 py-4">No eligible sailors in this zone</p>';
+    `).join('') || '<p class="text-center text-xs text-slate-400 py-4">No eligible sailors</p>';
 
     document.getElementById('ztmZoneName').textContent = store.currentZone;
     document.getElementById('zoneTeamModal').classList.remove('hidden');
@@ -942,12 +954,30 @@ function toggleZoneTeam(sailorId, addToTeam) {
     if (addToTeam) {
         const teamSize = store.sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone).length;
         if (teamSize >= 15) { showToast('Zone Team is full (15 max)', 'error'); return; }
+        
+        sailor.isZoneTeam = true;
+        sailor.zone_assigned = store.currentZone;
+    } else {
+        sailor.isZoneTeam = false;
+        sailor.zone_assigned = 'A-Zone';
     }
-    sailor.isZoneTeam = addToTeam;
+
+    const fbKey = sailor._fbKey || sailor.id;
+    if (fbKey) {
+        sailorsDB.ref(`sailors/${fbKey}`).update({
+            isZoneTeam: sailor.isZoneTeam,
+            zone_assigned: sailor.zone_assigned
+        }).then(() => {
+            showToast(`${sailor.name} ${addToTeam ? 'added to' : 'removed from'} Zone Team`);
+        }).catch(err => {
+            console.error("Error updating sailor zone team status:", err);
+            showToast("Saved locally (offline mode)", "info");
+        });
+    }
+
     openZoneTeamManager(); // refresh manager lists
     renderZoneTeam();
     renderAvailableSailors();
-    showToast(`${sailor.name} ${addToTeam ? 'added to' : 'removed from'} Zone Team`);
 }
 
 function updateCounters() {
