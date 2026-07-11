@@ -6883,56 +6883,87 @@ function renderDailyDetailsSpecialView() {
     const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
     
     let tableRows = '';
+    let hasAllocations = false;
+
     zones.forEach(z => {
         const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        
+        // Find if this zone has any active allocations
+        let zoneHasAllocations = false;
         wos.forEach(wo => {
-            let assignedSailors = [];
+            let assignedCount = 0;
             if (dateVal === today) {
-                const assignedIds = (wo.assigned || []).map(String);
-                assignedSailors = store.sailors.filter(s =>
-                    assignedIds.includes(String(s.id)) ||
-                    assignedIds.includes(String(s._fbKey))
-                );
+                assignedCount = (wo.assigned || []).length;
             } else {
-                const assignedIds = (store.dailyAllocations || [])
-                    .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
-                    .map(a => String(a.sailor_id));
-                assignedSailors = store.sailors.filter(s =>
-                    assignedIds.includes(String(s.id)) ||
-                    assignedIds.includes(String(s._fbKey))
-                );
+                assignedCount = (store.dailyAllocations || []).filter(a => 
+                    a.date === dateVal && String(a.work_order_id) === String(wo.id)
+                ).length;
             }
-            
-            const tradeCounts = {};
-            assignedSailors.forEach(s => {
-                tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
-            });
-            const tradeStr = Object.entries(tradeCounts)
-                .map(([trade, count]) => `${count} ${trade}`)
-                .join(', ') || 'None';
-                
-            const namesList = assignedSailors.map(s => `
-                <span class="inline-block bg-slate-100 text-slate-700 text-[10px] px-2 py-0.5 rounded font-medium border border-slate-200">
-                    ${s.rank || 'AB'} ${s.name} (${s.official_number || s.service_no || '-'})
-                </span>
-            `).join(' ');
+            if (assignedCount > 0) zoneHasAllocations = true;
+        });
 
+        if (zoneHasAllocations) {
+            hasAllocations = true;
+            // Add Zone Group Header row spanning all 6 columns
             tableRows += `
-                <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
-                    <td class="px-4 py-3 font-semibold text-slate-800 text-xs">${z.name}</td>
-                    <td class="px-4 py-3 text-slate-700 text-xs font-medium">${wo.description}</td>
-                    <td class="px-4 py-3 text-center"><span class="bg-teal-100 text-teal-800 text-[11px] font-bold px-2 py-0.5 rounded-full">${assignedSailors.length}</span></td>
-                    <td class="px-4 py-3 text-slate-500 text-[11px] font-semibold">${tradeStr}</td>
-                    <td class="px-4 py-3 max-w-xs"><div class="flex flex-wrap gap-1">${namesList || '<span class="text-slate-400 italic">None</span>'}</div></td>
+                <tr class="bg-slate-900 text-white font-bold">
+                    <td colspan="6" class="px-4 py-2.5 text-xs uppercase tracking-wider">
+                        🗺️ ZONE: ${z.name.toUpperCase()}
+                    </td>
                 </tr>
             `;
-        });
+            
+            wos.forEach(wo => {
+                let assignedSailors = [];
+                if (dateVal === today) {
+                    const assignedIds = (wo.assigned || []).map(String);
+                    assignedSailors = store.sailors.filter(s =>
+                        assignedIds.includes(String(s.id)) ||
+                        assignedIds.includes(String(s._fbKey))
+                    );
+                } else {
+                    const assignedIds = (store.dailyAllocations || [])
+                        .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+                        .map(a => String(a.sailor_id));
+                    assignedSailors = store.sailors.filter(s =>
+                        assignedIds.includes(String(s.id)) ||
+                        assignedIds.includes(String(s._fbKey))
+                    );
+                }
+                
+                if (assignedSailors.length > 0) {
+                    // Add Work Order separator row
+                    tableRows += `
+                        <tr class="bg-slate-50 font-bold border-b border-slate-200">
+                            <td colspan="6" class="px-4 py-2 text-[10px] text-slate-700 text-center underline uppercase tracking-wide">
+                                📋 DUTY: ${wo.description.toUpperCase()}
+                            </td>
+                        </tr>
+                    `;
+                    
+                    assignedSailors.forEach((s, idx) => {
+                        const serNo = String(idx + 1).padStart(2, '0');
+                        const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                        tableRows += `
+                            <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors text-xs text-slate-800">
+                                <td class="px-4 py-2 text-center font-medium">${serNo}</td>
+                                <td class="px-4 py-2">${s.rank || 'AB'}</td>
+                                <td class="px-4 py-2 font-semibold text-slate-900">${s.name}</td>
+                                <td class="px-4 py-2 text-center"><span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-medium">${parsedOffNo.type}</span></td>
+                                <td class="px-4 py-2 font-mono">${parsedOffNo.num}</td>
+                                <td class="px-4 py-2 text-center"><span class="bg-teal-50 text-teal-700 px-2 py-0.5 rounded font-bold">${s.trade || '—'}</span></td>
+                            </tr>
+                        `;
+                    });
+                }
+            });
+        }
     });
 
-    if (!tableRows) {
+    if (!hasAllocations) {
         tableRows = `
             <tr>
-                <td colspan="5" class="px-4 py-8 text-center text-slate-400 italic text-sm">
+                <td colspan="6" class="px-4 py-8 text-center text-slate-400 italic text-sm">
                     No active assignments logged for this date.
                 </td>
             </tr>
@@ -6947,10 +6978,10 @@ function renderDailyDetailsSpecialView() {
             </div>
             <div class="flex items-center gap-2">
                 <button onclick="openLmdExportModal('csv')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
-                    📥 Export CSV
+                     Export CSV
                 </button>
                 <button onclick="openLmdExportModal('print')" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
-                    🖨️ Print Report
+                     Print Report
                 </button>
             </div>
         </div>
@@ -6959,11 +6990,12 @@ function renderDailyDetailsSpecialView() {
             <table class="w-full text-left border-collapse">
                 <thead>
                     <tr class="bg-slate-50 text-slate-600 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
-                        <th class="px-4 py-3 w-1/6">Zone</th>
-                        <th class="px-4 py-3 w-1/3">Work Name</th>
-                        <th class="px-4 py-3 w-1/12 text-center">Count</th>
-                        <th class="px-4 py-3 w-1/6">Trades</th>
-                        <th class="px-4 py-3 w-1/4">Assigned Sailors</th>
+                        <th class="px-4 py-3 w-[10%] text-center">Ser No</th>
+                        <th class="px-4 py-3 w-[15%]">Rank</th>
+                        <th class="px-4 py-3 w-[35%]">Name</th>
+                        <th class="px-4 py-3 w-[15%] text-center">Service Type</th>
+                        <th class="px-4 py-3 w-[15%]">Service No</th>
+                        <th class="px-4 py-3 w-[10%] text-center">Trade</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -7020,43 +7052,63 @@ function exportLmdCSV(scope, selectedZone) {
     
     zones.forEach(z => {
         const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        
+        // Check if zone has active allocations
+        let zoneHasAllocations = false;
         wos.forEach(wo => {
-            let assignedSailors = [];
+            let assignedCount = 0;
             if (dateVal === today) {
-                const assignedIds = (wo.assigned || []).map(String);
-                assignedSailors = store.sailors.filter(s =>
-                    assignedIds.includes(String(s.id)) ||
-                    assignedIds.includes(String(s._fbKey))
-                );
+                assignedCount = (wo.assigned || []).length;
             } else {
-                const assignedIds = (store.dailyAllocations || [])
-                    .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
-                    .map(a => String(a.sailor_id));
-                assignedSailors = store.sailors.filter(s =>
-                    assignedIds.includes(String(s.id)) ||
-                    assignedIds.includes(String(s._fbKey))
-                );
+                assignedCount = (store.dailyAllocations || []).filter(a => 
+                    a.date === dateVal && String(a.work_order_id) === String(wo.id)
+                ).length;
             }
-            
-            if (assignedSailors.length > 0) {
-                // Add header row for the work order/duty
-                csvContent += `,,${wo.description.toUpperCase()},,,\n`;
-                
-                assignedSailors.forEach((s, idx) => {
-                    const serNo = String(idx + 1).padStart(2, '0');
-                    const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
-                    const row = [
-                        serNo,
-                        s.rank || 'AB',
-                        s.name,
-                        parsedOffNo.type,
-                        parsedOffNo.num,
-                        s.trade || ''
-                    ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
-                    csvContent += row + "\n";
-                });
-            }
+            if (assignedCount > 0) zoneHasAllocations = true;
         });
+
+        if (zoneHasAllocations) {
+            // Add Zone Section header row in CSV
+            csvContent += `,,=== ZONE: ${z.name.toUpperCase()} ===,,,\n`;
+            
+            wos.forEach(wo => {
+                let assignedSailors = [];
+                if (dateVal === today) {
+                    const assignedIds = (wo.assigned || []).map(String);
+                    assignedSailors = store.sailors.filter(s =>
+                        assignedIds.includes(String(s.id)) ||
+                        assignedIds.includes(String(s._fbKey))
+                    );
+                } else {
+                    const assignedIds = (store.dailyAllocations || [])
+                        .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+                        .map(a => String(a.sailor_id));
+                    assignedSailors = store.sailors.filter(s =>
+                        assignedIds.includes(String(s.id)) ||
+                        assignedIds.includes(String(s._fbKey))
+                    );
+                }
+                
+                if (assignedSailors.length > 0) {
+                    // Add header row for the work order/duty
+                    csvContent += `,,● DUTY: ${wo.description.toUpperCase()},,,\n`;
+                    
+                    assignedSailors.forEach((s, idx) => {
+                        const serNo = String(idx + 1).padStart(2, '0');
+                        const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                        const row = [
+                            serNo,
+                            s.rank || 'AB',
+                            s.name,
+                            parsedOffNo.type,
+                            parsedOffNo.num,
+                            s.trade || ''
+                        ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
+                        csvContent += row + "\n";
+                    });
+                }
+            });
+        }
     });
     
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -7086,50 +7138,76 @@ function printLmdDetails(scope, selectedZone) {
     
     zones.forEach(z => {
         const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        
+        // Check if zone has active allocations
+        let zoneHasAllocations = false;
         wos.forEach(wo => {
-            let assignedSailors = [];
+            let assignedCount = 0;
             if (dateVal === today) {
-                const assignedIds = (wo.assigned || []).map(String);
-                assignedSailors = store.sailors.filter(s =>
-                    assignedIds.includes(String(s.id)) ||
-                    assignedIds.includes(String(s._fbKey))
-                );
+                assignedCount = (wo.assigned || []).length;
             } else {
-                const assignedIds = (store.dailyAllocations || [])
-                    .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
-                    .map(a => String(a.sailor_id));
-                assignedSailors = store.sailors.filter(s =>
-                    assignedIds.includes(String(s.id)) ||
-                    assignedIds.includes(String(s._fbKey))
-                );
+                assignedCount = (store.dailyAllocations || []).filter(a => 
+                    a.date === dateVal && String(a.work_order_id) === String(wo.id)
+                ).length;
             }
+            if (assignedCount > 0) zoneHasAllocations = true;
+        });
+
+        if (zoneHasAllocations) {
+            // Add Zone section row in the printed table
+            rowsHtml += `
+                <tr style="background-color: #0f172a; color: white; font-weight: bold;">
+                    <td colspan="6" style="padding: 8px 12px; font-size: 13px; text-transform: uppercase;">
+                        🗺️ ZONE: ${z.name.toUpperCase()}
+                    </td>
+                </tr>
+            `;
             
-            if (assignedSailors.length > 0) {
-                // Add sub-header separator row for work order
-                rowsHtml += `
-                    <tr style="background-color: #f8fafc; font-weight: bold;">
-                        <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px;">
-                            ${wo.description.toUpperCase()}
-                        </td>
-                    </tr>
-                `;
+            wos.forEach(wo => {
+                let assignedSailors = [];
+                if (dateVal === today) {
+                    const assignedIds = (wo.assigned || []).map(String);
+                    assignedSailors = store.sailors.filter(s =>
+                        assignedIds.includes(String(s.id)) ||
+                        assignedIds.includes(String(s._fbKey))
+                    );
+                } else {
+                    const assignedIds = (store.dailyAllocations || [])
+                        .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+                        .map(a => String(a.sailor_id));
+                    assignedSailors = store.sailors.filter(s =>
+                        assignedIds.includes(String(s.id)) ||
+                        assignedIds.includes(String(s._fbKey))
+                    );
+                }
                 
-                assignedSailors.forEach((s, idx) => {
-                    const serNo = String(idx + 1).padStart(2, '0');
-                    const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                if (assignedSailors.length > 0) {
+                    // Add sub-header separator row for work order
                     rowsHtml += `
-                        <tr>
-                            <td style="text-align:center;">${serNo}</td>
-                            <td>${s.rank || 'AB'}</td>
-                            <td>${s.name}</td>
-                            <td style="text-align:center;">${parsedOffNo.type}</td>
-                            <td>${parsedOffNo.num}</td>
-                            <td style="text-align:center;">${s.trade || '—'}</td>
+                        <tr style="background-color: #f1f5f9; font-weight: bold;">
+                            <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
+                                📋 DUTY: ${wo.description.toUpperCase()}
+                            </td>
                         </tr>
                     `;
-                });
-            }
-        });
+                    
+                    assignedSailors.forEach((s, idx) => {
+                        const serNo = String(idx + 1).padStart(2, '0');
+                        const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                        rowsHtml += `
+                            <tr>
+                                <td style="text-align:center;">${serNo}</td>
+                                <td>${s.rank || 'AB'}</td>
+                                <td>${s.name}</td>
+                                <td style="text-align:center;">${parsedOffNo.type}</td>
+                                <td>${parsedOffNo.num}</td>
+                                <td style="text-align:center;">${s.trade || '—'}</td>
+                            </tr>
+                        `;
+                    });
+                }
+            });
+        }
     });
     
     if (!rowsHtml) {
