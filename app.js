@@ -514,6 +514,22 @@ function changeZone() {
 // DASHBOARD
 // =============================================
 function renderDashboard() {
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    const isToday = dateVal === today;
+
+    const summaryTitle = document.getElementById('summaryTitle');
+    if (summaryTitle) {
+        if (isToday) {
+            summaryTitle.textContent = "Today's Operational Summary";
+        } else {
+            const formatted = new Date(dateVal).toLocaleDateString('en-GB', {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+            });
+            summaryTitle.textContent = `${formatted}'s Operational Summary`;
+        }
+    }
+
     renderAvailableSailors();
     renderWorkOrders();
     renderQuickAssignments();
@@ -538,13 +554,77 @@ function updateDashboardButtons() {
 
     const newAssignBtn = document.getElementById('newAssignBtn');
     const newWorkOrderBtn = document.getElementById('newWorkOrderBtn');
+    const btnContinueYesterday = document.getElementById('btnContinueYesterday');
+
+    const today = new Date().toISOString().split('T')[0];
+    const isToday = !store.dashboardDate || store.dashboardDate === today;
 
     if (newAssignBtn) {
-        newAssignBtn.classList.toggle('hidden', !isAdminStaff);
+        newAssignBtn.classList.toggle('hidden', !isAdminStaff || !isToday);
     }
     if (newWorkOrderBtn) {
-        newWorkOrderBtn.classList.toggle('hidden', isAdminStaff);
+        newWorkOrderBtn.classList.toggle('hidden', isAdminStaff || !isToday);
     }
+    if (btnContinueYesterday) {
+        btnContinueYesterday.classList.toggle('hidden', !isToday);
+    }
+}
+
+function changeDashboardDate(val) {
+    if (!val) return;
+    store.dashboardDate = val;
+    renderDashboard();
+    
+    const today = new Date().toISOString().split('T')[0];
+    if (val !== today) {
+        showToast(`Viewing historical data for ${val} (Read Only)`, 'info');
+    }
+}
+
+function isWorkOrderActiveOnDate(wo, dateStr) {
+    const today = new Date().toISOString().split('T')[0];
+    if (dateStr === today) {
+        return wo.status !== 'Completed';
+    }
+    
+    // Check if there are daily allocations for this work order on this date
+    const hasAllocations = (store.dailyAllocations || []).some(a => 
+        a.date === dateStr && String(a.work_order_id) === String(wo.id)
+    );
+    if (hasAllocations) return true;
+    
+    // Check if it was created before or on this date and is not completed
+    if (wo.created_at) {
+        const createdDate = new Date(wo.created_at).toISOString().split('T')[0];
+        if (createdDate <= dateStr) {
+            if (wo.status === 'Completed') {
+                return false;
+            }
+            return true;
+        }
+    }
+    return false;
+}
+
+function getSailorAssignmentOnDate(sailorId, dateVal) {
+    if (!store.dailyAllocations) return null;
+    const alloc = store.dailyAllocations.find(a => 
+        String(a.sailor_id) === String(sailorId) && a.date === dateVal
+    );
+    if (alloc) {
+        const wo = store.workOrders.find(w => 
+            String(w.id) === String(alloc.work_order_id) || 
+            String(w._fbKey) === String(alloc.work_order_id)
+        );
+        if (wo) {
+            return {
+                ref: wo.reference_no || 'Active WO',
+                title: wo.description || '',
+                zone: wo.zone_id || ''
+            };
+        }
+    }
+    return null;
 }
 
 function getSailorCurrentAssignment(sailorId) {
@@ -566,8 +646,33 @@ function getSailorCurrentAssignment(sailorId) {
 
 function renderAvailableSailors() {
     const container = document.getElementById('availableSailors');
-    // Only Present sailors are assignable; those on Leave/Sick are excluded from the pool
-    let sailors = store.sailors.filter(s => s.status === 'Available' && (s.attendance || 'Present') === 'Present');
+    if (!container) return;
+
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    const isToday = dateVal === today;
+
+    // Recalculate status for the selected date
+    const assignedIds = new Set();
+    if (isToday) {
+        (store.workOrders || []).forEach(wo => {
+            if ((wo.status === 'Active' || wo.status === 'Pending') && wo.assigned) {
+                wo.assigned.forEach(id => assignedIds.add(String(id)));
+            }
+        });
+    } else {
+        (store.dailyAllocations || []).forEach(alloc => {
+            if (alloc.date === dateVal) {
+                assignedIds.add(String(alloc.sailor_id));
+            }
+        });
+    }
+
+    // Filter available sailors on selected date
+    let sailors = store.sailors.filter(s => {
+        const isAssigned = assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey));
+        return !isAssigned && (s.attendance || 'Present') === 'Present';
+    });
     
     if (store.currentFilter === 'zone-team') {
         sailors = sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone);
@@ -577,6 +682,16 @@ function renderAvailableSailors() {
     
     if (store.currentTrade !== 'ALL') {
         sailors = sailors.filter(s => s.trade === store.currentTrade);
+    }
+
+    // Support search query
+    const searchInput = document.getElementById('sailorSearch');
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+    if (query) {
+        sailors = sailors.filter(s => 
+            s.name.toLowerCase().includes(query) || 
+            s.official_number.toLowerCase().includes(query)
+        );
     }
     
     sailors.sort((a, b) => b.avgScore - a.avgScore);
@@ -589,7 +704,10 @@ function renderAvailableSailors() {
             'SW': '#065f46', 'BB': '#1d4ed8', 'AL': '#ec4899'
         }[sailor.trade] || '#475569';
 
-        const assignment = getSailorCurrentAssignment(sailor.id ?? sailor._fbKey);
+        const assignment = isToday 
+            ? getSailorCurrentAssignment(sailor.id ?? sailor._fbKey)
+            : getSailorAssignmentOnDate(sailor.id ?? sailor._fbKey, dateVal);
+
         if (assignment) {
             return `
             <div class="sailor-card rounded-xl p-2.5 border bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed select-none relative group"
@@ -617,7 +735,7 @@ function renderAvailableSailors() {
         return `
         <div class="sailor-card rounded-xl p-2.5 hover:shadow-md transition-all border"
             style="background:rgba(255,255,255,0.88);border-color:rgba(255,255,255,0.7);backdrop-filter:blur(6px)"
-            draggable="true"
+            draggable="${isToday ? 'true' : 'false'}"
             ondragstart="handleDragStart(event, ${sailor.id})"
             ondragend="handleDragEnd(event)">
             <div class="flex items-center gap-2.5">
@@ -641,9 +759,14 @@ function renderAvailableSailors() {
             </div>
         </div>
         `;
-    }).join('') || '<div class="text-center py-6"><p class="text-slate-400 text-sm">No sailors available</p><p class="text-slate-300 text-xs mt-1">Check attendance status</p></div>';
+    }).join('') || '<div class="text-center py-6"><p class="text-slate-400 text-sm">No sailors available</p></div>';
 
-    const freeCount = sailors.filter(s => !getSailorCurrentAssignment(s.id ?? s._fbKey)).length;
+    const freeCount = sailors.filter(s => {
+        const assignment = isToday 
+            ? getSailorCurrentAssignment(s.id ?? s._fbKey)
+            : getSailorAssignmentOnDate(s.id ?? s._fbKey, dateVal);
+        return !assignment;
+    }).length;
     document.getElementById('availableBadge').textContent = freeCount;
 }
 
@@ -655,9 +778,16 @@ function renderWorkOrders() {
     };
 
     let projectCount = 0, jobCount = 0, taskCount = 0;
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
 
     Object.keys(columns).forEach(type => {
-        const orders = store.workOrders.filter(wo => wo.type === type && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed');
+        const orders = store.workOrders.filter(wo => 
+            wo.type === type && 
+            !wo.assign_type && 
+            wo.zone_id === store.currentZone && 
+            isWorkOrderActiveOnDate(wo, dateVal)
+        );
         columns[type].innerHTML = orders.map(wo => renderWorkOrderCard(wo)).join('');
         
         const wrapperId = type === 'PROJECT' ? 'projectColumnWrapper' : type === 'JOB' ? 'jobColumnWrapper' : 'taskColumnWrapper';
@@ -666,7 +796,11 @@ function renderWorkOrders() {
             wrapper.classList.toggle('hidden', orders.length === 0);
         }
         
-        const activeOrders = orders.filter(o => o.status === 'Active');
+        // Count active ones on this date
+        const activeOrders = orders.filter(o => {
+            if (dateVal === today) return o.status === 'Active';
+            return true; // We assume shown historical work orders are active or had allocations
+        });
         if (type === 'PROJECT') projectCount = activeOrders.length;
         if (type === 'JOB') jobCount = activeOrders.length;
         if (type === 'TASK') taskCount = activeOrders.length;
@@ -681,11 +815,14 @@ function renderQuickAssignments() {
     const container = document.getElementById('quickAssignmentsList');
     if (!container) return;
 
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+
     // Filter work orders that have an assign_type and belong to active zone
     const quickOrders = store.workOrders.filter(wo => 
         wo.assign_type && 
         wo.zone_id === store.currentZone && 
-        wo.status !== 'Completed'
+        isWorkOrderActiveOnDate(wo, dateVal)
     );
 
     const badge = document.getElementById('quickAssignCountBadge');
@@ -700,10 +837,13 @@ function renderQuickAssignments() {
 }
 
 function updateBoardEmptyState() {
-    const projects = store.workOrders.filter(wo => wo.type === 'PROJECT' && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
-    const jobs = store.workOrders.filter(wo => wo.type === 'JOB' && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
-    const tasks = store.workOrders.filter(wo => wo.type === 'TASK' && !wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
-    const assigns = store.workOrders.filter(wo => wo.assign_type && wo.zone_id === store.currentZone && wo.status !== 'Completed').length;
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+
+    const projects = store.workOrders.filter(wo => wo.type === 'PROJECT' && !wo.assign_type && wo.zone_id === store.currentZone && isWorkOrderActiveOnDate(wo, dateVal)).length;
+    const jobs = store.workOrders.filter(wo => wo.type === 'JOB' && !wo.assign_type && wo.zone_id === store.currentZone && isWorkOrderActiveOnDate(wo, dateVal)).length;
+    const tasks = store.workOrders.filter(wo => wo.type === 'TASK' && !wo.assign_type && wo.zone_id === store.currentZone && isWorkOrderActiveOnDate(wo, dateVal)).length;
+    const assigns = store.workOrders.filter(wo => wo.assign_type && wo.zone_id === store.currentZone && isWorkOrderActiveOnDate(wo, dateVal)).length;
 
     // Explicitly toggle hidden class on wrappers to ensure they are hidden on mobile
     const projWrapper = document.getElementById('projectColumnWrapper');
@@ -983,18 +1123,29 @@ function toggleZoneTeam(sailorId, addToTeam) {
 function updateCounters() {
     const activeWo = store.workOrders || [];
     const activeJc = store.jobCards || [];
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    const isToday = dateVal === today;
 
     const assignedIds = new Set();
-    activeWo.forEach(wo => {
-        if (wo.status === 'Active' && wo.assigned) {
-            wo.assigned.forEach(id => assignedIds.add(String(id)));
-        }
-    });
-    activeJc.forEach(jc => {
-        if (jc.status === 'Active' && jc.assigned) {
-            jc.assigned.forEach(id => assignedIds.add(String(id)));
-        }
-    });
+    if (isToday) {
+        activeWo.forEach(wo => {
+            if (wo.status === 'Active' && wo.assigned) {
+                wo.assigned.forEach(id => assignedIds.add(String(id)));
+            }
+        });
+        activeJc.forEach(jc => {
+            if (jc.status === 'Active' && jc.assigned) {
+                jc.assigned.forEach(id => assignedIds.add(String(id)));
+            }
+        });
+    } else {
+        (store.dailyAllocations || []).forEach(alloc => {
+            if (alloc.date === dateVal) {
+                assignedIds.add(String(alloc.sailor_id));
+            }
+        });
+    }
 
     if (store.sailors) {
         store.sailors.forEach(s => {
@@ -1082,10 +1233,19 @@ function removeSailorFromOrder(sailorId, workOrderId) {
     const sailor = store.sailors.find(s => String(s.id) === String(sailorId));
     const workOrder = store.workOrders.find(wo => String(wo.id) === String(workOrderId) || String(wo._fbKey) === String(workOrderId));
 
+    const today = new Date().toISOString().split('T')[0];
+    const isToday = !store.dashboardDate || store.dashboardDate === today;
+    if (!isToday) {
+        showToast("Historical data is read-only!", "error");
+        return;
+    }
+
     if (sailor && workOrder) {
         workOrder.assigned = (workOrder.assigned || []).filter(id => String(id) !== String(sailorId));
         sailor.status = 'Available';
         
+        opsDB.ref(`daily_allocations/${today}_${sailorId}`).remove();
+
         if (window.fbSaveWorkOrder) {
             fbSaveWorkOrder(workOrder).then(() => {
                 renderDashboard();
@@ -1901,11 +2061,43 @@ function openWorkOrderDetail(workOrderId) {
     );
     if (!wo) { console.warn('Work order not found:', workOrderId); return; }
 
-    // Normalise assigned[] to strings for consistent comparison
-    const assignedIds = (wo.assigned || []).map(String);
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    const isToday = dateVal === today;
 
     // Reset to details tab each open
     switchWoTab('details');
+
+    // Toggle Evaluation tab button
+    const evalTabBtn = document.getElementById('woTab-evaluation-btn');
+    if (evalTabBtn) {
+        evalTabBtn.classList.toggle('hidden', !isToday);
+    }
+
+    // Toggle Assign New Labour block
+    const assignLaborBlock = document.getElementById('detailSailorChips')?.parentElement;
+    if (assignLaborBlock) {
+        assignLaborBlock.classList.toggle('hidden', !isToday);
+    }
+
+    // Toggle sticky footer buttons
+    const btnSaveWoChanges = document.getElementById('btnSaveWoChanges');
+    const btnProceedWo = document.getElementById('btnProceedWo');
+    const btnForwardComplete = document.getElementById('btnForwardComplete');
+    if (btnSaveWoChanges) btnSaveWoChanges.classList.toggle('hidden', !isToday);
+    if (btnProceedWo) btnProceedWo.classList.toggle('hidden', !isToday);
+    if (btnForwardComplete) btnForwardComplete.classList.toggle('hidden', !isToday);
+
+    // Disable/enable fields
+    const inputs = [
+        'woDetailStatus', 'woDetailPriority', 'woDetailDescription',
+        'woDetailAuthority', 'woDetailBudget', 'woDetailDuration',
+        'woDetailProgress', 'woDetailIncharge', 'woDetailSupervisor', 'woDetailArtificer'
+    ];
+    inputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.disabled = !isToday;
+    });
 
     document.getElementById('woDetailId').value = wo.id;
     document.getElementById('woDetailTitle').textContent = wo.description;
@@ -1926,8 +2118,9 @@ function openWorkOrderDetail(workOrderId) {
     const cost = computeJobCardCost(jc);
     document.getElementById('woJobCardNo').textContent = jc ? jc.job_number : 'No linked job card';
     document.getElementById('woJobCardCost').textContent = formatCurrency(cost.total);
+    
     // Load assignable sailors (exclude already assigned)
-    if (typeof renderDetailSailorChips === 'function') {
+    if (isToday && typeof renderDetailSailorChips === 'function') {
         renderDetailSailorChips();
     }
     
@@ -1970,18 +2163,18 @@ function openWorkOrderDetail(workOrderId) {
     document.getElementById('woDetailIncharge').innerHTML = inchargeOptions;
     document.getElementById('woDetailSupervisor').innerHTML = supervisorOptions;
 
-    // Project Artificer dropdown (filtered to Settings assignments, with fallback to all AC sailors)
-    const acSailors = store.sailors.filter(s => {
-        const off = String(s.official_number || '').trim().toUpperCase();
-        return off.startsWith('AC');
-    });
-
+    // Artificer dropdown
     let artificerOptions = '<option value="">Select...</option>';
     const assignedArtificerId = wo.project_artificer;
     const eligibleArtificerIds = new Set();
     if (inc && inc.woArtificerId) eligibleArtificerIds.add(String(inc.woArtificerId));
     if (assignedArtificerId) eligibleArtificerIds.add(String(assignedArtificerId));
-
+    
+    const acSailors = store.sailors.filter(s => {
+        const off = String(s.official_number || '').trim().toUpperCase();
+        return off.startsWith('AC');
+    });
+    
     if (eligibleArtificerIds.size > 0) {
         const selectedSailors = store.sailors.filter(s => eligibleArtificerIds.has(String(s.id ?? s._fbKey)));
         artificerOptions += selectedSailors.map(s => `<option value="${s.id}" ${wo.project_artificer == s.id ? 'selected' : ''}>${s.rank} ${s.name}</option>`).join('');
@@ -1991,13 +2184,24 @@ function openWorkOrderDetail(workOrderId) {
     
     document.getElementById('woDetailArtificer').innerHTML = artificerOptions;
 
-    if (typeof renderDetailSailorChips === 'function') { renderDetailSailorChips(); }
+    // Normalised assigned list based on date
+    let assignedSailors = [];
+    if (isToday) {
+        const assignedIds = (wo.assigned || []).map(String);
+        assignedSailors = store.sailors.filter(s =>
+            assignedIds.includes(String(s.id)) ||
+            assignedIds.includes(String(s._fbKey))
+        );
+    } else {
+        const assignedIds = (store.dailyAllocations || [])
+            .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+            .map(a => String(a.sailor_id));
+        assignedSailors = store.sailors.filter(s =>
+            assignedIds.includes(String(s.id)) ||
+            assignedIds.includes(String(s._fbKey))
+        );
+    }
 
-    // Assigned labour list
-    const assignedSailors = store.sailors.filter(s =>
-        assignedIds.includes(String(s.id)) ||
-        assignedIds.includes(String(s._fbKey))
-    );
     document.getElementById('assignedLaborCount').textContent = `${assignedSailors.length} assigned`;
     document.getElementById('woDetailAssigned').innerHTML = assignedSailors.map(s => `
         <div class="flex items-center justify-between p-2 bg-white rounded-lg border">
@@ -2013,16 +2217,20 @@ function openWorkOrderDetail(workOrderId) {
             </div>
             <div class="flex items-center gap-2">
                 ${s.evaluated ? '<span class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">✓ Evaluated</span>' : '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded">Pending</span>'}
-                <button onclick="removeSailorFromOrder('${s.id}', '${wo._fbKey || wo.id}'); openWorkOrderDetail('${wo._fbKey || wo.id}');" class="text-red-500 hover:text-red-700 text-lg">×</button>
+                ${isToday ? `<button onclick="removeSailorFromOrder('${s.id}', '${wo._fbKey || wo.id}'); openWorkOrderDetail('${wo._fbKey || wo.id}');" class="text-red-500 hover:text-red-700 text-lg">×</button>` : ''}
             </div>
         </div>
     `).join('') || '<p class="text-slate-500 text-center py-4">No labour assigned</p>';
 
-    // Evaluation tab list (always available - req 1)
+    // Evaluation tab list (always available on today - req 1)
     const pendingEvals = assignedSailors.filter(s => !s.evaluated).length;
     const evalBadge = document.getElementById('woEvalPendingBadge');
-    if (pendingEvals > 0) { evalBadge.textContent = pendingEvals + ' pending'; evalBadge.classList.remove('hidden'); }
-    else { evalBadge.classList.add('hidden'); }
+    if (isToday && pendingEvals > 0) { 
+        evalBadge.textContent = pendingEvals + ' pending'; 
+        evalBadge.classList.remove('hidden'); 
+    } else { 
+        evalBadge.classList.add('hidden'); 
+    }
 
     document.getElementById('laborEvalList').innerHTML = assignedSailors.length ? assignedSailors.map(s => `
         <div class="flex items-center justify-between p-3 bg-white rounded-lg border ${s.evaluated ? 'border-green-300' : 'border-amber-300'}">
@@ -2041,7 +2249,7 @@ function openWorkOrderDetail(workOrderId) {
                 `<button onclick="openEvaluationModal('${s.id ?? s._fbKey}', '${wo.id ?? wo._fbKey}')" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm">📝 Evaluate</button>`
             }
         </div>
-    `).join('') : '<p class="text-slate-500 text-center py-6">No labour assigned to evaluate. Assign labour in the Details tab first.</p>';
+    `).join('') : '<p class="text-slate-500 text-center py-6">No labour assigned to evaluate.</p>';
 
     document.getElementById('workOrderDetailModal').classList.remove('hidden');
 }
@@ -2310,12 +2518,12 @@ function proceedWorkOrder() {
             sailor_id: sid,
             work_order_id: wo.id,
             role_today: (sailor && sailor.id == wo.supervisor) ? 'Supervisor' : (sailor && sailor.id == wo.incharge) ? 'In-Charge' : 'Worker',
-            assigned_by: store.currentUser.name,
+            assigned_by: (store.currentUser && store.currentUser.name) ? store.currentUser.name : 'Officer',
             status: 'Active'
         };
         store.dailyAllocations.push(alloc);
         if (sailor) { sailor.status = 'Assigned'; sailor.evaluated = false; }
-        // syncToFirebase('daily_allocations', `${today}_${sid}`, alloc);
+        opsDB.ref(`daily_allocations/${today}_${sid}`).set(alloc);
     });
 
     closeModal('workOrderDetailModal');
@@ -5719,12 +5927,20 @@ document.addEventListener('DOMContentLoaded', () => {
     setInterval(updateDateTime, 1000);
     renderZoneSelectors();
 
+    // Initialize dashboardDate to today
+    const today = new Date().toISOString().split('T')[0];
+    store.dashboardDate = today;
+    const datePicker = document.getElementById('dashboardDatePicker');
+    if (datePicker) {
+        datePicker.value = today;
+    }
+
     // ── Initial render (with empty store — Firebase will populate) ──
     renderDashboard();
 
     // Set today's date for inventory
     if (document.getElementById('invDate')) {
-        document.getElementById('invDate').value = new Date().toISOString().split('T')[0];
+        document.getElementById('invDate').value = today;
     }
 
     // ── Start Firebase listeners ──
