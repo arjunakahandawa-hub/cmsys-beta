@@ -505,7 +505,7 @@ function switchView(view) {
 function changeZone() {
     store.currentZone = document.getElementById('zoneSelector').value;
     applySettings();
-    // Re-render whichever view is currently visible
+    toggleViewsBasedOnZone();
     refreshCurrentView();
     showToast(`Switched to ${store.currentZone}`);
 }
@@ -517,6 +517,16 @@ function renderDashboard() {
     const today = new Date().toISOString().split('T')[0];
     const dateVal = store.dashboardDate || today;
     const isToday = dateVal === today;
+
+    const isSpecialZone = store.currentZone === 'Admin & Staff Duties';
+
+    // Show/hide views and sidebar
+    toggleViewsBasedOnZone();
+
+    if (isSpecialZone) {
+        renderDailyDetailsSpecialView();
+        return;
+    }
 
     const summaryTitle = document.getElementById('summaryTitle');
     if (summaryTitle) {
@@ -4401,19 +4411,24 @@ function removeZone(zoneId) {
 
 // Rebuild every zone-bound <select> from store.zones, preserving valid selections
 function renderZoneSelectors() {
-    const optionsHtml = store.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+    let optionsHtml = store.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+    
+    // Add Admin & Staff Duties special option
+    optionsHtml += `<option value="Admin & Staff Duties">Admin & Staff Duties</option>`;
 
     ['zoneSelector', 'locZone'].forEach(selId => {
         const sel = document.getElementById(selId);
         if (!sel) return;
         const prev = sel.value;
         sel.innerHTML = optionsHtml;
-        if (store.zones.some(z => z.id === prev)) {
+        if (store.zones.some(z => z.id === prev) || prev === 'Admin & Staff Duties') {
             sel.value = prev;
         } else if (selId === 'zoneSelector') {
             sel.value = store.currentZone;
         }
     });
+
+    toggleViewsBasedOnZone();
 }
 
 // =============================================
@@ -4970,6 +4985,8 @@ function applySettings() {
     }
     const brandTag = document.querySelector('.brand-tag');
     if (brandTag && s.stationName) brandTag.textContent = s.stationName;
+
+    toggleViewsBasedOnZone();
 }
 
 // ── Save a single setting field to Firebase ──
@@ -6724,6 +6741,385 @@ function toggleLeftSidebar(open) {
             arrow.textContent = '➔';
         }
     }
+}
+
+// =============================================
+// ADMIN & STAFF DUTIES (SPECIAL ZONE) HELPERS
+// =============================================
+let _lmdExportAction = 'csv';
+
+function toggleViewsBasedOnZone() {
+    const isSpecialZone = store.currentZone === 'Admin & Staff Duties';
+    
+    // Tabs to toggle
+    const specialTabs = ['tab-job-cards', 'tab-inventory', 'tab-estimates', 'tab-maintenance', 'tab-settings'];
+    const mobileSpecialTabs = ['mobile-tab-job-cards', 'mobile-tab-inventory', 'mobile-tab-estimates', 'mobile-tab-maintenance', 'mobile-tab-settings'];
+
+    specialTabs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('hidden', isSpecialZone);
+    });
+
+    mobileSpecialTabs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('hidden', isSpecialZone);
+    });
+
+    // Hide left sidebar container
+    const leftSidebar = document.getElementById('leftSidebarContainer');
+    if (leftSidebar) {
+        leftSidebar.classList.toggle('hidden', isSpecialZone);
+    }
+    const sidebarToggle = document.getElementById('sidebarToggleBtn');
+    if (sidebarToggle) {
+        sidebarToggle.classList.toggle('hidden', isSpecialZone);
+    }
+
+    const mainPanel = document.getElementById('boardGridContainer')?.parentElement;
+    if (mainPanel) {
+        if (isSpecialZone) {
+            mainPanel.classList.remove('md:col-span-9');
+            mainPanel.classList.add('md:col-span-12');
+        } else {
+            mainPanel.classList.remove('md:col-span-12');
+            mainPanel.classList.add('md:col-span-9');
+        }
+    }
+
+    // Toggle normal action bar items
+    document.getElementById('newAssignBtn')?.classList.toggle('hidden', isSpecialZone);
+    document.getElementById('newWorkOrderBtn')?.classList.toggle('hidden', isSpecialZone);
+    document.getElementById('btnContinueYesterday')?.classList.toggle('hidden', isSpecialZone);
+
+    // Toggle board grid container
+    document.getElementById('boardGridContainer')?.classList.toggle('hidden', isSpecialZone);
+    
+    // Hide empty state if special zone
+    if (isSpecialZone) {
+        document.getElementById('boardEmptyState')?.classList.add('hidden');
+        document.getElementById('ongoingTasksSummaryWrapper')?.classList.add('hidden');
+    } else {
+        document.getElementById('ongoingTasksSummaryWrapper')?.classList.remove('hidden');
+    }
+
+    // Toggle special container
+    const dailyDetailsContainer = document.getElementById('dailyDetailsContainer');
+    if (dailyDetailsContainer) {
+        dailyDetailsContainer.classList.toggle('hidden', !isSpecialZone);
+    }
+
+    // If currently on a hidden view, switch to dashboard
+    const currentView = store.currentView || 'dashboard';
+    if (isSpecialZone && ['jobcards', 'inventory', 'estimates', 'maintenance', 'settings'].includes(currentView)) {
+        switchView('dashboard');
+    }
+}
+
+function renderDailyDetailsSpecialView() {
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    let dailyDetailsContainer = document.getElementById('dailyDetailsContainer');
+    if (!dailyDetailsContainer) {
+        dailyDetailsContainer = document.createElement('div');
+        dailyDetailsContainer.id = 'dailyDetailsContainer';
+        dailyDetailsContainer.className = 'glass-card p-6 mt-4';
+        document.getElementById('boardGridContainer').parentElement.appendChild(dailyDetailsContainer);
+    }
+    dailyDetailsContainer.classList.remove('hidden');
+
+    const zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
+    
+    let tableRows = '';
+    zones.forEach(z => {
+        const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        wos.forEach(wo => {
+            let assignedSailors = [];
+            if (dateVal === today) {
+                const assignedIds = (wo.assigned || []).map(String);
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
+            } else {
+                const assignedIds = (store.dailyAllocations || [])
+                    .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+                    .map(a => String(a.sailor_id));
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
+            }
+            
+            const tradeCounts = {};
+            assignedSailors.forEach(s => {
+                tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
+            });
+            const tradeStr = Object.entries(tradeCounts)
+                .map(([trade, count]) => `${count} ${trade}`)
+                .join(', ') || 'None';
+                
+            const namesList = assignedSailors.map(s => `
+                <span class="inline-block bg-slate-100 text-slate-700 text-[10px] px-2 py-0.5 rounded font-medium border border-slate-200">
+                    ${s.rank || 'AB'} ${s.name} (${s.official_number || s.service_no || '-'})
+                </span>
+            `).join(' ');
+
+            tableRows += `
+                <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors">
+                    <td class="px-4 py-3 font-semibold text-slate-800 text-xs">${z.name}</td>
+                    <td class="px-4 py-3 text-slate-700 text-xs font-medium">${wo.description}</td>
+                    <td class="px-4 py-3 text-center"><span class="bg-teal-100 text-teal-800 text-[11px] font-bold px-2 py-0.5 rounded-full">${assignedSailors.length}</span></td>
+                    <td class="px-4 py-3 text-slate-500 text-[11px] font-semibold">${tradeStr}</td>
+                    <td class="px-4 py-3 max-w-xs"><div class="flex flex-wrap gap-1">${namesList || '<span class="text-slate-400 italic">None</span>'}</div></td>
+                </tr>
+            `;
+        });
+    });
+
+    if (!tableRows) {
+        tableRows = `
+            <tr>
+                <td colspan="5" class="px-4 py-8 text-center text-slate-400 italic text-sm">
+                    No active assignments logged for this date.
+                </td>
+            </tr>
+        `;
+    }
+
+    dailyDetailsContainer.innerHTML = `
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 border-b border-slate-100 pb-4">
+            <div>
+                <h3 class="text-lg font-bold text-slate-800">📋 Daily Details - All Zones</h3>
+                <p class="text-xs text-slate-500 mt-0.5">Overview of sailor allocations across all zones</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="openLmdExportModal('csv')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                    📥 Export CSV
+                </button>
+                <button onclick="openLmdExportModal('print')" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                    🖨️ Print Report
+                </button>
+            </div>
+        </div>
+        
+        <div class="overflow-x-auto rounded-xl border border-slate-100">
+            <table class="w-full text-left border-collapse">
+                <thead>
+                    <tr class="bg-slate-50 text-slate-600 text-xs font-bold uppercase tracking-wider border-b border-slate-200">
+                        <th class="px-4 py-3 w-1/6">Zone</th>
+                        <th class="px-4 py-3 w-1/3">Work Name</th>
+                        <th class="px-4 py-3 w-1/12 text-center">Count</th>
+                        <th class="px-4 py-3 w-1/6">Trades</th>
+                        <th class="px-4 py-3 w-1/4">Assigned Sailors</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                    ${tableRows}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+function openLmdExportModal(action) {
+    _lmdExportAction = action;
+    document.getElementById('lmdExportModalTitle').textContent = action === 'csv' ? 'Export CSV Options' : 'Print Options';
+    
+    const zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
+    document.getElementById('exportZoneSelect').innerHTML = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+    
+    document.querySelector('input[name="exportScope"][value="all"]').checked = true;
+    toggleExportZoneSelect();
+    
+    document.getElementById('lmdExportModal').classList.remove('hidden');
+}
+
+function toggleExportZoneSelect() {
+    const scope = document.querySelector('input[name="exportScope"]:checked').value;
+    document.getElementById('exportZoneSelectWrapper').classList.toggle('hidden', scope !== 'selected');
+}
+
+function executeLmdExport() {
+    closeModal('lmdExportModal');
+    const scope = document.querySelector('input[name="exportScope"]:checked').value;
+    const selectedZone = document.getElementById('exportZoneSelect').value;
+    
+    if (_lmdExportAction === 'csv') {
+        exportLmdCSV(scope, selectedZone);
+    } else {
+        printLmdDetails(scope, selectedZone);
+    }
+}
+
+function exportLmdCSV(scope, selectedZone) {
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    let zones = [];
+    if (scope === 'all') {
+        zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
+    } else {
+        const z = store.zones.find(x => x.id === selectedZone);
+        if (z) zones.push(z);
+    }
+    
+    let csvContent = "Zone Name,Work Name,Reference No,Assigned Sailors Count,Assigned Sailors Breakdown,Assigned Sailors Names\n";
+    
+    zones.forEach(z => {
+        const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        wos.forEach(wo => {
+            let assignedSailors = [];
+            if (dateVal === today) {
+                const assignedIds = (wo.assigned || []).map(String);
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
+            } else {
+                const assignedIds = (store.dailyAllocations || [])
+                    .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+                    .map(a => String(a.sailor_id));
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
+            }
+            
+            const tradeCounts = {};
+            assignedSailors.forEach(s => {
+                tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
+            });
+            const tradeStr = Object.entries(tradeCounts)
+                .map(([trade, count]) => `${count} ${trade}`)
+                .join(', ');
+                
+            const namesStr = assignedSailors.map(s => `${s.rank || 'AB'} ${s.name} (${s.official_number || s.service_no || '-'})`).join('; ');
+            
+            const row = [
+                `"${z.name}"`,
+                `"${wo.description.replace(/"/g, '""')}"`,
+                `"${wo.reference_no || ''}"`,
+                assignedSailors.length,
+                `"${tradeStr}"`,
+                `"${namesStr}"`
+            ].join(',');
+            csvContent += row + "\n";
+        });
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `LMD_Report_${dateVal}_${scope}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('CSV downloaded successfully!');
+}
+
+function printLmdDetails(scope, selectedZone) {
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    let zones = [];
+    if (scope === 'all') {
+        zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
+    } else {
+        const z = store.zones.find(x => x.id === selectedZone);
+        if (z) zones.push(z);
+    }
+    
+    let rowsHtml = '';
+    
+    zones.forEach(z => {
+        const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        wos.forEach(wo => {
+            let assignedSailors = [];
+            if (dateVal === today) {
+                const assignedIds = (wo.assigned || []).map(String);
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
+            } else {
+                const assignedIds = (store.dailyAllocations || [])
+                    .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+                    .map(a => String(a.sailor_id));
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
+            }
+            
+            const tradeCounts = {};
+            assignedSailors.forEach(s => {
+                tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
+            });
+            const tradeStr = Object.entries(tradeCounts)
+                .map(([trade, count]) => `${count} ${trade}`)
+                .join(', ') || 'None';
+                
+            const namesStr = assignedSailors.map(s => `${s.rank || 'AB'} ${s.name} (${s.official_number || s.service_no || '-'})`).join('<br>');
+            
+            rowsHtml += `
+                <tr>
+                    <td><b>${z.name}</b></td>
+                    <td>${wo.description}</td>
+                    <td>${wo.reference_no || '—'}</td>
+                    <td style="text-align:center;"><b>${assignedSailors.length}</b></td>
+                    <td>${tradeStr}</td>
+                    <td style="font-size:10px; color:#334155;">${namesStr || '—'}</td>
+                </tr>
+            `;
+        });
+    });
+    
+    if (!rowsHtml) {
+        rowsHtml = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #64748b;">No allocations found for this selection on this date.</td></tr>`;
+    }
+    
+    const formattedDate = new Date(dateVal).toLocaleDateString('en-GB', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    
+    const win = window.open('', '_blank');
+    win.document.write(`
+        <html><head><title>Daily Details LMD Report</title>
+        <style>
+            body { font-family: Arial, sans-serif; color:#000; margin:0; padding:20px; }
+            h1 { font-size: 20px; color: #0f172a; margin-bottom: 5px; }
+            h2 { font-size: 14px; color: #475569; margin-top: 0; font-weight: normal; margin-bottom: 20px; }
+            table { width:100%; border-collapse:collapse; font-size:11px; margin-top: 10px; }
+            th, td { border:1px solid #94a3b8; padding:6px 8px; text-align: left; vertical-align: top; }
+            th { background:#f1f5f9; color: #1e293b; font-weight: bold; }
+            .footer { margin-top: 30px; font-size: 10px; color: #64748b; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+            @media print { @page { size:A4; margin:15mm; } }
+        </style></head>
+        <body>
+            <h1>Daily Details LMD Report</h1>
+            <h2>Date: ${formattedDate} (${dateVal}) | Scope: ${scope === 'all' ? 'All Zones' : 'Zone: ' + selectedZone}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">Zone</th>
+                        <th style="width: 28%;">Work Name</th>
+                        <th style="width: 12%;">Ref No</th>
+                        <th style="width: 8%; text-align:center;">Count</th>
+                        <th style="width: 15%;">Trades</th>
+                        <th style="width: 25%;">Sailors Assigned</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+            <div class="footer">Generated by NCW Operation System on ${new Date().toLocaleString()}</div>
+        </body></html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); }, 300);
 }
 
 
