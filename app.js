@@ -2183,16 +2183,27 @@ function openWorkOrderDetail(workOrderId) {
         );
     }
 
-    document.getElementById('assignedLaborCount').textContent = `${assignedSailors.length} assigned`;
+    const tradeCounts = {};
+    assignedSailors.forEach(s => {
+        tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
+    });
+    const countStr = Object.entries(tradeCounts)
+        .map(([trade, count]) => `${count} ${trade}`)
+        .join(', ');
+    document.getElementById('assignedLaborCount').textContent = countStr || '0 assigned';
+
     document.getElementById('woDetailAssigned').innerHTML = assignedSailors.map(s => `
         <div class="flex items-center justify-between p-2 bg-white rounded-lg border">
             <div class="flex items-center gap-3">
                 <span class="w-8 h-8 bg-slate-600 text-white rounded-full flex items-center justify-center text-xs font-bold">${s.trade}</span>
                 <div>
-                    <p class="font-medium text-sm">${s.name}</p>
-                    <div class="flex gap-2 text-xs">
-                        <span class="text-slate-500">Avg: <span class="${getPerformanceTextColor(s.avgScore)}">${s.avgScore.toFixed(1)}</span></span>
-                        <span class="text-slate-500">Yesterday: <span class="${getPerformanceTextColor(s.yesterdayScore)}">${s.yesterdayScore?.toFixed(1) || '-'}</span></span>
+                    <p class="font-medium text-sm">${s.rank || 'AB'} ${s.name}</p>
+                    <div class="flex gap-2 text-xs text-slate-500 mt-0.5">
+                        <span>Official No: ${s.official_number || s.service_no || '-'}</span>
+                        <span>•</span>
+                        <span>Trade: ${s.trade}</span>
+                        <span>•</span>
+                        <span>Avg: <span class="${getPerformanceTextColor(s.avgScore)}">${s.avgScore.toFixed(1)}</span></span>
                     </div>
                 </div>
             </div>
