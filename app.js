@@ -9,6 +9,23 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// Global Runtime Error Alert for Remote Debugging
+window.addEventListener('error', function(e) {
+    const errDiv = document.createElement('div');
+    errDiv.style.position = 'fixed';
+    errDiv.style.top = '0';
+    errDiv.style.left = '0';
+    errDiv.style.right = '0';
+    errDiv.style.background = '#ef4444';
+    errDiv.style.color = '#ffffff';
+    errDiv.style.padding = '8px';
+    errDiv.style.fontSize = '12px';
+    errDiv.style.zIndex = '9999';
+    errDiv.style.textAlign = 'center';
+    errDiv.textContent = 'System Error: ' + e.message + ' at ' + e.filename + ':' + e.lineno;
+    document.body.appendChild(errDiv);
+});
+
 // =============================================
 // NCW-PS v2.2 - Naval Civil Works Productivity Suite
 // Main Application JavaScript
