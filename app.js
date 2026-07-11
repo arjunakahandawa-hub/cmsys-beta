@@ -668,11 +668,8 @@ function renderAvailableSailors() {
         });
     }
 
-    // Filter available sailors on selected date
-    let sailors = store.sailors.filter(s => {
-        const isAssigned = assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey));
-        return !isAssigned && (s.attendance || 'Present') === 'Present';
-    });
+    // Filter present sailors on selected date
+    let sailors = store.sailors.filter(s => (s.attendance || 'Present') === 'Present');
     
     if (store.currentFilter === 'zone-team') {
         sailors = sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone);
@@ -694,7 +691,15 @@ function renderAvailableSailors() {
         );
     }
     
-    sailors.sort((a, b) => b.avgScore - a.avgScore);
+    // Sort unassigned first, then by score
+    sailors.sort((a, b) => {
+        const aAssigned = assignedIds.has(String(a.id)) || assignedIds.has(String(a._fbKey));
+        const bAssigned = assignedIds.has(String(b.id)) || assignedIds.has(String(b._fbKey));
+        if (aAssigned !== bAssigned) {
+            return aAssigned ? 1 : -1;
+        }
+        return b.avgScore - a.avgScore;
+    });
     
     container.innerHTML = sailors.map(sailor => {
         const scoreColor = sailor.avgScore >= 8 ? '#059669' : sailor.avgScore >= 6 ? '#d97706' : '#dc2626';
@@ -1284,31 +1289,7 @@ function filterTrade(trade) {
 }
 
 function searchSailors() {
-    const query = document.getElementById('sailorSearch').value.toLowerCase();
-    const container = document.getElementById('availableSailors');
-    let sailors = store.sailors.filter(s => 
-        s.status === 'Available' && 
-        (s.name.toLowerCase().includes(query) || s.official_number.toLowerCase().includes(query))
-    );
-    
-    sailors.sort((a, b) => b.avgScore - a.avgScore);
-    
-    container.innerHTML = sailors.map(sailor => `
-        <div class="sailor-card bg-slate-50 border border-slate-200 rounded-lg p-3 hover:shadow-lg transition-all"
-            draggable="true" ondragstart="handleDragStart(event, ${sailor.id})" ondragend="handleDragEnd(event)">
-            <div class="flex items-center gap-3">
-                <div class="w-10 h-10 bg-slate-700 text-white rounded-full flex items-center justify-center text-xs font-bold">${sailor.trade}</div>
-                <div class="flex-1 min-w-0">
-                    <p class="font-medium text-slate-800 text-sm truncate">${sailor.name}</p>
-                    <span class="text-xs text-slate-500 mono">${sailor.official_number}</span>
-                </div>
-                <div class="flex items-center gap-1">
-                    <span class="performance-badge ${getPerformanceColor(sailor.avgScore)}">${sailor.avgScore.toFixed(1)}</span>
-                    <span class="performance-badge bg-slate-200 text-slate-600">${sailor.yesterdayScore?.toFixed(1) || '-'}</span>
-                </div>
-            </div>
-        </div>
-    `).join('');
+    renderAvailableSailors();
 }
 
 function continueYesterdayJobs() {
