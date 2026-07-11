@@ -2498,6 +2498,9 @@ function proceedWorkOrder() {
 
     // Activate the work order and write today's allocations
     wo.status = 'Active';
+    if (window.fbSaveWorkOrder) {
+        fbSaveWorkOrder(wo);
+    }
     const today = new Date().toISOString().split('T')[0];
 
     wo.assigned.forEach(sid => {
