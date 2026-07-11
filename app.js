@@ -4098,11 +4098,18 @@ function renderLocationsList() {
 function selectLocation(id) {
     store.selectedLocation = id;
     const loc = store.locations.find(l => l.id === id);
+    if (!loc) return;
     const records = store.maintenanceRecords.filter(r => r.location_id === id);
 
     document.getElementById('selectedLocationName').textContent = `${loc.building_name} — ${loc.sub_location || 'General'}`;
     document.getElementById('selectedLocationZone').textContent = `Zone: ${loc.zone_id}`;
-    document.getElementById('addMaintenanceBtn').style.display = 'block';
+    
+    // Show action buttons container
+    const actionBtns = document.getElementById('locationActionButtons');
+    if (actionBtns) actionBtns.style.display = 'flex';
+    
+    const addMaintBtn = document.getElementById('addMaintenanceBtn');
+    if (addMaintBtn) addMaintBtn.style.display = 'block';
 
     const typeColors = {
         'Repair':     'bg-rose-100 text-rose-700 border-rose-300',
@@ -4172,6 +4179,14 @@ function searchLocations() {
 }
 
 function openAddLocationModal() {
+    const titleEl = document.getElementById('locationModalTitle');
+    if (titleEl) titleEl.textContent = 'Add Location';
+    
+    const idEl = document.getElementById('locId');
+    if (idEl) idEl.value = '';
+    const keyEl = document.getElementById('locFbKey');
+    if (keyEl) keyEl.value = '';
+    
     document.getElementById('locZone').value = store.currentZone;
     document.getElementById('locBuilding').value = '';
     document.getElementById('locSubLocation').value = '';
@@ -4179,20 +4194,109 @@ function openAddLocationModal() {
     document.getElementById('addLocationModal').classList.remove('hidden');
 }
 
+function editLocation() {
+    if (!store.selectedLocation) return;
+    const loc = store.locations.find(l => l.id === store.selectedLocation);
+    if (!loc) return;
+
+    const titleEl = document.getElementById('locationModalTitle');
+    if (titleEl) titleEl.textContent = 'Edit Location';
+
+    const idEl = document.getElementById('locId');
+    if (idEl) idEl.value = loc.id;
+    const keyEl = document.getElementById('locFbKey');
+    if (keyEl) keyEl.value = loc._fbKey || '';
+
+    document.getElementById('locZone').value = loc.zone_id || store.currentZone;
+    document.getElementById('locBuilding').value = loc.building_name || '';
+    document.getElementById('locSubLocation').value = loc.sub_location || '';
+    document.getElementById('locDescription').value = loc.description || '';
+    document.getElementById('addLocationModal').classList.remove('hidden');
+}
+
+function deleteLocation() {
+    if (!store.selectedLocation) return;
+    const loc = store.locations.find(l => l.id === store.selectedLocation);
+    if (!loc) return;
+
+    if (!confirm(`Are you sure you want to delete the location "${loc.building_name} — ${loc.sub_location || 'General'}"? This will also delete all its maintenance records.`)) {
+        return;
+    }
+
+    opsDB.ref(`locations/${loc._fbKey}`).remove().then(() => {
+        // Delete linked maintenance records
+        const linkedRecords = store.maintenanceRecords.filter(r => r.location_id === loc.id);
+        linkedRecords.forEach(r => {
+            if (r._fbKey) {
+                opsDB.ref(`maintenance_records/${r._fbKey}`).remove();
+            }
+        });
+
+        showToast('Location and its records deleted successfully!');
+        store.selectedLocation = null;
+        document.getElementById('selectedLocationName').textContent = 'Select a Location';
+        document.getElementById('selectedLocationZone').textContent = '';
+        
+        const actionBtns = document.getElementById('locationActionButtons');
+        if (actionBtns) actionBtns.style.display = 'none';
+        
+        document.getElementById('maintenanceHistory').innerHTML = '<p class="text-slate-500 text-center py-8">Select a location to view maintenance history</p>';
+        renderLocationsList();
+    }).catch(err => {
+        console.error(err);
+        showToast('Error deleting location', 'error');
+    });
+}
+
+function autofillLocationDetails(buildingName) {
+    if (!buildingName) return;
+    const loc = store.locations.find(l => l.zone_id === store.currentZone && l.building_name === buildingName);
+    if (loc) {
+        document.getElementById('woSubLocation').value = loc.sub_location || '';
+        const descInput = document.getElementById('woDescription');
+        if (descInput && !descInput.value.trim()) {
+            descInput.value = loc.description || '';
+        }
+    }
+}
+
 function saveLocation(event) {
     event.preventDefault();
     
-    const newLocation = {
+    const idVal = document.getElementById('locId').value;
+    const fbKeyVal = document.getElementById('locFbKey').value;
+    
+    const locData = {
         zone_id: document.getElementById('locZone').value,
         building_name: document.getElementById('locBuilding').value,
         sub_location: document.getElementById('locSubLocation').value,
         description: document.getElementById('locDescription').value
     };
     
-    fbSaveLocation(newLocation).then(() => {
+    if (fbKeyVal) {
+        locData._fbKey = fbKeyVal;
+        locData.id = parseInt(idVal);
+    } else {
+        const maxId = store.locations.length ? Math.max(...store.locations.map(l => l.id || 0)) : 0;
+        locData.id = maxId + 1;
+    }
+    
+    fbSaveLocation(locData).then(() => {
         closeModal('addLocationModal');
-        showToast('Location added successfully!');
-        document.getElementById('addLocationForm').reset();
+        showToast(fbKeyVal ? 'Location updated successfully!' : 'Location added successfully!');
+        
+        document.getElementById('locId').value = '';
+        document.getElementById('locFbKey').value = '';
+        document.getElementById('locBuilding').value = '';
+        document.getElementById('locSubLocation').value = '';
+        document.getElementById('locDescription').value = '';
+        
+        // If we edited the currently selected location, update the details view
+        if (fbKeyVal && store.selectedLocation === locData.id) {
+            selectLocation(locData.id);
+        } else {
+            renderLocationsList();
+        }
     }).catch(err => {
         console.error(err);
         showToast('Error saving location!', 'error');
@@ -4581,7 +4685,7 @@ function exportInventoryReport() {
 // =============================================
 function openBulkUploadModal(type) {
     document.getElementById('bulkUploadType').value = type;
-    document.getElementById('bulkUploadTitle').textContent = type === 'inventory' ? 'Inventory' : 'Locations';
+    document.getElementById('bulkUploadTitle').textContent = type === 'inventory' ? 'Inventory' : 'LMD Locations';
     document.getElementById('bulkUploadFile').value = '';
     document.getElementById('bulkFileName').classList.add('hidden');
     document.getElementById('bulkUploadBtn').disabled = true;
