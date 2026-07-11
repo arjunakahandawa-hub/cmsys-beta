@@ -6752,27 +6752,27 @@ function toggleViewsBasedOnZone() {
     const isSpecialZone = store.currentZone === 'Admin & Staff Duties';
     
     // Tabs to toggle
-    const specialTabs = ['tab-job-cards', 'tab-inventory', 'tab-estimates', 'tab-maintenance', 'tab-settings'];
-    const mobileSpecialTabs = ['mobile-tab-job-cards', 'mobile-tab-inventory', 'mobile-tab-estimates', 'mobile-tab-maintenance', 'mobile-tab-settings'];
+    const specialTabs = ['tab-jobcards', 'tab-inventory', 'tab-estimates', 'tab-maintenance', 'tab-settings'];
+    const mobileSpecialTabs = ['mobile-tab-jobcards', 'mobile-tab-inventory', 'mobile-tab-estimates', 'mobile-tab-maintenance', 'mobile-tab-settings'];
 
     specialTabs.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.classList.toggle('hidden', isSpecialZone);
+        if (el) el.style.display = isSpecialZone ? 'none' : '';
     });
 
     mobileSpecialTabs.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.classList.toggle('hidden', isSpecialZone);
+        if (el) el.style.display = isSpecialZone ? 'none' : '';
     });
 
     // Hide left sidebar container
     const leftSidebar = document.getElementById('leftSidebarContainer');
     if (leftSidebar) {
-        leftSidebar.classList.toggle('hidden', isSpecialZone);
+        leftSidebar.style.display = isSpecialZone ? 'none' : '';
     }
     const sidebarToggle = document.getElementById('sidebarToggleBtn');
     if (sidebarToggle) {
-        sidebarToggle.classList.toggle('hidden', isSpecialZone);
+        sidebarToggle.style.display = isSpecialZone ? 'none' : '';
     }
 
     const mainPanel = document.getElementById('boardGridContainer')?.parentElement;
@@ -6787,25 +6787,31 @@ function toggleViewsBasedOnZone() {
     }
 
     // Toggle normal action bar items
-    document.getElementById('newAssignBtn')?.classList.toggle('hidden', isSpecialZone);
-    document.getElementById('newWorkOrderBtn')?.classList.toggle('hidden', isSpecialZone);
-    document.getElementById('btnContinueYesterday')?.classList.toggle('hidden', isSpecialZone);
+    ['newAssignBtn', 'newWorkOrderBtn', 'btnContinueYesterday'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isSpecialZone ? 'none' : '';
+    });
 
     // Toggle board grid container
-    document.getElementById('boardGridContainer')?.classList.toggle('hidden', isSpecialZone);
+    const boardGrid = document.getElementById('boardGridContainer');
+    if (boardGrid) {
+        boardGrid.style.display = isSpecialZone ? 'none' : '';
+    }
     
-    // Hide empty state if special zone
-    if (isSpecialZone) {
-        document.getElementById('boardEmptyState')?.classList.add('hidden');
-        document.getElementById('ongoingTasksSummaryWrapper')?.classList.add('hidden');
-    } else {
-        document.getElementById('ongoingTasksSummaryWrapper')?.classList.remove('hidden');
+    // Hide empty state and summary if special zone
+    const boardEmpty = document.getElementById('boardEmptyState');
+    if (boardEmpty) {
+        if (isSpecialZone) boardEmpty.style.display = 'none';
+    }
+    const ongoingSummary = document.getElementById('ongoingTasksSummaryWrapper');
+    if (ongoingSummary) {
+        ongoingSummary.style.display = isSpecialZone ? 'none' : '';
     }
 
     // Toggle special container
     const dailyDetailsContainer = document.getElementById('dailyDetailsContainer');
     if (dailyDetailsContainer) {
-        dailyDetailsContainer.classList.toggle('hidden', !isSpecialZone);
+        dailyDetailsContainer.style.display = isSpecialZone ? 'block' : 'none';
     }
 
     // If currently on a hidden view, switch to dashboard
