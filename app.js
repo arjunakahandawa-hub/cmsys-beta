@@ -42,6 +42,24 @@ function isAdminStaffDuties(zoneIdOrName) {
     return normalized === 'adminstaffduties';
 }
 
+// Helper to parse official number into Type and Number (e.g. "VAS 70836" -> {type:"VAS", num:"70836"})
+function parseOfficialNumber(offNo) {
+    if (!offNo) return { type: '•', num: '-' };
+    const clean = offNo.trim();
+    const match = clean.match(/^([A-Za-z\/&]+)\s+(\d+)$/);
+    if (match) {
+        return { type: match[1], num: match[2] };
+    }
+    const parts = clean.split(/[\s]+/);
+    if (parts.length > 1) {
+        return { type: parts[0], num: parts.slice(1).join(' ') };
+    }
+    if (/^\d+$/.test(clean)) {
+        return { type: '•', num: clean };
+    }
+    return { type: '•', num: clean };
+}
+
 // =============================================
 // DATA STORE
 // NOTE: Arrays start empty — Firebase listeners populate them
@@ -6998,7 +7016,7 @@ function exportLmdCSV(scope, selectedZone) {
         if (z) zones.push(z);
     }
     
-    let csvContent = "Zone Name,Work Name,Reference No,Assigned Sailors Count,Assigned Sailors Breakdown,Assigned Sailors Names\n";
+    let csvContent = "Ser No,Rank,Name,Service Type,Service No,Trade\n";
     
     zones.forEach(z => {
         const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
@@ -7020,25 +7038,24 @@ function exportLmdCSV(scope, selectedZone) {
                 );
             }
             
-            const tradeCounts = {};
-            assignedSailors.forEach(s => {
-                tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
-            });
-            const tradeStr = Object.entries(tradeCounts)
-                .map(([trade, count]) => `${count} ${trade}`)
-                .join(', ');
+            if (assignedSailors.length > 0) {
+                // Add header row for the work order/duty
+                csvContent += `,,${wo.description.toUpperCase()},,,\n`;
                 
-            const namesStr = assignedSailors.map(s => `${s.rank || 'AB'} ${s.name} (${s.official_number || s.service_no || '-'})`).join('; ');
-            
-            const row = [
-                `"${z.name}"`,
-                `"${wo.description.replace(/"/g, '""')}"`,
-                `"${wo.reference_no || ''}"`,
-                assignedSailors.length,
-                `"${tradeStr}"`,
-                `"${namesStr}"`
-            ].join(',');
-            csvContent += row + "\n";
+                assignedSailors.forEach((s, idx) => {
+                    const serNo = String(idx + 1).padStart(2, '0');
+                    const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                    const row = [
+                        serNo,
+                        s.rank || 'AB',
+                        s.name,
+                        parsedOffNo.type,
+                        parsedOffNo.num,
+                        s.trade || ''
+                    ].map(val => `"${String(val).replace(/"/g, '""')}"`).join(',');
+                    csvContent += row + "\n";
+                });
+            }
         });
     });
     
@@ -7087,26 +7104,31 @@ function printLmdDetails(scope, selectedZone) {
                 );
             }
             
-            const tradeCounts = {};
-            assignedSailors.forEach(s => {
-                tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
-            });
-            const tradeStr = Object.entries(tradeCounts)
-                .map(([trade, count]) => `${count} ${trade}`)
-                .join(', ') || 'None';
+            if (assignedSailors.length > 0) {
+                // Add sub-header separator row for work order
+                rowsHtml += `
+                    <tr style="background-color: #f8fafc; font-weight: bold;">
+                        <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px;">
+                            ${wo.description.toUpperCase()}
+                        </td>
+                    </tr>
+                `;
                 
-            const namesStr = assignedSailors.map(s => `${s.rank || 'AB'} ${s.name} (${s.official_number || s.service_no || '-'})`).join('<br>');
-            
-            rowsHtml += `
-                <tr>
-                    <td><b>${z.name}</b></td>
-                    <td>${wo.description}</td>
-                    <td>${wo.reference_no || '—'}</td>
-                    <td style="text-align:center;"><b>${assignedSailors.length}</b></td>
-                    <td>${tradeStr}</td>
-                    <td style="font-size:10px; color:#334155;">${namesStr || '—'}</td>
-                </tr>
-            `;
+                assignedSailors.forEach((s, idx) => {
+                    const serNo = String(idx + 1).padStart(2, '0');
+                    const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                    rowsHtml += `
+                        <tr>
+                            <td style="text-align:center;">${serNo}</td>
+                            <td>${s.rank || 'AB'}</td>
+                            <td>${s.name}</td>
+                            <td style="text-align:center;">${parsedOffNo.type}</td>
+                            <td>${parsedOffNo.num}</td>
+                            <td style="text-align:center;">${s.trade || '—'}</td>
+                        </tr>
+                    `;
+                });
+            }
         });
     });
     
@@ -7123,10 +7145,10 @@ function printLmdDetails(scope, selectedZone) {
         <html><head><title>Daily Details LMD Report</title>
         <style>
             body { font-family: Arial, sans-serif; color:#000; margin:0; padding:20px; }
-            h1 { font-size: 20px; color: #0f172a; margin-bottom: 5px; }
-            h2 { font-size: 14px; color: #475569; margin-top: 0; font-weight: normal; margin-bottom: 20px; }
+            h1 { font-size: 20px; color: #0f172a; margin-bottom: 5px; text-align: center; }
+            h2 { font-size: 14px; color: #475569; margin-top: 0; font-weight: normal; margin-bottom: 20px; text-align: center; }
             table { width:100%; border-collapse:collapse; font-size:11px; margin-top: 10px; }
-            th, td { border:1px solid #94a3b8; padding:6px 8px; text-align: left; vertical-align: top; }
+            th, td { border:1px solid #94a3b8; padding:6px 8px; text-align: left; vertical-align: middle; }
             th { background:#f1f5f9; color: #1e293b; font-weight: bold; }
             .footer { margin-top: 30px; font-size: 10px; color: #64748b; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 8px; }
             @media print { @page { size:A4; margin:15mm; } }
@@ -7137,12 +7159,12 @@ function printLmdDetails(scope, selectedZone) {
             <table>
                 <thead>
                     <tr>
-                        <th style="width: 12%;">Zone</th>
-                        <th style="width: 28%;">Work Name</th>
-                        <th style="width: 12%;">Ref No</th>
-                        <th style="width: 8%; text-align:center;">Count</th>
-                        <th style="width: 15%;">Trades</th>
-                        <th style="width: 25%;">Sailors Assigned</th>
+                        <th style="width: 10%; text-align:center;">Ser No</th>
+                        <th style="width: 15%;">Rank</th>
+                        <th style="width: 35%;">Name</th>
+                        <th style="width: 15%; text-align:center;">Service Type</th>
+                        <th style="width: 15%;">Service No</th>
+                        <th style="width: 10%; text-align:center;">Trade</th>
                     </tr>
                 </thead>
                 <tbody>
