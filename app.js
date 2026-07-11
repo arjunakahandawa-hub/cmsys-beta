@@ -536,11 +536,13 @@ function renderDashboard() {
     const isToday = dateVal === today;
 
     const isSpecialZone = store.currentZone === 'Admin & Staff Duties';
+    console.log('🟢 renderDashboard() store.currentZone =', JSON.stringify(store.currentZone), 'isSpecialZone =', isSpecialZone);
 
     // Show/hide views and sidebar
     toggleViewsBasedOnZone();
 
     if (isSpecialZone) {
+        console.log('🟢 Entering Admin & Staff Duties special view...');
         renderDailyDetailsSpecialView();
         return;
     }
@@ -6839,17 +6841,21 @@ function toggleViewsBasedOnZone() {
 }
 
 function renderDailyDetailsSpecialView() {
+    console.log('🔵 renderDailyDetailsSpecialView() CALLED, store.currentZone =', store.currentZone);
     const today = new Date().toISOString().split('T')[0];
     const dateVal = store.dashboardDate || today;
     
     let dailyDetailsContainer = document.getElementById('dailyDetailsContainer');
     if (!dailyDetailsContainer) {
+        console.log('🔵 dailyDetailsContainer NOT found, creating...');
         dailyDetailsContainer = document.createElement('div');
         dailyDetailsContainer.id = 'dailyDetailsContainer';
         dailyDetailsContainer.className = 'glass-card p-6 mt-4';
         document.getElementById('boardGridContainer').parentElement.appendChild(dailyDetailsContainer);
     }
     dailyDetailsContainer.classList.remove('hidden');
+    dailyDetailsContainer.style.display = 'block';
+    console.log('🔵 dailyDetailsContainer display:', dailyDetailsContainer.style.display, 'hidden class:', dailyDetailsContainer.classList.contains('hidden'));
 
     const zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
     
