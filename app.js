@@ -5769,10 +5769,7 @@ function handleProfilePicError(img, cleanNo) {
         img.src = `images/${cleanNo}.PNG`;
     } else {
         const fallback = img.getAttribute('data-fallback');
-        const parent = img.parentElement;
-        if (parent) {
-            parent.innerHTML = fallback || '';
-        }
+        img.outerHTML = fallback || '';
     }
 }
 
