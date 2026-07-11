@@ -32,6 +32,17 @@ window.addEventListener('error', function(e) {
 // =============================================
 
 // =============================================
+// ADMIN & STAFF DUTIES ZONE HELPER
+// The zone ID may be stored as 'Admin-&-Staff-Duties', 'Admin & Staff Duties',
+// 'Admin-Staff-Duties' etc. This helper normalizes the check.
+// =============================================
+function isAdminStaffDuties(zoneIdOrName) {
+    if (!zoneIdOrName) return false;
+    const normalized = zoneIdOrName.toLowerCase().replace(/[-&\s]+/g, '');
+    return normalized === 'adminstaffduties';
+}
+
+// =============================================
 // DATA STORE
 // NOTE: Arrays start empty — Firebase listeners populate them
 // Hardcoded fallback data retained as safety defaults
@@ -535,14 +546,12 @@ function renderDashboard() {
     const dateVal = store.dashboardDate || today;
     const isToday = dateVal === today;
 
-    const isSpecialZone = store.currentZone === 'Admin & Staff Duties';
-    console.log('🟢 renderDashboard() store.currentZone =', JSON.stringify(store.currentZone), 'isSpecialZone =', isSpecialZone);
+    const isSpecialZone = isAdminStaffDuties(store.currentZone);
 
     // Show/hide views and sidebar
     toggleViewsBasedOnZone();
 
     if (isSpecialZone) {
-        console.log('🟢 Entering Admin & Staff Duties special view...');
         renderDailyDetailsSpecialView();
         return;
     }
@@ -574,12 +583,7 @@ function updateDashboardButtons() {
     const zoneName = currentZoneObj ? currentZoneObj.name : '';
     const zoneId = store.currentZone;
 
-    const isAdminStaff = (
-        zoneName === 'Admin & Staff Duties' ||
-        zoneId === 'Admin & Staff Duties' ||
-        zoneId === 'Admin-Staff-Duties' ||
-        (zoneName.includes('Admin') && zoneName.includes('Staff'))
-    );
+    const isAdminStaff = isAdminStaffDuties(zoneId) || isAdminStaffDuties(zoneName);
 
     const newAssignBtn = document.getElementById('newAssignBtn');
     const newWorkOrderBtn = document.getElementById('newWorkOrderBtn');
@@ -4432,15 +4436,18 @@ function removeZone(zoneId) {
 function renderZoneSelectors() {
     let optionsHtml = store.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
     
-    // Add Admin & Staff Duties special option
-    optionsHtml += `<option value="Admin & Staff Duties">Admin & Staff Duties</option>`;
+    // Add Admin & Staff Duties special option (only if not already in the zones list)
+    const hasAdminZone = store.zones.some(z => isAdminStaffDuties(z.id));
+    if (!hasAdminZone) {
+        optionsHtml += `<option value="Admin-&-Staff-Duties">Admin & Staff Duties</option>`;
+    }
 
     ['zoneSelector', 'locZone'].forEach(selId => {
         const sel = document.getElementById(selId);
         if (!sel) return;
         const prev = sel.value;
         sel.innerHTML = optionsHtml;
-        if (store.zones.some(z => z.id === prev) || prev === 'Admin & Staff Duties') {
+        if (store.zones.some(z => z.id === prev) || isAdminStaffDuties(prev)) {
             sel.value = prev;
         } else if (selId === 'zoneSelector') {
             sel.value = store.currentZone;
@@ -6768,7 +6775,7 @@ function toggleLeftSidebar(open) {
 let _lmdExportAction = 'csv';
 
 function toggleViewsBasedOnZone() {
-    const isSpecialZone = store.currentZone === 'Admin & Staff Duties';
+    const isSpecialZone = isAdminStaffDuties(store.currentZone);
     
     // Tabs to toggle
     const specialTabs = ['tab-jobcards', 'tab-inventory', 'tab-estimates', 'tab-maintenance', 'tab-settings'];
@@ -6841,7 +6848,6 @@ function toggleViewsBasedOnZone() {
 }
 
 function renderDailyDetailsSpecialView() {
-    console.log('🔵 renderDailyDetailsSpecialView() CALLED, store.currentZone =', store.currentZone);
     const today = new Date().toISOString().split('T')[0];
     const dateVal = store.dashboardDate || today;
     
@@ -6855,9 +6861,8 @@ function renderDailyDetailsSpecialView() {
     }
     dailyDetailsContainer.classList.remove('hidden');
     dailyDetailsContainer.style.display = 'block';
-    console.log('🔵 dailyDetailsContainer display:', dailyDetailsContainer.style.display, 'hidden class:', dailyDetailsContainer.classList.contains('hidden'));
 
-    const zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
+    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
     
     let tableRows = '';
     zones.forEach(z => {
@@ -6955,7 +6960,7 @@ function openLmdExportModal(action) {
     _lmdExportAction = action;
     document.getElementById('lmdExportModalTitle').textContent = action === 'csv' ? 'Export CSV Options' : 'Print Options';
     
-    const zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
+    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
     document.getElementById('exportZoneSelect').innerHTML = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
     
     document.querySelector('input[name="exportScope"][value="all"]').checked = true;
@@ -6987,7 +6992,7 @@ function exportLmdCSV(scope, selectedZone) {
     
     let zones = [];
     if (scope === 'all') {
-        zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
+        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
     } else {
         const z = store.zones.find(x => x.id === selectedZone);
         if (z) zones.push(z);
@@ -7054,7 +7059,7 @@ function printLmdDetails(scope, selectedZone) {
     
     let zones = [];
     if (scope === 'all') {
-        zones = store.zones.filter(z => z.id !== 'Admin & Staff Duties');
+        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
     } else {
         const z = store.zones.find(x => x.id === selectedZone);
         if (z) zones.push(z);
