@@ -7219,7 +7219,7 @@ function printLmdDetails(scope, selectedZone) {
     
     const win = window.open('', '_blank');
     win.document.write(`
-        <html><head><title>Daily Details LMD Report</title>
+        <html><head><title>Daily Details</title>
         <style>
             body { font-family: Arial, sans-serif; color:#000; margin:0; padding:20px; }
             h1 { font-size: 20px; color: #0f172a; margin-bottom: 5px; text-align: center; }
@@ -7231,7 +7231,7 @@ function printLmdDetails(scope, selectedZone) {
             @media print { @page { size:A4; margin:15mm; } }
         </style></head>
         <body>
-            <h1>Daily Details LMD Report</h1>
+            <h1>Daily Details</h1>
             <h2>Date: ${formattedDate} (${dateVal}) | Scope: ${scope === 'all' ? 'All Zones' : 'Zone: ' + selectedZone}</h2>
             <table>
                 <thead>
