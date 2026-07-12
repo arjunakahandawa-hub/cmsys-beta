@@ -4492,12 +4492,29 @@ function removeZone(zoneId) {
 
 // Rebuild every zone-bound <select> from store.zones, preserving valid selections
 function renderZoneSelectors() {
+    // Determine if the current officer has access to "All Zone" (Admin-&-Staff-Duties)
+    let hasAllZoneAccess = true;
+    if (store.activeProfileType === 'OIC') {
+        if (store.activeOicProfileId) {
+            const profile = getOicProfiles().find(p => p.id === store.activeOicProfileId);
+            if (profile) {
+                // If it is NOT the main admin (3576), check their permission
+                const isMain = (profile.serviceNo || '').includes('3576');
+                if (!isMain) {
+                    hasAllZoneAccess = profile.permAllZones === true;
+                }
+            }
+        }
+    }
+
     let optionsHtml = store.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
     
-    // Add Admin & Staff Duties special option (only if not already in the zones list)
-    const hasAdminZone = store.zones.some(z => isAdminStaffDuties(z.id));
-    if (!hasAdminZone) {
-        optionsHtml += `<option value="Admin-&-Staff-Duties">Admin & Staff Duties</option>`;
+    // Add Admin & Staff Duties special option (only if not already in the zones list AND hasAllZoneAccess is true)
+    if (hasAllZoneAccess) {
+        const hasAdminZone = store.zones.some(z => isAdminStaffDuties(z.id));
+        if (!hasAdminZone) {
+            optionsHtml += `<option value="Admin-&-Staff-Duties">Admin & Staff Duties</option>`;
+        }
     }
 
     ['zoneSelector', 'locZone'].forEach(selId => {
@@ -4506,7 +4523,15 @@ function renderZoneSelectors() {
         const prev = sel.value;
         sel.innerHTML = optionsHtml;
         if (store.zones.some(z => z.id === prev) || isAdminStaffDuties(prev)) {
-            sel.value = prev;
+            // If previous selected zone was Admin-&-Staff-Duties but they no longer have access, reset to default zone
+            if (isAdminStaffDuties(prev) && !hasAllZoneAccess) {
+                sel.value = 'A-Zone';
+                if (selId === 'zoneSelector') {
+                    store.currentZone = 'A-Zone';
+                }
+            } else {
+                sel.value = prev;
+            }
         } else if (selId === 'zoneSelector') {
             sel.value = store.currentZone;
         }
@@ -5246,7 +5271,9 @@ function getOicProfiles() {
             name: s.oicName || '',
             rank: s.oicRank || '',
             serviceNo: s.oicServiceNo || '',
-            password: s.oicPassword || ''
+            password: s.oicPassword || '',
+            permSettings: true,
+            permAllZones: true
         });
     }
     return profiles;
@@ -5258,6 +5285,16 @@ function renderSettingsOicProfilesList() {
     if (!listEl) return;
 
     const profiles = getOicProfiles();
+    
+    // Check if logged-in user is the main administrator (NRC 3576)
+    const isMain = (store.currentUser?.serviceNo || '').includes('3576');
+
+    // Show/hide Add Officer button
+    const addBtn = document.querySelector('button[onclick="openOicProfileModal()"]');
+    if (addBtn) {
+        addBtn.style.display = isMain ? '' : 'none';
+    }
+
     if (profiles.length === 0) {
         listEl.innerHTML = `<div class="p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">No Officer-In-Charge profiles added yet.</div>`;
         return;
@@ -5271,6 +5308,23 @@ function renderSettingsOicProfilesList() {
             `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` :
             fallbackText;
 
+        const isProfileMain = (p.serviceNo || '').includes('3576');
+        const permList = [];
+        if (p.permSettings || isProfileMain) permList.push('Settings');
+        if (p.permAllZones || isProfileMain) permList.push('All Zones');
+        const permText = permList.length > 0 ? `Access: ${permList.join(', ')}` : 'Access: None';
+
+        const actionsHtml = isMain ? `
+            <div class="flex items-center gap-1">
+                <button onclick="editOicProfile('${p.id}')" class="text-blue-500 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50" title="Edit">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </button>
+                <button onclick="deleteOicProfile('${p.id}')" class="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50" title="Delete">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+            </div>
+        ` : '';
+
         return `
             <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
                 <div class="flex items-center gap-3 min-w-0">
@@ -5278,16 +5332,10 @@ function renderSettingsOicProfilesList() {
                     <div class="min-w-0 text-left">
                         <p class="text-sm font-bold text-slate-800 truncate">${p.rank} ${p.name}</p>
                         <p class="text-[11px] text-slate-400 font-semibold font-mono">${p.serviceNo} ${p.password ? '• 🔒 Password Protected' : '• 🔓 No Password'}</p>
+                        <p class="text-[10px] text-teal-650 font-semibold mt-0.5">${permText}</p>
                     </div>
                 </div>
-                <div class="flex items-center gap-1">
-                    <button onclick="editOicProfile('${p.id}')" class="text-blue-500 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50" title="Edit">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                    </button>
-                    <button onclick="deleteOicProfile('${p.id}')" class="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50" title="Delete">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                    </button>
-                </div>
+                ${actionsHtml}
             </div>
         `;
     }).join('');
@@ -5300,6 +5348,8 @@ function openOicProfileModal() {
     document.getElementById('oicProfRank').value = '';
     document.getElementById('oicProfServiceNo').value = '';
     document.getElementById('oicProfPassword').value = '';
+    document.getElementById('oicPermSettings').checked = false;
+    document.getElementById('oicPermAllZones').checked = false;
     document.getElementById('oicProfileModal').classList.remove('hidden');
 }
 
@@ -5313,6 +5363,8 @@ function editOicProfile(id) {
     document.getElementById('oicProfRank').value = profile.rank;
     document.getElementById('oicProfServiceNo').value = profile.serviceNo;
     document.getElementById('oicProfPassword').value = profile.password || '';
+    document.getElementById('oicPermSettings').checked = profile.permSettings === true;
+    document.getElementById('oicPermAllZones').checked = profile.permAllZones === true;
     document.getElementById('oicProfileModal').classList.remove('hidden');
 }
 
@@ -5323,6 +5375,8 @@ function saveOicProfile(event) {
     const rank = document.getElementById('oicProfRank').value.trim();
     const serviceNo = document.getElementById('oicProfServiceNo').value.trim();
     const password = document.getElementById('oicProfPassword').value;
+    const permSettings = document.getElementById('oicPermSettings').checked;
+    const permAllZones = document.getElementById('oicPermAllZones').checked;
 
     const profileId = id || 'oic_' + Date.now();
 
@@ -5332,7 +5386,9 @@ function saveOicProfile(event) {
         name,
         rank,
         serviceNo,
-        password
+        password,
+        permSettings,
+        permAllZones
     };
 
     opsDB.ref(`settings/oicProfiles/${profileId}`).set({
@@ -5340,12 +5396,17 @@ function saveOicProfile(event) {
         name,
         rank,
         serviceNo,
-        password
+        password,
+        permSettings,
+        permAllZones
     }).then(() => {
         closeModal('oicProfileModal');
         applySettings();
         renderSettingsOicProfilesList();
         showToast('Officer Profile saved successfully');
+        if (store.activeOicProfileId === profileId) {
+            applyActiveProfile();
+        }
     });
 }
 
@@ -6574,6 +6635,8 @@ function applyActiveProfile() {
         let oicName = s.oicName || s.userName;
         let oicRank = s.oicRank || s.userRank;
         let oicServiceNo = s.oicServiceNo || s.userServiceNo;
+        let permSettings = true;
+        let permAllZones = true;
 
         const oicProfileId = store.activeOicProfileId;
         if (oicProfileId) {
@@ -6582,23 +6645,39 @@ function applyActiveProfile() {
                 oicName = profile.name;
                 oicRank = profile.rank;
                 oicServiceNo = profile.serviceNo;
+                
+                // If it is NOT the main administrator (3576), apply permissions
+                const isMain = (profile.serviceNo || '').includes('3576');
+                if (!isMain) {
+                    permSettings = profile.permSettings === true;
+                    permAllZones = profile.permAllZones === true;
+                }
             }
         }
 
         store.currentUser = {
             name: oicName,
             rank: oicRank,
-            serviceNo: oicServiceNo
+            serviceNo: oicServiceNo,
+            permSettings: permSettings,
+            permAllZones: permAllZones
         };
 
-        // Enable settings tab (Desktop & Mobile)
+        // Enable/Disable settings tab (Desktop & Mobile) based on permSettings
         const settingsTabBtn = document.getElementById('tab-settings');
-        if (settingsTabBtn) {
-            settingsTabBtn.classList.remove('hidden');
-        }
         const mobileSettingsTabBtn = document.getElementById('mobile-tab-settings');
-        if (mobileSettingsTabBtn) {
-            mobileSettingsTabBtn.classList.remove('hidden');
+
+        if (permSettings) {
+            if (settingsTabBtn) settingsTabBtn.classList.remove('hidden');
+            if (mobileSettingsTabBtn) mobileSettingsTabBtn.classList.remove('hidden');
+        } else {
+            if (settingsTabBtn) settingsTabBtn.classList.add('hidden');
+            if (mobileSettingsTabBtn) mobileSettingsTabBtn.classList.add('hidden');
+            
+            // If currently on settings view, redirect to dashboard
+            if (store.currentView === 'settings') {
+                switchView('dashboard');
+            }
         }
 
         // Update profile menu button text or picture to "OIC" or rank
@@ -6630,6 +6709,9 @@ function applyActiveProfile() {
     if (profileBtn) {
         profileBtn.title = `Profile: ${store.currentUser.rank} ${store.currentUser.name} (${store.currentUser.serviceNo})`;
     }
+
+    // Update zone dropdown selectors based on active profile permissions
+    renderZoneSelectors();
 
     // Refresh profile dropdown list to update checkmarks
     renderProfileDropdown();
