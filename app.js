@@ -1026,7 +1026,6 @@ function renderWorkOrderCard(wo) {
         <div class="work-order-card ${sm.stripe} rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer group"
             style="background:rgba(255,255,255,0.9);border:1px solid rgba(255,255,255,0.8);backdrop-filter:blur(6px)"
             onclick="handleCardClick(event, '${woKey}')"
-            ontouchend="handleCardClick(event, '${woKey}')"
             ondragover="handleDragOver(event)" ondrop="handleDropOnCard(event, '${woKey}')">
 
             <!-- Header row -->
