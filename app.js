@@ -977,6 +977,16 @@ function renderWorkOrderCard(wo) {
     // Use _fbKey for the click handler (Firebase primary key)
     const woKey = wo._fbKey || wo.id;
 
+    const tradeCounts = {};
+    assignedSailors.forEach(s => {
+        const t = s.trade || 'MA';
+        tradeCounts[t] = (tradeCounts[t] || 0) + 1;
+    });
+    const tradeStr = Object.entries(tradeCounts)
+        .map(([trade, count]) => `${count} ${trade}`)
+        .join(', ');
+    const tradeBadge = tradeStr ? `<span class="text-[10px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded ml-1 border border-slate-200">${tradeStr}</span>` : '';
+
     return `
         <div class="work-order-card ${sm.stripe} rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer group"
             style="background:rgba(255,255,255,0.9);border:1px solid rgba(255,255,255,0.8);backdrop-filter:blur(6px)"
@@ -1019,7 +1029,7 @@ function renderWorkOrderCard(wo) {
             <!-- Assigned sailors -->
             <div class="px-3 pb-3 border-t border-slate-100 pt-2">
                 <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-[11px] text-slate-500">👷 ${assignedSailors.length} assigned</span>
+                    <span class="text-[11px] text-slate-500 flex items-center flex-wrap gap-1">👷 ${assignedSailors.length} assigned ${tradeBadge}</span>
                     ${store.isEveningMode && pendingEvals > 0
                         ? `<span class="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold animate-pulse">📝 ${pendingEvals} eval due</span>`
                         : ''}
