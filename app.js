@@ -831,6 +831,7 @@ function renderWorkOrders() {
     let projectCount = 0, jobCount = 0, taskCount = 0;
     const today = new Date().toISOString().split('T')[0];
     const dateVal = store.dashboardDate || today;
+    let projectTradesStr = '', jobTradesStr = '', taskTradesStr = '';
 
     Object.keys(columns).forEach(type => {
         const orders = store.workOrders.filter(wo => 
@@ -855,11 +856,45 @@ function renderWorkOrders() {
         if (type === 'PROJECT') projectCount = activeOrders.length;
         if (type === 'JOB') jobCount = activeOrders.length;
         if (type === 'TASK') taskCount = activeOrders.length;
+
+        // Calculate trade breakdown of assigned sailors
+        const typeSailors = [];
+        orders.forEach(wo => {
+            const assignedIds = (wo.assigned || []).map(String);
+            const sailors = store.sailors.filter(s =>
+                assignedIds.includes(String(s.id)) ||
+                assignedIds.includes(String(s._fbKey))
+            );
+            typeSailors.push(...sailors);
+        });
+
+        const tradeCounts = {};
+        typeSailors.forEach(s => {
+            const t = s.trade || 'MA';
+            tradeCounts[t] = (tradeCounts[t] || 0) + 1;
+        });
+
+        const tradeStr = Object.entries(tradeCounts)
+            .map(([trade, count]) => `${count} ${trade}`)
+            .join(', ');
+
+        if (type === 'PROJECT') projectTradesStr = tradeStr;
+        if (type === 'JOB') jobTradesStr = tradeStr;
+        if (type === 'TASK') taskTradesStr = tradeStr;
     });
 
     document.getElementById('ongoingProjects').textContent = projectCount;
     document.getElementById('ongoingJobs').textContent = jobCount;
     document.getElementById('ongoingTasks').textContent = taskCount;
+
+    const projTradesEl = document.getElementById('ongoingProjectsTrades');
+    if (projTradesEl) projTradesEl.textContent = projectTradesStr ? `(${projectTradesStr})` : '';
+
+    const jobTradesEl = document.getElementById('ongoingJobsTrades');
+    if (jobTradesEl) jobTradesEl.textContent = jobTradesStr ? `(${jobTradesStr})` : '';
+
+    const taskTradesEl = document.getElementById('ongoingTasksTrades');
+    if (taskTradesEl) taskTradesEl.textContent = taskTradesStr ? `(${taskTradesStr})` : '';
 }
 
 function renderQuickAssignments() {
