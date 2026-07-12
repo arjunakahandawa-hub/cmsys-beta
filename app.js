@@ -42,11 +42,10 @@ function isAdminStaffDuties(zoneIdOrName) {
     return normalized === 'adminstaffduties';
 }
 
-// Helper to parse official number into Type and Number (e.g. "VAS 70836" -> {type:"VAS", num:"70836"})
 function parseOfficialNumber(offNo) {
     if (!offNo) return { type: '•', num: '-' };
     const clean = offNo.trim();
-    const match = clean.match(/^([A-Za-z\/&]+)\s+(\d+)$/);
+    const match = clean.match(/^([A-Za-z\/&]+)\s*(\d+[A-Za-z]*)$/);
     if (match) {
         return { type: match[1], num: match[2] };
     }
