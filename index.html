@@ -394,6 +394,12 @@
                     <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300 tab-active">
                         <span class="hidden xl:inline">📊 </span>Dashboard
                     </button>
+                    <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300 hidden">
+                        <span class="hidden xl:inline">📋 </span>Daily Details
+                    </button>
+                    <button onclick="switchView('summary')" id="tab-summary" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300 hidden">
+                        <span class="hidden xl:inline">📊 </span>Summary
+                    </button>
                     <button onclick="switchView('jobcards')" id="tab-jobcards" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📋 </span>Job Cards
                     </button>
@@ -618,7 +624,6 @@
                         </div>
                     </div>
 
-                    <div id="dailyDetailsContainer" class="hidden"></div>
                     <div id="boardGridContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                         <!-- Projects Column -->
                         <div id="projectColumnWrapper" class="glass-card overflow-hidden">
@@ -694,6 +699,19 @@
                         <p class="mt-1 text-sm text-slate-500">Create a new Work Order or Assignment to get started.</p>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- ==================== DAILY DETAILS VIEW ==================== -->
+        <div id="view-dailydetails" class="view-content hidden p-4 md:p-6 space-y-6">
+            <div id="dailyDetailsContainer" class="glass-card p-6 mt-4"></div>
+        </div>
+
+        <!-- ==================== SUMMARY VIEW ==================== -->
+        <div id="view-summary" class="view-content hidden p-4 md:p-6 space-y-6">
+            <div class="glass-card p-6">
+                <h3 class="text-lg font-bold text-slate-800">📊 Summary Overview</h3>
+                <p class="text-sm text-slate-500 mt-2">Summary reports and analytics will be displayed here soon.</p>
             </div>
         </div>
 
@@ -2792,7 +2810,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260712002"></script>
+    <script src="app.js?v=20260712003"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
@@ -2817,6 +2835,14 @@
         <button onclick="switchView('dashboard')" id="mobile-tab-dashboard" class="flex flex-col items-center gap-0.5 text-teal-400 flex-1">
             <span class="text-lg">📊</span>
             <span class="text-[8px] font-semibold">Dashboard</span>
+        </button>
+        <button onclick="switchView('dailydetails')" id="mobile-tab-dailydetails" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1 hidden">
+            <span class="text-lg">📋</span>
+            <span class="text-[8px] font-semibold">Daily Details</span>
+        </button>
+        <button onclick="switchView('summary')" id="mobile-tab-summary" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1 hidden">
+            <span class="text-lg">📊</span>
+            <span class="text-[8px] font-semibold">Summary</span>
         </button>
         <button onclick="switchView('jobcards')" id="mobile-tab-jobcards" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📋</span>

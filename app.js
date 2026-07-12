@@ -433,7 +433,7 @@ function fbUpdateSailorZoneTeam(fbKey, isZoneTeam) {
 // Refresh whichever view tab is currently visible
 // ─────────────────────────────────────────────
 function refreshCurrentView() {
-    const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports'];
+    const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary'];
     for (const v of views) {
         const el = document.getElementById(`view-${v}`);
         if (el && !el.classList.contains('hidden')) {
@@ -444,6 +444,7 @@ function refreshCurrentView() {
                 case 'estimates':   renderEstimates();      break;
                 case 'maintenance': renderMaintenance();    break;
                 case 'reports':     renderReports();        break;
+                case 'dailydetails': renderDailyDetailsSpecialView(); break;
             }
             break;
         }
@@ -544,6 +545,8 @@ function switchView(view) {
         case 'maintenance': renderMaintenance(); break;
         case 'reports': renderReports(); break;
         case 'settings': renderSettings(); break;
+        case 'dailydetails': renderDailyDetailsSpecialView(); break;
+        case 'summary': /* Placeholder for next phase */ break;
     }
 }
 
@@ -563,15 +566,8 @@ function renderDashboard() {
     const dateVal = store.dashboardDate || today;
     const isToday = dateVal === today;
 
-    const isSpecialZone = isAdminStaffDuties(store.currentZone);
-
     // Show/hide views and sidebar
     toggleViewsBasedOnZone();
-
-    if (isSpecialZone) {
-        renderDailyDetailsSpecialView();
-        return;
-    }
 
     const summaryTitle = document.getElementById('summaryTitle');
     if (summaryTitle) {
@@ -6794,7 +6790,7 @@ let _lmdExportAction = 'csv';
 function toggleViewsBasedOnZone() {
     const isSpecialZone = isAdminStaffDuties(store.currentZone);
     
-    // Tabs to toggle
+    // Normal tabs to toggle
     const specialTabs = ['tab-jobcards', 'tab-inventory', 'tab-estimates', 'tab-maintenance', 'tab-settings'];
     const mobileSpecialTabs = ['mobile-tab-jobcards', 'mobile-tab-inventory', 'mobile-tab-estimates', 'mobile-tab-maintenance', 'mobile-tab-settings'];
 
@@ -6808,58 +6804,62 @@ function toggleViewsBasedOnZone() {
         if (el) el.style.display = isSpecialZone ? 'none' : '';
     });
 
-    // Hide left sidebar container
+    // Admin & Staff Duties specific tabs
+    const adminTabs = ['tab-dailydetails', 'tab-summary'];
+    const mobileAdminTabs = ['mobile-tab-dailydetails', 'mobile-tab-summary'];
+
+    adminTabs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isSpecialZone ? '' : 'none';
+    });
+
+    mobileAdminTabs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isSpecialZone ? '' : 'none';
+    });
+
+    // Revert sidebar, sidebar toggle, mainPanel and boardGrid display changes (always use normal layout)
     const leftSidebar = document.getElementById('leftSidebarContainer');
     if (leftSidebar) {
-        leftSidebar.style.display = isSpecialZone ? 'none' : '';
+        leftSidebar.style.display = '';
     }
     const sidebarToggle = document.getElementById('sidebarToggleBtn');
     if (sidebarToggle) {
-        sidebarToggle.style.display = isSpecialZone ? 'none' : '';
+        sidebarToggle.style.display = '';
     }
 
     const mainPanel = document.getElementById('boardGridContainer')?.parentElement;
     if (mainPanel) {
-        if (isSpecialZone) {
-            mainPanel.classList.remove('md:col-span-9');
-            mainPanel.classList.add('md:col-span-12');
-        } else {
-            mainPanel.classList.remove('md:col-span-12');
-            mainPanel.classList.add('md:col-span-9');
-        }
+        mainPanel.classList.remove('md:col-span-12');
+        mainPanel.classList.add('md:col-span-9');
     }
 
-    // Toggle normal action bar items
-    ['newAssignBtn', 'newWorkOrderBtn', 'btnContinueYesterday', 'dashboardExportCsvBtn', 'dashboardPrintBtn'].forEach(id => {
+    const boardGrid = document.getElementById('boardGridContainer');
+    if (boardGrid) {
+        boardGrid.style.display = '';
+    }
+
+    const boardEmpty = document.getElementById('boardEmptyState');
+    if (boardEmpty) {
+        boardEmpty.style.display = '';
+    }
+    const ongoingSummary = document.getElementById('ongoingTasksSummaryWrapper');
+    if (ongoingSummary) {
+        ongoingSummary.style.display = '';
+    }
+
+    // Toggle dashboard-level export/print buttons (only for normal zones, since Admin has them in Daily Details)
+    ['dashboardExportCsvBtn', 'dashboardPrintBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = isSpecialZone ? 'none' : '';
     });
 
-    // Toggle board grid container
-    const boardGrid = document.getElementById('boardGridContainer');
-    if (boardGrid) {
-        boardGrid.style.display = isSpecialZone ? 'none' : '';
-    }
-    
-    // Hide empty state and summary if special zone
-    const boardEmpty = document.getElementById('boardEmptyState');
-    if (boardEmpty) {
-        if (isSpecialZone) boardEmpty.style.display = 'none';
-    }
-    const ongoingSummary = document.getElementById('ongoingTasksSummaryWrapper');
-    if (ongoingSummary) {
-        ongoingSummary.style.display = isSpecialZone ? 'none' : '';
-    }
-
-    // Toggle special container
-    const dailyDetailsContainer = document.getElementById('dailyDetailsContainer');
-    if (dailyDetailsContainer) {
-        dailyDetailsContainer.style.display = isSpecialZone ? 'block' : 'none';
-    }
-
     // If currently on a hidden view, switch to dashboard
     const currentView = store.currentView || 'dashboard';
     if (isSpecialZone && ['jobcards', 'inventory', 'estimates', 'maintenance', 'settings'].includes(currentView)) {
+        switchView('dashboard');
+    }
+    if (!isSpecialZone && ['dailydetails', 'summary'].includes(currentView)) {
         switchView('dashboard');
     }
 }
