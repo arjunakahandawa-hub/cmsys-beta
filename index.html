@@ -566,6 +566,12 @@
                                 </svg>
                                 Continue Yesterday
                             </button>
+                            <button id="dashboardExportCsvBtn" onclick="exportLmdCSV('selected', store.currentZone)" class="bg-slate-700 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
+                                📥 Export CSV
+                            </button>
+                            <button id="dashboardPrintBtn" onclick="printLmdDetails('selected', store.currentZone)" class="bg-slate-700 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
+                                🖨️ Print Report
+                            </button>
                         </div>
                         <div class="flex items-center gap-2.5">
                             <!-- Evening Evaluation Button (Shows 18:00-20:00) -->
@@ -2786,7 +2792,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260711014"></script>
+    <script src="app.js?v=20260712001"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

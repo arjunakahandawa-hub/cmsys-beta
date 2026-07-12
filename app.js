@@ -6831,7 +6831,7 @@ function toggleViewsBasedOnZone() {
     }
 
     // Toggle normal action bar items
-    ['newAssignBtn', 'newWorkOrderBtn', 'btnContinueYesterday'].forEach(id => {
+    ['newAssignBtn', 'newWorkOrderBtn', 'btnContinueYesterday', 'dashboardExportCsvBtn', 'dashboardPrintBtn'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = isSpecialZone ? 'none' : '';
     });
