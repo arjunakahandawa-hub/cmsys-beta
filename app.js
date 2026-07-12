@@ -6810,12 +6810,12 @@ function toggleViewsBasedOnZone() {
 
     adminTabs.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = isSpecialZone ? '' : 'none';
+        if (el) el.style.display = isSpecialZone ? 'block' : 'none';
     });
 
     mobileAdminTabs.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = isSpecialZone ? '' : 'none';
+        if (el) el.style.display = isSpecialZone ? 'flex' : 'none';
     });
 
     // Revert sidebar, sidebar toggle, mainPanel and boardGrid display changes (always use normal layout)
