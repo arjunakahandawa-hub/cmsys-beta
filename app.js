@@ -4177,7 +4177,7 @@ function renderLocationsList() {
                 return `
                 <div class="px-3 py-2 pl-7 hover:bg-teal-50 cursor-pointer text-sm flex items-center justify-between group transition-colors
                     ${store.selectedLocation === loc.id ? 'bg-teal-100 border-l-3 border-teal-500 font-medium text-teal-800' : 'text-slate-600'}"
-                    onclick="selectLocation(${loc.id})">
+                    onclick="selectLocation('${loc.id}')">
                     <span>📍 ${loc.sub_location || 'General'}</span>
                     ${recCount > 0 ? `<span class="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full font-medium">${recCount}</span>` : ''}
                 </div>`;
@@ -4260,7 +4260,7 @@ function searchLocations() {
                 const recCount = store.maintenanceRecords.filter(r => r.location_id === loc.id).length;
                 return `
                 <div class="px-3 py-2 pl-7 hover:bg-teal-50 cursor-pointer text-sm flex items-center justify-between transition-colors"
-                    onclick="selectLocation(${loc.id})">
+                    onclick="selectLocation('${loc.id}')">
                     <span class="text-slate-600">📍 ${loc.sub_location || 'General'}</span>
                     ${recCount > 0 ? `<span class="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full">${recCount}</span>` : ''}
                 </div>`;
