@@ -9,6 +9,37 @@ if ('serviceWorker' in navigator) {
     });
 }
 
+// Custom PWA Installer trigger variables and listeners
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    console.log('⚓ PWA Installable prompt intercepted!');
+    // Refresh the profile dropdown to show the install button if open
+    renderProfileDropdown();
+});
+
+window.addEventListener('appinstalled', (evt) => {
+    console.log('⚓ NCW-PS PWA was installed successfully!');
+    deferredPrompt = null;
+    renderProfileDropdown();
+});
+
+function triggerPwaInstall() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+            console.log('⚓ User accepted PWA installation');
+        } else {
+            console.log('⚓ User dismissed PWA installation');
+        }
+        deferredPrompt = null;
+        renderProfileDropdown();
+    });
+}
+
 // Global Runtime Error Alert for Remote Debugging
 window.addEventListener('error', function(e) {
     const errDiv = document.createElement('div');
@@ -258,11 +289,40 @@ function initOpsListeners() {
     // ── Work Orders ──
     opsDB.ref('work_orders').on('value', snapshot => {
         const raw = snapshotToArray(snapshot);
-        store.workOrders = raw.map(wo => ({
-            ...wo,
-            id:       wo.id       ?? wo._fbKey,
-            assigned: Array.isArray(wo.assigned) ? wo.assigned : Object.values(wo.assigned ?? {}),
-        }));
+        const today = new Date().toISOString().split('T')[0];
+        
+        store.workOrders = raw.map(wo => {
+            const mappedWo = {
+                ...wo,
+                id:            wo.id            ?? wo._fbKey,
+                assigned:      Array.isArray(wo.assigned) ? wo.assigned : Object.values(wo.assigned ?? {}),
+                last_assigned: Array.isArray(wo.last_assigned) ? wo.last_assigned : Object.values(wo.last_assigned ?? {}),
+            };
+
+            // Initialise last_assigned_date on first load if it doesn't exist yet
+            if (mappedWo.assigned && mappedWo.assigned.length > 0 && !mappedWo.last_assigned_date) {
+                mappedWo.last_assigned_date = today;
+                if (window.fbSaveWorkOrder) fbSaveWorkOrder(mappedWo);
+            }
+
+            // Midnight Auto-Reset: if last_assigned_date is in the past, auto-clear assignments
+            if ((mappedWo.status === 'Active' || mappedWo.status === 'Pending') && 
+                mappedWo.last_assigned_date && mappedWo.last_assigned_date !== today && 
+                mappedWo.assigned && mappedWo.assigned.length > 0) {
+                
+                console.log(`⏰ Auto-clearing assignments for WO ${mappedWo.id} (new day started)`);
+                mappedWo.last_assigned = mappedWo.assigned;
+                mappedWo.assigned = [];
+                mappedWo.last_assigned_date = today;
+                
+                if (window.fbSaveWorkOrder) {
+                    fbSaveWorkOrder(mappedWo);
+                }
+            }
+            
+            return mappedWo;
+        });
+
         refreshCurrentView();
         console.log(`📋 DB#2: ${store.workOrders.length} work orders loaded`);
     });
@@ -339,6 +399,7 @@ function initOpsListeners() {
     // ── Daily Allocations ──
     opsDB.ref('daily_allocations').on('value', snapshot => {
         store.dailyAllocations = snapshotToArray(snapshot);
+        refreshCurrentView();
     });
 
     console.log('🔥 DB#2: All ops listeners attached');
@@ -351,6 +412,9 @@ function initOpsListeners() {
 // Save / update a work order (returns Promise)
 function fbSaveWorkOrder(data) {
     const { _fbKey, ...clean } = data;
+    if (clean.assigned && clean.assigned.length === 0) {
+        clean.assigned = null;
+    }
     if (_fbKey) {
         return opsDB.ref(`work_orders/${_fbKey}`).update(clean);
     }
@@ -360,6 +424,9 @@ function fbSaveWorkOrder(data) {
 // Save / update a job card
 function fbSaveJobCard(data) {
     const { _fbKey, ...clean } = data;
+    if (clean.assigned && clean.assigned.length === 0) {
+        clean.assigned = null;
+    }
     if (_fbKey) {
         return opsDB.ref(`job_cards/${_fbKey}`).update(clean);
     }
@@ -432,7 +499,32 @@ function fbUpdateSailorZoneTeam(fbKey, isZoneTeam) {
 // ─────────────────────────────────────────────
 // Refresh whichever view tab is currently visible
 // ─────────────────────────────────────────────
+function computeYesterdayJobs() {
+    if (!store.dailyAllocations || !store.sailors) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    // Find the most recent date in dailyAllocations that is strictly before dateVal
+    const pastDates = [...new Set(store.dailyAllocations.map(a => a.date))]
+        .filter(d => d < dateVal)
+        .sort((a, b) => b.localeCompare(a));
+        
+    const lastActiveDate = pastDates[0];
+    
+    store.sailors.forEach(s => {
+        s.yesterdayJob = null;
+        if (lastActiveDate) {
+            const alloc = store.dailyAllocations.find(a => a.date === lastActiveDate && String(a.sailor_id) === String(s.id));
+            if (alloc) {
+                s.yesterdayJob = alloc.work_order_id;
+            }
+        }
+    });
+}
+
 function refreshCurrentView() {
+    computeYesterdayJobs();
     const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary'];
     for (const v of views) {
         const el = document.getElementById(`view-${v}`);
@@ -714,27 +806,35 @@ function renderAvailableSailors() {
         });
     }
 
-    // Filter present sailors on selected date
-    let sailors = store.sailors.filter(s => (s.attendance || 'Present') === 'Present');
-    
-    if (store.currentFilter === 'zone-team') {
-        sailors = sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone);
-    } else if (store.currentFilter === 'continuation') {
-        sailors = sailors.filter(s => s.yesterdayJob !== null);
-    }
-    
-    if (store.currentTrade !== 'ALL') {
-        sailors = sailors.filter(s => s.trade === store.currentTrade);
-    }
-
     // Support search query
     const searchInput = document.getElementById('sailorSearch');
     const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    // When searching, show ALL sailors (651) regardless of attendance/zone/team filters
+    // When NOT searching, apply normal filters for a clean default view
+    let sailors;
     if (query) {
-        sailors = sailors.filter(s => 
-            s.name.toLowerCase().includes(query) || 
-            s.official_number.toLowerCase().includes(query)
+        sailors = store.sailors.filter(s =>
+            (s._searchIndex || '').includes(query) ||
+            s.name.toLowerCase().includes(query) ||
+            (s.official_number || '').toLowerCase().includes(query) ||
+            (s.rank || '').toLowerCase().includes(query) ||
+            (s.trade || '').toLowerCase().includes(query)
         );
+        // Still apply trade filter if set
+        if (store.currentTrade !== 'ALL') {
+            sailors = sailors.filter(s => s.trade === store.currentTrade);
+        }
+    } else {
+        sailors = store.sailors.filter(s => (s.attendance || 'Present') === 'Present');
+        if (store.currentFilter === 'zone-team') {
+            sailors = sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone);
+        } else if (store.currentFilter === 'continuation') {
+            sailors = sailors.filter(s => s.yesterdayJob !== null);
+        }
+        if (store.currentTrade !== 'ALL') {
+            sailors = sailors.filter(s => s.trade === store.currentTrade);
+        }
     }
     
     // Sort unassigned first, then by score
@@ -1127,7 +1227,7 @@ function renderZoneTeam() {
 
 // ---- Zone Team add / remove (req 3) ----
 function removeFromZoneTeam(sailorId) {
-    const sailor = store.sailors.find(s => s.id === sailorId);
+    const sailor = store.sailors.find(s => String(s.id) === String(sailorId));
     if (sailor) {
         sailor.isZoneTeam = false;
         sailor.zone_assigned = 'A-Zone';
@@ -1147,8 +1247,33 @@ function removeFromZoneTeam(sailorId) {
 }
 
 function openZoneTeamManager() {
-    const eligible = store.sailors.filter(s => !s.isZoneTeam);
+    const searchInput = document.getElementById('ztmSearch');
+    if (searchInput) searchInput.value = '';
+    renderZtmLists();
+    document.getElementById('zoneTeamModal').classList.remove('hidden');
+}
+
+function filterZtmAvailableList() {
+    renderZtmLists(document.getElementById('ztmSearch').value);
+}
+
+function renderZtmLists(filter = '') {
+    const currentZoneObj = store.zones.find(z => z.id === store.currentZone);
+    document.getElementById('ztmZoneName').textContent = currentZoneObj ? currentZoneObj.name : store.currentZone;
+
     const current = store.sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone);
+    let eligible = store.sailors.filter(s => !s.isZoneTeam);
+
+    if (filter) {
+        const q = filter.toLowerCase().trim();
+        eligible = eligible.filter(s =>
+            (s._searchIndex || '').includes(q) ||
+            s.name.toLowerCase().includes(q) ||
+            (s.official_number || '').toLowerCase().includes(q) ||
+            (s.rank || '').toLowerCase().includes(q) ||
+            (s.trade || '').toLowerCase().includes(q)
+        );
+    }
 
     const attLabel = { 'Present':'Available', 'Leave':'On Leave', 'Sick':'Sick', 'Duty':'Duty' };
     const attCls = { 'Present':'text-green-600', 'Leave':'text-amber-600', 'Sick':'text-red-600', 'Duty':'text-blue-600' };
@@ -1162,7 +1287,7 @@ function openZoneTeamManager() {
                     <p class="text-[11px] ${attCls[s.attendance||'Present']}">${attLabel[s.attendance||'Present']} • ${s.official_number}</p>
                 </div>
             </div>
-            <button onclick="toggleZoneTeam(${s.id}, false)" class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200">Remove</button>
+            <button onclick="toggleZoneTeam('${s.id ?? s._fbKey}', false)" class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200">Remove</button>
         </div>
     `).join('') || '<p class="text-center text-xs text-slate-400 py-4">No team members yet</p>';
 
@@ -1175,16 +1300,13 @@ function openZoneTeamManager() {
                     <p class="text-[11px] ${attCls[s.attendance||'Present']}">${attLabel[s.attendance||'Present']} • ${s.official_number}</p>
                 </div>
             </div>
-            <button onclick="toggleZoneTeam(${s.id}, true)" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200">+ Add</button>
+            <button onclick="toggleZoneTeam('${s.id ?? s._fbKey}', true)" class="text-xs bg-green-100 text-green-700 px-2 py-1 rounded hover:bg-green-200">+ Add</button>
         </div>
-    `).join('') || '<p class="text-center text-xs text-slate-400 py-4">No eligible sailors</p>';
-
-    document.getElementById('ztmZoneName').textContent = store.currentZone;
-    document.getElementById('zoneTeamModal').classList.remove('hidden');
+    `).join('') || '<p class="text-center text-xs text-slate-400 py-4">No eligible sailors found</p>';
 }
 
 function toggleZoneTeam(sailorId, addToTeam) {
-    const sailor = store.sailors.find(s => s.id === sailorId);
+    const sailor = store.sailors.find(s => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
     if (!sailor) return;
     if (addToTeam) {
         const teamSize = store.sailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone).length;
@@ -1210,7 +1332,8 @@ function toggleZoneTeam(sailorId, addToTeam) {
         });
     }
 
-    openZoneTeamManager(); // refresh manager lists
+    // Refresh lists
+    renderZtmLists(document.getElementById('ztmSearch')?.value || '');
     renderZoneTeam();
     renderAvailableSailors();
 }
@@ -1272,12 +1395,6 @@ function updatePendingEvals() {
 let draggedSailorId = null;
 
 function handleDragStart(event, sailorId) {
-    const assignment = getSailorCurrentAssignment(sailorId);
-    if (assignment) {
-        event.preventDefault();
-        showToast(`${store.sailors.find(s => s.id === sailorId)?.name || 'Sailor'} is already busy in ${assignment.zone}!`, 'error');
-        return;
-    }
     draggedSailorId = sailorId;
     event.target.classList.add('dragging');
     event.dataTransfer.effectAllowed = 'move';
@@ -1305,20 +1422,52 @@ function handleDropOnCard(event, workOrderId) {
     if (!draggedSailorId) return;
 
     const assignment = getSailorCurrentAssignment(draggedSailorId);
-    if (assignment) {
-        showToast('This sailor is already assigned elsewhere!', 'error');
-        return;
-    }
-
     const sailor = store.sailors.find(s => s.id === draggedSailorId);
     const workOrder = store.workOrders.find(wo => wo.id === workOrderId);
 
-    if (sailor && workOrder && !workOrder.assigned.includes(draggedSailorId)) {
+    if (!sailor || !workOrder) {
+        draggedSailorId = null;
+        return;
+    }
+
+    if (assignment) {
+        // Automatically remove from previous assignment
+        const prevWo = store.workOrders.find(w => {
+            if (w.status !== 'Active' && w.status !== 'Pending') return false;
+            const assignedIds = (w.assigned || []).map(String);
+            return assignedIds.includes(String(draggedSailorId));
+        });
+        
+        if (prevWo) {
+            prevWo.assigned = (prevWo.assigned || []).filter(id => String(id) !== String(draggedSailorId));
+            const today = new Date().toISOString().split('T')[0];
+            prevWo.last_assigned_date = today;
+            if (window.fbSaveWorkOrder) {
+                fbSaveWorkOrder(prevWo);
+            }
+            opsDB.ref(`daily_allocations/${today}_${draggedSailorId}`).remove();
+        }
+    }
+
+    if (!workOrder.assigned) workOrder.assigned = [];
+
+    if (!workOrder.assigned.includes(draggedSailorId)) {
         workOrder.assigned.push(draggedSailorId);
         sailor.status = 'Assigned';
         sailor.evaluated = false;
+        
+        const today = new Date().toISOString().split('T')[0];
+        workOrder.last_assigned_date = today;
+        
+        if (window.fbSaveWorkOrder) {
+            fbSaveWorkOrder(workOrder);
+        }
+        
         renderDashboard();
-        showToast(`${sailor.name} assigned to ${workOrder.description.substring(0, 30)}...`);
+        showToast(assignment 
+            ? `Reassigned ${sailor.name} from ${assignment.zone}!` 
+            : `${sailor.name} assigned to ${workOrder.description.substring(0, 30)}...`
+        );
     }
 
     draggedSailorId = null;
@@ -1338,6 +1487,9 @@ function removeSailorFromOrder(sailorId, workOrderId) {
     if (sailor && workOrder) {
         workOrder.assigned = (workOrder.assigned || []).filter(id => String(id) !== String(sailorId));
         sailor.status = 'Available';
+        
+        const today = new Date().toISOString().split('T')[0];
+        workOrder.last_assigned_date = today;
         
         opsDB.ref(`daily_allocations/${today}_${sailorId}`).remove();
 
@@ -1532,21 +1684,24 @@ function renderWoSailorChips(filter = '') {
         'AL':'#ec4899'
     };
 
-    let sailors = store.sailors.filter(s =>
-        (s.attendance === 'Present' || !s.attendance) &&
-        (_woCurrentTrade === 'ALL' || s.trade === _woCurrentTrade)
-    );
-
+    // When searching, show ALL sailors (651) so any sailor can be found and assigned
+    let sailors;
     if (filter) {
         const q = filter.toLowerCase().trim();
-        sailors = sailors.filter(s =>
-            // _searchIndex covers ALL Firebase string fields — Off No, name, rank, trade, etc.
+        sailors = store.sailors.filter(s =>
             (s._searchIndex || '').includes(q) ||
-            // Fallbacks for mapped fields
             s.name.toLowerCase().includes(q) ||
             (s.official_number || '').toLowerCase().includes(q) ||
             (s.rank || '').toLowerCase().includes(q) ||
             (s.trade || '').toLowerCase().includes(q)
+        );
+        if (_woCurrentTrade !== 'ALL') {
+            sailors = sailors.filter(s => s.trade === _woCurrentTrade);
+        }
+    } else {
+        sailors = store.sailors.filter(s =>
+            (s.attendance === 'Present' || !s.attendance) &&
+            (_woCurrentTrade === 'ALL' || s.trade === _woCurrentTrade)
         );
     }
 
@@ -1571,22 +1726,21 @@ function renderWoSailorChips(filter = '') {
         if (assignment) {
             return `
             <button type="button"
-                disabled
-                title="Already assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}"
-                class="sailor-chip-card opacity-50 cursor-not-allowed"
+                onclick="toggleWoSailor('${s.id ?? s._fbKey}')"
+                title="Currently assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}. Click to automatically reassign here."
+                class="sailor-chip-card hover:border-amber-500 hover:shadow-md transition-all duration-200"
                 style="
                     display:flex; align-items:center; gap:8px;
-                    padding:7px 10px; border-radius:10px;
-                    border:2px solid #e2e8f0;
-                    background:#f1f5f9;
-                    box-shadow: none;
-                    transition:all 0.15s ease; min-width:140px; position:relative;
+                    padding:7px 10px; border-radius:10px; cursor:pointer;
+                    border:2px dashed #f59e0b;
+                    background:#fffbeb;
+                    min-width:140px; position:relative;
                     text-align:left;
                 ">
                 <!-- Trade badge -->
                 <span style="
                     width:32px; height:32px; border-radius:8px;
-                    background:#94a3b8;
+                    background:#d97706;
                     color:white; display:flex; align-items:center; justify-content:center;
                     font-size:9px; font-weight:800; flex-shrink:0;
                 ">${s.trade}</span>
@@ -1595,11 +1749,11 @@ function renderWoSailorChips(filter = '') {
                 <div style="min-width:0; flex:1">
                     <div style="
                         font-size:11px; font-weight:700; line-height:1.2;
-                        color:#64748b;
+                        color:#b45309;
                         white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
                         max-width:130px;
                     ">${rank} ${fullName}</div>
-                    <div style="font-size:8px; color:#b45309; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">⚠️ Busy: ${assignment.zone}</div>
+                    <div style="font-size:8px; color:#d97706; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🔁 Reassign from ${assignment.zone}</div>
                 </div>
             </button>`;
         }
@@ -1677,8 +1831,23 @@ function toggleWoSailor(sailorId, name) {
     } else {
         const assignment = getSailorCurrentAssignment(sailorId);
         if (assignment) {
-            showToast(`${store.sailors.find(s => String(s.id ?? s._fbKey) === key)?.name || 'Sailor'} is already busy in ${assignment.zone}!`, 'error');
-            return;
+            // Automatically remove from previous assignment
+            const prevWo = store.workOrders.find(w => {
+                if (w.status !== 'Active' && w.status !== 'Pending') return false;
+                const assignedIds = (w.assigned || []).map(String);
+                return assignedIds.includes(key);
+            });
+            
+            if (prevWo) {
+                prevWo.assigned = (prevWo.assigned || []).filter(id => String(id) !== key);
+                const today = new Date().toISOString().split('T')[0];
+                prevWo.last_assigned_date = today;
+                if (window.fbSaveWorkOrder) {
+                    fbSaveWorkOrder(prevWo);
+                }
+                opsDB.ref(`daily_allocations/${today}_${key}`).remove();
+            }
+            showToast(`Reassigned ${store.sailors.find(s => String(s.id ?? s._fbKey) === key)?.name || 'Sailor'} from ${assignment.zone}!`);
         }
         _woSelectedSailors.add(key);
     }
@@ -2333,6 +2502,14 @@ function openWorkOrderDetail(workOrderId) {
         </div>
     `).join('') : '<p class="text-slate-500 text-center py-6">No labour assigned to evaluate.</p>';
 
+    // Toggle Restore Last Crew button visibility
+    const btnRestorePrevCrew = document.getElementById('btnRestorePrevCrew');
+    if (btnRestorePrevCrew) {
+        const hasLastCrew = wo.last_assigned && wo.last_assigned.length > 0;
+        const currentCrewEmpty = !wo.assigned || wo.assigned.length === 0;
+        btnRestorePrevCrew.classList.toggle('hidden', !(hasLastCrew && currentCrewEmpty && isToday));
+    }
+
     document.getElementById('workOrderDetailModal').classList.remove('hidden');
 }
 
@@ -2367,20 +2544,26 @@ function renderDetailSailorChips(filter = '') {
     if (!wo) return;
     const assignedIds = (wo.assigned || []).map(String);
 
-    let sailors = store.sailors.filter(s => 
-        !assignedIds.includes(String(s.id)) && !assignedIds.includes(String(s._fbKey)) &&
-        s.status !== 'Assigned' && 
-        (_detailCurrentTrade === 'ALL' || s.trade === _detailCurrentTrade)
-    );
-
+    // When searching, show ALL sailors (651) so any sailor can be found and assigned
+    let sailors;
     if (filter) {
         const q = filter.toLowerCase().trim();
-        sailors = sailors.filter(s =>
-            (s._searchIndex || '').includes(q) ||
+        sailors = store.sailors.filter(s =>
+            !assignedIds.includes(String(s.id)) && !assignedIds.includes(String(s._fbKey)) &&
+            ((s._searchIndex || '').includes(q) ||
             s.name.toLowerCase().includes(q) ||
             (s.official_number || '').toLowerCase().includes(q) ||
             (s.rank || '').toLowerCase().includes(q) ||
-            (s.trade || '').toLowerCase().includes(q)
+            (s.trade || '').toLowerCase().includes(q))
+        );
+        if (_detailCurrentTrade !== 'ALL') {
+            sailors = sailors.filter(s => s.trade === _detailCurrentTrade);
+        }
+    } else {
+        sailors = store.sailors.filter(s => 
+            !assignedIds.includes(String(s.id)) && !assignedIds.includes(String(s._fbKey)) &&
+            s.status !== 'Sick' && s.status !== 'Leave' &&
+            (_detailCurrentTrade === 'ALL' || s.trade === _detailCurrentTrade)
         );
     }
 
@@ -2400,26 +2583,25 @@ function renderDetailSailorChips(filter = '') {
         if (assignment) {
             return `
             <button type="button"
-                disabled
-                title="Already assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}"
-                class="sailor-chip-card opacity-50 cursor-not-allowed"
+                onclick="assignSingleLabor('${s.id ?? s._fbKey}')"
+                title="Currently assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}. Click to automatically reassign here."
+                class="sailor-chip-card hover:border-amber-500 hover:shadow-md transition-all duration-200"
                 style="
                     display:flex; align-items:center; gap:8px;
-                    padding:7px 10px; border-radius:10px;
-                    border:2px solid #e2e8f0;
-                    background:#f1f5f9;
-                    box-shadow: none;
-                    transition:all 0.15s ease; min-width:140px; position:relative;
+                    padding:7px 10px; border-radius:10px; cursor:pointer;
+                    border:2px dashed #f59e0b;
+                    background:#fffbeb;
+                    min-width:140px; position:relative;
                     text-align:left;
                 ">
-                <div style="background:#94a3b8; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:0.5px; flex-shrink:0;">
+                <div style="background:#d97706; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:0.5px; flex-shrink:0;">
                     ${s.trade}
                 </div>
                 <div style="flex:1; overflow:hidden;">
-                    <div style="font-size:11px; font-weight:700; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;">
+                    <div style="font-size:11px; font-weight:700; color:#b45309; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;">
                         ${rank} ${fullName}
                     </div>
-                    <div style="font-size:8px; color:#b45309; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">⚠️ Busy: ${assignment.zone}</div>
+                    <div style="font-size:8px; color:#d97706; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🔁 Reassign from ${assignment.zone}</div>
                 </div>
             </button>
             `;
@@ -2455,30 +2637,50 @@ function renderDetailSailorChips(filter = '') {
 
 function assignSingleLabor(sailorId) {
     const assignment = getSailorCurrentAssignment(sailorId);
-    if (assignment) {
-        showToast('This sailor is already assigned elsewhere!', 'error');
-        return;
-    }
-
     const wo = store.workOrders.find(w => String(w.id) === String(store.selectedWorkOrder) || String(w._fbKey) === String(store.selectedWorkOrder));
     const sailor = store.sailors.find(s => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
     
-    if (wo && sailor) {
-        if (!wo.assigned) wo.assigned = [];
+    if (!wo || !sailor) return;
+
+    if (assignment) {
+        // Automatically remove from previous assignment
+        const prevWo = store.workOrders.find(w => {
+            if (w.status !== 'Active' && w.status !== 'Pending') return false;
+            const assignedIds = (w.assigned || []).map(String);
+            return assignedIds.includes(String(sailorId));
+        });
         
-        const alreadyAssigned = wo.assigned.some(id => String(id) === String(sailorId));
-        if (!alreadyAssigned) {
-            wo.assigned.push(sailorId);
-            sailor.status = 'Assigned';
-            sailor.evaluated = false;
-            
-            if (typeof fbSaveWorkOrder === 'function') {
-                fbSaveWorkOrder(wo);
+        if (prevWo) {
+            prevWo.assigned = (prevWo.assigned || []).filter(id => String(id) !== String(sailorId));
+            const today = new Date().toISOString().split('T')[0];
+            prevWo.last_assigned_date = today;
+            if (window.fbSaveWorkOrder) {
+                fbSaveWorkOrder(prevWo);
             }
-            
-            showToast(`${sailor.name} assigned`);
-            openWorkOrderDetail(wo._fbKey || wo.id);
+            opsDB.ref(`daily_allocations/${today}_${sailorId}`).remove();
         }
+    }
+
+    if (!wo.assigned) wo.assigned = [];
+    
+    const alreadyAssigned = wo.assigned.some(id => String(id) === String(sailorId));
+    if (!alreadyAssigned) {
+        wo.assigned.push(sailorId);
+        sailor.status = 'Assigned';
+        sailor.evaluated = false;
+        
+        const today = new Date().toISOString().split('T')[0];
+        wo.last_assigned_date = today;
+        
+        if (typeof fbSaveWorkOrder === 'function') {
+            fbSaveWorkOrder(wo);
+        }
+        
+        showToast(assignment 
+            ? `Reassigned ${sailor.name} from ${assignment.zone}!` 
+            : `${sailor.name} assigned successfully`
+        );
+        openWorkOrderDetail(wo._fbKey || wo.id);
     }
 }
 
@@ -2549,13 +2751,29 @@ function forwardToComplete() {
     const woKey = store.selectedWorkOrder;
     const wo = store.workOrders.find(w => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey));
     if (wo) {
+        // Collect currently assigned sailors to free them up locally
+        const assignedIds = (wo.assigned || []).map(String);
+        
         wo.status = 'Completed';
         wo.progress = 100;
+        wo.assigned = []; // Remove sailors from work order
+        
+        // Reset status for these sailors in the local store
+        if (store.sailors) {
+            store.sailors.forEach(s => {
+                if (assignedIds.includes(String(s.id)) || assignedIds.includes(String(s._fbKey))) {
+                    if (s.status === 'Assigned') {
+                        s.status = 'Available';
+                    }
+                }
+            });
+        }
         
         // Sync to Job Card
         const jc = getJobCardForWorkOrder(wo._fbKey || wo.id);
         if (jc) {
             jc.status = 'Completed';
+            jc.assigned = []; // Remove sailors from job card
             if (window.fbSaveJobCard) fbSaveJobCard(jc);
         }
         
@@ -2581,20 +2799,40 @@ function proceedWorkOrder() {
     // Save any pending field edits first
     saveWorkOrderChanges();
 
-    if (wo.assigned.length === 0) {
+    const today = new Date().toISOString().split('T')[0];
+
+    // Auto-restore previous crew if current assigned is empty
+    if ((!wo.assigned || wo.assigned.length === 0) && wo.last_assigned && wo.last_assigned.length > 0) {
+        wo.assigned = [...wo.last_assigned];
+        if (store.sailors) {
+            wo.assigned.forEach(sid => {
+                const s = store.sailors.find(x => String(x.id) === String(sid) || String(x._fbKey) === String(sid));
+                if (s) {
+                    s.status = 'Assigned';
+                    s.evaluated = false;
+                }
+            });
+        }
+        showToast(`Auto-restored last active crew (${wo.assigned.length} sailors)`);
+    }
+
+    if (!wo.assigned || wo.assigned.length === 0) {
         showToast('Assign at least one sailor before proceeding', 'error');
         return;
     }
 
     // Activate the work order and write today's allocations
     wo.status = 'Active';
+    wo.last_commit_date = today;
+    wo.last_assigned = [...wo.assigned];
+    wo.last_assigned_date = today;
+
     if (window.fbSaveWorkOrder) {
         fbSaveWorkOrder(wo);
     }
-    const today = new Date().toISOString().split('T')[0];
 
     wo.assigned.forEach(sid => {
-        const sailor = store.sailors.find(s => s.id === sid);
+        const sailor = store.sailors.find(s => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
         // remove existing same-day allocation for this sailor (one job per day)
         store.dailyAllocations = store.dailyAllocations.filter(a => !(a.date === today && a.sailor_id === sid));
         const alloc = {
@@ -2614,6 +2852,34 @@ function proceedWorkOrder() {
     closeModal('workOrderDetailModal');
     renderDashboard();
     showToast(`✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0,28)}…" for ${today}`);
+}
+
+function restorePreviousCrew() {
+    const woKey = store.selectedWorkOrder;
+    const wo = store.workOrders.find(w => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey));
+    if (wo && wo.last_assigned && wo.last_assigned.length > 0) {
+        const today = new Date().toISOString().split('T')[0];
+        wo.assigned = [...wo.last_assigned];
+        wo.last_assigned_date = today;
+        
+        // Mark sailors as Assigned locally
+        if (store.sailors) {
+            wo.assigned.forEach(sid => {
+                const s = store.sailors.find(x => String(x.id) === String(sid) || String(x._fbKey) === String(sid));
+                if (s) {
+                    s.status = 'Assigned';
+                    s.evaluated = false;
+                }
+            });
+        }
+        
+        if (window.fbSaveWorkOrder) {
+            fbSaveWorkOrder(wo);
+        }
+        
+        showToast(`Restored ${wo.assigned.length} sailor(s) from last crew`);
+        openWorkOrderDetail(woKey);
+    }
 }
 
 function toggleEvaluationMode() {
@@ -2865,7 +3131,7 @@ function renderJobCardLabor(jobCardId) {
     
     if (labor.length > 0) {
         laborHtml = labor.map(l => {
-            const sailor = store.sailors.find(s => s.id === l.sailor_id);
+            const sailor = store.sailors.find(s => String(s.id) === String(l.sailor_id) || String(s._fbKey) === String(l.sailor_id));
             return `
                 <tr>
                     <td class="px-4 py-2 text-slate-600">${l.work_date}</td>
@@ -4061,9 +4327,12 @@ function buildEstimatePrintHTML(est) {
 
     return `
     <div class="est-sheet">
-        <div style="text-align:center;border-bottom:2px solid #000;padding-bottom:6px;margin-bottom:8px;">
-            <div style="font-size:15px;font-weight:bold;">SRI LANKA NAVY — CIVIL ENGINEERING</div>
-            <div style="font-size:12px;">Naval Civil Works — Cost Estimate</div>
+        <div style="display:flex;align-items:center;justify-content:center;border-bottom:2.5px solid #000;padding-bottom:10px;margin-bottom:12px;">
+            <img src="${window.location.href.split('?')[0].split('#')[0].replace('index.html', '')}navy_crest.jpg" style="height:55px;margin-right:15px;" alt="SLN Crest">
+            <div style="text-align:left;">
+                <div style="font-size:16px;font-weight:800;letter-spacing:0.5px;color:#0f172a;">SRI LANKA NAVY — CIVIL ENGINEERING</div>
+                <div style="font-size:11px;font-weight:bold;color:#475569;margin-top:2px;letter-spacing:0.5px;">Naval Civil Works — Cost Estimate</div>
+            </div>
         </div>
         <table style="width:100%;font-size:11px;margin-bottom:6px;">
             <tr>
@@ -4684,7 +4953,7 @@ function loadMonthlyReport() {
     const totalManDays = zoneLabor.reduce((sum, l) => sum + (l.hours / 8), 0);
     const laborByTrade = {};
     zoneLabor.forEach(l => {
-        const sailor = store.sailors.find(s => s.id === l.sailor_id);
+        const sailor = store.sailors.find(s => String(s.id) === String(l.sailor_id) || String(s._fbKey) === String(l.sailor_id));
         if (sailor) {
             if (!laborByTrade[sailor.trade]) laborByTrade[sailor.trade] = 0;
             laborByTrade[sailor.trade] += l.hours / 8;
@@ -6183,6 +6452,8 @@ function confirmClearInventory() {
 // INITIALIZATION
 // =============================================
 document.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    updateOnlineStatus();
     updateDateTime();
     setInterval(updateDateTime, 1000);
     renderZoneSelectors();
@@ -6385,6 +6656,18 @@ function renderProfileDropdown() {
                 `;
             }
         });
+    }
+
+    // Add PWA Install option if installer is available
+    if (deferredPrompt) {
+        html += `
+            <div class="border-t border-slate-100 mt-1">
+                <div onclick="triggerPwaInstall()" class="px-4 py-2.5 hover:bg-teal-50 text-teal-600 font-semibold cursor-pointer transition-colors text-xs flex items-center gap-3">
+                    <span class="text-sm">📥</span>
+                    <span>Install NCW-PS App</span>
+                </div>
+            </div>
+        `;
     }
 
     // Add logout button
@@ -6974,10 +7257,10 @@ function toggleViewsBasedOnZone() {
         ongoingSummary.style.display = '';
     }
 
-    // Toggle dashboard-level export/print buttons (only for normal zones, since Admin has them in Daily Details)
-    ['dashboardExportCsvBtn', 'dashboardPrintBtn'].forEach(id => {
+    // Keep dashboard-level export/print buttons visible
+    ['dashboardExportCsvBtn', 'dashboardPrintBtn', 'dashboardShareWhatsappBtn'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = isSpecialZone ? 'none' : '';
+        if (el) el.style.display = '';
     });
 
     // If currently on a hidden view, switch to dashboard
@@ -7102,11 +7385,14 @@ function renderDailyDetailsSpecialView() {
                 <p class="text-xs text-slate-500 mt-0.5">Overview of sailor allocations across all zones</p>
             </div>
             <div class="flex items-center gap-2">
-                <button onclick="openLmdExportModal('csv')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                <button onclick="openLmdExportModal('csv')" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                      Export CSV
                 </button>
-                <button onclick="openLmdExportModal('print')" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                <button onclick="openLmdExportModal('print')" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                      Print Report
+                </button>
+                <button onclick="openLmdExportModal('whatsapp')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                     WhatsApp Share
                 </button>
             </div>
         </div>
@@ -7133,7 +7419,10 @@ function renderDailyDetailsSpecialView() {
 
 function openLmdExportModal(action) {
     _lmdExportAction = action;
-    document.getElementById('lmdExportModalTitle').textContent = action === 'csv' ? 'Export CSV Options' : 'Print Options';
+    let title = 'Print Options';
+    if (action === 'csv') title = 'Export CSV Options';
+    else if (action === 'whatsapp') title = 'WhatsApp Share Options';
+    document.getElementById('lmdExportModalTitle').textContent = title;
     
     const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
     document.getElementById('exportZoneSelect').innerHTML = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
@@ -7150,14 +7439,19 @@ function toggleExportZoneSelect() {
 }
 
 function executeLmdExport() {
-    closeModal('lmdExportModal');
     const scope = document.querySelector('input[name="exportScope"]:checked').value;
     const selectedZone = document.getElementById('exportZoneSelect').value;
     
     if (_lmdExportAction === 'csv') {
         exportLmdCSV(scope, selectedZone);
+        closeModal('lmdExportModal');
+    } else if (_lmdExportAction === 'whatsapp') {
+        // Share first to keep user gesture activation, then close modal
+        shareLmdWhatsApp(scope, selectedZone);
+        closeModal('lmdExportModal');
     } else {
         printLmdDetails(scope, selectedZone);
+        closeModal('lmdExportModal');
     }
 }
 
@@ -7347,18 +7641,52 @@ function printLmdDetails(scope, selectedZone) {
     win.document.write(`
         <html><head><title>Daily Details</title>
         <style>
-            body { font-family: Arial, sans-serif; color:#000; margin:0; padding:20px; }
-            h1 { font-size: 20px; color: #0f172a; margin-bottom: 5px; text-align: center; }
-            h2 { font-size: 14px; color: #475569; margin-top: 0; font-weight: normal; margin-bottom: 20px; text-align: center; }
-            table { width:100%; border-collapse:collapse; font-size:11px; margin-top: 10px; }
-            th, td { border:1px solid #94a3b8; padding:6px 8px; text-align: left; vertical-align: middle; }
-            th { background:#f1f5f9; color: #1e293b; font-weight: bold; }
-            .footer { margin-top: 30px; font-size: 10px; color: #64748b; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 8px; }
-            @media print { @page { size:A4; margin:15mm; } }
+            body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; margin:0; padding:20px; }
+            .header-container { display: flex; align-items: center; justify-content: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px; }
+            .logo-img { height: 65px; margin-right: 18px; }
+            .header-text { text-align: left; }
+            .header-text h1 { font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+            .header-text h2 { font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px; }
+            
+            .meta-section { display: flex; justify-content: space-between; font-size: 10px; color: #334155; margin-bottom: 15px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 6px; }
+            .meta-left { font-weight: bold; line-height: 1.5; }
+            .meta-right { text-align: right; line-height: 1.5; }
+            
+            table { width:100%; border-collapse:collapse; font-size:10.5px; margin-top: 10px; }
+            th, td { border:1px solid #94a3b8; padding:7px 9px; text-align: left; vertical-align: middle; }
+            th { background:#f1f5f9; color: #1e293b; font-weight: bold; text-transform: uppercase; font-size: 10px; }
+            
+            .signature-section { margin-top: 60px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
+            .sig-block { text-align: center; width: 220px; }
+            .sig-block p { margin: 2px 0; }
+            
+            .footer { margin-top: 35px; font-size: 9px; color: #64748b; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+            @media print { 
+                @page { size:A4; margin:12mm; } 
+                body { padding:0; }
+                .meta-section { background: none; border-color: #94a3b8; }
+            }
         </style></head>
         <body>
-            <h1>Daily Details</h1>
-            <h2>Date: ${formattedDate} (${dateVal}) | Scope: ${scope === 'all' ? 'All Zones' : 'Zone: ' + selectedZone}</h2>
+            <div class="header-container">
+                <img class="logo-img" src="${window.location.href.split('?')[0].split('#')[0].replace('index.html', '')}navy_crest.jpg" alt="SLN Crest">
+                <div class="header-text">
+                    <h1>Sri Lanka Navy</h1>
+                    <h2>Civil Engineering Department — Eastern Naval Area</h2>
+                </div>
+            </div>
+            
+            <div class="meta-section">
+                <div class="meta-left">
+                    <div>REPORT: DAILY LMD ALLOCATION REPORT</div>
+                    <div>SCOPE: ${scope === 'all' ? 'ALL ZONES' : 'ZONE: ' + selectedZone.toUpperCase()}</div>
+                </div>
+                <div class="meta-right">
+                    <div>DATE: ${formattedDate} (${dateVal})</div>
+                    <div>GENERATED BY: NCW OPERATION SYSTEM</div>
+                </div>
+            </div>
+
             <table>
                 <thead>
                     <tr>
@@ -7374,6 +7702,20 @@ function printLmdDetails(scope, selectedZone) {
                     ${rowsHtml}
                 </tbody>
             </table>
+            
+            <div class="signature-section">
+                <div class="sig-block">
+                    <p>..................................................</p>
+                    <p style="font-weight: bold;">OIC Civil Engineering Shop</p>
+                    <p style="color: #64748b; font-size: 10px;">Dockyard, Trincomalee</p>
+                </div>
+                <div class="sig-block">
+                    <p>..................................................</p>
+                    <p style="font-weight: bold;">Command Civil Engineering Officer</p>
+                    <p style="color: #64748b; font-size: 10px;">Eastern Naval Area</p>
+                </div>
+            </div>
+
             <div class="footer">Generated by NCW Operation System on ${new Date().toLocaleString()}</div>
         </body></html>`);
     win.document.close();
@@ -7381,22 +7723,212 @@ function printLmdDetails(scope, selectedZone) {
     setTimeout(() => { win.print(); }, 300);
 }
 
+// ---- Theme Management & Online Status ----
+function initTheme() {
+    const isDark = localStorage.getItem('ncw_ps_dark_theme') === 'true';
+    if (isDark) {
+        document.documentElement.classList.add('dark');
+        const btn = document.getElementById('darkModeToggleBtn');
+        if (btn) btn.innerHTML = '☀️';
+    } else {
+        document.documentElement.classList.remove('dark');
+        const btn = document.getElementById('darkModeToggleBtn');
+        if (btn) btn.innerHTML = '🌙';
+    }
+}
 
+function toggleDarkMode() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.setItem('ncw_ps_dark_theme', isDark);
+    const btn = document.getElementById('darkModeToggleBtn');
+    if (btn) btn.innerHTML = isDark ? '☀️' : '🌙';
+    showToast(isDark ? 'Dark Theme enabled' : 'Light Theme enabled');
+}
 
+function updateOnlineStatus() {
+    const indicator = document.getElementById('onlineIndicator');
+    if (!indicator) return;
 
+    if (navigator.onLine) {
+        indicator.innerHTML = `
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>Online</span>
+        `;
+        indicator.className = 'flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 transition-all duration-300';
+    } else {
+        indicator.innerHTML = `
+            <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+            <span>Offline</span>
+        `;
+        indicator.className = 'flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border border-red-500/20 bg-red-500/10 text-red-400 transition-all duration-300';
+        showToast('You are offline. Operations will sync when you reconnect.', 'error');
+    }
+}
 
+window.addEventListener('online', updateOnlineStatus);
+window.addEventListener('offline', updateOnlineStatus);
 
+// ==================== WHATSAPP / SYSTEM SHARING FUNCTIONS ====================
 
+function shareViaWhatsAppOrSystem(text, filename) {
+    const canUseShare = navigator.share && (window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
+    if (canUseShare) {
+        navigator.share({
+            title: 'NCW-PS Share Report',
+            text: text,
+            url: window.location.href
+        })
+        .then(() => showToast('Shared successfully via system share!'))
+        .catch(err => {
+            console.error('System share failed, falling back to WhatsApp share:', err);
+            if (err.name !== 'AbortError') {
+                fallbackWhatsAppShare(text);
+            }
+        });
+    } else {
+        fallbackWhatsAppShare(text);
+    }
+}
 
+function fallbackWhatsAppShare(text) {
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    const encodedText = encodeURIComponent(text);
+    const url = `https://wa.me/?text=${encodedText}`;
+    
+    if (isMobile) {
+        // On mobile, changing window.location.href is 100% reliable and bypassed popup blockers
+        window.location.href = url;
+    } else {
+        // On desktop, open in a new window/tab
+        window.open(url, '_blank');
+    }
+}
 
+function shareLmdWhatsApp(scope, selectedZone) {
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    let zones = [];
+    if (scope === 'all') {
+        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    } else {
+        const z = store.zones.find(x => x.id === selectedZone);
+        if (z) zones.push(z);
+    }
+    
+    let text = `*⚓ NCW-PS DAILY ALLOCATION REPORT*\n`;
+    text += `*📅 Date:* ${dateVal}\n`;
+    if (scope === 'selected' && zones.length > 0) {
+        text += `*🗺️ Zone:* ${zones[0].name.toUpperCase()}\n`;
+    }
+    text += `=========================\n\n`;
+    
+    let totalAssigned = 0;
+    
+    zones.forEach(z => {
+        const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        
+        let zoneText = '';
+        let zoneHasAllocations = false;
+        
+        wos.forEach(wo => {
+            let assignedSailors = [];
+            if (dateVal === today) {
+                const assignedIds = (wo.assigned || []).map(String);
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
+            } else {
+                const assignedIds = (store.dailyAllocations || [])
+                    .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+                    .map(a => String(a.sailor_id));
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
+            }
+            
+            if (assignedSailors.length > 0) {
+                zoneHasAllocations = true;
+                zoneText += `*📋 Duty:* _${wo.description.toUpperCase()}_\n`;
+                
+                assignedSailors.forEach((s, idx) => {
+                    totalAssigned++;
+                    const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                    const offNoStr = parsedOffNo.type ? `${parsedOffNo.type} ${parsedOffNo.num}` : parsedOffNo.num;
+                    zoneText += `  ${idx + 1}. ${s.rank || 'AB'} ${s.name} (${offNoStr}) - ${s.trade || '—'}\n`;
+                });
+                zoneText += `\n`;
+            }
+        });
+        
+        if (zoneHasAllocations) {
+            text += `*🗺️ ZONE: ${z.name.toUpperCase()}*\n`;
+            text += `-------------------------\n`;
+            text += zoneText;
+            text += `\n`;
+        }
+    });
+    
+    text += `*📊 Summary:* Total Sailors Assigned: ${totalAssigned}\n`;
+    text += `Generated on: ${new Date().toLocaleString()}`;
+    
+    shareViaWhatsAppOrSystem(text, `LMD_Report_${dateVal}.txt`);
+}
 
-
-
-
-
-
-
+function shareEstimateWhatsApp() {
+    if (!store.selectedEstimate) {
+        showToast('No estimate selected to share!', 'error');
+        return;
+    }
+    const est = store.estimates.find(e => e.id === store.selectedEstimate);
+    if (!est) {
+        showToast('Estimate not found!', 'error');
+        return;
+    }
+    
+    let text = `*⚓ SRI LANKA NAVY - COST ESTIMATE*\n`;
+    text += `*Estimate No:* ${est.estimate_number}\n`;
+    text += `*Reference:* ${est.reference_doc || '—'}\n`;
+    text += `*Location:* ${est.location || '—'}\n`;
+    text += `*End User:* ${est.endUser || '—'}\n`;
+    text += `*Description:* ${est.description}\n`;
+    if (est.workScope) {
+        text += `*Work Scope:* ${est.workScope}\n`;
+    }
+    text += `=========================\n\n`;
+    
+    text += `*🛠️ MATERIALS ESTIMATE:*\n`;
+    if (est.materials && est.materials.length > 0) {
+        est.materials.forEach((m, idx) => {
+            text += `${idx + 1}. ${m.item_name} - Qty: ${m.qty} ${m.unit} @ ${formatCurrency(m.cost)} = ${formatCurrency(m.qty * m.cost)}\n`;
+        });
+    } else {
+        text += `No materials logged\n`;
+    }
+    text += `*Total Materials Cost:* *${formatCurrency(est.total_cost)}*\n\n`;
+    
+    text += `*👷 LABOUR ESTIMATE:*\n`;
+    if (est.labor && est.labor.length > 0) {
+        est.labor.forEach((l, idx) => {
+            text += `${idx + 1}. ${l.trade} - Workers: ${l.workers}, Man-Days: ${l.manDays}\n`;
+        });
+    } else {
+        text += `No labour logged\n`;
+    }
+    text += `*Total Man-Days:* *${est.totalManDays || 0}*\n\n`;
+    
+    text += `*Status:* ${est.status || 'Draft'}\n`;
+    if (est.approvedAuthority) {
+        text += `*Approving Authority:* ${est.approvedAuthority}\n`;
+    }
+    text += `-------------------------\n`;
+    text += `Generated on: ${new Date().toLocaleString()}`;
+    
+    shareViaWhatsAppOrSystem(text, `Estimate_${est.estimate_number}.txt`);
+}
 
 
 

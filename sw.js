@@ -1,12 +1,11 @@
-const CACHE_NAME = 'ncw-ps-cache-v4.0';
+const CACHE_NAME = 'ncw-ps-cache-v4.2';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png',
-  './navy_crest.jpg'
+  './icon-512.png'
 ];
 
 self.addEventListener('install', e => {

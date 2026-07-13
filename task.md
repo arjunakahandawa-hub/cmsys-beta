@@ -1,0 +1,6 @@
+- [x] Configure Dark Mode CSS variables and overrides in `index.html`.
+- [x] Add Online Indicator and Dark Mode toggle button in `index.html`.
+- [x] Implement theme logic and network listeners in `app.js`.
+- [x] Update LMD print templates with SLN crest and signature blocks in `app.js`.
+- [x] Update Estimate print template with SLN crest in `app.js`.
+- [x] Verify all features and deploy.
