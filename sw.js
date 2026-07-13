@@ -1,13 +1,20 @@
-const CACHE_NAME = 'ncw-ps-cache-v3.7';
+const CACHE_NAME = 'ncw-ps-cache-v4.0';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
   './navy_crest.jpg'
 ];
 
 self.addEventListener('install', e => {
-  self.skipWaiting();
+  e.waitUntil(
+    caches.open(CACHE_NAME).then(cache => {
+      return cache.addAll(ASSETS);
+    }).then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', e => {
@@ -26,6 +33,16 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   e.respondWith(
-    fetch(e.request).catch(() => caches.match(e.request))
+    fetch(e.request)
+      .then(response => {
+        if (response && response.status === 200 && response.type === 'basic') {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(e.request, responseToCache);
+          });
+        }
+        return response;
+      })
+      .catch(() => caches.match(e.request))
   );
 });
