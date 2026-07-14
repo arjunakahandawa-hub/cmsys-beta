@@ -8831,9 +8831,9 @@ function renderSailorDashboardView() {
         const wo = store.workOrders.find(w => String(w.id) === String(a.work_order_id) || String(w._fbKey) === String(a.work_order_id));
         recentJobs.push({
             date: a.date,
-            type: 'Daily Allocation',
-            ref: wo ? wo.reference_no : 'Task Allocation',
-            desc: wo ? wo.description : 'Productivity suite labor allocation',
+            type: 'Allocation',
+            ref: wo ? wo.reference_no : 'Task',
+            desc: wo ? wo.description : 'Task Labor allocation',
             status: 'Completed'
         });
     });
@@ -8841,17 +8841,21 @@ function renderSailorDashboardView() {
     recentJobs.sort((a, b) => b.date.localeCompare(a.date));
 
     dutyLogContainer.innerHTML = recentJobs.slice(0, 10).map(job => `
-        <div class="p-3 hover:bg-slate-50 flex items-center justify-between text-xs">
-            <div>
-                <p class="font-bold text-slate-700">${job.desc}</p>
-                <p class="text-slate-400 mt-0.5">Ref: ${job.ref} · ${job.type}</p>
+        <div class="p-4 hover:bg-white/5 flex items-start gap-3 text-xs transition-colors duration-200">
+            <div class="mt-1 flex flex-col items-center flex-shrink-0">
+                <div class="w-2.5 h-2.5 rounded-full bg-teal-400 border border-teal-300 shadow-[0_0_8px_rgba(20,184,166,0.8)]"></div>
+                <div class="w-0.5 h-10 bg-white/10 mt-1"></div>
             </div>
-            <div class="text-right">
-                <span class="mono text-slate-500 font-bold">${job.date}</span>
-                <span class="block text-[10px] text-green-600 font-semibold uppercase mt-0.5">${job.status}</span>
+            <div class="min-w-0 flex-1">
+                <p class="font-black text-white truncate text-xs">${job.desc}</p>
+                <p class="text-[10px] text-slate-400 mt-0.5 tracking-wider">Ref: ${job.ref} · ${job.type}</p>
+            </div>
+            <div class="text-right flex-shrink-0 pl-2">
+                <span class="mono text-[10px] text-slate-400 font-bold tracking-tight">${job.date}</span>
+                <span class="block text-[9px] text-teal-400 font-black uppercase mt-1 tracking-wider">${job.status}</span>
             </div>
         </div>
-    `).join('') || '<p class="text-slate-400 text-center py-6 text-xs">No recent allocation records found.</p>';
+    `).join('') || '<p class="text-slate-500 text-center py-8 text-xs italic">No operational records found.</p>';
 }
 
 // Window click listener to close login search dropdown

@@ -1524,99 +1524,131 @@
 
         
 <!-- ==================== SAILOR DASHBOARD VIEW ==================== -->
-        <div id="view-sailordashboard" class="view-content hidden p-4 md:p-6 max-w-lg mx-auto space-y-6">
+        <div id="view-sailordashboard" class="view-content hidden p-4 md:p-6 max-w-lg mx-auto space-y-6 min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-teal-950 text-white rounded-3xl shadow-2xl animate-fade-in-up pb-10">
+            <style>
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .animate-fade-in-up {
+                animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+            </style>
+            
             <!-- Top brand / logout bar -->
-            <div class="flex items-center justify-between pb-3 border-b border-slate-200">
-                <div class="flex items-center gap-2">
-                    <span class="text-xl">⚓</span>
-                    <span class="font-extrabold text-sm text-slate-800 tracking-wider">NCW-PS PORTAL</span>
+            <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center border border-teal-500/30 shadow-[0_0_10px_rgba(20,184,166,0.3)]">
+                        <span class="text-teal-400 text-sm">⚓</span>
+                    </div>
+                    <span class="font-black text-xs text-white tracking-widest uppercase">NCW-PS Portal</span>
                 </div>
-                <button onclick="logoutProfile()" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer">
+                <button onclick="logoutProfile()" class="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1 cursor-pointer shadow-[0_0_10px_rgba(239,68,68,0.1)] hover:scale-105 active:scale-95">
                     🚪 Logout
                 </button>
             </div>
 
             <!-- Profile Summary Card -->
-            <div class="glass-card p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden">
-                <!-- Decorative Navy Flag Crest Badge -->
-                <div class="absolute -right-4 -top-4 w-16 h-16 opacity-10">
-                    <img src="navy_crest.jpg" alt="SLN">
+            <div class="relative bg-slate-900/60 backdrop-blur-2xl border border-white/10 p-6 rounded-3xl flex flex-col items-center text-center shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden">
+                <!-- Ambient Backlight -->
+                <div class="absolute -left-10 -top-10 w-32 h-32 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute -right-10 -bottom-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <!-- Profile Avatar frame with glowing gradient border -->
+                <div class="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-teal-500 via-cyan-400 to-indigo-500 shadow-[0_0_25px_rgba(20,184,166,0.4)] relative mb-4 transition-transform hover:scale-105 duration-300">
+                    <div class="w-full h-full rounded-full overflow-hidden bg-slate-950 border-2 border-slate-950" id="dashPicContainer">
+                        <!-- Image dynamically populated -->
+                    </div>
                 </div>
 
-                <div class="w-28 h-28 rounded-full overflow-hidden border-4 border-teal-500 shadow-md bg-slate-200 relative mb-4" id="dashPicContainer">
-                    <!-- Image dynamically populated -->
-                </div>
-
-                <div class="flex flex-wrap justify-center gap-2">
-                    <span class="text-xs bg-slate-800 text-teal-300 px-2 py-0.5 rounded font-extrabold" id="dashTradeBadge">MA</span>
-                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold" id="dashCategory">Regular</span>
-                    <span class="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1" id="dashStatusBadge">
-                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>Available
+                <div class="flex flex-wrap justify-center gap-2 mb-3">
+                    <span class="text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2.5 py-0.5 rounded-lg font-black tracking-wide uppercase shadow-[0_0_8px_rgba(20,184,166,0.2)]" id="dashTradeBadge">MA</span>
+                    <span class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded-lg font-black tracking-wide uppercase" id="dashCategory">Regular</span>
+                    <span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-black tracking-wide flex items-center gap-1.5 shadow-[0_0_8px_rgba(16,185,129,0.2)]" id="dashStatusBadge">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>Available
                     </span>
                 </div>
 
-                <h3 class="text-xl font-black text-slate-800 mt-3" id="dashName">Kamal Perera</h3>
-                <p class="text-sm text-slate-500 font-bold mt-0.5" id="dashRankOffNo">Able Seaman (MA) · Official No: EC124913</p>
-                <p class="text-xs text-slate-400 mt-1 font-semibold" id="dashActiveZone">Zone: A-Zone</p>
+                <h3 class="text-2xl font-black text-white tracking-wide" id="dashName">Kamal Perera</h3>
+                <p class="text-xs text-slate-400 font-bold mt-1 tracking-wider" id="dashRankOffNo">Able Seaman (MA) · Official No: EC124913</p>
+                <div class="mt-3 flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1 rounded-full text-[10px] text-slate-300 font-extrabold uppercase tracking-widest">
+                    <span class="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+                    <span id="dashActiveZone">Zone: A-Zone</span>
+                </div>
             </div>
 
             <!-- Points & Leave Stats Grid -->
             <div class="grid grid-cols-2 gap-4">
                 <!-- Points Box -->
-                <div class="p-5 rounded-2xl border border-teal-500/25 bg-teal-50/40 flex flex-col justify-between shadow-sm">
+                <div class="relative overflow-hidden p-5 rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-2xl flex flex-col justify-between shadow-[0_8px_24px_rgba(0,0,0,0.3)] transition-transform hover:translate-y-[-2px] duration-300 group">
+                    <div class="absolute -right-4 -top-4 w-12 h-12 bg-teal-500/10 rounded-full blur-xl transition-all group-hover:scale-150 duration-500"></div>
                     <div>
-                        <span class="text-xs font-extrabold text-teal-800 tracking-wide uppercase">Operational Points</span>
-                        <p class="text-[10px] text-slate-400 mt-0.5 sinhala">ක්‍රියාකාරී ලකුණු ප්‍රමාණය</p>
+                        <span class="text-[10px] font-black text-teal-400 tracking-widest uppercase">Operational Points</span>
+                        <p class="text-[9px] text-slate-500 font-bold mt-0.5 sinhala">ක්‍රියාකාරී ලකුණු</p>
                     </div>
                     <div class="flex items-baseline gap-1 mt-6">
-                        <span class="text-4xl font-black text-teal-600" id="dashTotalPoints">124</span>
-                        <span class="text-xs text-teal-500 font-bold">Points</span>
+                        <span class="text-4xl font-black text-teal-300 tracking-tight" id="dashTotalPoints">124</span>
+                        <span class="text-[10px] text-teal-500 font-black uppercase tracking-wider">PTS</span>
                     </div>
                 </div>
                 <!-- Leave Days Box -->
-                <div class="p-5 rounded-2xl border border-indigo-500/25 bg-indigo-50/40 flex flex-col justify-between shadow-sm">
+                <div class="relative overflow-hidden p-5 rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-2xl flex flex-col justify-between shadow-[0_8px_24px_rgba(0,0,0,0.3)] transition-transform hover:translate-y-[-2px] duration-300 group">
+                    <div class="absolute -right-4 -top-4 w-12 h-12 bg-indigo-500/10 rounded-full blur-xl transition-all group-hover:scale-150 duration-500"></div>
                     <div>
-                        <span class="text-xs font-extrabold text-indigo-800 tracking-wide uppercase">Leave Days Earned</span>
-                        <p class="text-[10px] text-slate-400 mt-0.5 sinhala">හිමිවන නිවාඩු දින ගණන</p>
+                        <span class="text-[10px] font-black text-indigo-400 tracking-widest uppercase">Leave Days Earned</span>
+                        <p class="text-[9px] text-slate-500 font-bold mt-0.5 sinhala">හිමිවන නිවාඩු දින ගණන</p>
                     </div>
                     <div class="flex items-baseline gap-1 mt-6">
-                        <span class="text-4xl font-black text-indigo-600" id="dashLeaveDays">12</span>
-                        <span class="text-xs text-indigo-500 font-bold">Days</span>
+                        <span class="text-4xl font-black text-indigo-300 tracking-tight" id="dashLeaveDays">12</span>
+                        <span class="text-[10px] text-indigo-500 font-black uppercase tracking-wider">Days</span>
                     </div>
                 </div>
             </div>
 
             <!-- Progress to Next Leave Day -->
-            <div class="space-y-2.5 border border-slate-100 p-5 rounded-2xl bg-slate-50/70 shadow-inner">
-                <div class="flex justify-between text-xs font-extrabold text-slate-500">
-                    <span class="sinhala">ඊළඟ නිවාඩු දිනයට ප්‍රගතිය</span>
-                    <span id="dashNextLeaveProgressText">4 / 10 Points</span>
+            <div class="space-y-3 border border-white/10 p-5 rounded-3xl bg-slate-900/60 backdrop-blur-2xl shadow-[0_8px_24px_rgba(0,0,0,0.3)] relative overflow-hidden">
+                <div class="absolute -left-6 -bottom-6 w-16 h-16 bg-cyan-500/5 rounded-full blur-xl pointer-events-none"></div>
+                <div class="flex justify-between text-xs font-black text-slate-400 uppercase tracking-widest">
+                    <span class="sinhala text-[10px]">ඊළඟ නිවාඩු දිනයට ප්‍රගතිය</span>
+                    <span id="dashNextLeaveProgressText" class="text-teal-400">4 / 10 Points</span>
                 </div>
-                <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
-                    <div class="bg-gradient-to-r from-teal-500 to-indigo-600 h-full rounded-full transition-all duration-500" id="dashNextLeaveProgressBar" style="width: 40%"></div>
+                <div class="w-full bg-slate-950 rounded-full h-3 overflow-hidden p-0.5 border border-white/5">
+                    <div class="bg-gradient-to-r from-teal-400 via-cyan-400 to-indigo-500 h-full rounded-full transition-all duration-700 shadow-[0_0_12px_rgba(20,184,166,0.6)]" id="dashNextLeaveProgressBar" style="width: 40%"></div>
                 </div>
-                <p class="text-[10px] text-slate-400 italic">Formula: 1 Day of Leave earned for every 10 Performance/Operational points accrued.</p>
+                <p class="text-[9px] text-slate-500 italic font-semibold">Accumulate 10 points to unlock your next leave day allocation.</p>
             </div>
 
             <!-- Rating Summary -->
-            <div class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm">
-                <h4 class="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-3">Performance Ratings</h4>
+            <div class="bg-slate-900/60 backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
+                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Performance Metrics</h4>
                 <div class="grid grid-cols-2 gap-3">
-                    <div class="bg-slate-50 rounded-xl p-3 flex items-center justify-between">
-                        <span class="text-xs text-slate-500">Rolling Avg</span>
-                        <span class="text-sm font-extrabold text-slate-800" id="dashAvgRating">7.8 / 10</span>
+                    <div class="bg-slate-950/60 border border-white/5 rounded-2xl p-4 flex items-center justify-between transition-colors hover:bg-slate-950/90 duration-300">
+                        <div class="min-w-0">
+                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Rolling Avg</span>
+                            <p class="text-[10px] text-slate-400 sinhala mt-0.5">සාමාන්‍යය</p>
+                        </div>
+                        <span class="text-base font-black text-teal-400 tracking-tight" id="dashAvgRating">7.8 / 10</span>
                     </div>
-                    <div class="bg-slate-50 rounded-xl p-3 flex items-center justify-between">
-                        <span class="text-xs text-slate-500">Yesterday</span>
-                        <span class="text-sm font-extrabold text-slate-800" id="dashYesterdayRating">8.5 / 10</span>
+                    <div class="bg-slate-950/60 border border-white/5 rounded-2xl p-4 flex items-center justify-between transition-colors hover:bg-slate-950/90 duration-300">
+                        <div class="min-w-0">
+                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Yesterday</span>
+                            <p class="text-[10px] text-slate-400 sinhala mt-0.5">ඊයේ ලකුණ</p>
+                        </div>
+                        <span class="text-base font-black text-indigo-400 tracking-tight" id="dashYesterdayRating">8.5 / 10</span>
                     </div>
                 </div>
             </div>
 
             <!-- Recent Duties Log -->
             <div class="space-y-3">
-                <h4 class="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Your Recent Duty Records</h4>
-                <div id="dashDutyLog" class="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-250 rounded-2xl bg-white shadow-sm scrollbar-thin">
+                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Operational Timeline</h4>
+                <div id="dashDutyLog" class="max-h-56 overflow-y-auto border border-white/10 rounded-3xl bg-slate-900/60 backdrop-blur-2xl shadow-[0_8px_24px_rgba(0,0,0,0.3)] scrollbar-thin divide-y divide-white/5 p-2">
                     <!-- Populated dynamically -->
                 </div>
             </div>
