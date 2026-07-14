@@ -3134,6 +3134,7 @@ function selectJobCard(id) {
     
     // Show/hide add material button based on status
     document.getElementById('addMaterialBtn').style.display = jc.status === 'Active' ? 'block' : 'none';
+    document.getElementById('deleteJobCardBtn').style.display = jc.status === 'Active' ? 'block' : 'none';
     
     // Show feedback tab for completed jobs
     document.getElementById('feedbackTabBtn').style.display = jc.status === 'Completed' ? 'block' : 'none';
@@ -3146,6 +3147,62 @@ function selectJobCard(id) {
     
     // Switch to materials tab
     switchJobCardTab('materials');
+}
+
+function deleteJobCard() {
+    const jcId = store.selectedJobCard;
+    if (!jcId) return;
+    
+    const jc = store.jobCards.find(j => String(j.id) === String(jcId) || String(j._fbKey) === String(jcId));
+    if (!jc) return;
+    
+    if (confirm(`⚠️ Are you sure you want to delete Job Card "${jc.job_number}" (${jc.description})?\n\nThis will also delete all logged materials and labor logs for this job card. This action cannot be undone.`)) {
+        const targetFbKey = jc._fbKey;
+        if (!targetFbKey) {
+            showToast('Cannot delete: Firebase key not found.');
+            return;
+        }
+        
+        // 1. Delete Job Card from Firebase
+        opsDB.ref(`job_cards/${targetFbKey}`).remove()
+            .then(() => {
+                // 2. Delete linked materials logs
+                const linkedMaterials = store.jobCardMaterials.filter(m => String(m.job_card_id) === String(jcId));
+                linkedMaterials.forEach(m => {
+                    if (m._fbKey) {
+                        opsDB.ref(`job_card_materials/${m._fbKey}`).remove();
+                    }
+                });
+
+                // 3. Delete linked labor logs
+                const linkedLabor = store.jobCardLabor.filter(l => String(l.job_card_id) === String(jcId));
+                linkedLabor.forEach(l => {
+                    if (l._fbKey) {
+                        opsDB.ref(`job_card_labor/${l._fbKey}`).remove();
+                    }
+                });
+
+                store.selectedJobCard = null;
+                
+                // Reset right panel content
+                document.getElementById('selectedJobNumber').textContent = 'Select a Job Card';
+                document.getElementById('selectedJobDesc').textContent = '';
+                document.getElementById('totalMaterialCost').textContent = 'Rs. 0.00';
+                document.getElementById('addMaterialBtn').style.display = 'none';
+                document.getElementById('deleteJobCardBtn').style.display = 'none';
+                
+                // Clear tab lists in UI
+                document.getElementById('jobCardMaterials').innerHTML = '<tr><td colspan="7" class="text-center py-4 text-slate-400">Select a Job Card to view materials</td></tr>';
+                document.getElementById('jobCardLabor').innerHTML = '<tr><td colspan="6" class="text-center py-4 text-slate-400">Select a Job Card to view labor</td></tr>';
+                
+                showToast(`Deleted Job Card successfully!`);
+                renderJobCardsList();
+            })
+            .catch(err => {
+                console.error('Error deleting Job Card:', err);
+                showToast('Failed to delete Job Card.');
+            });
+    }
 }
 
 function renderJobCardMaterials(jobCardId) {

@@ -882,9 +882,14 @@
                                         <span class="text-xs bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded border border-amber-500/30 font-medium">📄 Estimate: <span id="selectedJobEstimateNo"></span></span>
                                     </div>
                                 </div>
-                                <div class="text-right">
+                                <div class="flex items-center gap-4">
+                                    <div class="text-right">
                                     <p class="text-sm text-blue-200">Total Material Cost</p>
                                     <p class="text-2xl font-bold" id="totalMaterialCost">Rs. 0.00</p>
+                                </div>
+                                    <button onclick="deleteJobCard()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium" id="deleteJobCardBtn" style="display: none;">
+                                        🗑️ Delete
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -2848,7 +2853,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260714002"></script>
+    <script src="app.js?v=20260714003"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
