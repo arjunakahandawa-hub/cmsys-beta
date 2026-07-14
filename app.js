@@ -4024,13 +4024,15 @@ function selectEstimate(id) {
     renderEstimates();
 }
 
+let estWorkScopeCounter = 0;
+
 function openNewEstimateModal() {
     document.getElementById('estId').value = '';
     document.getElementById('estDescription').value = '';
     document.getElementById('estReference').value = '';
     document.getElementById('estLocation').value = '';
     document.getElementById('estEndUser').value = '';
-    document.getElementById('estWorkScope').value = '';
+    
     // Default "Created By" to the logged-in user
     document.getElementById('estCreatedName').value = store.currentUser.name || '';
     document.getElementById('estCreatedRank').value = store.currentUser.rank || '';
@@ -4041,10 +4043,13 @@ function openNewEstimateModal() {
     document.getElementById('estApprovedName').value = '';
     document.getElementById('estApprovedRank').value = '';
     document.getElementById('estApprovedSvc').value = '';
-    document.getElementById('estMaterialsBody').innerHTML = '';
-    document.getElementById('estLaborBody').innerHTML = '';
-    updateEstimateTotals();
+
+    // Clear dynamic scopes container and add one default section
+    document.getElementById('estWorkScopesContainer').innerHTML = '';
+    estWorkScopeCounter = 0;
+    addWorkScopeBlock();
     
+    updateEstimateTotals();
     document.getElementById('newEstimateModal').classList.remove('hidden');
 }
 
@@ -4057,7 +4062,6 @@ function editEstimate() {
     document.getElementById('estReference').value = est.reference_doc || '';
     document.getElementById('estLocation').value = est.location || '';
     document.getElementById('estEndUser').value = est.endUser || '';
-    document.getElementById('estWorkScope').value = est.workScope || '';
     document.getElementById('estCreatedName').value = est.createdBy?.name || '';
     document.getElementById('estCreatedRank').value = est.createdBy?.rank || '';
     document.getElementById('estCreatedSvc').value = est.createdBy?.serviceNo || '';
@@ -4068,72 +4072,195 @@ function editEstimate() {
     document.getElementById('estApprovedRank').value = est.approvedBy?.rank || '';
     document.getElementById('estApprovedSvc').value = est.approvedBy?.serviceNo || '';
     
-    // Populate materials
-    document.getElementById('estMaterialsBody').innerHTML = '';
-    est.materials?.forEach(m => {
-        addEstimateMaterialRow(m);
-    });
+    document.getElementById('estWorkScopesContainer').innerHTML = '';
+    estWorkScopeCounter = 0;
     
-    // Populate labor
-    document.getElementById('estLaborBody').innerHTML = '';
-    est.labor?.forEach(l => {
-        addEstimateLaborRow(l);
-    });
+    if (est.workScopes && est.workScopes.length > 0) {
+        est.workScopes.forEach(s => {
+            addWorkScopeBlock(s);
+        });
+    } else {
+        // Backward compatibility: load flat lists as a single section
+        addWorkScopeBlock({
+            description: est.workScope || 'Default Work Scope Section',
+            materials: est.materials || [],
+            labor: est.labor || []
+        });
+    }
     
     updateEstimateTotals();
     document.getElementById('newEstimateModal').classList.remove('hidden');
 }
 
-let estMaterialRowId = 0;
-function addEstimateMaterialRow(data = null) {
-    estMaterialRowId++;
-    const id = estMaterialRowId;
+function addWorkScopeBlock(data = null) {
+    estWorkScopeCounter++;
+    const sId = estWorkScopeCounter;
+    
+    const container = document.getElementById('estWorkScopesContainer');
+    const block = document.createElement('div');
+    block.id = `estScopeBlock-${sId}`;
+    block.className = `est-scope-block border border-slate-200 rounded-xl p-4 bg-white shadow-sm relative`;
+    
+    block.innerHTML = `
+        <div class="flex items-center justify-between border-b border-slate-100 pb-2 mb-3">
+            <h5 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                <span class="bg-indigo-100 text-indigo-800 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold est-scope-num">1</span>
+                Scope Section Description *
+            </h5>
+            <button type="button" onclick="removeWorkScopeBlock(${sId})" class="text-red-500 hover:text-red-700 text-xs font-semibold flex items-center gap-0.5">
+                ✕ Delete Section
+            </button>
+        </div>
+        
+        <div class="mb-4">
+            <input type="text" class="est-scope-desc w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Describe the scope of work for this section... *" value="${data?.description || ''}" required>
+        </div>
+        
+        <!-- Materials sub-section -->
+        <div class="border border-slate-100 rounded-lg p-3 bg-slate-50/30 mb-4">
+            <div class="flex items-center justify-between mb-2">
+                <h6 class="font-semibold text-slate-700 text-xs flex items-center gap-1">🛠️ Materials <span class="est-scope-materials-total text-green-600 font-bold ml-2" id="estScopeMaterialsTotal-${sId}">Rs. 0.00</span></h6>
+                <button type="button" onclick="addScopeMaterialRow(${sId})" class="bg-green-600 hover:bg-green-700 text-white px-2 py-0.5 rounded text-[10px] font-medium transition-all">+ Add Material</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead class="bg-slate-100">
+                        <tr>
+                            <th class="px-2 py-1.5 text-left">Material</th>
+                            <th class="px-2 py-1.5 text-center" style="width: 80px;">Qty</th>
+                            <th class="px-2 py-1.5 text-center" style="width: 70px;">Unit</th>
+                            <th class="px-2 py-1.5 text-right" style="width: 100px;">Unit Cost</th>
+                            <th class="px-2 py-1.5 text-right" style="width: 100px;">Total</th>
+                            <th class="px-2 py-1.5 text-center" style="width: 100px;">Availability</th>
+                            <th class="px-2 py-1.5" style="width: 30px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="estScopeMaterialsBody-${sId}">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Labor sub-section -->
+        <div class="border border-slate-100 rounded-lg p-3 bg-slate-50/30">
+            <div class="flex items-center justify-between mb-2">
+                <h6 class="font-semibold text-slate-700 text-xs flex items-center gap-1">👷 Labor Requirement <span class="est-scope-labor-total text-blue-600 font-bold ml-2" id="estScopeLaborTotal-${sId}">0 Man-Days</span></h6>
+                <button type="button" onclick="addScopeLaborRow(${sId})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded text-[10px] font-medium transition-all">+ Add Labor</button>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-xs">
+                    <thead class="bg-slate-100">
+                        <tr>
+                            <th class="px-2 py-1.5 text-left">Trade/Role</th>
+                            <th class="px-2 py-1.5 text-center" style="width: 80px;">Workers</th>
+                            <th class="px-2 py-1.5 text-center" style="width: 80px;">Man-Days</th>
+                            <th class="px-2 py-1.5 text-left">Task Description</th>
+                            <th class="px-2 py-1.5" style="width: 30px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="estScopeLaborBody-${sId}">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    
+    container.appendChild(block);
+    
+    // Populate data if provided
+    if (data) {
+        (data.materials || []).forEach(m => addScopeMaterialRow(sId, m));
+        (data.labor || []).forEach(l => addScopeLaborRow(sId, l));
+    } else {
+        // Add a default blank row to keep it friendly
+        addScopeMaterialRow(sId);
+        addScopeLaborRow(sId);
+    }
+    
+    renumberScopeBlocks();
+    updateEstimateTotals();
+}
+
+function removeWorkScopeBlock(sId) {
+    const blocks = document.querySelectorAll('.est-scope-block');
+    if (blocks.length <= 1) {
+        showToast('At least one Work Scope Section is required.');
+        return;
+    }
+    const block = document.getElementById(`estScopeBlock-${sId}`);
+    if (block) {
+        block.remove();
+        renumberScopeBlocks();
+        updateEstimateTotals();
+    }
+}
+
+function renumberScopeBlocks() {
+    const blocks = document.querySelectorAll('.est-scope-block');
+    blocks.forEach((b, idx) => {
+        const numSpan = b.querySelector('.est-scope-num');
+        if (numSpan) numSpan.textContent = idx + 1;
+    });
+}
+
+let scopeMatRowIdCounter = 0;
+function addScopeMaterialRow(scopeId, data = null) {
+    scopeMatRowIdCounter++;
+    const rowId = scopeMatRowIdCounter;
+    
+    const tbody = document.getElementById(`estScopeMaterialsBody-${scopeId}`);
+    if (!tbody) return;
     
     const row = document.createElement('tr');
-    row.id = `estMatRow-${id}`;
+    row.id = `scopeMatRow-${scopeId}-${rowId}`;
+    row.className = `scope-mat-row`;
     row.innerHTML = `
-        <td class="px-2 py-2">
-            <select class="est-mat-select w-full px-2 py-1 border rounded text-sm" onchange="fillEstMaterialFromInventory(${id})">
+        <td class="px-2 py-1.5">
+            <select class="est-mat-select w-full px-2 py-1 border rounded text-xs" onchange="fillScopeMaterialFromInventory(${scopeId}, ${rowId})">
                 <option value="">Select...</option>
                 ${store.inventory.filter(i => i.category !== 'Tools').map(i => 
                     `<option value="${i.id}" data-desc="${i.description}" data-unit="${i.deno}" data-cost="${i.cost_per_unit}" data-loc="${i.location}" ${data?.description === i.description ? 'selected' : ''}>${i.description}</option>`
                 ).join('')}
             </select>
         </td>
-        <td class="px-2 py-2"><input type="number" class="est-mat-qty w-20 px-2 py-1 border rounded text-sm text-center" value="${data?.qty || ''}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-2"><input type="text" class="est-mat-unit w-16 px-2 py-1 border rounded text-sm text-center" value="${data?.unit || ''}" readonly></td>
-        <td class="px-2 py-2"><input type="number" class="est-mat-cost w-24 px-2 py-1 border rounded text-sm text-right" value="${data?.cost || ''}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-2 text-right font-medium est-mat-total">${formatCurrency((data?.qty || 0) * (data?.cost || 0))}</td>
-        <td class="px-2 py-2"><span class="est-mat-avail text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">${data?.availability || '-'}</span></td>
-        <td class="px-2 py-2"><button type="button" onclick="removeEstimateRow('estMatRow-${id}')" class="text-red-500 hover:text-red-700">×</button></td>
+        <td class="px-2 py-1.5"><input type="number" class="est-mat-qty w-full px-2 py-1 border rounded text-xs text-center" value="${data?.qty || ''}" onchange="updateEstimateTotals()"></td>
+        <td class="px-2 py-1.5"><input type="text" class="est-mat-unit w-full px-2 py-1 border rounded text-xs text-center bg-slate-50" value="${data?.unit || ''}" readonly></td>
+        <td class="px-2 py-1.5"><input type="number" class="est-mat-cost w-full px-2 py-1 border rounded text-xs text-right" value="${data?.cost || ''}" onchange="updateEstimateTotals()"></td>
+        <td class="px-2 py-1.5 text-right font-medium est-mat-total">${formatCurrency((data?.qty || 0) * (data?.cost || 0))}</td>
+        <td class="px-2 py-1.5 text-center"><span class="est-mat-avail text-xxs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">${data?.availability || '-'}</span></td>
+        <td class="px-2 py-1.5 text-center"><button type="button" onclick="removeScopeRow('scopeMatRow-${scopeId}-${rowId}')" class="text-red-500 hover:text-red-700 font-bold text-sm">×</button></td>
     `;
-    
-    document.getElementById('estMaterialsBody').appendChild(row);
+    tbody.appendChild(row);
 }
 
-function fillEstMaterialFromInventory(rowId) {
-    const row = document.getElementById(`estMatRow-${rowId}`);
+function fillScopeMaterialFromInventory(scopeId, rowId) {
+    const row = document.getElementById(`scopeMatRow-${scopeId}-${rowId}`);
+    if (!row) return;
     const select = row.querySelector('.est-mat-select');
     const option = select.selectedOptions[0];
     
     if (option && option.value) {
-        row.querySelector('.est-mat-unit').value = option.dataset.unit;
-        row.querySelector('.est-mat-cost').value = option.dataset.cost;
-        row.querySelector('.est-mat-avail').textContent = option.dataset.loc;
+        row.querySelector('.est-mat-unit').value = option.dataset.unit || '';
+        row.querySelector('.est-mat-cost').value = option.dataset.cost || '';
+        row.querySelector('.est-mat-avail').textContent = option.dataset.loc || '-';
         updateEstimateTotals();
     }
 }
 
-let estLaborRowId = 0;
-function addEstimateLaborRow(data = null) {
-    estLaborRowId++;
-    const id = estLaborRowId;
+let scopeLabRowIdCounter = 0;
+function addScopeLaborRow(scopeId, data = null) {
+    scopeLabRowIdCounter++;
+    const rowId = scopeLabRowIdCounter;
+    
+    const tbody = document.getElementById(`estScopeLaborBody-${scopeId}`);
+    if (!tbody) return;
     
     const row = document.createElement('tr');
-    row.id = `estLabRow-${id}`;
+    row.id = `scopeLabRow-${scopeId}-${rowId}`;
+    row.className = `scope-lab-row`;
     row.innerHTML = `
-        <td class="px-2 py-2">
-            <select class="est-lab-trade w-full px-2 py-1 border rounded text-sm">
+        <td class="px-2 py-1.5">
+            <select class="est-lab-trade w-full px-2 py-1 border rounded text-xs">
                 <option value="Mason" ${data?.trade === 'Mason' ? 'selected' : ''}>Mason</option>
                 <option value="Carpenter" ${data?.trade === 'Carpenter' ? 'selected' : ''}>Carpenter</option>
                 <option value="Painter" ${data?.trade === 'Painter' ? 'selected' : ''}>Painter</option>
@@ -4143,77 +4270,126 @@ function addEstimateLaborRow(data = null) {
                 <option value="Helper" ${data?.trade === 'Helper' ? 'selected' : ''}>Helper</option>
             </select>
         </td>
-        <td class="px-2 py-2"><input type="number" class="est-lab-workers w-20 px-2 py-1 border rounded text-sm text-center" value="${data?.workers || 1}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-2"><input type="number" class="est-lab-days w-20 px-2 py-1 border rounded text-sm text-center" value="${data?.manDays || ''}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-2"><input type="text" class="est-lab-desc w-full px-2 py-1 border rounded text-sm" placeholder="Task description"></td>
-        <td class="px-2 py-2"><button type="button" onclick="removeEstimateRow('estLabRow-${id}')" class="text-red-500 hover:text-red-700">×</button></td>
+        <td class="px-2 py-1.5"><input type="number" class="est-lab-workers w-full px-2 py-1 border rounded text-xs text-center" value="${data?.workers || 1}" onchange="updateEstimateTotals()"></td>
+        <td class="px-2 py-1.5"><input type="number" class="est-lab-days w-full px-2 py-1 border rounded text-xs text-center" value="${data?.manDays || ''}" onchange="updateEstimateTotals()"></td>
+        <td class="px-2 py-1.5"><input type="text" class="est-lab-desc w-full px-2 py-1 border rounded text-xs" placeholder="Task description" value="${data?.taskDescription || data?.desc || ''}"></td>
+        <td class="px-2 py-1.5 text-center"><button type="button" onclick="removeScopeRow('scopeLabRow-${scopeId}-${rowId}')" class="text-red-500 hover:text-red-700 font-bold text-sm">×</button></td>
     `;
-    
-    document.getElementById('estLaborBody').appendChild(row);
+    tbody.appendChild(row);
 }
 
-function removeEstimateRow(rowId) {
-    document.getElementById(rowId)?.remove();
-    updateEstimateTotals();
+function removeScopeRow(rowId) {
+    const el = document.getElementById(rowId);
+    if (el) {
+        el.remove();
+        updateEstimateTotals();
+    }
 }
 
 function updateEstimateTotals() {
-    // Calculate materials total
-    let materialsTotal = 0;
-    document.querySelectorAll('#estMaterialsBody tr').forEach(row => {
-        const qty = parseFloat(row.querySelector('.est-mat-qty')?.value) || 0;
-        const cost = parseFloat(row.querySelector('.est-mat-cost')?.value) || 0;
-        const total = qty * cost;
-        materialsTotal += total;
-        const totalCell = row.querySelector('.est-mat-total');
-        if (totalCell) totalCell.textContent = formatCurrency(total);
+    let grandMaterialsTotal = 0;
+    let grandLaborTotal = 0;
+    
+    const blocks = document.querySelectorAll('.est-scope-block');
+    blocks.forEach(b => {
+        const sId = b.id.replace('estScopeBlock-', '');
+        
+        // Scope Materials total
+        let scopeMatTotal = 0;
+        b.querySelectorAll(`#estScopeMaterialsBody-${sId} tr`).forEach(row => {
+            const qty = parseFloat(row.querySelector('.est-mat-qty')?.value) || 0;
+            const cost = parseFloat(row.querySelector('.est-mat-cost')?.value) || 0;
+            const total = qty * cost;
+            scopeMatTotal += total;
+            
+            const totalCell = row.querySelector('.est-mat-total');
+            if (totalCell) totalCell.textContent = formatCurrency(total);
+        });
+        
+        const scopeMatTotalLabel = document.getElementById(`estScopeMaterialsTotal-${sId}`);
+        if (scopeMatTotalLabel) scopeMatTotalLabel.textContent = formatCurrency(scopeMatTotal);
+        grandMaterialsTotal += scopeMatTotal;
+        
+        // Scope Labor total
+        let scopeLabTotal = 0;
+        b.querySelectorAll(`#estScopeLaborBody-${sId} tr`).forEach(row => {
+            const days = parseFloat(row.querySelector('.est-lab-days')?.value) || 0;
+            scopeLabTotal += days;
+        });
+        
+        const scopeLabTotalLabel = document.getElementById(`estScopeLaborTotal-${sId}`);
+        if (scopeLabTotalLabel) scopeLabTotalLabel.textContent = `${scopeLabTotal} Man-Days`;
+        grandLaborTotal += scopeLabTotal;
     });
     
-    // Calculate labor total
-    let laborTotal = 0;
-    document.querySelectorAll('#estLaborBody tr').forEach(row => {
-        const days = parseFloat(row.querySelector('.est-lab-days')?.value) || 0;
-        laborTotal += days;
-    });
-    
-    document.getElementById('estMaterialsTotal').textContent = formatCurrency(materialsTotal);
-    document.getElementById('estLaborTotal').textContent = laborTotal;
-    document.getElementById('estSummaryMaterials').textContent = formatCurrency(materialsTotal);
-    document.getElementById('estSummaryLabor').textContent = laborTotal;
-    document.getElementById('estSummaryTotal').textContent = formatCurrency(materialsTotal);
+    document.getElementById('estSummaryMaterials').textContent = formatCurrency(grandMaterialsTotal);
+    document.getElementById('estSummaryLabor').textContent = grandLaborTotal;
+    document.getElementById('estSummaryTotal').textContent = formatCurrency(grandMaterialsTotal);
 }
 
 function saveEstimate(event) {
     event.preventDefault();
     
-    // Collect materials
-    const materials = [];
-    document.querySelectorAll('#estMaterialsBody tr').forEach(row => {
-        const select = row.querySelector('.est-mat-select');
-        materials.push({
-            description: select.selectedOptions[0]?.text || '',
-            qty: parseFloat(row.querySelector('.est-mat-qty')?.value) || 0,
-            unit: row.querySelector('.est-mat-unit')?.value || '',
-            cost: parseFloat(row.querySelector('.est-mat-cost')?.value) || 0,
-            availability: row.querySelector('.est-mat-avail')?.textContent || '-'
+    const workScopes = [];
+    let grandMaterialsTotal = 0;
+    let grandLaborTotal = 0;
+    
+    const flatMaterials = [];
+    const flatLabor = [];
+    const scopeDescriptions = [];
+    
+    const blocks = document.querySelectorAll('.est-scope-block');
+    blocks.forEach(b => {
+        const sId = b.id.replace('estScopeBlock-', '');
+        const desc = b.querySelector('.est-scope-desc').value.trim();
+        scopeDescriptions.push(desc);
+        
+        const materials = [];
+        b.querySelectorAll(`#estScopeMaterialsBody-${sId} tr`).forEach(row => {
+            const select = row.querySelector('.est-mat-select');
+            const description = select.selectedOptions[0]?.text || '';
+            if (!description || description === 'Select...') return;
+            
+            const item = {
+                description: description,
+                qty: parseFloat(row.querySelector('.est-mat-qty')?.value) || 0,
+                unit: row.querySelector('.est-mat-unit')?.value || '',
+                cost: parseFloat(row.querySelector('.est-mat-cost')?.value) || 0,
+                availability: row.querySelector('.est-mat-avail')?.textContent || '-'
+            };
+            materials.push(item);
+            flatMaterials.push(item);
+            grandMaterialsTotal += (item.qty * item.cost);
+        });
+        
+        const labor = [];
+        b.querySelectorAll(`#estScopeLaborBody-${sId} tr`).forEach(row => {
+            const trade = row.querySelector('.est-lab-trade')?.value || '';
+            const workers = parseInt(row.querySelector('.est-lab-workers')?.value) || 1;
+            const manDays = parseFloat(row.querySelector('.est-lab-days')?.value) || 0;
+            const taskDescription = row.querySelector('.est-lab-desc')?.value || '';
+            
+            if (manDays <= 0) return;
+            
+            const item = {
+                trade: trade,
+                workers: workers,
+                manDays: manDays,
+                taskDescription: taskDescription
+            };
+            labor.push(item);
+            flatLabor.push(item);
+            grandLaborTotal += manDays;
+        });
+        
+        workScopes.push({
+            description: desc,
+            materials: materials,
+            labor: labor
         });
     });
-    
-    // Collect labor
-    const labor = [];
-    document.querySelectorAll('#estLaborBody tr').forEach(row => {
-        labor.push({
-            trade: row.querySelector('.est-lab-trade')?.value || '',
-            workers: parseInt(row.querySelector('.est-lab-workers')?.value) || 1,
-            manDays: parseFloat(row.querySelector('.est-lab-days')?.value) || 0
-        });
-    });
-    
-    const totalCost = materials.reduce((sum, m) => sum + (m.qty * m.cost), 0);
-    const totalManDays = labor.reduce((sum, l) => sum + l.manDays, 0);
     
     const id = document.getElementById('estId').value;
-
     const sig = (n, r, s) => ({
         name: document.getElementById(n).value.trim(),
         rank: document.getElementById(r).value.trim(),
@@ -4224,20 +4400,24 @@ function saveEstimate(event) {
     const approvedBy = sig('estApprovedName', 'estApprovedRank', 'estApprovedSvc');
     const location = document.getElementById('estLocation').value;
     const endUser = document.getElementById('estEndUser').value;
+    const description = document.getElementById('estDescription').value;
+    const reference_doc = document.getElementById('estReference').value;
+    
+    const compiledWorkScope = scopeDescriptions.join('; ');
     
     if (id) {
-        // Update existing
         const est = store.estimates.find(e => e.id == id);
         if (est) {
-            est.description = document.getElementById('estDescription').value;
-            est.reference_doc = document.getElementById('estReference').value;
+            est.description = description;
+            est.reference_doc = reference_doc;
             est.location = location;
             est.endUser = endUser;
-            est.workScope = document.getElementById('estWorkScope').value;
-            est.materials = materials;
-            est.labor = labor;
-            est.total_cost = totalCost;
-            est.totalManDays = totalManDays;
+            est.workScope = compiledWorkScope;
+            est.workScopes = workScopes;
+            est.materials = flatMaterials;
+            est.labor = flatLabor;
+            est.total_cost = grandMaterialsTotal;
+            est.totalManDays = grandLaborTotal;
             est.createdBy = createdBy;
             est.checkedBy = checkedBy;
             est.approvedBy = approvedBy;
@@ -4246,19 +4426,19 @@ function saveEstimate(event) {
         }
         showToast('Estimate updated!');
     } else {
-        // Create new
         const newEst = {
             id: store.estimates.length + 1,
             estimate_number: `EST/${new Date().getFullYear()}/${String(store.estimates.length + 1).padStart(4, '0')}`,
-            description: document.getElementById('estDescription').value,
-            reference_doc: document.getElementById('estReference').value,
+            description: description,
+            reference_doc: reference_doc,
             location: location,
             endUser: endUser,
-            workScope: document.getElementById('estWorkScope').value,
-            materials: materials,
-            labor: labor,
-            total_cost: totalCost,
-            totalManDays: totalManDays,
+            workScope: compiledWorkScope,
+            workScopes: workScopes,
+            materials: flatMaterials,
+            labor: flatLabor,
+            total_cost: grandMaterialsTotal,
+            totalManDays: grandLaborTotal,
             status: 'Pending',
             approvedAuthority: null,
             createdBy: createdBy,
@@ -4352,22 +4532,99 @@ function buildEstimatePrintHTML(est) {
             <div style="font-size:9px;color:#444;">${p && p.rank ? p.rank : ''}${p && p.serviceNo ? ' • ' + p.serviceNo : ''}</div>
         </div>`;
 
-    const matRows = (est.materials || []).map((m, i) => `
-        <tr>
-            <td style="text-align:center;">${i + 1}</td>
-            <td>${m.description}</td>
-            <td style="text-align:center;">${m.qty}</td>
-            <td style="text-align:center;">${m.unit}</td>
-            <td style="text-align:right;">${formatCurrency(m.cost)}</td>
-            <td style="text-align:right;">${formatCurrency(m.qty * m.cost)}</td>
-        </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;">No materials</td></tr>';
+    let sectionsHtml = '';
+    
+    if (est.workScopes && est.workScopes.length > 0) {
+        est.workScopes.forEach((s, sIdx) => {
+            const matRows = (s.materials || []).map((m, i) => `
+                <tr>
+                    <td style="text-align:center;width:8%;">${i + 1}</td>
+                    <td>${m.description}</td>
+                    <td style="text-align:center;width:10%;">${m.qty}</td>
+                    <td style="text-align:center;width:10%;">${m.unit}</td>
+                    <td style="text-align:right;width:15%;">${formatCurrency(m.cost)}</td>
+                    <td style="text-align:right;width:15%;">${formatCurrency(m.qty * m.cost)}</td>
+                </tr>`).join('');
+                
+            const labRows = (s.labor || []).map(l => `
+                <tr>
+                    <td>${l.trade}</td>
+                    <td style="text-align:center;width:15%;">${l.workers}</td>
+                    <td style="text-align:center;width:15%;">${l.manDays}</td>
+                    <td>${l.taskDescription || ''}</td>
+                </tr>`).join('');
+                
+            const sectionTotalCost = (s.materials || []).reduce((sum, m) => sum + (m.qty * m.cost), 0);
+            const sectionTotalDays = (s.labor || []).reduce((sum, l) => sum + l.manDays, 0);
 
-    const labRows = (est.labor || []).map(l => `
-        <tr>
-            <td>${l.trade}</td>
-            <td style="text-align:center;">${l.workers}</td>
-            <td style="text-align:center;">${l.manDays}</td>
-        </tr>`).join('') || '<tr><td colspan="3" style="text-align:center;">No labour</td></tr>';
+            sectionsHtml += `
+                <div style="margin-top: 14px; border: 1px solid #94a3b8; border-radius: 6px; padding: 10px; background-color: #fafafa; page-break-inside: avoid;">
+                    <div style="font-size: 11px; font-weight: bold; border-bottom: 1.5px solid #475569; padding-bottom: 4px; margin-bottom: 8px; text-transform: uppercase; color: #1e293b;">
+                        Section ${sIdx + 1}: ${s.description}
+                    </div>
+                    
+                    ${matRows ? `
+                    <div style="font-size: 10px; font-weight: bold; margin-bottom: 3px; color: #059669;">🛠️ Materials</div>
+                    <table class="est-table" style="margin-bottom: 10px;">
+                        <thead>
+                            <tr><th>#</th><th>Material</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr>
+                        </thead>
+                        <tbody>${matRows}</tbody>
+                        <tfoot>
+                            <tr><td colspan="5" style="text-align:right;"><b>Section Materials Cost</b></td><td style="text-align:right;"><b>${formatCurrency(sectionTotalCost)}</b></td></tr>
+                        </tfoot>
+                    </table>
+                    ` : ''}
+                    
+                    ${labRows ? `
+                    <div style="font-size: 10px; font-weight: bold; margin-bottom: 3px; color: #2563eb;">👷 Labor Requirement</div>
+                    <table class="est-table">
+                        <thead><tr><th>Trade / Role</th><th>Workers</th><th>Man-Days</th><th>Task Description</th></tr></thead>
+                        <tbody>${labRows}</tbody>
+                        <tfoot><tr><td colspan="2" style="text-align:right;"><b>Section Total Man-Days</b></td><td colspan="2" style="text-align:left; padding-left: 10px;"><b>${sectionTotalDays}</b></td></tr></tfoot>
+                    </table>
+                    ` : ''}
+                </div>
+            `;
+        });
+    } else {
+        // Fallback for flat layout (old estimates)
+        const matRows = (est.materials || []).map((m, i) => `
+            <tr>
+                <td style="text-align:center;">${i + 1}</td>
+                <td>${m.description}</td>
+                <td style="text-align:center;">${m.qty}</td>
+                <td style="text-align:center;">${m.unit}</td>
+                <td style="text-align:right;">${formatCurrency(m.cost)}</td>
+                <td style="text-align:right;">${formatCurrency(m.qty * m.cost)}</td>
+            </tr>`).join('') || '<tr><td colspan="6" style="text-align:center;">No materials</td></tr>';
+
+        const labRows = (est.labor || []).map(l => `
+            <tr>
+                <td>${l.trade}</td>
+                <td style="text-align:center;">${l.workers}</td>
+                <td style="text-align:center;">${l.manDays}</td>
+                <td>${l.taskDescription || ''}</td>
+            </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;">No labour</td></tr>';
+
+        sectionsHtml = `
+            <table class="est-table" style="margin-top:10px;">
+                <thead>
+                    <tr><th>#</th><th>Material</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr>
+                </thead>
+                <tbody>${matRows}</tbody>
+                <tfoot>
+                    <tr><td colspan="5" style="text-align:right;"><b>Materials Total</b></td><td style="text-align:right;"><b>${formatCurrency(est.total_cost)}</b></td></tr>
+                </tfoot>
+            </table>
+
+            <table class="est-table" style="margin-top:10px;">
+                <thead><tr><th>Trade / Role</th><th>Workers</th><th>Man-Days</th><th>Task Description</th></tr></thead>
+                <tbody>${labRows}</tbody>
+                <tfoot><tr><td colspan="2" style="text-align:right;"><b>Total Man-Days</b></td><td colspan="2" style="text-align:left; padding-left: 10px;"><b>${est.totalManDays || 0}</b></td></tr></tfoot>
+            </table>
+        `;
+    }
 
     return `
     <div class="est-sheet">
@@ -4392,25 +4649,32 @@ function buildEstimatePrintHTML(est) {
             </tr>
             ${est.approvedAuthority ? `<tr><td colspan="2"><b>Approving Authority:</b> ${est.approvedAuthority}</td></tr>` : ''}
         </table>
-        ${est.workScope ? `<p style="font-size:11px;margin:4px 0;"><b>Work Scope:</b> ${est.workScope}</p>` : ''}
+        ${est.workScope && !est.workScopes ? `<p style="font-size:11px;margin:4px 0;"><b>Work Scope:</b> ${est.workScope}</p>` : ''}
 
-        <table class="est-table">
-            <thead>
-                <tr><th>#</th><th>Material</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr>
-            </thead>
-            <tbody>${matRows}</tbody>
-            <tfoot>
-                <tr><td colspan="5" style="text-align:right;"><b>Materials Total</b></td><td style="text-align:right;"><b>${formatCurrency(est.total_cost)}</b></td></tr>
-            </tfoot>
-        </table>
+        ${sectionsHtml}
+        
+        <!-- Summary Section (Always printed at the bottom of sheets) -->
+        <div style="margin-top: 14px; border: 1.5px solid #000; border-radius: 6px; padding: 12px; background-color: #f8fafc; page-break-inside: avoid;">
+            <div style="font-size: 11px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 8px; text-transform: uppercase;">
+                📊 Grand Summary
+            </div>
+            <table style="width: 100%; font-size: 11px; border: none;">
+                <tr style="border: none;">
+                    <td style="border: none; padding: 4px 0; width: 33%;"><b>Total Materials Cost:</b></td>
+                    <td style="border: none; padding: 4px 0; color: #059669; font-size: 12px;"><b>${formatCurrency(est.total_cost)}</b></td>
+                </tr>
+                <tr style="border: none;">
+                    <td style="border: none; padding: 4px 0;"><b>Total Labor (Man-Days):</b></td>
+                    <td style="border: none; padding: 4px 0; color: #2563eb; font-size: 12px;"><b>${est.totalManDays || 0}</b></td>
+                </tr>
+                <tr style="border: none; border-top: 1px solid #cbd5e1;">
+                    <td style="border: none; padding: 6px 0; font-size: 13px;"><b>Grand Total Estimate:</b></td>
+                    <td style="border: none; padding: 6px 0; color: #d97706; font-size: 14px;"><b>${formatCurrency(est.total_cost)}</b></td>
+                </tr>
+            </table>
+        </div>
 
-        <table class="est-table" style="margin-top:6px;">
-            <thead><tr><th>Trade / Role</th><th>Workers</th><th>Man-Days</th></tr></thead>
-            <tbody>${labRows}</tbody>
-            <tfoot><tr><td colspan="2" style="text-align:right;"><b>Total Man-Days</b></td><td style="text-align:center;"><b>${est.totalManDays || 0}</b></td></tr></tfoot>
-        </table>
-
-        <div style="display:flex;justify-content:space-between;margin-top:26px;">
+        <div style="display:flex;justify-content:space-between;margin-top:26px;page-break-inside:avoid;">
             ${sigBlock('Created By', est.createdBy)}
             ${sigBlock('Checked By', est.checkedBy)}
             ${sigBlock('Approved By', est.approvedBy)}
