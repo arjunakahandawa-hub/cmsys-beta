@@ -3901,6 +3901,7 @@ function selectEstimate(id) {
     document.getElementById('selectedEstimateNumber').textContent = est.estimate_number;
     document.getElementById('editEstimateBtn').style.display = est.status === 'Pending' ? 'inline-block' : 'none';
     document.getElementById('approveEstimateBtn').style.display = est.status === 'Pending' ? 'inline-block' : 'none';
+    document.getElementById('deleteEstimateBtn').style.display = est.status === 'Pending' ? 'inline-block' : 'none';
 
     const sigBlock = (label, p) => `
         <div class="text-center">
@@ -4515,10 +4516,44 @@ function submitApproval(event) {
     const authority = document.getElementById('apvAuthority').value;
     est.status = 'Approved';
     est.approvedAuthority = authority;
+    if (window.fbSaveEstimate) fbSaveEstimate(est);
     closeModal('approvalModal');
     selectEstimate(est.id);
     showToast(`Estimate ${est.estimate_number} approved by ${authority}`);
-    // syncToFirebase('estimates', est.id, est);
+}
+
+function deleteEstimate() {
+    const estId = store.selectedEstimate;
+    if (!estId) return;
+    
+    const est = store.estimates.find(e => e.id === estId);
+    if (!est) return;
+    
+    if (confirm(`⚠️ Are you sure you want to delete the estimate "${est.estimate_number}" (${est.description})?\n\nThis action cannot be undone.`)) {
+        const targetFbKey = est._fbKey;
+        if (!targetFbKey) {
+            showToast('Cannot delete: Firebase key not found.');
+            return;
+        }
+        
+        opsDB.ref(`estimates/${targetFbKey}`).remove()
+            .then(() => {
+                store.selectedEstimate = null;
+                // Reset right panel content
+                document.getElementById('selectedEstimateNumber').textContent = 'Select an Estimate';
+                document.getElementById('editEstimateBtn').style.display = 'none';
+                document.getElementById('approveEstimateBtn').style.display = 'none';
+                document.getElementById('deleteEstimateBtn').style.display = 'none';
+                document.getElementById('estimateContent').innerHTML = `<p class="text-slate-500 text-center py-8">Select an estimate to view details</p>`;
+                
+                showToast(`Deleted estimate successfully!`);
+                renderEstimates();
+            })
+            .catch(err => {
+                console.error('Error deleting estimate:', err);
+                showToast('Failed to delete estimate.');
+            });
+    }
 }
 
 // ---- Compact printable layout (req 7) ----
