@@ -3759,10 +3759,11 @@ function submitOffCharge(event) {
     item.off_charge_records.push({ ref, qty, date, dest, remarks });
     item.off_charge_ref = ref;
 
+    if (window.fbSaveInventoryItem) fbSaveInventoryItem(item);
+
     closeModal('offChargeModal');
     renderInventoryTable();
     showToast(`Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`);
-    // syncToFirebase('inventory', item.id, item);
 }
 
 function openAddInventoryModal() {
