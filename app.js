@@ -2324,9 +2324,11 @@ function openWorkOrderDetail(workOrderId) {
     const btnSaveWoChanges = document.getElementById('btnSaveWoChanges');
     const btnProceedWo = document.getElementById('btnProceedWo');
     const btnForwardComplete = document.getElementById('btnForwardComplete');
+    const btnDeleteWo = document.getElementById('btnDeleteWo');
     if (btnSaveWoChanges) btnSaveWoChanges.classList.toggle('hidden', !isToday);
     if (btnProceedWo) btnProceedWo.classList.toggle('hidden', !isToday);
     if (btnForwardComplete) btnForwardComplete.classList.toggle('hidden', !isToday);
+    if (btnDeleteWo) btnDeleteWo.classList.toggle('hidden', !isToday);
 
     // Disable/enable fields
     const inputs = [
@@ -2730,6 +2732,48 @@ function saveWorkOrderChanges() {
         renderDashboard();
         showToast('Work order updated successfully!');
         // syncToFirebase('work_orders', wo.id, wo);
+    }
+}
+
+function deleteWorkOrder() {
+    const woKey = store.selectedWorkOrder;
+    if (!woKey) return;
+    
+    const wo = store.workOrders.find(w => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey));
+    if (!wo) return;
+    
+    if (confirm(`⚠️ Are you sure you want to delete the work order "${wo.description}"?\n\nThis will permanently remove the work order and its daily labor allocations.`)) {
+        const targetFbKey = wo._fbKey;
+        if (!targetFbKey) {
+            showToast('Cannot delete: Firebase key not found.');
+            return;
+        }
+
+        // 1. Remove the work order from Firebase
+        opsDB.ref(`work_orders/${targetFbKey}`).remove()
+            .then(() => {
+                // 2. Remove all daily allocations associated with this work order id / reference
+                const woIdStr = String(wo.id);
+                const allocsToDelete = (store.dailyAllocations || []).filter(a => String(a.work_order_id) === woIdStr);
+                
+                const deletePromises = allocsToDelete.map(a => {
+                    if (a._fbKey) {
+                        return opsDB.ref(`daily_allocations/${a._fbKey}`).remove();
+                    }
+                    return Promise.resolve();
+                });
+                
+                return Promise.all(deletePromises);
+            })
+            .then(() => {
+                closeModal('workOrderDetailModal');
+                showToast(`Deleted work order successfully!`);
+                renderDashboard();
+            })
+            .catch(err => {
+                console.error('Error deleting work order:', err);
+                showToast('Failed to delete work order.');
+            });
     }
 }
 
