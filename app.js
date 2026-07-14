@@ -8689,8 +8689,7 @@ function filterLoginSailor(query) {
         const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'AB';
         const fallbackText = `<div class="w-8 h-8 rounded-full bg-slate-800 text-teal-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0">${shortRank}</div>`;
         const avatar = cleanNo ? 
-            `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '
-${cleanNo}')">` :
+            `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` :
             fallbackText;
 
         return `
