@@ -3758,8 +3758,7 @@ function submitOffCharge(event) {
     if (!item.off_charge_records) item.off_charge_records = [];
     item.off_charge_records.push({ ref, qty, date, dest, remarks });
     item.off_charge_ref = ref;
-
-    if (window.fbSaveInventoryItem) fbSaveInventoryItem(item);
+    fbSaveInventoryItem(item);
 
     closeModal('offChargeModal');
     renderInventoryTable();
