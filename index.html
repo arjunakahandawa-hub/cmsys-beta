@@ -1560,9 +1560,14 @@
                 <div class="absolute -left-10 -top-10 w-32 h-32 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
                 <div class="absolute -right-10 -bottom-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
 
-                <!-- Profile Avatar frame with glowing gradient border -->
-                <div class="w-32 h-32 rounded-full p-1 bg-gradient-to-tr from-teal-500 via-cyan-400 to-indigo-500 shadow-[0_0_25px_rgba(20,184,166,0.4)] relative mb-4 transition-transform hover:scale-105 duration-300">
-                    <div class="w-full h-full rounded-full overflow-hidden bg-slate-950 border-2 border-slate-950" id="dashPicContainer">
+                <!-- Profile Avatar frame with rotating glow border -->
+                <div class="relative w-32 h-32 rounded-full p-[3px] overflow-hidden mb-4 shadow-[0_0_25px_rgba(20,184,166,0.35)] transition-transform hover:scale-105 duration-300 flex items-center justify-center">
+                    <!-- Rotating Glow Layer -->
+                    <div class="absolute inset-[-20px] bg-[conic-gradient(from_0deg,#14b8a6,#06b6d4,#6366f1,#14b8a6)] animate-[spin_4s_linear_infinite]"></div>
+                    <!-- Inner Mask -->
+                    <div class="absolute inset-[3px] rounded-full bg-slate-950 z-10"></div>
+                    <!-- Image Container -->
+                    <div class="w-full h-full rounded-full overflow-hidden z-20 bg-slate-900 flex items-center justify-center" id="dashPicContainer">
                         <!-- Image dynamically populated -->
                     </div>
                 </div>
