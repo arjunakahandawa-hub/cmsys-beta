@@ -683,7 +683,7 @@
                                 📥 Export CSV
                             </button>
                             <button id="dashboardPrintBtn" onclick="isAdminStaffDuties(store.currentZone) ? openLmdExportModal('print') : printLmdDetails('selected', store.currentZone)" class="bg-slate-700 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
-                                🖨️ Print Report
+                                🖨️ Print / PDF
                             </button>
                             <button id="dashboardShareWhatsappBtn" onclick="openLmdExportModal('whatsapp')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
                                 💬 WhatsApp Share
@@ -2538,14 +2538,14 @@
                 <button onclick="closeModal('lmdExportModal')" class="text-teal-200 hover:text-white">✕</button>
             </div>
             <div class="p-6 space-y-4">
-                <p class="text-sm text-slate-600">Please choose which details you want to export or print:</p>
+                <p class="text-sm text-slate-600">Please choose which details you want to export, print, or save as PDF:</p>
                 
                 <div class="space-y-3">
                     <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
                         <input type="radio" name="exportScope" value="all" checked onchange="toggleExportZoneSelect()" class="text-teal-600 focus:ring-teal-500">
                         <div>
                             <span class="block text-sm font-semibold text-slate-800">All Zone Details</span>
-                            <span class="block text-xs text-slate-500">Export/Print data for all zones combined.</span>
+                            <span class="block text-xs text-slate-500">Export/Print/PDF data for all zones combined.</span>
                         </div>
                     </label>
                     
@@ -2553,7 +2553,7 @@
                         <input type="radio" name="exportScope" value="selected" onchange="toggleExportZoneSelect()" class="text-teal-600 focus:ring-teal-500">
                         <div>
                             <span class="block text-sm font-semibold text-slate-800">Selected Zone Details</span>
-                            <span class="block text-xs text-slate-500">Export/Print data for a specific zone only.</span>
+                            <span class="block text-xs text-slate-500">Export/Print/PDF data for a specific zone only.</span>
                         </div>
                     </label>
                 </div>

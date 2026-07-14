@@ -7389,7 +7389,7 @@ function renderDailyDetailsSpecialView() {
                      Export CSV
                 </button>
                 <button onclick="openLmdExportModal('print')" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
-                     Print Report
+                     Print / PDF
                 </button>
                 <button onclick="openLmdExportModal('whatsapp')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                      WhatsApp Share
@@ -7419,7 +7419,7 @@ function renderDailyDetailsSpecialView() {
 
 function openLmdExportModal(action) {
     _lmdExportAction = action;
-    let title = 'Print Options';
+    let title = 'Print / PDF Options';
     if (action === 'csv') title = 'Export CSV Options';
     else if (action === 'whatsapp') title = 'WhatsApp Share Options';
     document.getElementById('lmdExportModalTitle').textContent = title;
