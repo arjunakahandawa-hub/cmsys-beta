@@ -1229,7 +1229,7 @@
                     <button onclick="switchSettingsTab('offcharge')" id="stab-offcharge" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🚢 Off-Charge</button>
                     <button onclick="switchSettingsTab('workorder')" id="stab-workorder" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📋 Work Orders</button>
                     <button onclick="switchSettingsTab('display')" id="stab-display" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🎨 Display</button>
-                    <button onclick="switchSettingsTab('data')" id="stab-data" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">💾 Data</button>
+                    
                 </div>
 
                 <!-- ── Tab: System Identity ── -->
@@ -1430,42 +1430,7 @@
                     </div>
                 </div>
 
-                <!-- ── Tab: Data Management ── -->
-                <div id="stab-content-data" class="settings-tab-content hidden">
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
-                        <h3 class="font-bold text-slate-800 text-lg mb-1">💾 Data Management</h3>
-
-                        <!-- Firebase Status -->
-                        <div class="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-xl" id="fbStatusIcon" style="background:#dcfce7">✅</div>
-                            <div>
-                                <p class="font-semibold text-slate-700 text-sm">Firebase Connection</p>
-                                <p class="text-xs text-slate-500" id="fbStatusText">Connected to ncw-ps-operations</p>
-                            </div>
-                            <button onclick="checkFirebaseStatus()" class="ml-auto text-xs bg-white border border-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-50">Refresh</button>
-                        </div>
-
-                        <!-- Export JSON -->
-                        <div class="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                            <h4 class="font-semibold text-blue-800 mb-1">📤 Export All Data</h4>
-                            <p class="text-xs text-blue-600 mb-3">Inventory, Work Orders, Locations, Settings ආදී සෑම දත්තයක්ම JSON file එකක් ලෙස download කරගන්න</p>
-                            <button onclick="exportAllDataJson()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">📤 Export JSON Backup</button>
-                        </div>
-
-                        <!-- Clear Completed WOs -->
-                        <div class="p-4 bg-amber-50 rounded-xl border border-amber-200">
-                            <h4 class="font-semibold text-amber-800 mb-1">🗂️ Archive Completed Work Orders</h4>
-                            <p class="text-xs text-amber-600 mb-3">Status 'Completed' ලෙස ඇති Work Orders Database එකෙන් ඉවත් කිරීම. (ඉවත් කිරීමට පෙර Export කිරීම නිර්දේශිතයි)</p>
-                            <button onclick="confirmArchiveCompleted()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium">🗃️ Archive Completed WOs</button>
-                        </div>
-
-                        <!-- Danger Zone -->
-                        <div class="p-4 bg-red-50 rounded-xl border border-red-200">
-                            <h4 class="font-semibold text-red-800 mb-1">⚠️ Danger Zone</h4>
-                            <p class="text-xs text-red-600 mb-3">Inventory data සම්පූර්ණයෙන්ම clear කිරීම. <strong>undo කළ නොහැක!</strong></p>
-                            <button onclick="confirmClearInventory()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">🗑️ Clear All Inventory</button>
-                        </div>
-                    </div>
+                
                 </div>
 
             </div>

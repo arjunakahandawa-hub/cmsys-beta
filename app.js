@@ -5799,8 +5799,6 @@ function switchSettingsTab(tab) {
         setValue('cfg-currency', s.currency);
         setValue('cfg-dateFormat', s.dateFormat);
         setValue('cfg-lowStockLevel', s.lowStockLevel || 10);
-    } else if (tab === 'data') {
-        checkFirebaseStatus();
     }
 }
 
@@ -6735,61 +6733,6 @@ function removePriorityLevel(i) {
     arr.splice(i, 1);
     saveSettingsArray('priorityLevels', arr);
     renderSettingsPriorityList();
-}
-
-// ── Data Management ──
-function checkFirebaseStatus() {
-    const iconEl = document.getElementById('fbStatusIcon');
-    const textEl = document.getElementById('fbStatusText');
-    if (!iconEl || !textEl) return;
-    try {
-        opsDB.ref('.info/connected').once('value', snap => {
-            const connected = snap.val() === true;
-            iconEl.textContent = connected ? '✅' : '❌';
-            iconEl.style.background = connected ? '#dcfce7' : '#fee2e2';
-            textEl.textContent = connected ? 'Connected to ncw-ps-operations' : 'Disconnected — working offline';
-        });
-    } catch(e) { textEl.textContent = 'Unable to check status'; }
-}
-
-function exportAllDataJson() {
-    const exportData = {
-        exportDate: new Date().toISOString(),
-        version: store.settings.systemTitle || 'NCW-PS v2.2',
-        settings: store.settings,
-        inventory: store.inventory,
-        workOrders: store.workOrders,
-        jobCards: store.jobCards,
-        locations: store.locations,
-        maintenanceRecords: store.maintenanceRecords,
-        estimates: store.estimates,
-    };
-    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `ncwps-backup-${new Date().toISOString().split('T')[0]}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    showToast('JSON backup downloaded!');
-}
-
-function confirmArchiveCompleted() {
-    if (!confirm('Status "Completed" ලෙස ඇති Work Orders Firebase එකෙන් remove කරන්නද?\n\nකලින් Export කරන්න නිර්දේශිතයි!')) return;
-    const completed = store.workOrders.filter(wo => wo.status === 'Completed');
-    let count = 0;
-    completed.forEach(wo => {
-        const key = wo._fbKey || wo.id;
-        if (key) { opsDB.ref(`work_orders/${key}`).remove(); count++; }
-    });
-    showToast(`${count} completed work orders archived`);
-}
-
-function confirmClearInventory() {
-    if (!confirm('WARNING: Inventory data සම්පූර්ණයෙන්ම DELETE කරන්නද?\n\nඑකවරම undo කළ නොහැක!')) return;
-    if (!confirm('ඔබ 100% ක් සහතිකද?')) return;
-    opsDB.ref('inventory').remove().then(() => showToast('All inventory cleared', 'error'));
 }
 
 // =============================================
