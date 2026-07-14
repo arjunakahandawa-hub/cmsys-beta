@@ -246,7 +246,13 @@ function initSailorsListener() {
                     const t = (s.trade ?? s.tradeName ?? s.trade_name ?? 'MA').trim().toUpperCase();
                     return t === 'WEL' ? 'WE' : t;
                 })(),
-                category:        s.category        ?? s.cat        ?? 'Regular',
+                category:        (() => {
+                    const o = (offNo ?? '').trim().toUpperCase();
+                    if (o.startsWith('EC')) return 'Regular';
+                    if (o.startsWith('AC')) return 'Artificer';
+                    if (o.startsWith('VAS')) return 'VAS';
+                    return s.category ?? s.cat ?? 'Regular';
+                })(),
                 status:          s.status          ?? 'Available',
                 attendance:      s.attendance      ?? s.att        ?? 'Present',
                 zone_assigned:   s.zone_assigned   ?? s.zone       ?? s.zoneId ?? 'A-Zone',
