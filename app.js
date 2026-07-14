@@ -525,7 +525,7 @@ function computeYesterdayJobs() {
 
 function refreshCurrentView() {
     computeYesterdayJobs();
-    const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary'];
+    const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary','sailors'];
     for (const v of views) {
         const el = document.getElementById(`view-${v}`);
         if (el && !el.classList.contains('hidden')) {
@@ -537,6 +537,7 @@ function refreshCurrentView() {
                 case 'maintenance': renderMaintenance();    break;
                 case 'reports':     renderReports();        break;
                 case 'dailydetails': renderDailyDetailsSpecialView(); break;
+                case 'sailors':     renderSailorsView();    break;
             }
             break;
         }
@@ -639,6 +640,7 @@ function switchView(view) {
         case 'settings': renderSettings(); break;
         case 'dailydetails': renderDailyDetailsSpecialView(); break;
         case 'summary': /* Placeholder for next phase */ break;
+        case 'sailors': renderSailorsView(); break;
     }
 }
 
@@ -896,7 +898,12 @@ function renderAvailableSailors() {
                     ${sailor.isZoneTeam ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 rounded-full flex items-center justify-center text-white text-[8px] shadow">★</span>' : ''}
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-slate-800 text-xs truncate leading-tight">${sailor.name}</p>
+                    <p class="font-semibold text-slate-800 text-xs truncate leading-tight flex items-center justify-between gap-1">
+                        <span>${sailor.name}</span>
+                        <button onclick="event.stopPropagation(); openSailorProfile('${sailor.id ?? sailor._fbKey}')" class="text-teal-600 hover:text-teal-800 text-[11px] p-0.5 cursor-pointer font-bold transition-transform hover:scale-115" title="View Profile">
+                            👤
+                        </button>
+                    </p>
                     <div class="flex items-center gap-1.5 mt-0.5">
                         <span class="text-[10px] text-slate-400 mono">${sailor.official_number}</span>
                         <span class="text-[10px] text-slate-400">${sailor.rank}</span>
@@ -1207,7 +1214,7 @@ function renderZoneTeam() {
                 <div class="w-7 h-7 rounded-lg flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 shadow-sm"
                     style="background:${tb}">${s.trade}</div>
                 <div class="min-w-0">
-                    <span class="block text-xs font-semibold text-slate-700 truncate">${s.name.split(' ').slice(1,3).join(' ')}</span>
+                    <span class="block text-xs font-semibold text-slate-700 truncate hover:underline cursor-pointer text-teal-600" onclick="openSailorProfile('${s.id ?? s._fbKey}')">${s.name.split(' ').slice(1,3).join(' ')}</span>
                     <span class="text-[10px] ${cfg.textColor} flex items-center gap-1">
                         <span class="w-1.5 h-1.5 rounded-full inline-block ${cfg.dot}"></span>${cfg.text}
                     </span>
@@ -2458,7 +2465,7 @@ function openWorkOrderDetail(workOrderId) {
             <div class="flex items-center gap-3">
                 <span class="w-8 h-8 bg-slate-600 text-white rounded-full flex items-center justify-center text-xs font-bold">${s.trade}</span>
                 <div>
-                    <p class="font-medium text-sm">${s.rank || 'AB'} ${s.name}</p>
+                    <p class="font-medium text-sm hover:underline cursor-pointer text-teal-600" onclick="openSailorProfile('${s.id ?? s._fbKey}')">${s.rank || 'AB'} ${s.name}</p>
                     <div class="flex gap-2 text-xs text-slate-500 mt-0.5">
                         <span>Official No: ${s.official_number || s.service_no || '-'}</span>
                         <span>•</span>
@@ -2490,7 +2497,7 @@ function openWorkOrderDetail(workOrderId) {
             <div class="flex items-center gap-3">
                 <span class="w-10 h-10 bg-slate-600 text-white rounded-full flex items-center justify-center font-bold">${s.name.split(' ').map(n => n[0]).slice(0,2).join('')}</span>
                 <div>
-                    <p class="font-medium">${s.name}</p>
+                    <p class="font-medium hover:underline cursor-pointer text-teal-600" onclick="openSailorProfile('${s.id ?? s._fbKey}')">${s.name}</p>
                     <p class="text-xs text-slate-500">${s.trade} • ${s.rank} • Avg ${s.avgScore.toFixed(1)}</p>
                 </div>
             </div>
@@ -8280,3 +8287,274 @@ function shareEstimateWhatsApp() {
 
 
 
+
+// =============================================================================
+// SAILOR DIRECTORY, POINTS & LEAVE TRACKING IMPLEMENTATION
+// =============================================================================
+
+store.directoryTradeFilter = 'ALL';
+
+// Calculate Sailor points based on average score, allocations, and completed jobs
+function calculateSailorPoints(sailor) {
+    // 10 pts per unit of average performance score (baseline)
+    const scoreBase = parseFloat(sailor.avgScore || 7.0) * 10;
+
+    // Count how many daily allocations they have been part of (5 pts per duty allocation day)
+    const allocationsCount = (store.dailyAllocations || []).filter(a => 
+        String(a.sailor_id) === String(sailor.id) || 
+        String(a.sailor_id) === String(sailor._fbKey)
+    ).length;
+    const allocationPoints = allocationsCount * 5;
+
+    // Count how many completed job cards they have been part of (15 pts per project participation)
+    const completedJobsCount = (store.jobCards || []).filter(jc => 
+        jc.status === 'Completed' && 
+        (jc.assigned || []).some(id => String(id) === String(sailor.id) || String(id) === String(sailor._fbKey))
+    ).length;
+    const jobPoints = completedJobsCount * 15;
+
+    return Math.round(scoreBase + allocationPoints + jobPoints);
+}
+
+// Calculate Sailor leave eligibility (1 leave day per 10 points)
+function calculateSailorLeaveDays(sailor) {
+    const pts = calculateSailorPoints(sailor);
+    return Math.max(0, Math.floor(pts / 10));
+}
+
+// Filter Directory by Trade
+function filterDirectoryTrade(trade) {
+    store.directoryTradeFilter = trade;
+    document.querySelectorAll('.dir-trade-btn').forEach(btn => {
+        btn.classList.remove('bg-slate-800', 'text-white');
+        btn.classList.add('bg-slate-100', 'text-slate-600', 'hover:bg-slate-200');
+    });
+    const activeBtn = document.getElementById('dir-trade-' + trade);
+    if (activeBtn) {
+        activeBtn.classList.remove('bg-slate-100', 'text-slate-600', 'hover:bg-slate-200');
+        activeBtn.classList.add('bg-slate-800', 'text-white');
+    }
+    renderSailorsView();
+}
+
+// Render Directory Sailors Grid list
+function renderSailorsView() {
+    const container = document.getElementById('directorySailorsGrid');
+    if (!container) return;
+
+    const query = (document.getElementById('directorySailorSearch')?.value || '').toLowerCase().trim();
+    const trade = store.directoryTradeFilter || 'ALL';
+    const sortBy = document.getElementById('directorySailorSort')?.value || 'points-desc';
+
+    let filtered = [...store.sailors];
+
+    // Search filter
+    if (query) {
+        filtered = filtered.filter(s =>
+            (s.name || '').toLowerCase().includes(query) ||
+            (s.official_number || '').toLowerCase().includes(query) ||
+            (s.rank || '').toLowerCase().includes(query) ||
+            (s.trade || '').toLowerCase().includes(query)
+        );
+    }
+
+    // Trade filter
+    if (trade !== 'ALL') {
+        filtered = filtered.filter(s => s.trade === trade);
+    }
+
+    // Map each sailor with points and leave for sorting
+    const mapped = filtered.map(s => {
+        const points = calculateSailorPoints(s);
+        const leaveDays = calculateSailorLeaveDays(s);
+        return { ...s, points, leaveDays };
+    });
+
+    // Sorting
+    mapped.sort((a, b) => {
+        if (sortBy === 'points-desc') return b.points - a.points;
+        if (sortBy === 'points-asc') return a.points - b.points;
+        if (sortBy === 'score-desc') return b.avgScore - a.avgScore;
+        if (sortBy === 'name-asc') return a.name.localeCompare(b.name);
+        return 0;
+    });
+
+    // Update total count
+    const totalCountBadge = document.getElementById('directoryTotalCount');
+    if (totalCountBadge) {
+        totalCountBadge.textContent = `Total: ${mapped.length} Sailors`;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    container.innerHTML = mapped.map(s => {
+        const cleanNo = s.official_number ? s.official_number.replace(/[^a-zA-Z0-9]/g, '') : '';
+        const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'AB';
+        const fallbackText = `<div class="w-12 h-12 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
+        
+        const avatarHtml = cleanNo ? 
+            `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-12 h-12 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` :
+            fallbackText;
+
+        // Check if currently busy on a work order today
+        const assignment = getSailorCurrentAssignment(s.id ?? s._fbKey);
+        
+        let statusBadge = '';
+        if (s.attendance === 'Leave') {
+            statusBadge = `<span class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">On Leave</span>`;
+        } else if (s.attendance === 'Sick') {
+            statusBadge = `<span class="text-[10px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">Sick</span>`;
+        } else if (assignment) {
+            statusBadge = `<span class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold truncate max-w-[120px]" title="Busy: ${assignment.zone}">⚠️ ${assignment.zone}</span>`;
+        } else {
+            statusBadge = `<span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">✓ Available</span>`;
+        }
+
+        const tradeColors = {
+            'MA': 'bg-teal-600', 'CA': 'bg-purple-600', 'PA': 'bg-amber-700',
+            'PL': 'bg-cyan-600', 'WE': 'bg-red-600', 'RW': 'bg-slate-700',
+            'SW': 'bg-emerald-800', 'BB': 'bg-blue-700', 'AL': 'bg-pink-600'
+        };
+        const tradeClass = tradeColors[s.trade] || 'bg-slate-600';
+
+        return `
+        <div onclick="openSailorProfile('${s.id ?? s._fbKey}')" class="bg-white rounded-2xl shadow-md border border-slate-200/80 p-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between">
+            <div class="flex items-start gap-3">
+                <div class="relative flex-shrink-0">
+                    ${avatarHtml}
+                    <span class="absolute -bottom-1 -right-1 text-[9px] text-white px-1.5 py-0.5 rounded-full font-extrabold ${tradeClass}">
+                        ${s.trade}
+                    </span>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <p class="font-bold text-slate-800 text-sm truncate">${s.name}</p>
+                    <p class="text-xs text-slate-500 font-semibold truncate mt-0.5">${s.rank}</p>
+                    <p class="text-[10px] text-slate-400 mono mt-0.5">${s.official_number}</p>
+                </div>
+            </div>
+
+            <!-- Badges and stats section -->
+            <div class="border-t border-slate-100 pt-3 mt-4 flex items-center justify-between gap-1">
+                ${statusBadge}
+                <div class="flex gap-2 text-[11px] font-bold">
+                    <span class="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded" title="Total accumulated points">⭐ ${s.points}</span>
+                    <span class="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded" title="Leave days earned">📅 ${s.leaveDays}D</span>
+                </div>
+            </div>
+        </div>
+        `;
+    }).join('') || '<div class="col-span-full text-center py-12"><p class="text-slate-400 text-sm">No sailors found matching criteria.</p></div>';
+}
+
+// Open Sailor Profile Modal with detailed stats
+function openSailorProfile(sailorId) {
+    const sailor = store.sailors.find(s => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
+    if (!sailor) {
+        showToast('Sailor profile not found', 'error');
+        return;
+    }
+
+    const points = calculateSailorPoints(sailor);
+    const leaveDays = calculateSailorLeaveDays(sailor);
+    
+    // Bio
+    document.getElementById('profName').textContent = sailor.name;
+    document.getElementById('profRankOffNo').textContent = `${sailor.rank} · Official No: ${sailor.official_number}`;
+    document.getElementById('profActiveZone').textContent = `Assigned Zone: ${sailor.zone_assigned || 'None'}`;
+    document.getElementById('profTradeBadge').textContent = sailor.trade;
+    document.getElementById('profCategory').textContent = sailor.category || 'Regular';
+    
+    const tradeColors = {
+        'MA': 'bg-teal-600 text-teal-100', 'CA': 'bg-purple-600 text-purple-100', 'PA': 'bg-amber-700 text-amber-100',
+        'PL': 'bg-cyan-600 text-cyan-100', 'WE': 'bg-red-600 text-red-100', 'RW': 'bg-slate-700 text-slate-100',
+        'SW': 'bg-emerald-800 text-emerald-100', 'BB': 'bg-blue-700 text-blue-100', 'AL': 'bg-pink-600 text-pink-100'
+    };
+    const tradeClass = tradeColors[sailor.trade] || 'bg-slate-800 text-slate-100';
+    document.getElementById('profTradeBadge').className = `text-xs px-2 py-0.5 rounded font-extrabold ${tradeClass}`;
+
+    // Status Badge
+    const assignment = getSailorCurrentAssignment(sailor.id ?? sailor._fbKey);
+    const statusBadge = document.getElementById('profStatusBadge');
+    
+    if (sailor.attendance === 'Leave') {
+        statusBadge.className = 'text-xs bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1';
+        statusBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>On Leave';
+    } else if (sailor.attendance === 'Sick') {
+        statusBadge.className = 'text-xs bg-rose-100 text-rose-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1';
+        statusBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Sick';
+    } else if (assignment) {
+        statusBadge.className = 'text-xs bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1';
+        statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>Busy: ${assignment.zone}`;
+    } else {
+        statusBadge.className = 'text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1';
+        statusBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Available';
+    }
+
+    // Points & Leave Days
+    document.getElementById('profTotalPoints').textContent = points;
+    document.getElementById('profLeaveDays').textContent = leaveDays;
+    
+    // Ratings
+    document.getElementById('profAvgRating').textContent = `${(sailor.avgScore || 7.0).toFixed(1)} / 10`;
+    document.getElementById('profYesterdayRating').textContent = sailor.yesterdayScore ? `${sailor.yesterdayScore.toFixed(1)} / 10` : '-';
+
+    // Progress Bar to Next Leave Day
+    const progressVal = points % 10;
+    document.getElementById('profNextLeaveProgressText').textContent = `${progressVal} / 10 Points`;
+    document.getElementById('profNextLeaveProgressBar').style.width = `${progressVal * 10}%`;
+
+    // Profile Photo
+    const cleanNo = sailor.official_number ? sailor.official_number.replace(/[^a-zA-Z0-9]/g, '') : '';
+    const shortRank = sailor.rank ? sailor.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'AB';
+    const fallbackText = `<div class="w-full h-full rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xl">${shortRank}</div>`;
+    const picContainer = document.getElementById('profPicContainer');
+    
+    if (cleanNo) {
+        picContainer.innerHTML = `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
+    } else {
+        picContainer.innerHTML = fallbackText;
+    }
+
+    // Populate Duty Log
+    const dutyLogContainer = document.getElementById('profDutyLog');
+    
+    // Search active and completed work orders for this sailor's assignments
+    const recentJobs = [];
+    
+    // Check allocations (active / historic)
+    const allocations = (store.dailyAllocations || []).filter(a => 
+        String(a.sailor_id) === String(sailor.id) || 
+        String(a.sailor_id) === String(sailor._fbKey)
+    );
+    
+    allocations.forEach(a => {
+        // Find corresponding work order for description
+        const wo = store.workOrders.find(w => String(w.id) === String(a.work_order_id) || String(w._fbKey) === String(a.work_order_id));
+        recentJobs.push({
+            date: a.date,
+            type: 'Daily Allocation',
+            ref: wo ? wo.reference_no : 'Task Allocation',
+            desc: wo ? wo.description : 'Productivity suite labor allocation',
+            status: 'Completed'
+        });
+    });
+
+    // Sort recent jobs by date desc
+    recentJobs.sort((a, b) => b.date.localeCompare(a.date));
+
+    // Render duty log entries (limit to 10)
+    dutyLogContainer.innerHTML = recentJobs.slice(0, 10).map(job => `
+        <div class="p-3 hover:bg-slate-50 flex items-center justify-between text-xs">
+            <div>
+                <p class="font-bold text-slate-700">${job.desc}</p>
+                <p class="text-slate-400 mt-0.5">Ref: ${job.ref} · ${job.type}</p>
+            </div>
+            <div class="text-right">
+                <span class="mono text-slate-500 font-bold">${job.date}</span>
+                <span class="block text-[10px] text-green-600 font-semibold uppercase mt-0.5">${job.status}</span>
+            </div>
+        </div>
+    `).join('') || '<p class="text-slate-400 text-center py-6 text-xs">No recent allocation records found.</p>';
+
+    document.getElementById('sailorProfileModal').classList.remove('hidden');
+}

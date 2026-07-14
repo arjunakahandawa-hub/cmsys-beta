@@ -511,6 +511,9 @@
                     <button onclick="switchView('maintenance')" id="tab-maintenance" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">🔧 </span>LMD
                     </button>
+                    <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">⚓ </span>Sailors
+                    </button>
                     <button onclick="switchView('reports')" id="tab-reports" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📈 </span>Reports
                     </button>
@@ -1440,6 +1443,68 @@
 
             </div>
         </div>
+<!-- ==================== SAILORS VIEW ==================== -->
+        <div id="view-sailors" class="view-content hidden p-4 md:p-6 space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold" style="color:#0a1628">⚓ Sailor Directory & Profiles</h2>
+                    <p class="text-slate-500 text-sm">නාවික නාමාවලිය සහ පැතිකඩ • View ratings, points, and leave eligibility</p>
+                </div>
+            </div>
+
+            <!-- Directory Controls Card -->
+            <div class="glass-card p-4 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                    <!-- Search Input -->
+                    <div class="md:col-span-6 relative">
+                        <span class="absolute left-3 top-2.5 text-slate-400">🔍</span>
+                        <input type="text" id="directorySailorSearch" placeholder="Search by name, rank, service number or trade..." 
+                            class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500"
+                            oninput="renderSailorsView()">
+                    </div>
+                    <!-- Sort Selection -->
+                    <div class="md:col-span-3 flex items-center gap-2">
+                        <label class="text-xs font-semibold text-slate-500 whitespace-nowrap">Sort By:</label>
+                        <select id="directorySailorSort" onchange="renderSailorsView()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500">
+                            <option value="points-desc">Highest Points</option>
+                            <option value="points-asc">Lowest Points</option>
+                            <option value="score-desc">Highest Avg Score</option>
+                            <option value="name-asc">Name (A-Z)</option>
+                        </select>
+                    </div>
+                    <!-- Stats summary inside controls -->
+                    <div class="md:col-span-3 text-right">
+                        <span class="text-xs bg-teal-50 text-teal-700 font-bold px-3 py-1.5 rounded-lg border border-teal-200" id="directoryTotalCount">
+                            Total: 0 Sailors
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Trade Filter Buttons -->
+                <div class="border-t border-slate-100 pt-3 flex flex-wrap gap-2 items-center">
+                    <span class="text-xs font-semibold text-slate-500 mr-1">Trade Filter:</span>
+                    <div class="flex flex-wrap gap-1.5" id="directoryTradeFilters">
+                        <button onclick="filterDirectoryTrade('ALL')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-800 text-white" id="dir-trade-ALL">ALL</button>
+                        <button onclick="filterDirectoryTrade('MA')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-MA">MA</button>
+                        <button onclick="filterDirectoryTrade('CA')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-CA">CA</button>
+                        <button onclick="filterDirectoryTrade('PA')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-PA">PA</button>
+                        <button onclick="filterDirectoryTrade('PL')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-PL">PL</button>
+                        <button onclick="filterDirectoryTrade('WE')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-WE">WE</button>
+                        <button onclick="filterDirectoryTrade('RW')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-RW">RW</button>
+                        <button onclick="filterDirectoryTrade('AL')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-AL">AL</button>
+                        <button onclick="filterDirectoryTrade('SW')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-SW">SW</button>
+                        <button onclick="filterDirectoryTrade('BB')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-BB">BB</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sailors Grid -->
+            <div id="directorySailorsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- Sailor cards loaded dynamically -->
+            </div>
+        </div>
+
+        
 <div id="view-reports" class="view-content hidden">
             <!-- Report Tabs -->
             <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
@@ -2903,6 +2968,10 @@
             <span class="text-lg">🔧</span>
             <span class="text-[8px] font-semibold">LMD</span>
         </button>
+        <button onclick="switchView('sailors')" id="mobile-tab-sailors" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">⚓</span>
+            <span class="text-[8px] font-semibold">Sailors</span>
+        </button>
         <button onclick="switchView('reports')" id="mobile-tab-reports" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📈</span>
             <span class="text-[8px] font-semibold">Reports</span>
@@ -2960,6 +3029,108 @@
             </form>
         </div>
     </div>
+
+    <!-- Sailor Profile Modal -->
+    <div id="sailorProfileModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">⚓</span>
+                    <h2 class="font-bold text-lg sinhala">නාවික පැතිකඩ (Sailor Profile)</h2>
+                </div>
+                <button onclick="closeModal('sailorProfileModal')" class="text-slate-300 hover:text-white">✕</button>
+            </div>
+            
+            <div class="p-6 space-y-6">
+                <!-- Header Bio Block -->
+                <div class="flex flex-col sm:flex-row items-center gap-5 p-4 bg-slate-50 border border-slate-150 rounded-2xl">
+                    <!-- Profile Picture container -->
+                    <div class="w-24 h-24 rounded-full overflow-hidden border-2 border-teal-500 shadow-md flex-shrink-0 bg-slate-200 relative" id="profPicContainer">
+                        <!-- Image populated dynamically, with fallback -->
+                    </div>
+                    <!-- Details -->
+                    <div class="text-center sm:text-left flex-1 min-w-0">
+                        <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                            <span class="text-xs bg-slate-800 text-teal-300 px-2 py-0.5 rounded font-extrabold" id="profTradeBadge">MA</span>
+                            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold" id="profCategory">Regular</span>
+                            <span class="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1" id="profStatusBadge">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>Available
+                            </span>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-800 mt-2" id="profName">Kamal Perera</h3>
+                        <p class="text-sm text-slate-500 font-medium mt-0.5" id="profRankOffNo">Able Seaman (MA) · Official No: EC124913</p>
+                        <p class="text-xs text-slate-400 mt-1" id="profActiveZone">Assigned Zone: A-Zone</p>
+                    </div>
+                </div>
+
+                <!-- Points & Leave Stats Grid -->
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Points Box -->
+                    <div class="p-4 rounded-xl border border-teal-500/20 bg-teal-50/30 flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs font-bold text-teal-700 tracking-wide uppercase">Operational Points</span>
+                            <p class="text-xs text-slate-400 mt-0.5 sinhala">ක්‍රියාකාරී ලකුණු ප්‍රමාණය</p>
+                        </div>
+                        <div class="flex items-baseline gap-1 mt-4">
+                            <span class="text-3xl font-extrabold text-teal-600" id="profTotalPoints">124</span>
+                            <span class="text-xs text-teal-500 font-bold">Points</span>
+                        </div>
+                    </div>
+                    <!-- Leave Days Box -->
+                    <div class="p-4 rounded-xl border border-indigo-500/20 bg-indigo-50/30 flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs font-bold text-indigo-700 tracking-wide uppercase">Leave Days Earned</span>
+                            <p class="text-xs text-slate-400 mt-0.5 sinhala">හිමිවන නිවාඩු දින ගණන</p>
+                        </div>
+                        <div class="flex items-baseline gap-1 mt-4">
+                            <span class="text-3xl font-extrabold text-indigo-600" id="profLeaveDays">12</span>
+                            <span class="text-xs text-indigo-500 font-bold">Days</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress to Next Leave Day -->
+                <div class="space-y-2 border border-slate-100 p-4 rounded-xl bg-slate-50/50">
+                    <div class="flex justify-between text-xs font-bold text-slate-500">
+                        <span class="sinhala">ඊළඟ නිවාඩු දිනයට ප්‍රගතිය</span>
+                        <span id="profNextLeaveProgressText">4 / 10 Points</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
+                        <div class="bg-gradient-to-r from-teal-500 to-indigo-600 h-full rounded-full transition-all duration-500" id="profNextLeaveProgressBar" style="width: 40%"></div>
+                    </div>
+                    <p class="text-[10px] text-slate-400 italic">Formula: 1 Day of Leave earned for every 10 Performance/Operational points accrued.</p>
+                </div>
+
+                <!-- Rating Breakdowns -->
+                <div class="space-y-3">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Performance Rating Summary</h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-white border rounded-xl p-3 flex items-center justify-between">
+                            <span class="text-xs text-slate-500">Rolling Avg Rating</span>
+                            <span class="text-sm font-extrabold text-slate-800" id="profAvgRating">7.8 / 10</span>
+                        </div>
+                        <div class="bg-white border rounded-xl p-3 flex items-center justify-between">
+                            <span class="text-xs text-slate-500">Yesterday's Rating</span>
+                            <span class="text-sm font-extrabold text-slate-800" id="profYesterdayRating">8.5 / 10</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Duties Log -->
+                <div class="space-y-3">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Recent Operational Duties</h4>
+                    <div id="profDutyLog" class="max-h-40 overflow-y-auto divide-y divide-slate-100 border rounded-xl bg-white scrollbar-thin">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end gap-3 p-6 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+                <button onclick="closeModal('sailorProfileModal')" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
 
