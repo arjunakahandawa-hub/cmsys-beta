@@ -449,15 +449,33 @@
             </div>
 
             <form onsubmit="submitLogin(event)" class="space-y-4">
-                <!-- Profile Dropdown Selection -->
-                <div>
+                <input type="hidden" id="loginMode" value="OIC">
+
+                <!-- Mode Toggle Tab -->
+                <div class="flex border border-white/10 rounded-xl overflow-hidden mb-4 p-0.5 bg-slate-950/40">
+                    <button type="button" onclick="setLoginMode('OIC')" id="loginModeBtnOIC" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-white bg-teal-600 shadow-sm">Officer / OIC</button>
+                    <button type="button" onclick="setLoginMode('SAILOR')" id="loginModeBtnSailor" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white">Sailor Profile</button>
+                </div>
+
+                <!-- OIC / Officer Selection -->
+                <div id="loginGroupOic">
                     <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Select Profile</label>
-                    <select id="loginProfileSelect" onchange="onLoginProfileChange(this.value)" required class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 cursor-pointer">
+                    <select id="loginProfileSelect" onchange="onLoginProfileChange(this.value)" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 cursor-pointer">
                         <option value="">-- Choose Profile --</option>
                     </select>
                 </div>
 
-                <!-- Password Input -->
+                <!-- Sailor Search Autocomplete Selection -->
+                <div id="loginGroupSailor" class="hidden relative">
+                    <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Search Service No / Name</label>
+                    <input type="text" id="loginSailorSearch" placeholder="Type Service No or Name..." oninput="filterLoginSailor(this.value)" onfocus="showLoginSailorDropdown()" autocomplete="off" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500">
+                    <input type="hidden" id="loginSailorSelectedId">
+                    <div id="loginSailorDropdown" class="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto divide-y divide-slate-800 bg-slate-950 border border-white/10 rounded-xl shadow-2xl hidden scrollbar-thin text-left">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Password Input (OIC mode only) -->
                 <div id="loginPasswordGroup" class="hidden">
                     <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Password</label>
                     <input type="password" id="loginPasswordInput" placeholder="Enter password" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 text-center tracking-widest font-bold">
@@ -471,7 +489,7 @@
         </div>
     </div>
     <!-- ========== NAVAL HEADER ========== -->
-    <header class="nav-header header-glow sticky top-0 z-50 no-print">
+    <header id="navalHeader" class="nav-header header-glow sticky top-0 z-50 no-print">
         <div class="container mx-auto px-4">
             <div class="flex items-center justify-between h-[68px]">
 
@@ -553,7 +571,7 @@
     </header>
 
     <!-- ===== Tactical Status Bar ===== -->
-    <div class="no-print" style="background:linear-gradient(90deg,#0a1628 0%,#152a55 50%,#0a1628 100%);border-bottom:1px solid rgba(13,148,136,0.3)">
+    <div id="tacticalStatusBar" class="no-print" style="background:linear-gradient(90deg,#0a1628 0%,#152a55 50%,#0a1628 100%);border-bottom:1px solid rgba(13,148,136,0.3)">
         <div class="container mx-auto px-4 py-2 flex flex-col md:flex-row items-center justify-between gap-2.5 text-xs">
             <div class="flex flex-wrap items-center justify-center md:justify-start gap-3 md:gap-5 text-slate-400">
                 <span class="mono">📅 <span id="currentDate" class="text-teal-300"></span></span>
@@ -1505,7 +1523,106 @@
         </div>
 
         
-<div id="view-reports" class="view-content hidden">
+<!-- ==================== SAILOR DASHBOARD VIEW ==================== -->
+        <div id="view-sailor-dashboard" class="view-content hidden p-4 md:p-6 max-w-lg mx-auto space-y-6">
+            <!-- Top brand / logout bar -->
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">⚓</span>
+                    <span class="font-extrabold text-sm text-slate-800 tracking-wider">NCW-PS PORTAL</span>
+                </div>
+                <button onclick="logoutProfile()" class="bg-red-50 hover:bg-red-100 text-red-600 font-bold px-3 py-1.5 rounded-lg text-xs transition-colors flex items-center gap-1 cursor-pointer">
+                    🚪 Logout
+                </button>
+            </div>
+
+            <!-- Profile Summary Card -->
+            <div class="glass-card p-6 flex flex-col items-center text-center shadow-lg relative overflow-hidden">
+                <!-- Decorative Navy Flag Crest Badge -->
+                <div class="absolute -right-4 -top-4 w-16 h-16 opacity-10">
+                    <img src="navy_crest.jpg" alt="SLN">
+                </div>
+
+                <div class="w-28 h-28 rounded-full overflow-hidden border-4 border-teal-500 shadow-md bg-slate-200 relative mb-4" id="dashPicContainer">
+                    <!-- Image dynamically populated -->
+                </div>
+
+                <div class="flex flex-wrap justify-center gap-2">
+                    <span class="text-xs bg-slate-800 text-teal-300 px-2 py-0.5 rounded font-extrabold" id="dashTradeBadge">MA</span>
+                    <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold" id="dashCategory">Regular</span>
+                    <span class="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1" id="dashStatusBadge">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>Available
+                    </span>
+                </div>
+
+                <h3 class="text-xl font-black text-slate-800 mt-3" id="dashName">Kamal Perera</h3>
+                <p class="text-sm text-slate-500 font-bold mt-0.5" id="dashRankOffNo">Able Seaman (MA) · Official No: EC124913</p>
+                <p class="text-xs text-slate-400 mt-1 font-semibold" id="dashActiveZone">Zone: A-Zone</p>
+            </div>
+
+            <!-- Points & Leave Stats Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Points Box -->
+                <div class="p-5 rounded-2xl border border-teal-500/25 bg-teal-50/40 flex flex-col justify-between shadow-sm">
+                    <div>
+                        <span class="text-xs font-extrabold text-teal-800 tracking-wide uppercase">Operational Points</span>
+                        <p class="text-[10px] text-slate-400 mt-0.5 sinhala">ක්‍රියාකාරී ලකුණු ප්‍රමාණය</p>
+                    </div>
+                    <div class="flex items-baseline gap-1 mt-6">
+                        <span class="text-4xl font-black text-teal-600" id="dashTotalPoints">124</span>
+                        <span class="text-xs text-teal-500 font-bold">Points</span>
+                    </div>
+                </div>
+                <!-- Leave Days Box -->
+                <div class="p-5 rounded-2xl border border-indigo-500/25 bg-indigo-50/40 flex flex-col justify-between shadow-sm">
+                    <div>
+                        <span class="text-xs font-extrabold text-indigo-800 tracking-wide uppercase">Leave Days Earned</span>
+                        <p class="text-[10px] text-slate-400 mt-0.5 sinhala">හිමිවන නිවාඩු දින ගණන</p>
+                    </div>
+                    <div class="flex items-baseline gap-1 mt-6">
+                        <span class="text-4xl font-black text-indigo-600" id="dashLeaveDays">12</span>
+                        <span class="text-xs text-indigo-500 font-bold">Days</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress to Next Leave Day -->
+            <div class="space-y-2.5 border border-slate-100 p-5 rounded-2xl bg-slate-50/70 shadow-inner">
+                <div class="flex justify-between text-xs font-extrabold text-slate-500">
+                    <span class="sinhala">ඊළඟ නිවාඩු දිනයට ප්‍රගතිය</span>
+                    <span id="dashNextLeaveProgressText">4 / 10 Points</span>
+                </div>
+                <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
+                    <div class="bg-gradient-to-r from-teal-500 to-indigo-600 h-full rounded-full transition-all duration-500" id="dashNextLeaveProgressBar" style="width: 40%"></div>
+                </div>
+                <p class="text-[10px] text-slate-400 italic">Formula: 1 Day of Leave earned for every 10 Performance/Operational points accrued.</p>
+            </div>
+
+            <!-- Rating Summary -->
+            <div class="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm">
+                <h4 class="text-xs font-extrabold text-slate-500 uppercase tracking-wider mb-3">Performance Ratings</h4>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-slate-50 rounded-xl p-3 flex items-center justify-between">
+                        <span class="text-xs text-slate-500">Rolling Avg</span>
+                        <span class="text-sm font-extrabold text-slate-800" id="dashAvgRating">7.8 / 10</span>
+                    </div>
+                    <div class="bg-slate-50 rounded-xl p-3 flex items-center justify-between">
+                        <span class="text-xs text-slate-500">Yesterday</span>
+                        <span class="text-sm font-extrabold text-slate-800" id="dashYesterdayRating">8.5 / 10</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Duties Log -->
+            <div class="space-y-3">
+                <h4 class="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Your Recent Duty Records</h4>
+                <div id="dashDutyLog" class="max-h-48 overflow-y-auto divide-y divide-slate-100 border border-slate-250 rounded-2xl bg-white shadow-sm scrollbar-thin">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <div id="view-reports" class="view-content hidden">
             <!-- Report Tabs -->
             <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
                 <div class="border-b border-slate-200 flex">
@@ -2939,7 +3056,7 @@
     </script>
     
     <!-- Bottom Mobile Navigation Bar (visible only on mobile) -->
-    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-2 py-2 flex justify-around items-center z-40 backdrop-blur bg-opacity-95 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] no-print">
+    <div id="mobileTabBar" class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-2 py-2 flex justify-around items-center z-40 backdrop-blur bg-opacity-95 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] no-print">
         <button onclick="switchView('dashboard')" id="mobile-tab-dashboard" class="flex flex-col items-center gap-0.5 text-teal-400 flex-1">
             <span class="text-lg">📊</span>
             <span class="text-[8px] font-semibold">Dashboard</span>

@@ -268,6 +268,11 @@ function initSailorsListener() {
             renderDashboard();
         }
 
+        // Re-render personal sailor dashboard if active profile is Sailor
+        if (store.activeProfileType === 'Sailor') {
+            renderSailorDashboardView();
+        }
+
         // Re-render user settings profile if settings page is open
         if (!document.getElementById('view-settings').classList.contains('hidden') && _currentSettingsTab === 'user') {
             switchSettingsTab('user');
@@ -525,7 +530,7 @@ function computeYesterdayJobs() {
 
 function refreshCurrentView() {
     computeYesterdayJobs();
-    const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary','sailors'];
+    const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary','sailors','sailordashboard'];
     for (const v of views) {
         const el = document.getElementById(`view-${v}`);
         if (el && !el.classList.contains('hidden')) {
@@ -538,6 +543,7 @@ function refreshCurrentView() {
                 case 'reports':     renderReports();        break;
                 case 'dailydetails': renderDailyDetailsSpecialView(); break;
                 case 'sailors':     renderSailorsView();    break;
+                case 'sailordashboard': renderSailorDashboardView(); break;
             }
             break;
         }
@@ -641,6 +647,7 @@ function switchView(view) {
         case 'dailydetails': renderDailyDetailsSpecialView(); break;
         case 'summary': /* Placeholder for next phase */ break;
         case 'sailors': renderSailorsView(); break;
+        case 'sailordashboard': renderSailorDashboardView(); break;
     }
 }
 
@@ -7139,19 +7146,25 @@ function performProfileSwitch(type, zoneId = '', oicProfileId = '') {
     // Save to localStorage
     localStorage.setItem('ncw_ps_active_profile_type', type);
     localStorage.setItem('ncw_ps_active_profile_zone', zoneId);
-    localStorage.setItem('ncw_ps_active_oic_profile_id', oicProfileId);
+    
+    if (type === 'Sailor') {
+        localStorage.setItem('ncw_ps_active_sailor_id', oicProfileId); // third param is sailorId
+        switchView('sailordashboard');
+    } else {
+        localStorage.setItem('ncw_ps_active_oic_profile_id', oicProfileId);
+        switchView('dashboard');
+    }
 
     // Apply active profile rules
     applyActiveProfile();
-
-    // Switch view to dashboard to avoid staying on locked pages
-    switchView('dashboard');
 
     // Refresh view
     refreshCurrentView();
 
     // Show toast
-    if (type === 'OIC') {
+    if (type === 'Sailor') {
+        showToast('Logged in as Sailor');
+    } else if (type === 'OIC') {
         showToast('Switched to Command / OIC Profile');
     } else if (type === 'ZoneSubInCharge') {
         showToast(`Logged in as Sub In-Charge for ${zoneId}`);
@@ -7185,6 +7198,31 @@ function applyActiveProfile() {
     const zoneId = store.activeProfileZone;
     const s = store.settings || {};
     const zoneSelector = document.getElementById('zoneSelector');
+
+    // Toggle administrative components for Sailor Login
+    const navHeader = document.getElementById('navalHeader');
+    const mobileNav = document.getElementById('mobileTabBar');
+    const statusB = document.getElementById('tacticalStatusBar');
+    const sidebar = document.getElementById('leftSidebarContainer');
+    const sidebarToggle = document.getElementById('sidebarToggleBtn');
+
+    if (type === 'Sailor') {
+        if (navHeader) navHeader.classList.add('hidden');
+        if (mobileNav) mobileNav.classList.add('hidden');
+        if (statusB) statusB.classList.add('hidden');
+        if (sidebar) sidebar.classList.add('hidden');
+        if (sidebarToggle) sidebarToggle.classList.add('hidden');
+        
+        switchView('sailordashboard');
+        renderSailorDashboardView();
+        return;
+    } else {
+        if (navHeader) navHeader.classList.remove('hidden');
+        if (mobileNav) mobileNav.classList.remove('hidden');
+        if (statusB) statusB.classList.remove('hidden');
+        if (sidebar) sidebar.classList.remove('hidden');
+        if (sidebarToggle) sidebarToggle.classList.remove('hidden');
+    }
 
     if ((type === 'ZoneInCharge' || type === 'ZoneSubInCharge') && zoneId) {
         store.currentZone = zoneId;
@@ -7451,6 +7489,19 @@ function onLoginProfileChange(val) {
 
 function submitLogin(e) {
     e.preventDefault();
+    const mode = document.getElementById('loginMode')?.value || 'OIC';
+    
+    if (mode === 'SAILOR') {
+        const sailorId = document.getElementById('loginSailorSelectedId').value;
+        if (!sailorId) {
+            showToast('Please search and select your Service Number!', 'error');
+            return;
+        }
+        performProfileSwitch('Sailor', '', sailorId);
+        document.getElementById('loginScreen').classList.add('hidden');
+        return;
+    }
+
     const val = document.getElementById('loginProfileSelect').value;
     if (!val) return;
     
@@ -7496,6 +7547,7 @@ function logoutProfile() {
     localStorage.removeItem('ncw_ps_active_profile_type');
     localStorage.removeItem('ncw_ps_active_profile_zone');
     localStorage.removeItem('ncw_ps_active_oic_profile_id');
+    localStorage.removeItem('ncw_ps_active_sailor_id');
     store.activeProfileType = null;
     store.activeProfileZone = null;
     store.activeOicProfileId = null;
@@ -7504,9 +7556,8 @@ function logoutProfile() {
     const loginScreen = document.getElementById('loginScreen');
     if (loginScreen) {
         loginScreen.classList.remove('hidden');
+        setLoginMode('OIC'); // Reset mode to default
         populateLoginProfiles();
-        document.getElementById('loginProfileSelect').value = '';
-        onLoginProfileChange('');
     }
     
     // Close dropdown
@@ -8558,3 +8609,251 @@ function openSailorProfile(sailorId) {
 
     document.getElementById('sailorProfileModal').classList.remove('hidden');
 }
+
+// =============================================================================
+// SAILOR LOGIN AUTOCOMPLETE & PERSONAL DASHBOARD VIEW METHODS
+// =============================================================================
+
+// Set Login Mode (OIC or SAILOR)
+function setLoginMode(mode) {
+    const inputMode = document.getElementById('loginMode');
+    if (!inputMode) return;
+    inputMode.value = mode;
+
+    const btnOic = document.getElementById('loginModeBtnOIC');
+    const btnSailor = document.getElementById('loginModeBtnSailor');
+    const groupOic = document.getElementById('loginGroupOic');
+    const groupSailor = document.getElementById('loginGroupSailor');
+    const pwdGroup = document.getElementById('loginPasswordGroup');
+    const pwdInput = document.getElementById('loginPasswordInput');
+    const container = document.getElementById('loginAvatarContainer');
+
+    // Reset avatar
+    container.innerHTML = '<span class="text-3xl">⚓</span>';
+
+    if (mode === 'OIC') {
+        btnOic.classList.add('bg-teal-600', 'text-white');
+        btnOic.classList.remove('text-slate-400', 'hover:text-white');
+        btnSailor.classList.remove('bg-teal-600', 'text-white');
+        btnSailor.classList.add('text-slate-400', 'hover:text-white');
+        
+        groupOic.classList.remove('hidden');
+        groupSailor.classList.add('hidden');
+        
+        document.getElementById('loginProfileSelect').value = '';
+        pwdGroup.classList.add('hidden');
+        pwdInput.required = false;
+        pwdInput.value = '';
+    } else {
+        btnSailor.classList.add('bg-teal-600', 'text-white');
+        btnSailor.classList.remove('text-slate-400', 'hover:text-white');
+        btnOic.classList.remove('bg-teal-600', 'text-white');
+        btnOic.classList.add('text-slate-400', 'hover:text-white');
+        
+        groupSailor.classList.remove('hidden');
+        groupOic.classList.add('hidden');
+        
+        document.getElementById('loginSailorSearch').value = '';
+        document.getElementById('loginSailorSelectedId').value = '';
+        pwdGroup.classList.add('hidden');
+        pwdInput.required = false;
+        pwdInput.value = '';
+    }
+}
+
+// Filter Autocomplete list inside login screen
+function filterLoginSailor(query) {
+    const dropdown = document.getElementById('loginSailorDropdown');
+    if (!dropdown) return;
+
+    if (!query.trim()) {
+        dropdown.innerHTML = '';
+        dropdown.classList.add('hidden');
+        return;
+    }
+
+    const q = query.toLowerCase().trim();
+    const matches = store.sailors.filter(s => 
+        (s.name || '').toLowerCase().includes(q) || 
+        String(s.official_number || '').toLowerCase().includes(q)
+    ).slice(0, 8); // Top 8 matches
+
+    if (matches.length === 0) {
+        dropdown.innerHTML = '<div class="p-3 text-slate-500 text-xs italic">No matching sailors found</div>';
+        dropdown.classList.remove('hidden');
+        return;
+    }
+
+    dropdown.innerHTML = matches.map(s => {
+        const cleanNo = s.official_number ? s.official_number.replace(/[^a-zA-Z0-9]/g, '') : '';
+        const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'AB';
+        const fallbackText = `<div class="w-8 h-8 rounded-full bg-slate-800 text-teal-400 flex items-center justify-center font-bold text-[10px] flex-shrink-0">${shortRank}</div>`;
+        const avatar = cleanNo ? 
+            `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '
+${cleanNo}')">` :
+            fallbackText;
+
+        return `
+            <div onclick="selectLoginSailor('${s.id}')" class="px-4 py-2.5 hover:bg-white/5 cursor-pointer flex items-center gap-3 transition-colors text-xs text-white">
+                ${avatar}
+                <div class="min-w-0 flex-1">
+                    <p class="font-bold truncate">${s.name}</p>
+                    <p class="text-[10px] text-slate-400 truncate mt-0.5">${s.rank} · ${s.official_number}</p>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    dropdown.classList.remove('hidden');
+}
+
+// Show dropdown results when input focus
+function showLoginSailorDropdown() {
+    const val = document.getElementById('loginSailorSearch').value;
+    filterLoginSailor(val);
+}
+
+// Select Sailor in Login Page Autocomplete
+function selectLoginSailor(id) {
+    const sailor = store.sailors.find(s => String(s.id) === String(id));
+    if (!sailor) return;
+
+    document.getElementById('loginSailorSearch').value = `${sailor.rank} ${sailor.name} (${sailor.official_number})`;
+    document.getElementById('loginSailorSelectedId').value = id;
+    
+    // Hide dropdown
+    const dropdown = document.getElementById('loginSailorDropdown');
+    if (dropdown) dropdown.classList.add('hidden');
+
+    // Update Avatar Preview
+    const container = document.getElementById('loginAvatarContainer');
+    const cleanNo = sailor.official_number ? sailor.official_number.replace(/[^a-zA-Z0-9]/g, '') : '';
+    const shortRank = sailor.rank ? sailor.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'AB';
+    const fallbackText = `<div class="w-full h-full bg-slate-800 text-teal-400 flex items-center justify-center font-bold text-lg">${shortRank}</div>`;
+    
+    if (cleanNo) {
+        container.innerHTML = `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
+    } else {
+        container.innerHTML = fallbackText;
+    }
+}
+
+// Render the Personal Sailor Dashboard View
+function renderSailorDashboardView() {
+    const sailorId = localStorage.getItem('ncw_ps_active_sailor_id');
+    if (!sailorId) {
+        logoutProfile();
+        return;
+    }
+
+    const sailor = store.sailors.find(s => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
+    if (!sailor) {
+        // Retry loading if database hasn't loaded yet
+        return;
+    }
+
+    const points = calculateSailorPoints(sailor);
+    const leaveDays = calculateSailorLeaveDays(sailor);
+
+    // Bio
+    document.getElementById('dashName').textContent = sailor.name;
+    document.getElementById('dashRankOffNo').textContent = `${sailor.rank} · Official No: ${sailor.official_number}`;
+    document.getElementById('dashActiveZone').textContent = `Zone: ${sailor.zone_assigned || 'None'}`;
+    document.getElementById('dashTradeBadge').textContent = sailor.trade;
+    document.getElementById('dashCategory').textContent = sailor.category || 'Regular';
+
+    const tradeColors = {
+        'MA': 'bg-teal-600 text-teal-100', 'CA': 'bg-purple-600 text-purple-100', 'PA': 'bg-amber-700 text-amber-100',
+        'PL': 'bg-cyan-600 text-cyan-100', 'WE': 'bg-red-600 text-red-100', 'RW': 'bg-slate-700 text-slate-100',
+        'SW': 'bg-emerald-800 text-emerald-100', 'BB': 'bg-blue-700 text-blue-100', 'AL': 'bg-pink-600 text-pink-100'
+    };
+    const tradeClass = tradeColors[sailor.trade] || 'bg-slate-800 text-slate-100';
+    document.getElementById('dashTradeBadge').className = `text-xs px-2 py-0.5 rounded font-extrabold ${tradeClass}`;
+
+    // Status Badge
+    const assignment = getSailorCurrentAssignment(sailor.id ?? sailor._fbKey);
+    const statusBadge = document.getElementById('dashStatusBadge');
+    
+    if (sailor.attendance === 'Leave') {
+        statusBadge.className = 'text-xs bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1';
+        statusBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>On Leave';
+    } else if (sailor.attendance === 'Sick') {
+        statusBadge.className = 'text-xs bg-rose-100 text-rose-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1';
+        statusBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Sick';
+    } else if (assignment) {
+        statusBadge.className = 'text-xs bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1';
+        statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>Busy: ${assignment.zone}`;
+    } else {
+        statusBadge.className = 'text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1';
+        statusBadge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Available';
+    }
+
+    // Points & Leave Days
+    document.getElementById('dashTotalPoints').textContent = points;
+    document.getElementById('dashLeaveDays').textContent = leaveDays;
+    
+    // Ratings
+    document.getElementById('dashAvgRating').textContent = `${(sailor.avgScore || 7.0).toFixed(1)} / 10`;
+    document.getElementById('dashYesterdayRating').textContent = sailor.yesterdayScore ? `${sailor.yesterdayScore.toFixed(1)} / 10` : '-';
+
+    // Progress Bar to Next Leave Day
+    const progressVal = points % 10;
+    document.getElementById('dashNextLeaveProgressText').textContent = `${progressVal} / 10 Points`;
+    document.getElementById('dashNextLeaveProgressBar').style.width = `${progressVal * 10}%`;
+
+    // Profile Photo
+    const cleanNo = sailor.official_number ? sailor.official_number.replace(/[^a-zA-Z0-9]/g, '') : '';
+    const shortRank = sailor.rank ? sailor.rank.replace(/[a-z\s()]/gi, '').substring(0,3) : 'AB';
+    const fallbackText = `<div class="w-full h-full rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xl">${shortRank}</div>`;
+    const picContainer = document.getElementById('dashPicContainer');
+    
+    if (cleanNo) {
+        picContainer.innerHTML = `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, '&quot;')}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
+    } else {
+        picContainer.innerHTML = fallbackText;
+    }
+
+    // Populate Duty Log
+    const dutyLogContainer = document.getElementById('dashDutyLog');
+    const recentJobs = [];
+    
+    const allocations = (store.dailyAllocations || []).filter(a => 
+        String(a.sailor_id) === String(sailor.id) || 
+        String(a.sailor_id) === String(sailor._fbKey)
+    );
+    
+    allocations.forEach(a => {
+        const wo = store.workOrders.find(w => String(w.id) === String(a.work_order_id) || String(w._fbKey) === String(a.work_order_id));
+        recentJobs.push({
+            date: a.date,
+            type: 'Daily Allocation',
+            ref: wo ? wo.reference_no : 'Task Allocation',
+            desc: wo ? wo.description : 'Productivity suite labor allocation',
+            status: 'Completed'
+        });
+    });
+
+    recentJobs.sort((a, b) => b.date.localeCompare(a.date));
+
+    dutyLogContainer.innerHTML = recentJobs.slice(0, 10).map(job => `
+        <div class="p-3 hover:bg-slate-50 flex items-center justify-between text-xs">
+            <div>
+                <p class="font-bold text-slate-700">${job.desc}</p>
+                <p class="text-slate-400 mt-0.5">Ref: ${job.ref} · ${job.type}</p>
+            </div>
+            <div class="text-right">
+                <span class="mono text-slate-500 font-bold">${job.date}</span>
+                <span class="block text-[10px] text-green-600 font-semibold uppercase mt-0.5">${job.status}</span>
+            </div>
+        </div>
+    `).join('') || '<p class="text-slate-400 text-center py-6 text-xs">No recent allocation records found.</p>';
+}
+
+// Window click listener to close login search dropdown
+window.addEventListener('click', function(e) {
+    const dropdown = document.getElementById('loginSailorDropdown');
+    const input = document.getElementById('loginSailorSearch');
+    if (dropdown && input && !dropdown.contains(e.target) && !input.contains(e.target)) {
+        dropdown.classList.add('hidden');
+    }
+});
