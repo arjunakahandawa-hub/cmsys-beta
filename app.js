@@ -751,7 +751,10 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
         const createdDate = new Date(wo.created_at).toISOString().split('T')[0];
         if (createdDate <= dateStr) {
             if (wo.status === 'Completed') {
-                return false;
+                const compDate = wo.completed_date || wo.last_commit_date || wo.last_assigned_date || today;
+                if (compDate < dateStr) {
+                    return false;
+                }
             }
             return true;
         }
@@ -2815,9 +2818,35 @@ function forwardToComplete() {
     const woKey = store.selectedWorkOrder;
     const wo = store.workOrders.find(w => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey));
     if (wo) {
+        const today = new Date().toISOString().split('T')[0];
+        
         // Collect currently assigned sailors to free them up locally
         const assignedIds = (wo.assigned || []).map(String);
         
+        // Auto-commit crew to daily allocations for today before clearing them
+        if (assignedIds.length > 0) {
+            assignedIds.forEach(sid => {
+                const sailor = store.sailors.find(s => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
+                const alreadyAllocated = (store.dailyAllocations || []).some(a => a.date === today && String(a.sailor_id) === String(sid) && String(a.work_order_id) === String(wo.id));
+                if (!alreadyAllocated) {
+                    store.dailyAllocations = (store.dailyAllocations || []).filter(a => !(a.date === today && a.sailor_id === sid));
+                    const alloc = {
+                        id: (store.dailyAllocations || []).length + 1,
+                        date: today,
+                        sailor_id: sid,
+                        work_order_id: wo.id,
+                        role_today: (sailor && sailor.id == wo.supervisor) ? 'Supervisor' : (sailor && sailor.id == wo.incharge) ? 'In-Charge' : 'Worker',
+                        assigned_by: (store.currentUser && store.currentUser.name) ? store.currentUser.name : 'Officer',
+                        status: 'Active'
+                    };
+                    if (!store.dailyAllocations) store.dailyAllocations = [];
+                    store.dailyAllocations.push(alloc);
+                    opsDB.ref(`daily_allocations/${today}_${sid}`).set(alloc);
+                }
+            });
+        }
+        
+        wo.completed_date = today;
         wo.status = 'Completed';
         wo.progress = 100;
         wo.assigned = []; // Remove sailors from work order
