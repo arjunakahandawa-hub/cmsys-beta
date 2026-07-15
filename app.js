@@ -8319,6 +8319,111 @@ function printLmdDetails(scope, selectedZone) {
     setTimeout(() => { win.print(); }, 300);
 }
 
+function openEvalDetailsModal(mode) {
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    const modalTitle = document.getElementById('evalDetailsModalTitle');
+    const modalIcon = document.getElementById('evalDetailsModalIcon');
+    const tableHeader = document.getElementById('evalDetailsTableActionHeader');
+    
+    if (mode === 'evaluated') {
+        modalTitle.textContent = `Evaluated Sailors — ${dateVal}`;
+        modalIcon.textContent = '✅';
+        tableHeader.textContent = 'Score';
+    } else {
+        modalTitle.textContent = `Pending Evaluations — ${dateVal}`;
+        modalIcon.textContent = '⏳';
+        tableHeader.textContent = 'Pending Days';
+    }
+    
+    // Get all assigned sailors for the selected date
+    const assignedIds = new Set();
+    if (dateVal === today) {
+        (store.workOrders || []).forEach(wo => {
+            if ((wo.status === 'Active' || wo.status === 'Pending') && wo.assigned) {
+                wo.assigned.forEach(id => assignedIds.add(String(id)));
+            }
+        });
+    } else {
+        (store.dailyAllocations || []).forEach(alloc => {
+            if (alloc.date === dateVal) {
+                assignedIds.add(String(alloc.sailor_id));
+            }
+        });
+    }
+    
+    if (!store.sailors) return;
+    
+    // Filter sailors who are assigned today
+    const assignedSailors = store.sailors.filter(s => assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey)));
+    
+    // Filter based on evaluation mode
+    const filteredSailors = assignedSailors.filter(s => {
+        const alloc = (store.dailyAllocations || []).find(a => a.date === dateVal && String(a.sailor_id) === String(s.id));
+        const isEval = alloc ? alloc.evaluated === true : s.evaluated === true;
+        return mode === 'evaluated' ? isEval : !isEval;
+    });
+    
+    const tbody = document.getElementById('evalDetailsTableBody');
+    if (!tbody) return;
+    
+    tbody.innerHTML = filteredSailors.map(s => {
+        const alloc = (store.dailyAllocations || []).find(a => a.date === dateVal && String(a.sailor_id) === String(s.id));
+        let workDesc = 'Not specified';
+        let zoneId = s.zone_assigned || 'A-Zone';
+        
+        if (alloc && alloc.work_order_id) {
+            const wo = store.workOrders.find(w => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id));
+            if (wo) {
+                workDesc = wo.description || wo.reference_no || 'Active Work';
+                zoneId = wo.zone_id || zoneId;
+            }
+        } else {
+            const wo = store.workOrders.find(w => (w.status === 'Active' || w.status === 'Pending') && w.assigned && w.assigned.map(String).includes(String(s.id)));
+            if (wo) {
+                workDesc = wo.description || wo.reference_no || 'Active Work';
+                zoneId = wo.zone_id || zoneId;
+            }
+        }
+        
+        const sSettings = store.settings || {};
+        const inc = sSettings.zoneInCharges && sSettings.zoneInCharges[zoneId];
+        const inChargeStr = inc ? `${inc.rank} ${inc.name}` : 'No In-Charge set';
+        
+        let detailHtml = '';
+        if (mode === 'evaluated') {
+            let scoreVal = s.yesterdayScore || 7.0;
+            if (alloc && alloc.points !== undefined) {
+                scoreVal = alloc.points;
+            }
+            detailHtml = `<span class="px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold rounded-lg text-xs">⭐ ${scoreVal.toFixed(1)}</span>`;
+        } else {
+            const unEvaluatedAllocs = (store.dailyAllocations || []).filter(a => String(a.sailor_id) === String(s.id) && !a.evaluated);
+            const count = unEvaluatedAllocs.length;
+            detailHtml = `<span class="px-2.5 py-1 ${count > 2 ? 'bg-red-100 text-red-800 animate-pulse font-bold' : 'bg-slate-100 text-slate-700'} rounded-lg text-xs">${count} days pending</span>`;
+        }
+        
+        return `
+            <tr class="hover:bg-slate-100/50 transition-colors">
+                <td class="p-3 font-semibold text-slate-700">${s.official_number || s.service_no || '-'}</td>
+                <td class="p-3">
+                    <p class="font-bold text-teal-600 hover:underline cursor-pointer" onclick="closeModal('evalDetailsModal'); openSailorProfile('${s.id ?? s._fbKey}')">${s.rank} ${s.name}</p>
+                    <p class="text-xs text-slate-400 font-medium">${s.trade}</p>
+                </td>
+                <td class="p-3 max-w-[200px] truncate" title="${workDesc}">${workDesc}</td>
+                <td class="p-3">
+                    <p class="font-semibold text-slate-700 text-xs">${zoneId}</p>
+                    <p class="text-slate-400 text-xs">${inChargeStr}</p>
+                </td>
+                <td class="p-3">${detailHtml}</td>
+            </tr>
+        `;
+    }).join('') || `<tr><td colspan="5" class="p-8 text-center text-slate-400 italic">No sailors in this category for today</td></tr>`;
+    
+    document.getElementById('evalDetailsModal').classList.remove('hidden');
+}
+
 // ---- Theme Management & Online Status ----
 function initTheme() {
     const isDark = localStorage.getItem('ncw_ps_dark_theme') === 'true';

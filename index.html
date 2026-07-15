@@ -754,13 +754,13 @@
                                     <p class="text-[11px] text-slate-400 mt-0.5">Tasks</p>
                                     <p class="text-[10px] text-blue-200/80 font-medium mt-0.5" id="ongoingTasksTrades"></p>
                                 </div>
-                                <div class="text-center pl-4 md:pl-5" style="border-left:1px solid rgba(13,148,136,0.4)">
-                                    <p class="text-2xl font-extrabold text-emerald-300" id="evaluatedToday">0</p>
-                                    <p class="text-[11px] text-slate-400 mt-0.5">Evaluated</p>
+                                <div onclick="openEvalDetailsModal('evaluated')" class="text-center pl-4 md:pl-5 cursor-pointer hover:scale-105 transition-all group" style="border-left:1px solid rgba(13,148,136,0.4)" title="View Evaluated Sailors">
+                                    <p class="text-2xl font-extrabold text-emerald-300 group-hover:text-emerald-200 transition-colors" id="evaluatedToday">0</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5 group-hover:text-slate-300 transition-colors">Evaluated</p>
                                 </div>
-                                <div class="text-center pl-4 md:pl-5" style="border-left:1px solid rgba(13,148,136,0.4)">
-                                    <p class="text-2xl font-extrabold text-rose-300" id="pendingEvals">0</p>
-                                    <p class="text-[11px] text-slate-400 mt-0.5">Pending</p>
+                                <div onclick="openEvalDetailsModal('pending')" class="text-center pl-4 md:pl-5 cursor-pointer hover:scale-105 transition-all group" style="border-left:1px solid rgba(13,148,136,0.4)" title="View Pending Evaluations">
+                                    <p class="text-2xl font-extrabold text-rose-300 group-hover:text-rose-200 transition-colors" id="pendingEvals">0</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5 group-hover:text-slate-300 transition-colors">Pending</p>
                                 </div>
                             </div>
                         </div>
@@ -3232,6 +3232,42 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Evaluation Details Modal -->
+    <div id="evalDetailsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div class="bg-gradient-to-r from-teal-950 via-slate-900 to-teal-950 text-white px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl" id="evalDetailsModalIcon">📊</span>
+                    <h2 class="font-bold text-lg" id="evalDetailsModalTitle">Evaluation Details</h2>
+                </div>
+                <button onclick="closeModal('evalDetailsModal')" class="text-teal-200 hover:text-white text-lg font-bold">✕</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-1">
+                <div class="overflow-x-auto rounded-xl border border-slate-100 shadow-sm bg-slate-50/50">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                <th class="p-3">Service No</th>
+                                <th class="p-3">Rank & Name</th>
+                                <th class="p-3">Assigned Work / Shop</th>
+                                <th class="p-3">Zone & In-Charge</th>
+                                <th class="p-3" id="evalDetailsTableActionHeader">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="evalDetailsTableBody" class="divide-y divide-slate-100 text-slate-600">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="bg-slate-50 px-6 py-4 flex justify-end border-t border-slate-100">
+                <button onclick="closeModal('evalDetailsModal')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-xl font-semibold text-sm transition-all">Close</button>
+            </div>
         </div>
     </div>
 
