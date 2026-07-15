@@ -424,6 +424,10 @@
         .settings-tab-btn:hover { background: #e2e8f0; color: #334155; }
         .active-stab { background: linear-gradient(135deg,#0a1628,#152a55) !important; color: #5eead4 !important; }
     </style>
+    <!-- PDF Generation Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Google Identity Services (OAuth 2.0) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="min-h-screen" style="background:linear-gradient(160deg,#e8f4f8 0%,#dbeafe 25%,#e0f2fe 55%,#ecfdf5 100%)">
     <!-- ==================== PREMIUM LOGIN SCREEN ==================== -->
@@ -1272,6 +1276,10 @@
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Station Name</label>
                                 <input type="text" id="cfg-stationName" placeholder="SLN Docyard" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('stationName',this.value)">
                                 <p class="text-xs text-slate-400 mt-1">Header sub-line text (e.g., Naval Civil Works · Miss Garrison · Trincomalee)</p>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Google OAuth Client ID</label>
+                                <input type="text" id="cfg-googleClientId" placeholder="your-client-id.apps.googleusercontent.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('googleClientId',this.value)">
+                                <p class="text-xs text-slate-400 mt-1">Google Drive එකට PDF Backup Upload කිරීම සඳහා අවශ්‍ය OAuth Client ID එක මෙතැනට ඇතුළත් කරන්න.</p>
                             </div>
                             <hr class="border-slate-100">
                             <div class="flex items-center justify-between">
@@ -3281,6 +3289,28 @@
             
             <div class="flex justify-end gap-3 p-6 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
                 <button onclick="closeModal('sailorProfileModal')" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Drive Config Modal -->
+    <div id="googleConfigModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-teal-600 to-cyan-600 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h3 class="text-lg font-bold">Google OAuth API Setup</h3>
+                <button onclick="closeModal('googleConfigModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-slate-600">Google Drive එකට PDF උපස්ථ අප්ලෝඩ් කිරීම සඳහා ඔබගේ Google OAuth Client ID එක මෙතැනට ඇතුළත් කරන්න:</p>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Google OAuth Client ID</label>
+                    <input type="text" id="cfg-googleClientIdModal" placeholder="your-client-id.apps.googleusercontent.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50">
+                    <p class="text-xs text-slate-400 mt-2">මෙම අගය සාදා ගැනීමට Google Cloud Console හි OAuth 2.0 Client ID එකක් සකස් කර ගන්න.</p>
+                </div>
+                <div class="flex gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('googleConfigModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">Cancel</button>
+                    <button type="button" onclick="saveGoogleConfigFromModal()" class="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium">Save & Proceed</button>
+                </div>
             </div>
         </div>
     </div>

@@ -5865,6 +5865,7 @@ function switchSettingsTab(tab) {
     if (tab === 'identity') {
         setValue('cfg-systemTitle', s.systemTitle);
         setValue('cfg-stationName', s.stationName);
+        setValue('cfg-googleClientId', s.googleClientId);
         renderSettingsOicProfilesList();
     } else if (tab === 'user') {
         // Populate Zone dropdown
@@ -7820,12 +7821,18 @@ function renderDailyDetailsSpecialView() {
                 <h3 class="text-lg font-bold text-slate-800">📋 Daily Details - All Zones</h3>
                 <p class="text-xs text-slate-500 mt-0.5">Overview of sailor allocations across all zones</p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
                 <button onclick="openLmdExportModal('csv')" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                      Export CSV
                 </button>
                 <button onclick="openLmdExportModal('print')" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                      Print / PDF
+                </button>
+                <button onclick="downloadWorkOrdersPdfBackup()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all" title="Download PDF Backup">
+                     💾 Download PDF
+                </button>
+                <button onclick="uploadWorkOrdersPdfToDrive()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all" title="Upload PDF to Google Drive">
+                     ☁️ Upload to Google Drive
                 </button>
                 <button onclick="openLmdExportModal('whatsapp')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                      WhatsApp Share
@@ -8895,3 +8902,264 @@ window.addEventListener('click', function(e) {
         dropdown.classList.add('hidden');
     }
 });
+
+// =============================================
+// PDF BACKUP & GOOGLE DRIVE BACKUP SYSTEM
+// =============================================
+function generateWorkOrdersPdfBlob(dateVal) {
+    const today = new Date().toISOString().split('T')[0];
+    const targetDate = dateVal || store.dashboardDate || today;
+    
+    // Generate the exact same HTML rows as printLmdDetails but for all zones
+    let rowsHtml = '';
+    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    
+    zones.forEach(z => {
+        const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, targetDate));
+        
+        let zoneHasAllocations = false;
+        wos.forEach(wo => {
+            let assignedCount = 0;
+            if (targetDate === today) {
+                assignedCount = (wo.assigned || []).length;
+            } else {
+                assignedCount = (store.dailyAllocations || []).filter(a => 
+                    a.date === targetDate && String(a.work_order_id) === String(wo.id)
+                ).length;
+            }
+            if (assignedCount > 0) zoneHasAllocations = true;
+        });
+
+        if (zoneHasAllocations) {
+            rowsHtml += `
+                <tr style="background-color: #0f172a; color: white; font-weight: bold;">
+                    <td colspan="6" style="padding: 8px 12px; font-size: 13px; text-transform: uppercase;">
+                        🗺️ ZONE: ${z.name.toUpperCase()}
+                    </td>
+                </tr>
+            `;
+            
+            wos.forEach(wo => {
+                let assignedSailors = [];
+                if (targetDate === today) {
+                    const assignedIds = (wo.assigned || []).map(String);
+                    assignedSailors = store.sailors.filter(s =>
+                        assignedIds.includes(String(s.id)) ||
+                        assignedIds.includes(String(s._fbKey))
+                    );
+                } else {
+                    const assignedIds = (store.dailyAllocations || [])
+                        .filter(a => a.date === targetDate && String(a.work_order_id) === String(wo.id))
+                        .map(a => String(a.sailor_id));
+                    assignedSailors = store.sailors.filter(s =>
+                        assignedIds.includes(String(s.id)) ||
+                        assignedIds.includes(String(s._fbKey))
+                    );
+                }
+                
+                if (assignedSailors.length > 0) {
+                    rowsHtml += `
+                        <tr style="background-color: #f1f5f9; font-weight: bold;">
+                            <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
+                                📋 DUTY: ${wo.description.toUpperCase()}
+                            </td>
+                        </tr>
+                    `;
+                    
+                    assignedSailors.forEach((s, idx) => {
+                        const serNo = String(idx + 1).padStart(2, '0');
+                        const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                        rowsHtml += `
+                            <tr>
+                                <td style="text-align:center;">${serNo}</td>
+                                <td>${s.rank || 'AB'}</td>
+                                <td>${s.name}</td>
+                                <td style="text-align:center;">${parsedOffNo.type}</td>
+                                <td>${parsedOffNo.num}</td>
+                                <td style="text-align:center;">${s.trade || '—'}</td>
+                            </tr>
+                        `;
+                    });
+                }
+            });
+        }
+    });
+
+    if (!rowsHtml) {
+        rowsHtml = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #64748b;">No allocations found for this selection on this date.</td></tr>`;
+    }
+    
+    const formattedDate = new Date(targetDate).toLocaleDateString('en-GB', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+
+    // Create container element for html2pdf
+    const element = document.createElement('div');
+    element.style.padding = '20px';
+    element.style.background = '#white';
+    element.innerHTML = `
+        <div style="font-family: 'Segoe UI', Arial, sans-serif; color:#000;">
+            <div style="display: flex; align-items: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px;">
+                <div style="text-align: left;">
+                    <h1 style="font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">NCW-PS Daily Details Report</h1>
+                    <h2 style="font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">Naval Civil Works • Miss Garrison</h2>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #334155; margin-bottom: 15px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 6px;">
+                <div>
+                    <strong>Date:</strong> ${formattedDate}<br>
+                    <strong>Scope:</strong> All Zones Combined
+                </div>
+                <div style="text-align: right;">
+                    <strong>Generated At:</strong> ${new Date().toLocaleString()}<br>
+                    <strong>Authorized By:</strong> NCW-PS System
+                </div>
+            </div>
+            
+            <table style="width:100%; border-collapse:collapse; font-size:10.5px; margin-top: 10px;">
+                <thead>
+                    <tr style="background:#f1f5f9;">
+                        <th style="border:1px solid #94a3b8; padding:7px 9px; text-align:center;">Sr.No</th>
+                        <th style="border:1px solid #94a3b8; padding:7px 9px;">Rank</th>
+                        <th style="border:1px solid #94a3b8; padding:7px 9px;">Name</th>
+                        <th style="border:1px solid #94a3b8; padding:7px 9px; text-align:center;">Type</th>
+                        <th style="border:1px solid #94a3b8; padding:7px 9px;">Off. No</th>
+                        <th style="border:1px solid #94a3b8; padding:7px 9px; text-align:center;">Trade</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+
+            <div style="margin-top: 60px; display: flex; justify-content: space-between; font-size: 11px;">
+                <div style="text-align: center; width: 220px;">
+                    <p>..................................................</p>
+                    <p>OIC / Officer In Charge</p>
+                </div>
+                <div style="text-align: center; width: 220px;">
+                    <p>..................................................</p>
+                    <p>Artificer / Supervisor</p>
+                </div>
+            </div>
+        </div>
+    `;
+
+    return element;
+}
+
+function downloadWorkOrdersPdfBackup() {
+    showToast('Preparing PDF backup...', 'info');
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    const element = generateWorkOrdersPdfBlob(dateVal);
+    
+    const opt = {
+        margin:       10,
+        filename:     `ncw_ps_backup_${dateVal}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    
+    html2pdf().set(opt).from(element).save().then(() => {
+        showToast('PDF backup downloaded successfully!');
+    }).catch(err => {
+        console.error(err);
+        showToast('Failed to download PDF backup.', 'error');
+    });
+}
+
+function uploadWorkOrdersPdfToDrive() {
+    const clientId = (store.settings || {}).googleClientId || '';
+    if (!clientId) {
+        openGoogleConfigModal();
+        return;
+    }
+    
+    showToast('Connecting to Google Drive...', 'info');
+    
+    const client = google.accounts.oauth2.initTokenClient({
+        client_id: clientId,
+        scope: 'https://www.googleapis.com/auth/drive.file',
+        callback: (response) => {
+            if (response.error) {
+                showToast(`Google Authentication failed: ${response.error}`, 'error');
+                return;
+            }
+            if (response.access_token) {
+                performGoogleDriveUpload(response.access_token);
+            }
+        }
+    });
+    
+    client.requestAccessToken();
+}
+
+function performGoogleDriveUpload(accessToken) {
+    showToast('Generating PDF & Uploading...', 'info');
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    const element = generateWorkOrdersPdfBlob(dateVal);
+    
+    const opt = {
+        margin:       10,
+        filename:     `ncw_ps_backup_${dateVal}.pdf`,
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    
+    html2pdf().set(opt).from(element).output('blob').then(pdfBlob => {
+        const metadata = {
+            name: `ncw_ps_backup_${dateVal}.pdf`,
+            mimeType: 'application/pdf'
+        };
+        
+        const form = new FormData();
+        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+        form.append('file', pdfBlob);
+        
+        fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${accessToken}`
+            },
+            body: form
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.id) {
+                showToast('✅ Upload to Google Drive successful!');
+            } else {
+                showToast('❌ Google Drive upload failed: ' + (data.error?.message || 'Unknown error'), 'error');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('Failed to upload file to Google Drive.', 'error');
+        });
+    });
+}
+
+function openGoogleConfigModal() {
+    const s = store.settings || {};
+    document.getElementById('cfg-googleClientIdModal').value = s.googleClientId || '';
+    document.getElementById('googleConfigModal').classList.remove('hidden');
+}
+
+function saveGoogleConfigFromModal() {
+    const val = document.getElementById('cfg-googleClientIdModal').value.trim();
+    if (!val) {
+        showToast('Please enter a valid Client ID', 'error');
+        return;
+    }
+    saveSettingField('googleClientId', val);
+    closeModal('googleConfigModal');
+    showToast('Google Client ID saved. Retrying upload...');
+    setTimeout(() => {
+        uploadWorkOrdersPdfToDrive();
+    }, 1000);
+}
+
