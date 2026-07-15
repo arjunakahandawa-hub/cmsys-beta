@@ -618,8 +618,11 @@ function getPerformanceTextColor(score) {
 // =============================================
 // VIEW MANAGEMENT
 // =============================================
-function switchView(view) {
+function switchView(view, preventPushState = false) {
     store.currentView = view;
+    if (!preventPushState) {
+        window.history.pushState({ view: view }, '', `#${view}`);
+    }
     if (typeof toggleLeftSidebar === 'function') {
         toggleLeftSidebar(false);
     }
@@ -6951,6 +6954,7 @@ function removePriorityLevel(i) {
 // =============================================
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
+    initPwaHistoryManagement();
     updateOnlineStatus();
     updateDateTime();
     setInterval(updateDateTime, 1000);
@@ -8422,6 +8426,78 @@ function openEvalDetailsModal(mode) {
     }).join('') || `<tr><td colspan="5" class="p-8 text-center text-slate-400 italic">No sailors in this category for today</td></tr>`;
     
     document.getElementById('evalDetailsModal').classList.remove('hidden');
+}
+
+let _isHistoryBackAction = false;
+
+function initPwaHistoryManagement() {
+    // 1. Set initial history state for the landing view
+    const initialView = store.currentView || 'dashboard';
+    window.history.replaceState({ view: initialView }, '', `#${initialView}`);
+
+    // 2. Listen to popstate (back/forward navigation)
+    window.addEventListener('popstate', (event) => {
+        _isHistoryBackAction = true;
+        
+        // Handle modal state
+        if (event.state && event.state.modalOpen) {
+            // A specific modal is expected to be open
+            document.querySelectorAll('.modal-overlay, [id$="Modal"], [id$="modal"]').forEach(m => {
+                if (m.id === event.state.modalId) {
+                    m.classList.remove('hidden');
+                } else {
+                    m.classList.add('hidden');
+                }
+            });
+        } else {
+            // No modals expected to be open
+            document.querySelectorAll('.modal-overlay, [id$="Modal"], [id$="modal"]').forEach(m => {
+                m.classList.add('hidden');
+            });
+            
+            // Handle view switching
+            if (event.state && event.state.view) {
+                switchView(event.state.view, true);
+            }
+        }
+        
+        setTimeout(() => {
+            _isHistoryBackAction = false;
+        }, 100);
+    });
+
+    // 3. Observe DOM for modal open/close actions to push/pop history states automatically
+    const observer = new MutationObserver((mutations) => {
+        mutations.forEach((mutation) => {
+            if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
+                const target = mutation.target;
+                const isModal = target.classList.contains('modal-overlay') || target.id.endsWith('Modal') || target.id.endsWith('modal');
+                if (!isModal) return;
+
+                const isHidden = target.classList.contains('hidden');
+                
+                if (!isHidden) {
+                    // Modal was opened
+                    if (!_isHistoryBackAction) {
+                        window.history.pushState({ modalOpen: true, modalId: target.id, view: store.currentView }, '', window.location.hash);
+                    }
+                } else {
+                    // Modal was closed
+                    if (!_isHistoryBackAction) {
+                        const state = window.history.state;
+                        if (state && state.modalOpen && state.modalId === target.id) {
+                            window.history.back();
+                        }
+                    }
+                }
+            }
+        });
+    });
+
+    // Start observing all modals
+    document.querySelectorAll('.modal-overlay, [id$="Modal"], [id$="modal"]').forEach(m => {
+        observer.observe(m, { attributes: true, attributeFilter: ['class'] });
+    });
 }
 
 // ---- Theme Management & Online Status ----
