@@ -8257,7 +8257,7 @@ function printLmdDetails(scope, selectedZone) {
         </style></head>
         <body>
             <div class="header-container">
-                <img class="logo-img" src="${window.location.href.split('?')[0].split('#')[0].replace('index.html', '')}navy_crest.jpg" alt="SLN Crest">
+                <img class="logo-img" src="${window.location.href.split('?')[0].split('#')[0].replace('index.html', '')}logo.png" alt="SLN Crest">
                 <div class="header-text">
                     <h1>Sri Lanka Navy</h1>
                     <h2>Captain Civil Engineering Department (E)</h2>
