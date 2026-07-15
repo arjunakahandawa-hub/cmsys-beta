@@ -8409,6 +8409,40 @@ function calculateSailorPoints(sailor) {
     return Math.round(scoreBase + allocationPoints + jobPoints);
 }
 
+// Calculate Sailor points based on average score, allocations, and completed jobs within the last 30 days
+function calculateSailorPointsPast30Days(sailor) {
+    // 10 pts per unit of average performance score (baseline)
+    const scoreBase = parseFloat(sailor.avgScore || 7.0) * 10;
+
+    // Calculate 30 days ago date string (YYYY-MM-DD)
+    const today = new Date();
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(today.getDate() - 30);
+    const limitDateStr = thirtyDaysAgo.toISOString().split('T')[0];
+
+    // Count how many daily allocations they have been part of in the last 30 days (5 pts per duty allocation day)
+    const allocationsCount = (store.dailyAllocations || []).filter(a => {
+        if (String(a.sailor_id) !== String(sailor.id) && String(a.sailor_id) !== String(sailor._fbKey)) {
+            return false;
+        }
+        return a.date && a.date >= limitDateStr;
+    }).length;
+    const allocationPoints = allocationsCount * 5;
+
+    // Count how many completed job cards they have been part of in the last 30 days (15 pts per project participation)
+    const completedJobsCount = (store.jobCards || []).filter(jc => {
+        if (jc.status !== 'Completed') return false;
+        if (!(jc.assigned || []).some(id => String(id) === String(sailor.id) || String(id) === String(sailor._fbKey))) {
+            return false;
+        }
+        const compDateStr = jc.completed_date || jc.last_commit_date || jc.last_assigned_date;
+        return compDateStr && compDateStr >= limitDateStr;
+    }).length;
+    const jobPoints = completedJobsCount * 15;
+
+    return Math.round(scoreBase + allocationPoints + jobPoints);
+}
+
 // Calculate Sailor leave eligibility (1 leave day per 10 points)
 function calculateSailorLeaveDays(sailor) {
     const pts = calculateSailorPoints(sailor);
@@ -8547,7 +8581,7 @@ function openSailorProfile(sailorId) {
         return;
     }
 
-    const points = calculateSailorPoints(sailor);
+    const points = calculateSailorPointsPast30Days(sailor);
     const leaveDays = calculateSailorLeaveDays(sailor);
     
     // Bio
