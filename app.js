@@ -1409,8 +1409,14 @@ function updateCounters() {
 }
 
 function updatePendingEvals() {
+    const evaluated = store.sailors.filter(s => s.status === 'Assigned' && s.evaluated).length;
     const pending = store.sailors.filter(s => s.status === 'Assigned' && !s.evaluated).length;
-    document.getElementById('pendingEvals').textContent = pending;
+    
+    const evalEl = document.getElementById('evaluatedToday');
+    if (evalEl) evalEl.textContent = evaluated;
+    
+    const pendingEl = document.getElementById('pendingEvals');
+    if (pendingEl) pendingEl.textContent = pending;
 }
 
 // =============================================
