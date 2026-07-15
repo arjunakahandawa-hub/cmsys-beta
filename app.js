@@ -8288,13 +8288,15 @@ function printLmdDetails(scope, selectedZone) {
             <div class="signature-section">
                 <div class="sig-block">
                     <p>..................................................</p>
-                    <p style="font-weight: bold;">OIC Civil Engineering Shop</p>
-                    <p style="color: #64748b; font-size: 10px;">Dockyard, Trincomalee</p>
+                    <p style="font-weight: bold;">PREPARED BY - LME</p>
                 </div>
                 <div class="sig-block">
                     <p>..................................................</p>
-                    <p style="font-weight: bold;">Command Civil Engineering Officer</p>
-                    <p style="color: #64748b; font-size: 10px;">Eastern Naval Area</p>
+                    <p style="font-weight: bold;">CHECKED BY (S/S INCHARGE)</p>
+                </div>
+                <div class="sig-block">
+                    <p>..................................................</p>
+                    <p style="font-weight: bold;">CHECKED BY</p>
                 </div>
             </div>
 
@@ -9207,13 +9209,17 @@ function generateWorkOrdersPdfBlob(dateVal) {
             </table>
 
             <div style="margin-top: 60px; display: flex; justify-content: space-between; font-size: 11px;">
-                <div style="text-align: center; width: 220px;">
+                <div style="text-align: center; width: 180px;">
                     <p>..................................................</p>
-                    <p>OIC / Officer In Charge</p>
+                    <p style="font-weight: bold;">PREPARED BY - LME</p>
                 </div>
-                <div style="text-align: center; width: 220px;">
+                <div style="text-align: center; width: 180px;">
                     <p>..................................................</p>
-                    <p>Artificer / Supervisor</p>
+                    <p style="font-weight: bold;">CHECKED BY (S/S INCHARGE)</p>
+                </div>
+                <div style="text-align: center; width: 180px;">
+                    <p>..................................................</p>
+                    <p style="font-weight: bold;">CHECKED BY</p>
                 </div>
             </div>
         </div>
