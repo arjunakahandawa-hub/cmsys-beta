@@ -619,6 +619,7 @@ function getPerformanceTextColor(score) {
 // VIEW MANAGEMENT
 // =============================================
 function switchView(view) {
+    store.currentView = view;
     if (typeof toggleLeftSidebar === 'function') {
         toggleLeftSidebar(false);
     }
@@ -7326,6 +7327,11 @@ function applyActiveProfile() {
         store.activeProfileType = savedType;
         store.activeProfileZone = savedZone || '';
         store.activeOicProfileId = localStorage.getItem('ncw_ps_active_oic_profile_id') || '';
+    }
+
+    // Initialize currentView on load if not set
+    if (!store.currentView) {
+        store.currentView = (store.activeProfileType === 'Sailor') ? 'sailordashboard' : 'dashboard';
     }
 
     const type = store.activeProfileType;
