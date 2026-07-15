@@ -5211,6 +5211,8 @@ function removeZone(zoneId) {
 function renderZoneSelectors() {
     // Determine if the current officer has access to "All Zone" (Admin-&-Staff-Duties)
     let hasAllZoneAccess = true;
+    let allowedZones = store.zones.map(z => z.id); // default all
+
     if (store.activeProfileType === 'OIC') {
         if (store.activeOicProfileId) {
             const profile = getOicProfiles().find(p => p.id === store.activeOicProfileId);
@@ -5219,16 +5221,21 @@ function renderZoneSelectors() {
                 const isMain = (profile.serviceNo || '').includes('3576');
                 if (!isMain) {
                     hasAllZoneAccess = profile.permAllZones === true;
+                    allowedZones = profile.allowedZones || [];
                 }
             }
         }
+    } else if (store.activeProfileType === 'ZoneInCharge' || store.activeProfileType === 'ZoneSubInCharge') {
+        allowedZones = [store.activeProfileZone];
+        hasAllZoneAccess = false;
     }
 
-    let optionsHtml = store.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+    const visibleZones = store.zones.filter(z => allowedZones.includes(z.id));
+    let optionsHtml = visibleZones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
     
-    // Add Admin & Staff Duties special option (only if not already in the zones list AND hasAllZoneAccess is true)
+    // Add Admin & Staff Duties special option
     if (hasAllZoneAccess) {
-        const hasAdminZone = store.zones.some(z => isAdminStaffDuties(z.id));
+        const hasAdminZone = visibleZones.some(z => isAdminStaffDuties(z.id));
         if (!hasAdminZone) {
             optionsHtml += `<option value="Admin-&-Staff-Duties">Admin & Staff Duties</option>`;
         }
@@ -5239,18 +5246,22 @@ function renderZoneSelectors() {
         if (!sel) return;
         const prev = sel.value;
         sel.innerHTML = optionsHtml;
-        if (store.zones.some(z => z.id === prev) || isAdminStaffDuties(prev)) {
-            // If previous selected zone was Admin-&-Staff-Duties but they no longer have access, reset to default zone
-            if (isAdminStaffDuties(prev) && !hasAllZoneAccess) {
-                sel.value = 'A-Zone';
+
+        if (visibleZones.some(z => z.id === prev) || (isAdminStaffDuties(prev) && hasAllZoneAccess)) {
+            sel.value = prev;
+        } else {
+            // Select the first visible zone
+            if (visibleZones.length > 0) {
+                sel.value = visibleZones[0].id;
                 if (selId === 'zoneSelector') {
-                    store.currentZone = 'A-Zone';
+                    store.currentZone = visibleZones[0].id;
                 }
-            } else {
-                sel.value = prev;
+            } else if (hasAllZoneAccess) {
+                sel.value = 'Admin-&-Staff-Duties';
+                if (selId === 'zoneSelector') {
+                    store.currentZone = 'Admin-&-Staff-Duties';
+                }
             }
-        } else if (selId === 'zoneSelector') {
-            sel.value = store.currentZone;
         }
     });
 
@@ -6064,8 +6075,20 @@ function openOicProfileModal() {
     document.getElementById('oicProfRank').value = '';
     document.getElementById('oicProfServiceNo').value = '';
     document.getElementById('oicProfPassword').value = '';
+    
     document.getElementById('oicPermSettings').checked = false;
-    document.getElementById('oicPermAllZones').checked = false;
+    document.getElementById('oicPermDashboard').checked = true;
+    document.getElementById('oicPermJobCards').checked = true;
+    document.getElementById('oicPermInventory').checked = true;
+    document.getElementById('oicPermEstimates').checked = true;
+    document.getElementById('oicPermLMD').checked = true;
+    document.getElementById('oicPermSailors').checked = true;
+    document.getElementById('oicPermReports').checked = true;
+    
+    document.getElementById('oicPermAllZones').checked = true;
+    renderOicZonesPermissionCheckboxes(store.zones.map(z => z.id));
+    toggleSelectAllZonesPerm(true);
+    
     document.getElementById('oicProfileModal').classList.remove('hidden');
 }
 
@@ -6079,8 +6102,28 @@ function editOicProfile(id) {
     document.getElementById('oicProfRank').value = profile.rank;
     document.getElementById('oicProfServiceNo').value = profile.serviceNo;
     document.getElementById('oicProfPassword').value = profile.password || '';
+    
+    // Tab permissions
     document.getElementById('oicPermSettings').checked = profile.permSettings === true;
-    document.getElementById('oicPermAllZones').checked = profile.permAllZones === true;
+    document.getElementById('oicPermDashboard').checked = profile.permDashboard !== false;
+    document.getElementById('oicPermJobCards').checked = profile.permJobCards !== false;
+    document.getElementById('oicPermInventory').checked = profile.permInventory !== false;
+    document.getElementById('oicPermEstimates').checked = profile.permEstimates !== false;
+    document.getElementById('oicPermLMD').checked = profile.permLMD !== false;
+    document.getElementById('oicPermSailors').checked = profile.permSailors !== false;
+    document.getElementById('oicPermReports').checked = profile.permReports !== false;
+
+    // Zone permissions
+    const allZonesChecked = profile.permAllZones === true;
+    document.getElementById('oicPermAllZones').checked = allZonesChecked;
+    
+    const allowedZones = profile.allowedZones || [];
+    renderOicZonesPermissionCheckboxes(allowedZones);
+    
+    if (allZonesChecked) {
+        toggleSelectAllZonesPerm(true);
+    }
+    
     document.getElementById('oicProfileModal').classList.remove('hidden');
 }
 
@@ -6091,31 +6134,52 @@ function saveOicProfile(event) {
     const rank = document.getElementById('oicProfRank').value.trim();
     const serviceNo = document.getElementById('oicProfServiceNo').value.trim();
     const password = document.getElementById('oicProfPassword').value;
+    
     const permSettings = document.getElementById('oicPermSettings').checked;
+    const permDashboard = document.getElementById('oicPermDashboard').checked;
+    const permJobCards = document.getElementById('oicPermJobCards').checked;
+    const permInventory = document.getElementById('oicPermInventory').checked;
+    const permEstimates = document.getElementById('oicPermEstimates').checked;
+    const permLMD = document.getElementById('oicPermLMD').checked;
+    const permSailors = document.getElementById('oicPermSailors').checked;
+    const permReports = document.getElementById('oicPermReports').checked;
+    
     const permAllZones = document.getElementById('oicPermAllZones').checked;
+    
+    // Collect allowed zones
+    let allowedZones = [];
+    if (permAllZones) {
+        allowedZones = store.zones.map(z => z.id);
+    } else {
+        document.querySelectorAll('input[name="oicZonePermCheckbox"]:checked').forEach(cb => {
+            allowedZones.push(cb.value);
+        });
+    }
 
     const profileId = id || 'oic_' + Date.now();
 
-    if (!store.settings.oicProfiles) store.settings.oicProfiles = {};
-    store.settings.oicProfiles[profileId] = {
+    const profileData = {
         id: profileId,
         name,
         rank,
         serviceNo,
         password,
         permSettings,
-        permAllZones
+        permDashboard,
+        permJobCards,
+        permInventory,
+        permEstimates,
+        permLMD,
+        permSailors,
+        permReports,
+        permAllZones,
+        allowedZones
     };
 
-    opsDB.ref(`settings/oicProfiles/${profileId}`).set({
-        id: profileId,
-        name,
-        rank,
-        serviceNo,
-        password,
-        permSettings,
-        permAllZones
-    }).then(() => {
+    if (!store.settings.oicProfiles) store.settings.oicProfiles = {};
+    store.settings.oicProfiles[profileId] = profileData;
+
+    opsDB.ref(`settings/oicProfiles/${profileId}`).set(profileData).then(() => {
         closeModal('oicProfileModal');
         applySettings();
         renderSettingsOicProfilesList();
@@ -6138,6 +6202,40 @@ function deleteOicProfile(id) {
         renderSettingsOicProfilesList();
         showToast('Officer Profile deleted');
     });
+}
+
+function renderOicZonesPermissionCheckboxes(selectedZones = []) {
+    const listEl = document.getElementById('oicZonesPermissionList');
+    if (!listEl) return;
+    
+    // Sort zones by name for cleaner display
+    const sortedZones = [...store.zones].sort((a, b) => a.name.localeCompare(b.name));
+    
+    listEl.innerHTML = sortedZones.map(z => {
+        const checked = selectedZones.includes(z.id) ? 'checked' : '';
+        return `
+            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer truncate" title="${z.name}">
+                <input type="checkbox" name="oicZonePermCheckbox" value="${z.id}" ${checked} onchange="onOicZoneCheckboxChange()" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                <span class="truncate">${z.name}</span>
+            </label>
+        `;
+    }).join('') || '<div class="col-span-2 text-center text-xs text-slate-400 italic">No zones configured yet</div>';
+}
+
+function toggleSelectAllZonesPerm(checked) {
+    document.querySelectorAll('input[name="oicZonePermCheckbox"]').forEach(cb => {
+        cb.checked = checked;
+        cb.disabled = checked;
+    });
+}
+
+function onOicZoneCheckboxChange() {
+    // If any individual zone checkbox is unchecked, make sure 'All Zones Access' is unchecked
+    const allChecked = Array.from(document.querySelectorAll('input[name="oicZonePermCheckbox"]')).every(cb => cb.checked);
+    const allZonesCheckbox = document.getElementById('oicPermAllZones');
+    if (allZonesCheckbox && !allChecked) {
+        allZonesCheckbox.checked = false;
+    }
 }
 
 function showSettingsSailorResults() {
@@ -7342,7 +7440,15 @@ function applyActiveProfile() {
         let oicRank = s.oicRank || s.userRank;
         let oicServiceNo = s.oicServiceNo || s.userServiceNo;
         let permSettings = true;
+        let permDashboard = true;
+        let permJobCards = true;
+        let permInventory = true;
+        let permEstimates = true;
+        let permLMD = true;
+        let permSailors = true;
+        let permReports = true;
         let permAllZones = true;
+        let allowedZones = store.zones.map(z => z.id);
 
         const oicProfileId = store.activeOicProfileId;
         if (oicProfileId) {
@@ -7356,7 +7462,15 @@ function applyActiveProfile() {
                 const isMain = (profile.serviceNo || '').includes('3576');
                 if (!isMain) {
                     permSettings = profile.permSettings === true;
+                    permDashboard = profile.permDashboard !== false;
+                    permJobCards = profile.permJobCards !== false;
+                    permInventory = profile.permInventory !== false;
+                    permEstimates = profile.permEstimates !== false;
+                    permLMD = profile.permLMD !== false;
+                    permSailors = profile.permSailors !== false;
+                    permReports = profile.permReports !== false;
                     permAllZones = profile.permAllZones === true;
+                    allowedZones = profile.allowedZones || [];
                 }
             }
         }
@@ -7366,23 +7480,48 @@ function applyActiveProfile() {
             rank: oicRank,
             serviceNo: oicServiceNo,
             permSettings: permSettings,
-            permAllZones: permAllZones
+            permDashboard: permDashboard,
+            permJobCards: permJobCards,
+            permInventory: permInventory,
+            permEstimates: permEstimates,
+            permLMD: permLMD,
+            permSailors: permSailors,
+            permReports: permReports,
+            permAllZones: permAllZones,
+            allowedZones: allowedZones
         };
 
-        // Enable/Disable settings tab (Desktop & Mobile) based on permSettings
-        const settingsTabBtn = document.getElementById('tab-settings');
-        const mobileSettingsTabBtn = document.getElementById('mobile-tab-settings');
+        // Show/hide main navigation tabs based on user permissions
+        const tabPermissions = {
+            'settings': permSettings,
+            'dashboard': permDashboard,
+            'jobcards': permJobCards,
+            'inventory': permInventory,
+            'estimates': permEstimates,
+            'maintenance': permLMD,
+            'sailors': permSailors,
+            'reports': permReports
+        };
 
-        if (permSettings) {
-            if (settingsTabBtn) settingsTabBtn.classList.remove('hidden');
-            if (mobileSettingsTabBtn) mobileSettingsTabBtn.classList.remove('hidden');
-        } else {
-            if (settingsTabBtn) settingsTabBtn.classList.add('hidden');
-            if (mobileSettingsTabBtn) mobileSettingsTabBtn.classList.add('hidden');
-            
-            // If currently on settings view, redirect to dashboard
-            if (store.currentView === 'settings') {
-                switchView('dashboard');
+        // Loop over each tab and toggle visibility
+        for (const [viewName, hasAccess] of Object.entries(tabPermissions)) {
+            const btn = document.getElementById(`tab-${viewName}`);
+            const mBtn = document.getElementById(`mobile-tab-${viewName}`);
+            if (btn) {
+                if (hasAccess) btn.classList.remove('hidden');
+                else btn.classList.add('hidden');
+            }
+            if (mBtn) {
+                if (hasAccess) mBtn.classList.remove('hidden');
+                else mBtn.classList.add('hidden');
+            }
+        }
+        
+        // If current view is not allowed, redirect to the first allowed view
+        if (!tabPermissions[store.currentView]) {
+            const firstAllowed = Object.keys(tabPermissions).find(k => tabPermissions[k]);
+            if (firstAllowed) {
+                switchView(firstAllowed);
             }
         }
 
