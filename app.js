@@ -5790,6 +5790,55 @@ function cleanCsvValue(val) {
     return cleaned.replace(/""/g, '"');
 }
 
+function normalizeInventoryCsvHeader(h) {
+    const clean = h.trim().toLowerCase();
+    if (clean.includes('description') || clean === 'item' || clean === 'desc') {
+        return 'description';
+    }
+    if (clean.includes('category') || clean === 'cat' || clean === 'group') {
+        return 'category';
+    }
+    if (clean === 'deno' || clean.includes('unit') || clean === 'uom' || clean === 'denominations') {
+        return 'deno';
+    }
+    if (clean.includes('quantity') || clean === 'qty' || clean === 'stock' || clean === 'amount') {
+        return 'quantity';
+    }
+    if (clean.includes('unit cost') || clean.includes('unit_cost') || clean === 'cost per unit' || clean === 'rate' || clean === 'cost' || clean === 'price') {
+        return 'unit cost';
+    }
+    if (clean.includes('requirement') || clean === 'req') {
+        return 'requirement';
+    }
+    if (clean.includes('location') || clean === 'loc' || clean === 'store') {
+        return 'location';
+    }
+    if (clean.includes('on-charge') || clean.includes('on_charge') || clean.includes('charge ref') || clean === 'ref') {
+        return 'on-charge ref';
+    }
+    if (clean.includes('date')) {
+        return 'date added';
+    }
+    return clean;
+}
+
+function normalizeLocationsCsvHeader(h) {
+    const clean = h.trim().toLowerCase();
+    if (clean.includes('zone') || clean === 'zone_id') {
+        return 'zone';
+    }
+    if (clean.includes('building') || clean === 'building_name') {
+        return 'building name';
+    }
+    if (clean.includes('sub-location') || clean.includes('sub_location') || clean === 'sublocation') {
+        return 'sub-location';
+    }
+    if (clean.includes('description') || clean === 'desc') {
+        return 'description';
+    }
+    return clean;
+}
+
 function processInventoryCsv(csvText) {
     const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length <= 1) {
@@ -5798,7 +5847,7 @@ function processInventoryCsv(csvText) {
         return;
     }
     
-    const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
+    const headers = parseCsvLine(lines[0]).map(normalizeInventoryCsvHeader);
     let addedCount = 0;
     let skippedCount = 0;
     
@@ -5861,7 +5910,7 @@ function processLocationsCsv(csvText) {
         return;
     }
     
-    const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
+    const headers = parseCsvLine(lines[0]).map(normalizeLocationsCsvHeader);
     let addedCount = 0;
     let skippedCount = 0;
     
