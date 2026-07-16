@@ -319,6 +319,35 @@ function initSailorsListener() {
 // DB #2 LISTENERS — NCW-PS Operations (READ + WRITE)
 // ─────────────────────────────────────────────
 
+function standardizeInventoryDescription(desc) {
+    if (!desc) return '';
+    let clean = desc.trim().replace(/\s+/g, ' ');
+    
+    // Perform case-insensitive spelling auto-corrections
+    clean = clean.replace(/\bball\s+cocks?\b/gi, 'Ballcock Valve');
+    clean = clean.replace(/\bceiling\s+paints?\s+whites?\b/gi, 'Ceiling White');
+    clean = clean.replace(/\bmac\s+foils?\b/gi, 'Mackfoil');
+    clean = clean.replace(/\bbriliyant\s+whites?\b/gi, 'Briliant White');
+    clean = clean.replace(/\broopings?\b/gi, 'Roofing');
+    clean = clean.replace(/\blbows?\b/gi, 'Elbow');
+
+    return toTitleCase(clean);
+}
+
+function toTitleCase(str) {
+    if (!str) return '';
+    const acronyms = ['PVC', 'BMS', 'GI', 'MS', 'SLN', 'UOM', 'VAT', 'ALU'];
+    return str.split(' ').map(word => {
+        if (!word) return '';
+        const upper = word.toUpperCase();
+        const cleanWord = upper.replace(/[^A-Z0-9]/g, '');
+        if (acronyms.includes(cleanWord)) {
+            return upper; // Keep acronyms fully capitalized
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }).join(' ');
+}
+
 function standardizeInventoryCategory(cat) {
     if (!cat) return 'General';
     const cleaned = cat.trim().toUpperCase();
@@ -428,6 +457,7 @@ function initOpsListeners() {
         store.inventory = snapshotToArray(snapshot).map(item => ({
             ...item, id: item.id ?? item._fbKey,
             category: standardizeInventoryCategory(item.category),
+            description: standardizeInventoryDescription(item.description),
             on_charge_records:  item.on_charge_records  ? Object.values(item.on_charge_records)  : [],
             off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
         }));
@@ -527,6 +557,9 @@ function fbSaveInventoryItem(data) {
     const { _fbKey, ...clean } = data;
     if (clean.category) {
         clean.category = standardizeInventoryCategory(clean.category);
+    }
+    if (clean.description) {
+        clean.description = standardizeInventoryDescription(clean.description);
     }
     if (_fbKey) {
         return opsDB.ref(`inventory/${_fbKey}`).update(clean);
