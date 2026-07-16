@@ -321,7 +321,22 @@ function initSailorsListener() {
 
 function standardizeInventoryDescription(desc) {
     if (!desc) return '';
-    let clean = desc.trim().replace(/\s+/g, ' ');
+    let clean = desc.trim();
+    
+    // Remove wrapping quotes if present
+    if (clean.startsWith('"') && clean.endsWith('"')) {
+        clean = clean.substring(1, clean.length - 1).trim();
+    }
+    
+    // Replace double double-quotes "" with a single double-quote "
+    clean = clean.replace(/""/g, '"');
+    
+    // Also remove leading/trailing quotes that might have been left over if they were unbalanced
+    if (clean.startsWith('"')) clean = clean.substring(1).trim();
+    if (clean.endsWith('"')) clean = clean.substring(0, clean.length - 1).trim();
+    
+    // Replace multiple spaces with a single space
+    clean = clean.replace(/\s+/g, ' ');
     
     // Perform case-insensitive spelling auto-corrections
     clean = clean.replace(/\bball\s+cocks?\b/gi, 'Ballcock Valve');
