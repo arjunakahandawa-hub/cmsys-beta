@@ -612,8 +612,14 @@ function showToast(message, type = 'success') {
     setTimeout(() => toast.classList.add('hidden'), 3000);
 }
 
+let _justClosedModal = false;
+
 function closeModal(modalId) {
     document.getElementById(modalId).classList.add('hidden');
+    _justClosedModal = true;
+    setTimeout(() => {
+        _justClosedModal = false;
+    }, 350);
 }
 
 function formatCurrency(amount) {
@@ -2372,6 +2378,7 @@ function switchWoTab(tab) {
 }
 
 function openWorkOrderDetail(workOrderId) {
+    if (_justClosedModal) return;
     store.selectedWorkOrder = workOrderId;
     // Find by _fbKey (string) OR numeric id
     const wo = store.workOrders.find(w =>
@@ -8979,6 +8986,7 @@ function renderSailorsView() {
 
 // Open Sailor Profile Modal with detailed stats
 function openSailorProfile(sailorId) {
+    if (_justClosedModal) return;
     const sailor = store.sailors.find(s => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
     if (!sailor) {
         showToast('Sailor profile not found', 'error');
