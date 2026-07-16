@@ -16,6 +16,11 @@ window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
     console.log('⚓ PWA Installable prompt intercepted!');
+    // Show our custom header install button
+    const installBtn = document.getElementById('installAppBtn');
+    if (installBtn) {
+        installBtn.classList.remove('hidden');
+    }
     // Refresh the profile dropdown to show the install button if open
     renderProfileDropdown();
 });
@@ -23,6 +28,10 @@ window.addEventListener('beforeinstallprompt', (e) => {
 window.addEventListener('appinstalled', (evt) => {
     console.log('⚓ NCW-PS PWA was installed successfully!');
     deferredPrompt = null;
+    const installBtn = document.getElementById('installAppBtn');
+    if (installBtn) {
+        installBtn.classList.add('hidden');
+    }
     renderProfileDropdown();
 });
 
@@ -36,6 +45,10 @@ function triggerPwaInstall() {
             console.log('⚓ User dismissed PWA installation');
         }
         deferredPrompt = null;
+        const installBtn = document.getElementById('installAppBtn');
+        if (installBtn) {
+            installBtn.classList.add('hidden');
+        }
         renderProfileDropdown();
     });
 }
@@ -7032,7 +7045,10 @@ function removePriorityLevel(i) {
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initPwaHistoryManagement();
-    initPwaInstallation();
+    if (deferredPrompt) {
+        const installBtn = document.getElementById('installAppBtn');
+        if (installBtn) installBtn.classList.remove('hidden');
+    }
     updateOnlineStatus();
     updateDateTime();
     setInterval(updateDateTime, 1000);
@@ -8575,50 +8591,6 @@ function initPwaHistoryManagement() {
     // Start observing all modals
     document.querySelectorAll('.modal-overlay, [id$="Modal"], [id$="modal"]').forEach(m => {
         observer.observe(m, { attributes: true, attributeFilter: ['class'] });
-    });
-}
-
-let deferredPrompt = null;
-
-function initPwaInstallation() {
-    window.addEventListener('beforeinstallprompt', (e) => {
-        // Prevent default prompt
-        e.preventDefault();
-        // Stash the event
-        deferredPrompt = e;
-        // Show our install button
-        const installBtn = document.getElementById('installAppBtn');
-        if (installBtn) {
-            installBtn.classList.remove('hidden');
-        }
-    });
-
-    window.addEventListener('appinstalled', (evt) => {
-        showToast('App installed successfully on PC/Mobile!');
-        const installBtn = document.getElementById('installAppBtn');
-        if (installBtn) {
-            installBtn.classList.add('hidden');
-        }
-    });
-}
-
-function installPwaApp() {
-    if (!deferredPrompt) {
-        showToast('App is already installed or install is not supported by your browser.', 'info');
-        return;
-    }
-    deferredPrompt.prompt();
-    deferredPrompt.userChoice.then((choiceResult) => {
-        if (choiceResult.outcome === 'accepted') {
-            console.log('User accepted the PWA install prompt');
-        } else {
-            console.log('User dismissed the PWA install prompt');
-        }
-        deferredPrompt = null;
-        const installBtn = document.getElementById('installAppBtn');
-        if (installBtn) {
-            installBtn.classList.add('hidden');
-        }
     });
 }
 
