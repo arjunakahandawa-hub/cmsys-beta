@@ -7032,6 +7032,7 @@ function removePriorityLevel(i) {
 document.addEventListener('DOMContentLoaded', () => {
     initTheme();
     initPwaHistoryManagement();
+    initPwaInstallation();
     updateOnlineStatus();
     updateDateTime();
     setInterval(updateDateTime, 1000);
@@ -8574,6 +8575,50 @@ function initPwaHistoryManagement() {
     // Start observing all modals
     document.querySelectorAll('.modal-overlay, [id$="Modal"], [id$="modal"]').forEach(m => {
         observer.observe(m, { attributes: true, attributeFilter: ['class'] });
+    });
+}
+
+let deferredPrompt = null;
+
+function initPwaInstallation() {
+    window.addEventListener('beforeinstallprompt', (e) => {
+        // Prevent default prompt
+        e.preventDefault();
+        // Stash the event
+        deferredPrompt = e;
+        // Show our install button
+        const installBtn = document.getElementById('installAppBtn');
+        if (installBtn) {
+            installBtn.classList.remove('hidden');
+        }
+    });
+
+    window.addEventListener('appinstalled', (evt) => {
+        showToast('App installed successfully on PC/Mobile!');
+        const installBtn = document.getElementById('installAppBtn');
+        if (installBtn) {
+            installBtn.classList.add('hidden');
+        }
+    });
+}
+
+function installPwaApp() {
+    if (!deferredPrompt) {
+        showToast('App is already installed or install is not supported by your browser.', 'info');
+        return;
+    }
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+        if (choiceResult.outcome === 'accepted') {
+            console.log('User accepted the PWA install prompt');
+        } else {
+            console.log('User dismissed the PWA install prompt');
+        }
+        deferredPrompt = null;
+        const installBtn = document.getElementById('installAppBtn');
+        if (installBtn) {
+            installBtn.classList.add('hidden');
+        }
     });
 }
 
