@@ -1,11 +1,12 @@
-const CACHE_NAME = 'ncw-ps-cache-v4.4';
+const CACHE_NAME = 'ncw-ps-cache-v4.5';
 const ASSETS = [
   './',
   './index.html',
   './app.js',
   './manifest.json',
   './icon-192.png',
-  './icon-512.png'
+  './icon-512.png',
+  './logo.png'
 ];
 
 self.addEventListener('install', e => {
@@ -31,17 +32,34 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
+  // Only cache GET requests and bypass Firebase/Chrome Extension requests
+  if (
+    e.request.method !== 'GET' ||
+    e.request.url.includes('chrome-extension') ||
+    e.request.url.includes('firebaseio.com') ||
+    e.request.url.includes('identitytoolkit') ||
+    e.request.url.includes('google')
+  ) {
+    return;
+  }
+
   e.respondWith(
-    fetch(e.request)
-      .then(response => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
-            cache.put(e.request, responseToCache);
-          });
-        }
-        return response;
-      })
-      .catch(() => caches.match(e.request))
+    caches.match(e.request).then(cachedResponse => {
+      const fetchPromise = fetch(e.request)
+        .then(networkResponse => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => {
+              cache.put(e.request, responseToCache);
+            });
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          // Ignore network errors since we have cache fallback
+        });
+
+      return cachedResponse || fetchPromise;
+    })
   );
 });

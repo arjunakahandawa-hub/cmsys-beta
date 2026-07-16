@@ -126,6 +126,8 @@ const store = {
     estimates:           [],
     approvedPendingJobs: [],
     dailyAllocations:    [],
+    availableSailorsLimit: 40,
+    dailyAllocationsMap: {},
 
     // Static config (not stored in Firebase)
     approvalAuthorities: ['CCED(E)', 'CENA', 'DAC(E)', 'DGCE', 'CCEO(E)'],
@@ -409,7 +411,13 @@ function initOpsListeners() {
 
     // ── Daily Allocations ──
     opsDB.ref('daily_allocations').on('value', snapshot => {
-        store.dailyAllocations = snapshotToArray(snapshot);
+        const arr = snapshotToArray(snapshot);
+        store.dailyAllocations = arr;
+        const map = {};
+        arr.forEach(a => {
+            map[`${a.date}_${a.sailor_id}`] = a;
+        });
+        store.dailyAllocationsMap = map;
         refreshCurrentView();
     });
 
@@ -525,8 +533,8 @@ function computeYesterdayJobs() {
     
     store.sailors.forEach(s => {
         s.yesterdayJob = null;
-        if (lastActiveDate) {
-            const alloc = store.dailyAllocations.find(a => a.date === lastActiveDate && String(a.sailor_id) === String(s.id));
+        if (lastActiveDate && store.dailyAllocationsMap) {
+            const alloc = store.dailyAllocationsMap[`${lastActiveDate}_${s.id}`];
             if (alloc) {
                 s.yesterdayJob = alloc.work_order_id;
             }
@@ -534,7 +542,18 @@ function computeYesterdayJobs() {
     });
 }
 
+let _refreshViewTimeout = null;
+
 function refreshCurrentView() {
+    if (_refreshViewTimeout) {
+        clearTimeout(_refreshViewTimeout);
+    }
+    _refreshViewTimeout = setTimeout(() => {
+        refreshCurrentViewImmediately();
+    }, 100);
+}
+
+function refreshCurrentViewImmediately() {
     computeYesterdayJobs();
     const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary','sailors','sailordashboard'];
     for (const v of views) {
@@ -767,10 +786,8 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
 }
 
 function getSailorAssignmentOnDate(sailorId, dateVal) {
-    if (!store.dailyAllocations) return null;
-    const alloc = store.dailyAllocations.find(a => 
-        String(a.sailor_id) === String(sailorId) && a.date === dateVal
-    );
+    if (!store.dailyAllocationsMap) return null;
+    const alloc = store.dailyAllocationsMap[`${dateVal}_${sailorId}`];
     if (alloc) {
         const wo = store.workOrders.find(w => 
             String(w.id) === String(alloc.work_order_id) || 
@@ -832,6 +849,13 @@ function renderAvailableSailors() {
     const searchInput = document.getElementById('sailorSearch');
     const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
+    // Reset pagination limit when search query changes
+    const lastQuery = container.getAttribute('data-last-query') || '';
+    if (query !== lastQuery) {
+        store.availableSailorsLimit = 40;
+        container.setAttribute('data-last-query', query);
+    }
+
     // When searching, show ALL sailors (651) regardless of attendance/zone/team filters
     // When NOT searching, apply normal filters for a clean default view
     let sailors;
@@ -868,8 +892,11 @@ function renderAvailableSailors() {
         }
         return b.avgScore - a.avgScore;
     });
+
+    // Slice sailors to limit rendering for performance
+    const visibleSailors = sailors.slice(0, store.availableSailorsLimit);
     
-    container.innerHTML = sailors.map(sailor => {
+    let html = visibleSailors.map(sailor => {
         const scoreColor = sailor.avgScore >= 8 ? '#059669' : sailor.avgScore >= 6 ? '#d97706' : '#dc2626';
         const tradeBg = {
             'MA': '#0d9488', 'CA': '#7c3aed', 'PA': '#b45309',
@@ -937,7 +964,19 @@ function renderAvailableSailors() {
             </div>
         </div>
         `;
-    }).join('') || '<div class="text-center py-6"><p class="text-slate-400 text-sm">No sailors available</p></div>';
+    }).join('');
+
+    if (sailors.length > store.availableSailorsLimit) {
+        html += `
+        <div class="flex justify-center py-2">
+            <button onclick="loadMoreAvailableSailors()" class="bg-teal-600 hover:bg-teal-700 text-white font-semibold text-xs px-4 py-2 rounded-xl shadow-sm transition-all duration-200 hover:scale-105 active:scale-95">
+                Load More Sailors (+40)
+            </button>
+        </div>
+        `;
+    }
+
+    container.innerHTML = html || '<div class="text-center py-6"><p class="text-slate-400 text-sm">No sailors available</p></div>';
 
     const freeCount = sailors.filter(s => {
         const assignment = isToday 
@@ -946,6 +985,11 @@ function renderAvailableSailors() {
         return !assignment;
     }).length;
     document.getElementById('availableBadge').textContent = freeCount;
+}
+
+function loadMoreAvailableSailors() {
+    store.availableSailorsLimit += 40;
+    renderAvailableSailors();
 }
 
 function renderWorkOrders() {
@@ -1543,6 +1587,7 @@ function removeSailorFromOrder(sailorId, workOrderId) {
 // =============================================
 function filterSailors(filter) {
     store.currentFilter = filter;
+    store.availableSailorsLimit = 40;
     document.querySelectorAll('.filter-btn').forEach(btn => {
         btn.classList.remove('bg-slate-700', 'text-white');
         btn.classList.add('bg-slate-200');
@@ -1554,6 +1599,7 @@ function filterSailors(filter) {
 
 function filterTrade(trade) {
     store.currentTrade = trade;
+    store.availableSailorsLimit = 40;
     document.querySelectorAll('.trade-filter').forEach(btn => {
         btn.classList.remove('bg-slate-700', 'text-white');
         btn.classList.add('bg-slate-200');
