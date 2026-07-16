@@ -389,8 +389,7 @@ function initOpsListeners() {
 function standardizeInventoryCategory(cat) {
     if (!cat) return 'General';
     const cleaned = cat.trim().toUpperCase();
-    
-    // Exact mapping for common input variants
+
     const mapping = {
         'METAL': 'Metal',
         'YAKADA': 'Metal',
@@ -415,16 +414,12 @@ function standardizeInventoryCategory(cat) {
         'OIL': 'Lubricant Oil',
     };
 
-    if (mapping[cleaned]) {
-        return mapping[cleaned];
-    }
+    if (mapping[cleaned]) return mapping[cleaned];
 
-    // Fallback: Title Case matching to standard categories
-    const standardCats = ['BMS', 'Plumbing', 'Metal', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil', 'Stencil'];
+    const standardCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
     const matched = standardCats.find(sc => sc.toUpperCase() === cleaned);
     if (matched) return matched;
 
-    // If completely custom, return it formatted to Title Case
     return cat.trim().charAt(0).toUpperCase() + cat.trim().slice(1).toLowerCase();
 }
 
