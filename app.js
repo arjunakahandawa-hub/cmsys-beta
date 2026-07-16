@@ -4029,6 +4029,15 @@ function clearCurrentZoneInventory() {
         return;
     }
     
+    const password = prompt("🔑 Security Access: Please enter the Administrator password to authorize resetting this zone's inventory:");
+    if (password === null) {
+        return; // User clicked Cancel
+    }
+    if (password !== "MalitHZ") {
+        showToast("❌ Access Denied: Incorrect password", "error");
+        return;
+    }
+    
     const zoneName = store.zones.find(z => z.id === store.currentZone)?.name || store.currentZone;
     if (confirm(`⚠️ WARNING: Are you sure you want to delete ALL ${zoneItems.length} inventory items in the current zone (${zoneName})? This will permanently wipe this zone's inventory. This action cannot be undone.`)) {
         let deleted = 0;
