@@ -386,10 +386,51 @@ function initOpsListeners() {
         refreshCurrentView();
     });
 
+function standardizeInventoryCategory(cat) {
+    if (!cat) return 'General';
+    const cleaned = cat.trim().toUpperCase();
+    
+    // Exact mapping for common input variants
+    const mapping = {
+        'METAL': 'Metal',
+        'PAINT': 'Paint',
+        'PAI': 'Paint',
+        'GENERAL': 'General',
+        'BMS': 'BMS',
+        'TIMBER': 'BMS',
+        'PLUMBING': 'Plumbing',
+        'PVC': 'Plumbing',
+        'ALUMINIUM': 'Aluminium',
+        'ALUMINUM': 'Aluminium',
+        'ELECTRICAL': 'Electrical',
+        'TOOLS': 'Tools',
+        'TOOL': 'Tools',
+        'LUBRICANT OIL': 'Lubricant Oil',
+        'LUBRICANT': 'Lubricant Oil',
+        'OIL': 'Lubricant Oil',
+        'STANSILE': 'Metal',
+        'YAD': 'Metal',
+        'YAKADA': 'Metal'
+    };
+
+    if (mapping[cleaned]) {
+        return mapping[cleaned];
+    }
+
+    // Fallback: Title Case matching to standard categories
+    const standardCats = ['BMS', 'Plumbing', 'Metal', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
+    const matched = standardCats.find(sc => sc.toUpperCase() === cleaned);
+    if (matched) return matched;
+
+    // If completely custom, return it formatted to Title Case
+    return cat.trim().charAt(0).toUpperCase() + cat.trim().slice(1).toLowerCase();
+}
+
     // ── Inventory ──
     opsDB.ref('inventory').on('value', snapshot => {
         store.inventory = snapshotToArray(snapshot).map(item => ({
             ...item, id: item.id ?? item._fbKey,
+            category: standardizeInventoryCategory(item.category),
             on_charge_records:  item.on_charge_records  ? Object.values(item.on_charge_records)  : [],
             off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
         }));
@@ -487,6 +528,9 @@ function fbSaveJobCardLabor(data) {
 // Save / update inventory item
 function fbSaveInventoryItem(data) {
     const { _fbKey, ...clean } = data;
+    if (clean.category) {
+        clean.category = standardizeInventoryCategory(clean.category);
+    }
     if (_fbKey) {
         return opsDB.ref(`inventory/${_fbKey}`).update(clean);
     }
