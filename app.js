@@ -741,7 +741,7 @@ function changeDashboardDate(val) {
 function isWorkOrderActiveOnDate(wo, dateStr) {
     const today = new Date().toISOString().split('T')[0];
     if (dateStr === today) {
-        return wo.status !== 'Completed';
+        return wo.status !== 'Completed' && wo.status !== 'Hold';
     }
     
     // Check if there are daily allocations for this work order on this date
@@ -750,11 +750,11 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
     );
     if (hasAllocations) return true;
     
-    // Check if it was created before or on this date and is not completed
+    // Check if it was created before or on this date and is not completed/held
     if (wo.created_at) {
         const createdDate = new Date(wo.created_at).toISOString().split('T')[0];
         if (createdDate <= dateStr) {
-            if (wo.status === 'Completed') {
+            if (wo.status === 'Completed' || wo.status === 'Hold') {
                 const compDate = wo.completed_date || wo.last_commit_date || wo.last_assigned_date || today;
                 if (compDate < dateStr) {
                     return false;
@@ -2723,13 +2723,23 @@ function updateWorkOrderStatus() {
     const woKey = store.selectedWorkOrder;
     const wo = store.workOrders.find(w => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey));
     if (wo) {
-        wo.status = document.getElementById('woDetailStatus').value;
+        const newStatus = document.getElementById('woDetailStatus').value;
+        wo.status = newStatus;
         
         // Sync status to the linked Job Card
         const jc = getJobCardForWorkOrder(wo._fbKey || wo.id);
         if (jc) {
             jc.status = wo.status;
             if (window.fbSaveJobCard) fbSaveJobCard(jc);
+        }
+
+        // Clear today's daily allocations if putting on hold/completed/pending
+        if (newStatus === 'Hold' || newStatus === 'Completed' || newStatus === 'Pending') {
+            const today = new Date().toISOString().split('T')[0];
+            const allocationsToDelete = (store.dailyAllocations || []).filter(a => a.date === today && String(a.work_order_id) === String(wo.id));
+            allocationsToDelete.forEach(a => {
+                opsDB.ref(`daily_allocations/${today}_${a.sailor_id}`).remove().catch(e => console.warn(e));
+            });
         }
 
         if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
@@ -2742,7 +2752,8 @@ function saveWorkOrderChanges() {
     const woKey = store.selectedWorkOrder;
     const wo = store.workOrders.find(w => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey));
     if (wo) {
-        wo.status = document.getElementById('woDetailStatus').value;
+        const newStatus = document.getElementById('woDetailStatus').value;
+        wo.status = newStatus;
         wo.priority = document.getElementById('woDetailPriority').value;
         wo.description = document.getElementById('woDetailDescription').value || wo.description;
         wo.authority_approval = document.getElementById('woDetailAuthority').value;
@@ -2760,11 +2771,24 @@ function saveWorkOrderChanges() {
             if (window.fbSaveJobCard) fbSaveJobCard(jc);
         }
 
+        // Clear today's daily allocations if putting on hold/completed/pending
+        if (newStatus === 'Hold' || newStatus === 'Completed' || newStatus === 'Pending') {
+            const today = new Date().toISOString().split('T')[0];
+            const allocationsToDelete = (store.dailyAllocations || []).filter(a => a.date === today && String(a.work_order_id) === String(wo.id));
+            allocationsToDelete.forEach(a => {
+                opsDB.ref(`daily_allocations/${today}_${a.sailor_id}`).remove().catch(e => console.warn(e));
+            });
+        }
+
         if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
 
         renderDashboard();
         showToast('Work order updated successfully!');
-        // syncToFirebase('work_orders', wo.id, wo);
+        
+        // Auto-close modal if no longer showing on the planning board
+        if (newStatus === 'Hold' || newStatus === 'Completed') {
+            closeModal('workOrderDetailModal');
+        }
     }
 }
 
@@ -3110,8 +3134,8 @@ function renderJobCardsList() {
     
     switch(store.currentJobCardsTab) {
         case 'active':
-            jobCards = store.jobCards.filter(jc => jc.status === 'Active' && jc.zone_id === store.currentZone);
-            title = 'Active Job Cards';
+            jobCards = store.jobCards.filter(jc => (jc.status === 'Active' || jc.status === 'Hold') && jc.zone_id === store.currentZone);
+            title = 'Active & Held Job Cards';
             break;
         case 'completed':
             jobCards = store.jobCards.filter(jc => jc.status === 'Completed' && !jc.feedbackReceived && jc.zone_id === store.currentZone);
