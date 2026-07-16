@@ -319,6 +319,43 @@ function initSailorsListener() {
 // DB #2 LISTENERS — NCW-PS Operations (READ + WRITE)
 // ─────────────────────────────────────────────
 
+function standardizeInventoryCategory(cat) {
+    if (!cat) return 'General';
+    const cleaned = cat.trim().toUpperCase();
+
+    const mapping = {
+        'METAL': 'Metal',
+        'YAKADA': 'Metal',
+        'YAD': 'Metal',
+        'STANSILE': 'Stencil',
+        'STENCIL': 'Stencil',
+        'PAINT': 'Paint',
+        'PAI': 'Paint',
+        'GENERAL': 'General',
+        'BMS': 'BMS',
+        'TIMBER': 'BMS',
+        'PLUMBING': 'Plumbing',
+        'PVC': 'Plumbing',
+        'ALUMINIUM': 'Aluminium',
+        'ALUMINUM': 'Aluminium',
+        'ALU': 'Aluminium',
+        'ELECTRICAL': 'Electrical',
+        'TOOLS': 'Tools',
+        'TOOL': 'Tools',
+        'LUBRICANT OIL': 'Lubricant Oil',
+        'LUBRICANT': 'Lubricant Oil',
+        'OIL': 'Lubricant Oil',
+    };
+
+    if (mapping[cleaned]) return mapping[cleaned];
+
+    const standardCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
+    const matched = standardCats.find(sc => sc.toUpperCase() === cleaned);
+    if (matched) return matched;
+
+    return cat.trim().charAt(0).toUpperCase() + cat.trim().slice(1).toLowerCase();
+}
+
 function initOpsListeners() {
 
     // ── Work Orders ──
@@ -385,43 +422,6 @@ function initOpsListeners() {
         }));
         refreshCurrentView();
     });
-
-function standardizeInventoryCategory(cat) {
-    if (!cat) return 'General';
-    const cleaned = cat.trim().toUpperCase();
-
-    const mapping = {
-        'METAL': 'Metal',
-        'YAKADA': 'Metal',
-        'YAD': 'Metal',
-        'STANSILE': 'Stencil',
-        'STENCIL': 'Stencil',
-        'PAINT': 'Paint',
-        'PAI': 'Paint',
-        'GENERAL': 'General',
-        'BMS': 'BMS',
-        'TIMBER': 'BMS',
-        'PLUMBING': 'Plumbing',
-        'PVC': 'Plumbing',
-        'ALUMINIUM': 'Aluminium',
-        'ALUMINUM': 'Aluminium',
-        'ALU': 'Aluminium',
-        'ELECTRICAL': 'Electrical',
-        'TOOLS': 'Tools',
-        'TOOL': 'Tools',
-        'LUBRICANT OIL': 'Lubricant Oil',
-        'LUBRICANT': 'Lubricant Oil',
-        'OIL': 'Lubricant Oil',
-    };
-
-    if (mapping[cleaned]) return mapping[cleaned];
-
-    const standardCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
-    const matched = standardCats.find(sc => sc.toUpperCase() === cleaned);
-    if (matched) return matched;
-
-    return cat.trim().charAt(0).toUpperCase() + cat.trim().slice(1).toLowerCase();
-}
 
     // ── Inventory ──
     opsDB.ref('inventory').on('value', snapshot => {
