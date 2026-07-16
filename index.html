@@ -2548,6 +2548,31 @@
     </div>
 
     <!-- Add Inventory Item Modal -->
+    <!-- Password Verification Modal -->
+    <div id="passwordModal" class="fixed inset-0 bg-black/50 z-[60] hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm transform transition-all duration-300 scale-95 opacity-0" id="passwordModalContent">
+            <div class="bg-gradient-to-r from-slate-800 to-slate-900 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h3 class="text-md font-semibold flex items-center gap-2">
+                    🔑 Security Verification
+                </h3>
+                <button onclick="closePasswordModal()" class="text-white/80 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Enter Admin Password</label>
+                    <input type="password" id="confirmAdminPassword" placeholder="••••••••" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800 text-sm tracking-widest text-center" onkeydown="if(event.key === 'Enter') submitPasswordVerification()">
+                </div>
+                <div id="passwordError" class="text-rose-500 text-xs text-center font-medium hidden">❌ Incorrect password</div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closePasswordModal()" class="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 font-medium">Cancel</button>
+                    <button type="button" onclick="submitPasswordVerification()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2 rounded-lg text-xs font-semibold">
+                        Verify
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bulk Upload Modal -->
     <div id="bulkUploadModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
@@ -3092,7 +3117,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260716004"></script>
+    <script src="app.js?v=20260716005"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

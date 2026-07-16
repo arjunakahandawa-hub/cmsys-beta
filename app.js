@@ -4021,6 +4021,46 @@ function submitOffCharge(event) {
     showToast(`Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`);
 }
 
+let passwordCallback = null;
+
+function showPasswordModal(callback) {
+    passwordCallback = callback;
+    document.getElementById('confirmAdminPassword').value = '';
+    document.getElementById('passwordError').classList.add('hidden');
+    
+    const modal = document.getElementById('passwordModal');
+    const content = document.getElementById('passwordModalContent');
+    modal.classList.remove('hidden');
+    setTimeout(() => {
+        content.classList.remove('scale-95', 'opacity-0');
+        content.classList.add('scale-100', 'opacity-100');
+        document.getElementById('confirmAdminPassword').focus();
+    }, 50);
+}
+
+function closePasswordModal() {
+    const content = document.getElementById('passwordModalContent');
+    content.classList.remove('scale-100', 'opacity-100');
+    content.classList.add('scale-95', 'opacity-0');
+    setTimeout(() => {
+        document.getElementById('passwordModal').classList.add('hidden');
+        passwordCallback = null;
+    }, 200);
+}
+
+function submitPasswordVerification() {
+    const pwdInput = document.getElementById('confirmAdminPassword');
+    const errDiv = document.getElementById('passwordError');
+    if (pwdInput.value === 'MalitHZ') {
+        closePasswordModal();
+        if (passwordCallback) passwordCallback();
+    } else {
+        errDiv.classList.remove('hidden');
+        pwdInput.value = '';
+        pwdInput.focus();
+    }
+}
+
 function clearCurrentZoneInventory() {
     // Filter items belonging to the current active zone
     const zoneItems = store.inventory.filter(i => !i.zone_id || i.zone_id === store.currentZone);
@@ -4029,32 +4069,25 @@ function clearCurrentZoneInventory() {
         return;
     }
     
-    const password = prompt("🔑 Security Access: Please enter the Administrator password to authorize resetting this zone's inventory:");
-    if (password === null) {
-        return; // User clicked Cancel
-    }
-    if (password !== "MalitHZ") {
-        showToast("❌ Access Denied: Incorrect password", "error");
-        return;
-    }
-    
-    const zoneName = store.zones.find(z => z.id === store.currentZone)?.name || store.currentZone;
-    if (confirm(`⚠️ WARNING: Are you sure you want to delete ALL ${zoneItems.length} inventory items in the current zone (${zoneName})? This will permanently wipe this zone's inventory. This action cannot be undone.`)) {
-        let deleted = 0;
-        zoneItems.forEach(item => {
-            const key = item._fbKey || item.id;
-            if (key) {
-                opsDB.ref(`inventory/${key}`).remove()
-                    .then(() => {
-                        deleted++;
-                        if (deleted === zoneItems.length) {
-                            showToast(`Successfully wiped inventory for zone: ${zoneName}`);
-                        }
-                    })
-                    .catch(err => console.error(err));
-            }
-        });
-    }
+    showPasswordModal(() => {
+        const zoneName = store.zones.find(z => z.id === store.currentZone)?.name || store.currentZone;
+        if (confirm(`⚠️ WARNING: Are you sure you want to delete ALL ${zoneItems.length} inventory items in the current zone (${zoneName})? This will permanently wipe this zone's inventory. This action cannot be undone.`)) {
+            let deleted = 0;
+            zoneItems.forEach(item => {
+                const key = item._fbKey || item.id;
+                if (key) {
+                    opsDB.ref(`inventory/${key}`).remove()
+                        .then(() => {
+                            deleted++;
+                            if (deleted === zoneItems.length) {
+                                showToast(`Successfully wiped inventory for zone: ${zoneName}`);
+                            }
+                        })
+                        .catch(err => console.error(err));
+                }
+            });
+        }
+    });
 }
 
 function openAddInventoryModal() {
