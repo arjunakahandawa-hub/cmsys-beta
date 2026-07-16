@@ -5762,6 +5762,34 @@ function processCsvUpload() {
     reader.readAsText(file);
 }
 
+function parseCsvLine(line) {
+    const result = [];
+    let insideQuote = false;
+    let entry = '';
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            insideQuote = !insideQuote;
+        } else if (char === ',' && !insideQuote) {
+            result.push(cleanCsvValue(entry));
+            entry = '';
+        } else {
+            entry += char;
+        }
+    }
+    result.push(cleanCsvValue(entry));
+    return result;
+}
+
+function cleanCsvValue(val) {
+    let cleaned = val.trim();
+    if (cleaned.startsWith('"') && cleaned.endsWith('"')) {
+        cleaned = cleaned.substring(1, cleaned.length - 1).trim();
+    }
+    return cleaned.replace(/""/g, '"');
+}
+
 function processInventoryCsv(csvText) {
     const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length <= 1) {
@@ -5770,14 +5798,12 @@ function processInventoryCsv(csvText) {
         return;
     }
     
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
     let addedCount = 0;
     let skippedCount = 0;
     
     for (let i = 1; i < lines.length; i++) {
-        // Handle basic CSV splitting, this simple split doesn't handle commas inside quotes well
-        // Assuming simple data for now
-        const values = lines[i].split(',').map(v => v.trim());
+        const values = parseCsvLine(lines[i]);
         
         let itemData = {};
         headers.forEach((header, index) => {
@@ -5835,12 +5861,12 @@ function processLocationsCsv(csvText) {
         return;
     }
     
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+    const headers = parseCsvLine(lines[0]).map(h => h.toLowerCase());
     let addedCount = 0;
     let skippedCount = 0;
     
     for (let i = 1; i < lines.length; i++) {
-        const values = lines[i].split(',').map(v => v.trim());
+        const values = parseCsvLine(lines[i]);
         let itemData = {};
         
         headers.forEach((header, index) => {
