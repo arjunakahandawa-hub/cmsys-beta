@@ -345,6 +345,16 @@ function standardizeInventoryDescription(desc) {
     clean = clean.replace(/\bbriliyant\s+whites?\b/gi, 'Briliant White');
     clean = clean.replace(/\broopings?\b/gi, 'Roofing');
     clean = clean.replace(/\blbows?\b/gi, 'Elbow');
+    clean = clean.replace(/\bl\/\s*bows?\b/gi, 'Elbow');
+    clean = clean.replace(/\bfexibal\b/gi, 'Flexible');
+    clean = clean.replace(/\bpenal\s+pins?\b/gi, 'Panel Pin');
+    clean = clean.replace(/\bgrinder\s+dise\b/gi, 'Grinder Disc');
+    clean = clean.replace(/\brollel\s+brash\b/gi, 'Roler Brush');
+    clean = clean.replace(/\bms\s+plte\b/gi, 'MS Plate');
+    clean = clean.replace(/\bms\s+plete\b/gi, 'MS Plate');
+    clean = clean.replace(/\bgipso\s+board\b/gi, 'Gypson Board');
+    clean = clean.replace(/\balaminium\s+sealer\b/gi, 'Aluminium Sealer');
+    clean = clean.replace(/\banticoresive\b/gi, 'Anticorrosive');
 
     return toTitleCase(clean);
 }
