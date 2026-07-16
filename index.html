@@ -1047,7 +1047,10 @@
                     <h2 class="text-2xl font-bold" style="color:#0a1628">Inventory Management</h2>
                     <p class="text-sm text-slate-500">Materials and Tools tracking by category</p>
                 </div>
-                <div class="flex gap-2">
+                <div class="flex gap-2 flex-wrap">
+                    <button onclick="clearCurrentZoneInventory()" class="bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium" title="Clear all inventory items for this zone to perform a fresh upload">
+                        🗑️ Reset Zone Items
+                    </button>
                     <button onclick="openBulkUploadModal('inventory')" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium">
                         📤 Bulk Upload
                     </button>
@@ -3089,7 +3092,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260716002"></script>
+    <script src="app.js?v=20260716003"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

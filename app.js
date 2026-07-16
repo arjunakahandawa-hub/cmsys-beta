@@ -4021,6 +4021,33 @@ function submitOffCharge(event) {
     showToast(`Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`);
 }
 
+function clearCurrentZoneInventory() {
+    // Filter items belonging to the current active zone
+    const zoneItems = store.inventory.filter(i => !i.zone_id || i.zone_id === store.currentZone);
+    if (zoneItems.length === 0) {
+        showToast('No inventory items found in the current zone', 'info');
+        return;
+    }
+    
+    const zoneName = store.zones.find(z => z.id === store.currentZone)?.name || store.currentZone;
+    if (confirm(`⚠️ WARNING: Are you sure you want to delete ALL ${zoneItems.length} inventory items in the current zone (${zoneName})? This will permanently wipe this zone's inventory. This action cannot be undone.`)) {
+        let deleted = 0;
+        zoneItems.forEach(item => {
+            const key = item._fbKey || item.id;
+            if (key) {
+                opsDB.ref(`inventory/${key}`).remove()
+                    .then(() => {
+                        deleted++;
+                        if (deleted === zoneItems.length) {
+                            showToast(`Successfully wiped inventory for zone: ${zoneName}`);
+                        }
+                    })
+                    .catch(err => console.error(err));
+            }
+        });
+    }
+}
+
 function openAddInventoryModal() {
     document.getElementById('invId').value = '';
     document.getElementById('invDate').value = new Date().toISOString().split('T')[0];
