@@ -393,6 +393,10 @@ function standardizeInventoryCategory(cat) {
     // Exact mapping for common input variants
     const mapping = {
         'METAL': 'Metal',
+        'YAKADA': 'Metal',
+        'YAD': 'Metal',
+        'STANSILE': 'Stencil',
+        'STENCIL': 'Stencil',
         'PAINT': 'Paint',
         'PAI': 'Paint',
         'GENERAL': 'General',
@@ -402,15 +406,13 @@ function standardizeInventoryCategory(cat) {
         'PVC': 'Plumbing',
         'ALUMINIUM': 'Aluminium',
         'ALUMINUM': 'Aluminium',
+        'ALU': 'Aluminium',
         'ELECTRICAL': 'Electrical',
         'TOOLS': 'Tools',
         'TOOL': 'Tools',
         'LUBRICANT OIL': 'Lubricant Oil',
         'LUBRICANT': 'Lubricant Oil',
         'OIL': 'Lubricant Oil',
-        'STANSILE': 'Metal',
-        'YAD': 'Metal',
-        'YAKADA': 'Metal'
     };
 
     if (mapping[cleaned]) {
@@ -418,7 +420,7 @@ function standardizeInventoryCategory(cat) {
     }
 
     // Fallback: Title Case matching to standard categories
-    const standardCats = ['BMS', 'Plumbing', 'Metal', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
+    const standardCats = ['BMS', 'Plumbing', 'Metal', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil', 'Stencil'];
     const matched = standardCats.find(sc => sc.toUpperCase() === cleaned);
     if (matched) return matched;
 
@@ -3717,7 +3719,7 @@ function renderInventoryCategories() {
     if (!container) return;
 
     // Default categories that should always appear
-    const defaultCats = ['BMS', 'Plumbing', 'Metal', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools'];
+    const defaultCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
     
     // Extract unique categories from actual inventory items
     const actualCats = [...new Set(store.inventory.map(i => i.category))].filter(c => c && c.trim() !== '');
@@ -3742,7 +3744,7 @@ function renderInventoryCategories() {
     // Also update the select dropdown options, keeping standard ones and dynamically adding any database custom ones
     const catSelect = document.getElementById('invCategory');
     if (catSelect) {
-        const standardCats = ['BMS', 'Plumbing', 'Metal', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
+        const standardCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
         const customCats = allCats.filter(c => !standardCats.includes(c));
         
         let optionsHtml = '<option value="">-- Select Category --</option>';
