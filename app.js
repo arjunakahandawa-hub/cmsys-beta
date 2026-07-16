@@ -7,6 +7,15 @@ if ('serviceWorker' in navigator) {
             .then(reg => console.log('⚓ NCW-PS PWA Service Worker: REGISTERED (', reg.scope, ')'))
             .catch(err => console.error('⚠️ NCW-PS PWA Service Worker: REGISTRATION FAILED:', err));
     });
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+            refreshing = true;
+            console.log('⚓ New Service Worker activated, reloading page...');
+            window.location.reload();
+        }
+    });
 }
 
 // Custom PWA Installer trigger variables and listeners
@@ -632,7 +641,7 @@ function closeModal(modalId) {
     _justClosedModal = true;
     setTimeout(() => {
         _justClosedModal = false;
-    }, 350);
+    }, 1000);
 }
 
 function formatCurrency(amount) {
@@ -8557,7 +8566,7 @@ function initPwaHistoryManagement() {
         
         setTimeout(() => {
             _isHistoryBackAction = false;
-        }, 100);
+        }, 500);
     });
 
     // 3. Observe DOM for modal open/close actions to push/pop history states automatically
