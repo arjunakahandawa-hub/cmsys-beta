@@ -1073,12 +1073,9 @@
                         onkeyup="filterInventory()">
                     <div class="flex gap-2">
                         <select id="inventoryLocation" onchange="filterInventory()" class="flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-                            <option value="">All Locations (Current Zone)</option>
-                            <option value="ALL_ZONES">All Zones (All Locations)</option>
-                            <option value="Zone Store">Zone Store</option>
-                            <option value="Ready Use Store">Ready Use Store</option>
+                            <option value="">Current Locations & Zone</option>
+                            <option value="ALL_ZONES">All Locations & Zone</option>
                             <option value="Balance Store">Balance Store</option>
-                            <option value="Workshop">Workshop</option>
                         </select>
                         <select id="inventorySort" onchange="filterInventory()" class="flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
                             <option value="description">Sort: Description</option>
@@ -3117,7 +3114,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260716008"></script>
+    <script src="app.js?v=20260716009"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
