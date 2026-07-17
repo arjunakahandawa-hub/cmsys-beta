@@ -8561,35 +8561,59 @@ function renderSummaryView() {
         return sections.zones.subsections["A"];
     }
 
-    // 3. Process allocations and categorize sailors
-    activeAllocations.forEach(a => {
-        const sailor = store.sailors.find(s => String(s.id) === String(a.sailor_id) || String(s._fbKey) === String(a.sailor_id));
-        const wo = store.workOrders.find(w => String(w.id) === String(a.work_order_id) || String(w._fbKey) === String(a.work_order_id));
+    // 3. Process allocations and categorize sailors based on Daily Details logic
+    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const allAllocatedSailorIds = new Set();
+    
+    zones.forEach(z => {
+        const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
         
-        if (sailor && wo) {
-            const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
-            const section = getSectionForZone(wo.zone_id);
-            
-            // Normalize description to uppercase for matching
-            const rowKey = (wo.description || 'UNNAMED DUTY').toUpperCase().trim();
-            
-            // Dynamically create the row if it doesn't exist yet
-            if (!section.rows[rowKey]) {
-                section.rows[rowKey] = createRowMatrix(rowKey);
-            }
-            
-            const targetRow = section.rows[rowKey];
-            if (isVss) {
-                targetRow.vss[tradeIdx]++;
+        wos.forEach(wo => {
+            let assignedSailors = [];
+            if (dateVal === today) {
+                const assignedIds = (wo.assigned || []).map(String);
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
             } else {
-                targetRow.reg[tradeIdx]++;
+                const assignedIds = (store.dailyAllocations || [])
+                    .filter(a => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+                    .map(a => String(a.sailor_id));
+                assignedSailors = store.sailors.filter(s =>
+                    assignedIds.includes(String(s.id)) ||
+                    assignedIds.includes(String(s._fbKey))
+                );
             }
-        }
+            
+            if (assignedSailors.length > 0) {
+                const section = getSectionForZone(wo.zone_id);
+                const rowKey = (wo.description || 'UNNAMED DUTY').toUpperCase().trim();
+                
+                if (!section.rows[rowKey]) {
+                    section.rows[rowKey] = createRowMatrix(rowKey);
+                }
+                const targetRow = section.rows[rowKey];
+                
+                assignedSailors.forEach(sailor => {
+                    // Track for Leave/Sick check
+                    allAllocatedSailorIds.add(String(sailor.id));
+                    if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
+                    
+                    const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
+                    if (isVss) {
+                        targetRow.vss[tradeIdx]++;
+                    } else {
+                        targetRow.reg[tradeIdx]++;
+                    }
+                });
+            }
+        });
     });
 
     // 4. Process explicit leaves/sick statuses from sailorsDB
     store.sailors.forEach(sailor => {
-        const isAllocated = activeAllocations.some(a => String(a.sailor_id) === String(sailor.id) || String(a.sailor_id) === String(sailor._fbKey));
+        const isAllocated = allAllocatedSailorIds.has(String(sailor.id)) || (sailor._fbKey && allAllocatedSailorIds.has(String(sailor._fbKey)));
         
         if (!isAllocated && (sailor.attendance === 'Leave' || sailor.attendance === 'Sick')) {
             const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
