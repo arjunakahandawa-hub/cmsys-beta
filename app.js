@@ -179,6 +179,22 @@ const store = {
 // DB#2 = opsDB      (ncw-ps-operations)    → READ + WRITE
 // =============================================
 
+// Helper to safely parse cost, handling commas and string prefixes like "Rs."
+function safeParseCost(val) {
+    if (val === undefined || val === null || val === '') return 0;
+    if (typeof val === 'number') return val;
+    
+    let str = String(val).toLowerCase();
+    // Remove rs, rs., commas, and spaces
+    str = str.replace(/rs\.?/g, '').replace(/,/g, '').replace(/\s/g, '');
+    
+    // Strip any remaining characters that are not digits or decimal point
+    str = str.replace(/[^0-9.]/g, '');
+    
+    const num = parseFloat(str);
+    return isNaN(num) ? 0 : num;
+}
+
 // ── Helper: convert Firebase snapshot object → array with _fbKey ──
 function snapshotToArray(snapshot) {
     if (!snapshot.exists()) return [];
@@ -4272,7 +4288,7 @@ function saveInventoryItem(event) {
         description: document.getElementById('invDescription').value,
         deno: document.getElementById('invDeno').value,
         quantity: parseFloat(document.getElementById('invQuantity').value),
-        cost_per_unit: parseFloat(document.getElementById('invCost').value) || 0,
+        cost_per_unit: safeParseCost(document.getElementById('invCost').value),
         requirement: requirement,
         location: document.getElementById('invLocation').value,
         on_charge_ref: document.getElementById('invOnCharge').value,
@@ -6065,7 +6081,7 @@ function processInventoryCsv(csvText) {
             if (header === 'category') itemData.category = values[index];
             if (header === 'deno') itemData.deno = values[index];
             if (header === 'quantity') itemData.quantity = parseFloat(values[index]) || 0;
-            if (header === 'unit cost') itemData.cost_per_unit = parseFloat(values[index]) || 0;
+            if (header === 'unit cost') itemData.cost_per_unit = safeParseCost(values[index]);
             if (header === 'requirement') itemData.requirement = values[index];
             if (header === 'location') itemData.location = values[index];
             if (header === 'on-charge ref') itemData.on_charge_ref = values[index];
