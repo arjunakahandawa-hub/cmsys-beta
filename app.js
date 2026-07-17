@@ -485,6 +485,7 @@ function initOpsListeners() {
             ...item, id: item.id ?? item._fbKey,
             category: standardizeInventoryCategory(item.category),
             description: standardizeInventoryDescription(item.description),
+            cost_per_unit: parseFloat(item.cost_per_unit ?? item.unit_cost ?? item.cost ?? item.price ?? 0) || 0,
             on_charge_records:  item.on_charge_records  ? Object.values(item.on_charge_records)  : [],
             off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
         }));
