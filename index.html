@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0a1628">
+    <link rel="manifest" href="manifest.json">
     <title>NCW-PS v2.2 | Naval Civil Works Productivity Suite — SLN Trincomalee</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
@@ -51,6 +55,15 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Sinhala:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
+            --body-bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+            --header-bg: #0a1628;
+            --input-bg: #ffffff;
+            --input-text: #1e293b;
+            --card-sub-bg: rgba(15,32,64,0.04);
             --navy-900: #0a1628;
             --navy-800: #0f2040;
             --navy-700: #152a55;
@@ -60,9 +73,144 @@
             --gold: #d4a017;
             --gold-light: #f0c040;
         }
+
+        html.dark {
+            --body-bg: #070e1b;
+            --card-bg: #0f2040;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --border-color: rgba(255,255,255,0.08);
+            --header-bg: #050a12;
+            --input-bg: #152a55;
+            --input-text: #ffffff;
+            --card-sub-bg: rgba(255,255,255,0.03);
+        }
+
+        body {
+            background-color: var(--body-bg) !important;
+            color: var(--text-primary) !important;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        html.dark body {
+            background-color: var(--body-bg) !important;
+            color: var(--text-primary) !important;
+        }
+
+        html.dark .bg-white,
+        html.dark [style*="background: white"],
+        html.dark [style*="background:#fff"],
+        html.dark [style*="background:white"],
+        html.dark [style*="background-color: white"],
+        html.dark [style*="background-color:#fff"],
+        html.dark [style*="background-color:white"] {
+            background-color: var(--card-bg) !important;
+            background: var(--card-bg) !important;
+            color: var(--text-primary) !important;
+        }
+
+        html.dark .bg-slate-100,
+        html.dark .bg-slate-200,
+        html.dark .bg-slate-50,
+        html.dark .bg-slate-50/50,
+        html.dark .bg-slate-50/80 {
+            background-color: var(--body-bg) !important;
+        }
+
+        html.dark .text-slate-900,
+        html.dark .text-slate-800, 
+        html.dark .text-slate-700, 
+        html.dark .text-slate-600 {
+            color: var(--text-primary) !important;
+        }
+
+        html.dark .text-slate-500, 
+        html.dark .text-slate-400 {
+            color: var(--text-secondary) !important;
+        }
+
+        html.dark .border-slate-200, 
+        html.dark .border-slate-100 {
+            border-color: var(--border-color) !important;
+        }
+
+        html.dark .work-order-card {
+            background-color: var(--card-bg) !important;
+            border-color: var(--border-color) !important;
+        }
+        
+        html.dark .modal-content {
+            background-color: var(--card-bg) !important;
+            border-color: var(--border-color) !important;
+        }
+
+        html.dark .bg-white/80,
+        html.dark .bg-white/90 {
+            background-color: rgba(15, 32, 64, 0.8) !important;
+        }
+        
+        html.dark input, html.dark select, html.dark textarea {
+            background-color: var(--input-bg) !important;
+            color: var(--input-text) !important;
+            border-color: var(--border-color) !important;
+        }
+
+        html.dark .divide-slate-200 > *,
+        html.dark .divide-slate-100 > * {
+            border-color: var(--border-color) !important;
+        }
         * { font-family: 'Inter', 'Noto Sans Sinhala', sans-serif; }
+        select option {
+            background-color: #0a1628 !important;
+            color: #ffffff !important;
+        }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .sinhala { font-family: 'Noto Sans Sinhala', sans-serif; }
+
+        /* ===== Mobile App Optimizations (APK feeling) ===== */
+        html, body {
+            overflow-x: hidden;
+            -webkit-tap-highlight-color: transparent; /* Remove mobile gray tap highlight */
+        }
+        
+        /* Disable text selection on UI controls to feel like a real app */
+        body {
+            -webkit-user-select: none;
+            user-select: none;
+        }
+        input, textarea, select {
+            -webkit-user-select: text;
+            user-select: text;
+        }
+
+        /* 100dvh App Height Lock on Mobile to avoid scrolling top and bottom bars */
+        @media (max-width: 767px) {
+            body {
+                height: 100dvh;
+                display: flex;
+                flex-direction: column;
+                overscroll-behavior-y: contain; /* Disable pull-to-refresh on mobile */
+            }
+            header {
+                flex-shrink: 0;
+            }
+            /* Main scroll container inside page content */
+            main {
+                flex-grow: 1;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-bottom: 5rem !important; /* spacing for bottom nav */
+            }
+        }
+
+        /* Tactile Active press feedback for buttons, tabs, select boxes and clicks */
+        button, select, .nav-pill, [onclick] {
+            transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        button:active, .nav-pill:active, [onclick]:active {
+            transform: scale(0.96);
+            opacity: 0.9;
+        }
 
         /* ===== Page Background ===== */
         body {
@@ -205,7 +353,23 @@
         /* ===== Print ===== */
         @media print {
             .no-print { display: none !important; }
-            body { background: white; }
+            body { background: white; color: black; font-family: sans-serif; }
+            .print-header { display: block !important; }
+            .print-signatures { display: grid !important; margin-top: 40px !important; }
+            .print-table-container { 
+                border: none !important; 
+                padding: 0 !important; 
+                box-shadow: none !important; 
+                background: white !important;
+                overflow: visible !important;
+            }
+            table { border-color: #000 !important; width: 100% !important; }
+            th, td { border-color: #000 !important; padding: 4px 6px !important; color: #000 !important; }
+            th { background-color: #f8fafc !important; color: #000 !important; }
+            /* Hide general layout structure in print */
+            #leftSidebarContainer, #sidebarToggleBtn, header, .header-container, #mobileTabBar { display: none !important; }
+            main, .view-content { padding: 0 !important; margin: 0 !important; width: 100% !important; display: block !important; }
+            .glass-card { background: white !important; box-shadow: none !important; border: none !important; }
         }
 
         /* ===== Button Hover & Active Effects ===== */
@@ -276,6 +440,10 @@
         .settings-tab-btn:hover { background: #e2e8f0; color: #334155; }
         .active-stab { background: linear-gradient(135deg,#0a1628,#152a55) !important; color: #5eead4 !important; }
     </style>
+    <!-- PDF Generation Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- Google Identity Services (OAuth 2.0) -->
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="min-h-screen" style="background:linear-gradient(160deg,#e8f4f8 0%,#dbeafe 25%,#e0f2fe 55%,#ecfdf5 100%)">
     <!-- ==================== PREMIUM LOGIN SCREEN ==================== -->
@@ -284,8 +452,8 @@
             
             <!-- Crest and Title -->
             <div class="flex flex-col items-center gap-3 mb-6">
-                <div class="w-16 h-16 rounded-full bg-white shadow-lg overflow-hidden border-2 border-white/20 flex items-center justify-center">
-                    <img src="navy_crest.jpg" alt="Navy Crest" class="w-full h-full object-cover scale-[1.85] translate-y-[2px]">
+                <div class="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center">
+                    <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
                 </div>
                 <div>
                     <h2 class="text-xl font-bold text-white tracking-wide">NCW-PS Portal</h2>
@@ -301,15 +469,33 @@
             </div>
 
             <form onsubmit="submitLogin(event)" class="space-y-4">
-                <!-- Profile Dropdown Selection -->
-                <div>
+                <input type="hidden" id="loginMode" value="OIC">
+
+                <!-- Mode Toggle Tab -->
+                <div class="flex border border-white/10 rounded-xl overflow-hidden mb-4 p-0.5 bg-slate-950/40">
+                    <button type="button" onclick="setLoginMode('OIC')" id="loginModeBtnOIC" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-white bg-teal-600 shadow-sm">Officer / OIC</button>
+                    <button type="button" onclick="setLoginMode('SAILOR')" id="loginModeBtnSailor" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white">Sailor Profile</button>
+                </div>
+
+                <!-- OIC / Officer Selection -->
+                <div id="loginGroupOic">
                     <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Select Profile</label>
-                    <select id="loginProfileSelect" onchange="onLoginProfileChange(this.value)" required class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 cursor-pointer">
+                    <select id="loginProfileSelect" onchange="onLoginProfileChange(this.value)" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 cursor-pointer">
                         <option value="">-- Choose Profile --</option>
                     </select>
                 </div>
 
-                <!-- Password Input -->
+                <!-- Sailor Search Autocomplete Selection -->
+                <div id="loginGroupSailor" class="hidden relative">
+                    <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Search Service No / Name</label>
+                    <input type="text" id="loginSailorSearch" placeholder="Type Service No or Name..." oninput="filterLoginSailor(this.value)" onfocus="showLoginSailorDropdown()" autocomplete="off" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500">
+                    <input type="hidden" id="loginSailorSelectedId">
+                    <div id="loginSailorDropdown" class="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto divide-y divide-slate-800 bg-slate-950 border border-white/10 rounded-xl shadow-2xl hidden scrollbar-thin text-left">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Password Input (OIC mode only) -->
                 <div id="loginPasswordGroup" class="hidden">
                     <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Password</label>
                     <input type="password" id="loginPasswordInput" placeholder="Enter password" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 text-center tracking-widest font-bold">
@@ -323,19 +509,18 @@
         </div>
     </div>
     <!-- ========== NAVAL HEADER ========== -->
-    <header class="nav-header header-glow sticky top-0 z-50 no-print">
+    <header id="navalHeader" class="nav-header header-glow sticky top-0 z-50 no-print">
         <div class="container mx-auto px-4">
             <div class="flex items-center justify-between h-[68px]">
 
                 <!-- Brand -->
                 <div class="flex items-center gap-3">
-                    <div class="w-[60px] h-[60px] rounded-full shadow-[0_0_15px_rgba(0,0,0,0.4)] border-[3px] border-white/20 overflow-hidden flex-shrink-0 bg-white -ml-1 flex items-center justify-center">
-                        <img src="navy_crest.jpg" alt="Navy Crest" class="w-full h-full object-cover" style="transform: scale(1.85) translateY(3px);">
+                    <div class="w-[60px] h-[60px] rounded-full overflow-hidden flex-shrink-0 -ml-1 flex items-center justify-center">
+                        <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
                     </div>
                     <div>
                         <div class="flex items-center gap-2">
                             <h1 class="text-[15px] font-bold text-white tracking-wide">NCW-PS <span class="text-teal-400 font-extrabold">v2.2</span></h1>
-                            <span class="hidden md:inline text-[10px] border border-yellow-400/50 text-yellow-300 px-1.5 py-0.5 rounded font-medium">SLN CONFIDENTIAL</span>
                         </div>
                         <p class="brand-tag leading-none hidden sm:block">Naval Civil Works · Miss Garrison · Trincomalee</p>
                     </div>
@@ -345,6 +530,12 @@
                 <nav class="hidden md:flex gap-0.5 bg-white/5 backdrop-blur rounded-xl p-1 border border-white/10">
                     <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300 tab-active">
                         <span class="hidden xl:inline">📊 </span>Dashboard
+                    </button>
+                    <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300" style="display: none;">
+                        <span class="hidden xl:inline">📋 </span>Daily Details
+                    </button>
+                    <button onclick="switchView('summary')" id="tab-summary" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300" style="display: none;">
+                        <span class="hidden xl:inline">📊 </span>Summary
                     </button>
                     <button onclick="switchView('jobcards')" id="tab-jobcards" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📋 </span>Job Cards
@@ -356,7 +547,10 @@
                         <span class="hidden xl:inline">📐 </span>Estimates
                     </button>
                     <button onclick="switchView('maintenance')" id="tab-maintenance" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
-                        <span class="hidden xl:inline">🔧 </span>Maintenance
+                        <span class="hidden xl:inline">🔧 </span>LMD
+                    </button>
+                    <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">⚓ </span>Sailors
                     </button>
                     <button onclick="switchView('reports')" id="tab-reports" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📈 </span>Reports
@@ -368,10 +562,15 @@
 
                 <!-- Right Controls -->
                 <div class="flex items-center gap-3">
-                    <div id="modeIndicator" class="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg border border-white/10 bg-white/5">
-                        <span class="w-2 h-2 rounded-full bg-teal-400 pulse-online"></span>
-                        <span id="modeText" class="text-slate-300">Active</span>
-                    </div>
+                    <!-- Dark Mode Toggle Button -->
+                    <button onclick="toggleDarkMode()" id="darkModeToggleBtn" class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 hover:text-white cursor-pointer transition-all shadow-sm border border-slate-700/30" title="Toggle Theme">
+                        🌙
+                    </button>
+
+                    <button onclick="triggerPwaInstall()" id="installAppBtn" class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-teal-800/50 hover:bg-teal-700/50 text-teal-300 hover:text-white cursor-pointer transition-all shadow-sm border border-teal-700/30 hidden" title="🖥️ Install App on PC/Mobile">
+                        🖥️
+                    </button>
+
                     <select id="zoneSelector" onchange="changeZone()" class="text-xs rounded-lg px-2.5 py-1.5 border border-teal-600/50 font-medium cursor-pointer"
                         style="background:rgba(13,148,136,0.18);color:#5eead4;">
                     </select>
@@ -396,15 +595,17 @@
     </header>
 
     <!-- ===== Tactical Status Bar ===== -->
-    <div class="no-print" style="background:linear-gradient(90deg,#0a1628 0%,#152a55 50%,#0a1628 100%);border-bottom:1px solid rgba(13,148,136,0.3)">
-        <div class="container mx-auto px-4 py-1.5 flex items-center justify-between text-xs">
-            <div class="flex items-center gap-5 text-slate-400">
+    <div id="tacticalStatusBar" class="no-print" style="background:linear-gradient(90deg,#0a1628 0%,#152a55 50%,#0a1628 100%);border-bottom:1px solid rgba(13,148,136,0.3)">
+        <div class="container mx-auto px-4 py-2 flex flex-col md:flex-row items-center justify-between gap-2.5 text-xs">
+            <div class="flex flex-wrap items-center justify-center md:justify-start gap-3 md:gap-5 text-slate-400">
                 <span class="mono">📅 <span id="currentDate" class="text-teal-300"></span></span>
                 <span class="mono">🕐 <span id="currentTime" class="text-teal-300"></span></span>
-                <span class="text-slate-600">|</span>
-                <span class="text-slate-400">Miss Garrison Naval Station · ~10,000 Personnel · 750+ Ha</span>
+                <span id="onlineIndicator" class="flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 transition-all duration-300">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Online</span>
+                </span>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center justify-center gap-1.5 md:gap-2">
                 <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.35)">
                     ⚓ NET: <span id="netForce">24</span>
                 </span>
@@ -428,64 +629,80 @@
         <div id="view-dashboard" class="view-content">
             <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
                 
-                <!-- Left Panel - Available Sailors -->
-                <div class="col-span-12 md:col-span-3">
-                    <div class="glass-card overflow-hidden">
-                        <div class="text-white px-4 py-3" style="background:linear-gradient(135deg,#0a1628,#152a55)">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <h2 class="font-bold text-sm tracking-wide">⚓ Available Force</h2>
-                                    <p class="text-[10px] text-teal-300 mt-0.5">Drag to assign · Score: Avg</p>
-                                </div>
-                                <span class="text-sm font-extrabold text-teal-300" id="availableBadge">6</span>
-                            </div>
-                        </div>
+                <!-- Left Sidebar Backdrop (Mobile only) -->
+                <div id="sidebarBackdrop" onclick="toggleLeftSidebar(false)" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-35 hidden md:hidden no-print"></div>
 
-                        <!-- Filter Tabs -->
-                        <div class="p-3 border-b border-slate-200" style="background:rgba(248,250,252,0.8)">
-                            <div class="flex gap-1.5 mb-2">
-                                <button onclick="filterSailors('all')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium" style="background:#0a1628;color:#5eead4">All</button>
-                                <button onclick="filterSailors('zone-team')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Zone Team</button>
-                                <button onclick="filterSailors('continuation')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Continue</button>
-                            </div>
-                            <div class="flex flex-wrap gap-1">
-                                <button onclick="filterTrade('ALL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-700 text-white">ALL</button>
-                                <button onclick="filterTrade('MA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">MA</button>
-                                <button onclick="filterTrade('CA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">CA</button>
-                                <button onclick="filterTrade('PA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PA</button>
-                                <button onclick="filterTrade('PL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PL</button>
-                                <button onclick="filterTrade('WE')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">WE</button>
-                                <button onclick="filterTrade('RW')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">RW</button>
-                            </div>
-                        </div>
+                <!-- Left Panel Container (Sidebar on mobile, normal grid column on desktop) -->
+                <div id="leftSidebarContainer" class="fixed inset-y-0 left-0 z-40 w-72 max-w-[85vw] -translate-x-full transition-transform duration-300 ease-in-out md:relative md:translate-x-0 md:w-auto md:max-w-none md:z-auto md:inset-auto md:col-span-3 flex flex-col no-print bg-[#0a1628]/95 md:bg-transparent backdrop-blur-md md:backdrop-blur-none border-r border-teal-500/20 md:border-r-0 shadow-2xl md:shadow-none">
+                    
+                    <!-- Sidebar Toggle Button (Mobile Only) -->
+                    <button onclick="toggleLeftSidebar()" id="sidebarToggleBtn" class="md:hidden absolute left-full top-[120px] bg-gradient-to-r from-teal-600 to-teal-500 text-white rounded-r-xl w-8 h-12 flex items-center justify-center shadow-[4px_0_12px_rgba(13,148,136,0.3)] border-y border-r border-teal-400/30 hover:from-teal-500 hover:to-teal-400 transition-all focus:outline-none" title="Toggle Force Sidebar">
+                        <span class="text-[10px] transition-transform duration-300 font-extrabold" id="sidebarToggleArrow">➔</span>
+                    </button>
 
-                        <!-- Search -->
-                        <div class="p-3 border-b border-slate-200">
-                            <input type="text" id="sailorSearch" placeholder="Search by name or ID..." 
-                                class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
-                                onkeyup="searchSailors()">
-                        </div>
-
-                        <!-- Sailor List -->
-                        <div id="availableSailors" class="p-3 space-y-2 max-h-[450px] overflow-y-auto scrollbar-thin">
-                        </div>
-                    </div>
-
-                    <!-- Zone Team Panel (Add / Remove enabled) -->
-                    <div class="mt-4 glass-card overflow-hidden">
-                        <div class="panel-header-green text-white px-4 py-3">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <h3 class="font-semibold">Zone Team</h3>
-                                    <p class="text-xs text-green-100">Fixed team members (15 max)</p>
-                                </div>
-                                <div class="flex items-center gap-2">
-                                    <span class="bg-white/20 px-2 py-1 rounded text-xs" id="zoneTeamBadge">12/15</span>
-                                    <button onclick="openZoneTeamManager()" class="bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-xs font-medium" title="Add or remove team members">⚙ Manage</button>
+                    <!-- Scrollable sidebar content wrapper -->
+                    <div class="flex-grow overflow-y-auto p-4 md:p-0 space-y-4 scrollbar-thin h-full">
+                        <!-- Left Panel - Available Sailors -->
+                        <div class="glass-card overflow-hidden">
+                            <div class="text-white px-4 py-3" style="background:linear-gradient(135deg,#0a1628,#152a55)">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h2 class="font-bold text-sm tracking-wide">⚓ Available Force</h2>
+                                        <p class="text-[10px] text-teal-300 mt-0.5">Drag to assign · Score: Avg</p>
+                                    </div>
+                                    <span class="text-sm font-extrabold text-teal-300" id="availableBadge">6</span>
                                 </div>
                             </div>
+
+                            <!-- Filter Tabs -->
+                            <div class="p-3 border-b border-slate-200" style="background:rgba(248,250,252,0.8)">
+                                <div class="flex gap-1.5 mb-2">
+                                    <button onclick="filterSailors('all')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium" style="background:#0a1628;color:#5eead4">All</button>
+                                    <button onclick="filterSailors('zone-team')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Zone Team</button>
+                                    <button onclick="filterSailors('continuation')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Continue</button>
+                                </div>
+                                <div class="flex flex-wrap gap-1">
+                                    <button onclick="filterTrade('ALL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-700 text-white">ALL</button>
+                                    <button onclick="filterTrade('MA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">MA</button>
+                                    <button onclick="filterTrade('CA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">CA</button>
+                                    <button onclick="filterTrade('PA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PA</button>
+                                    <button onclick="filterTrade('PL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PL</button>
+                                    <button onclick="filterTrade('WE')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">WE</button>
+                                    <button onclick="filterTrade('RW')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">RW</button>
+                                    <button onclick="filterTrade('AL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">AL</button>
+                                    <button onclick="filterTrade('SW')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">SW</button>
+                                    <button onclick="filterTrade('BB')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">BB</button>
+                                </div>
+                            </div>
+
+                            <!-- Search -->
+                            <div class="p-3 border-b border-slate-200">
+                                <input type="text" id="sailorSearch" placeholder="Search by name or ID..." 
+                                    class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
+                                    onkeyup="searchSailors()">
+                            </div>
+
+                            <!-- Sailor List -->
+                            <div id="availableSailors" class="p-3 space-y-2 max-h-[450px] overflow-y-auto scrollbar-thin">
+                            </div>
                         </div>
-                        <div id="zoneTeamList" class="p-3 space-y-2 max-h-60 overflow-y-auto scrollbar-thin">
+
+                        <!-- Zone Team Panel (Add / Remove enabled) -->
+                        <div class="glass-card overflow-hidden">
+                            <div class="panel-header-green text-white px-4 py-3">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <h3 class="font-semibold text-xs md:text-sm">Zone Team</h3>
+                                        <p class="text-[10px] text-green-100">Fixed team members (15 max)</p>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="bg-white/20 px-2 py-1 rounded text-xs" id="zoneTeamBadge">12/15</span>
+                                        <button onclick="openZoneTeamManager()" class="bg-white/20 hover:bg-white/30 px-2 py-1 rounded text-[10px] md:text-xs font-medium" title="Add or remove team members">⚙ Manage</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="zoneTeamList" class="p-3 space-y-2 max-h-60 overflow-y-auto scrollbar-thin">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -493,23 +710,40 @@
                 <!-- Center Panel - Work Orders Board -->
                 <div class="col-span-12 md:col-span-9">
                     <!-- Action Bar -->
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center gap-4">
+                    <div class="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between mb-4">
+                        <div class="flex flex-wrap items-center gap-3">
                             <h2 class="text-xl font-bold text-slate-800">🪖 Work Order Board</h2>
-                            <button onclick="continueYesterdayJobs()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <!-- Historical Date Selector -->
+                            <div class="flex items-center gap-2 bg-white border border-slate-200 px-3 py-1.5 rounded-xl shadow-sm text-xs font-semibold text-slate-600">
+                                <span>📅 Date:</span>
+                                <input type="date" id="dashboardDatePicker" onchange="changeDashboardDate(this.value)" class="border-0 p-0 text-xs font-bold text-teal-600 focus:ring-0 cursor-pointer" style="outline:none;">
+                            </div>
+                            <button id="btnContinueYesterday" onclick="continueYesterdayJobs()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 shadow-sm transition-all">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                                 </svg>
                                 Continue Yesterday
                             </button>
+                            <button id="dashboardExportCsvBtn" onclick="isAdminStaffDuties(store.currentZone) ? openLmdExportModal('csv') : exportLmdCSV('selected', store.currentZone)" class="bg-slate-700 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
+                                📥 Export CSV
+                            </button>
+                            <button id="dashboardPrintBtn" onclick="isAdminStaffDuties(store.currentZone) ? openLmdExportModal('print') : printLmdDetails('selected', store.currentZone)" class="bg-slate-700 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
+                                🖨️ Print / PDF
+                            </button>
+                            <button id="dashboardShareWhatsappBtn" onclick="openLmdExportModal('whatsapp')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
+                                💬 WhatsApp Share
+                            </button>
                         </div>
-                        <div class="flex items-center gap-3">
+                        <div class="flex items-center gap-2.5">
                             <!-- Evening Evaluation Button (Shows 18:00-20:00) -->
-                            <button id="evalModeBtn" onclick="toggleEvaluationMode()" class="hidden text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-lg" style="background:linear-gradient(135deg,#d97706,#b45309);animation:pulse-gold 2s infinite">
+                            <button id="evalModeBtn" onclick="toggleEvaluationMode()" class="hidden text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-lg" style="background:linear-gradient(135deg,#d97706,#b45309);animation:pulse-gold 2s infinite">
                                 📝 Evening Evaluation
                             </button>
-                            <button onclick="openNewWorkOrderModal()" class="text-white px-4 py-2 rounded-xl text-sm font-medium flex items-center gap-2 shadow-sm transition-all" style="background:linear-gradient(135deg,#0d9488,#0891b2)">
-                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <button id="newAssignBtn" onclick="openNewAssignModal()" class="text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+                                ➕ New Assign
+                            </button>
+                            <button id="newWorkOrderBtn" onclick="openNewWorkOrderModal()" class="text-white px-3.5 py-2 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all" style="background:linear-gradient(135deg,#0d9488,#0891b2)">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
                                 </svg>
                                 New Work Order
@@ -518,36 +752,43 @@
                     </div>
 
                     <!-- Ongoing Tasks Summary -->
-                    <div class="rounded-xl p-4 mb-4 text-white" style="background:linear-gradient(135deg,#0a1628 0%,#152a55 50%,#0d4f6e 100%);border:1px solid rgba(13,148,136,0.35);box-shadow:0 8px 32px rgba(10,22,40,0.35)">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h3 class="font-bold text-[15px] text-teal-300">Today's Operational Summary</h3>
-                                <p class="text-sm text-slate-400 mt-0.5" id="workSummaryText">Miss Garrison Naval Dockyard — Click any work order to manage</p>
+                    <div id="ongoingTasksSummaryWrapper" class="rounded-xl p-4 mb-4 text-white" style="background:linear-gradient(135deg,#0a1628 0%,#152a55 50%,#0d4f6e 100%);border:1px solid rgba(13,148,136,0.35);box-shadow:0 8px 32px rgba(10,22,40,0.35)">
+                        <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                            <div class="text-center md:text-left">
+                                <h3 id="summaryTitle" class="font-bold text-[15px] text-teal-300">Today's Operational Summary</h3>
+                                <p class="text-xs md:text-sm text-slate-400 mt-0.5" id="workSummaryText">Miss Garrison Naval Dockyard — Click any work order to manage</p>
                             </div>
-                            <div class="flex items-center gap-6">
+                            <div class="flex flex-wrap items-center justify-center gap-4 md:gap-6">
                                 <div class="text-center">
                                     <p class="text-2xl font-extrabold text-teal-300" id="ongoingProjects">2</p>
                                     <p class="text-[11px] text-slate-400 mt-0.5">Projects</p>
+                                    <p class="text-[10px] text-teal-200/80 font-medium mt-0.5" id="ongoingProjectsTrades"></p>
                                 </div>
                                 <div class="text-center">
                                     <p class="text-2xl font-extrabold text-amber-300" id="ongoingJobs">5</p>
                                     <p class="text-[11px] text-slate-400 mt-0.5">Jobs</p>
+                                    <p class="text-[10px] text-amber-200/80 font-medium mt-0.5" id="ongoingJobsTrades"></p>
                                 </div>
                                 <div class="text-center">
                                     <p class="text-2xl font-extrabold text-blue-300" id="ongoingTasks">8</p>
                                     <p class="text-[11px] text-slate-400 mt-0.5">Tasks</p>
+                                    <p class="text-[10px] text-blue-200/80 font-medium mt-0.5" id="ongoingTasksTrades"></p>
                                 </div>
-                                <div class="text-center pl-5" style="border-left:1px solid rgba(13,148,136,0.4)">
-                                    <p class="text-2xl font-extrabold text-rose-300" id="pendingEvals">0</p>
-                                    <p class="text-[11px] text-slate-400 mt-0.5">Pending Evals</p>
+                                <div onclick="openEvalDetailsModal('evaluated')" class="text-center pl-4 md:pl-5 cursor-pointer hover:scale-105 transition-all group" style="border-left:1px solid rgba(13,148,136,0.4)" title="View Evaluated Sailors">
+                                    <p class="text-2xl font-extrabold text-emerald-300 group-hover:text-emerald-200 transition-colors" id="evaluatedToday">0</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5 group-hover:text-slate-300 transition-colors">Evaluated</p>
+                                </div>
+                                <div onclick="openEvalDetailsModal('pending')" class="text-center pl-4 md:pl-5 cursor-pointer hover:scale-105 transition-all group" style="border-left:1px solid rgba(13,148,136,0.4)" title="View Pending Evaluations">
+                                    <p class="text-2xl font-extrabold text-rose-300 group-hover:text-rose-200 transition-colors" id="pendingEvals">0</p>
+                                    <p class="text-[11px] text-slate-400 mt-0.5 group-hover:text-slate-300 transition-colors">Pending</p>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="grid grid-cols-3 gap-4">
+                    <div id="boardGridContainer" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                         <!-- Projects Column -->
-                        <div class="glass-card overflow-hidden">
+                        <div id="projectColumnWrapper" class="glass-card overflow-hidden">
                             <div class="panel-header-blue text-white px-4 py-3">
                                 <div class="flex items-center gap-2">
                                     <span class="text-lg">📐</span>
@@ -563,7 +804,7 @@
                         </div>
 
                         <!-- Jobs Column -->
-                        <div class="glass-card overflow-hidden">
+                        <div id="jobColumnWrapper" class="glass-card overflow-hidden">
                             <div class="panel-header-amber text-white px-4 py-3">
                                 <div class="flex items-center gap-2">
                                     <span class="text-lg">🔧</span>
@@ -579,7 +820,7 @@
                         </div>
 
                         <!-- Tasks Column -->
-                        <div class="glass-card overflow-hidden">
+                        <div id="taskColumnWrapper" class="glass-card overflow-hidden">
                             <div class="bg-gradient-to-r from-slate-600 to-slate-500 text-white px-4 py-3">
                                 <div class="flex items-center gap-2">
                                     <span class="text-lg">📋</span>
@@ -593,7 +834,128 @@
                                 ondragover="handleDragOver(event)" ondrop="handleDrop(event, 'TASK')">
                             </div>
                         </div>
+
+                        <!-- Quick Assignments Column -->
+                        <div id="assignmentColumnWrapper" class="glass-card overflow-hidden">
+                            <div class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white px-4 py-3">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-lg">💼</span>
+                                        <div>
+                                            <h3 class="font-semibold text-sm">Assignments</h3>
+                                            <p class="text-xs text-indigo-200">Admin / Utility / Stores</p>
+                                        </div>
+                                    </div>
+                                    <span id="quickAssignCountBadge" class="bg-white/20 text-white px-2 py-0.5 rounded-full text-[10px] font-bold">0 Active</span>
+                                </div>
+                            </div>
+                            <div id="quickAssignmentsList" class="kanban-column p-3 space-y-3 min-h-[450px]" style="background:rgba(79,70,229,0.04)">
+                                <!-- Populated dynamically by JS -->
+                            </div>
+                        </div>
                     </div>
+                    <!-- Empty State for Board -->
+                    <div id="boardEmptyState" class="hidden py-16 text-center bg-white/60 backdrop-blur-md border border-slate-200 rounded-2xl p-6 shadow-sm">
+                        <span class="text-5xl">⚓</span>
+                        <h3 class="mt-4 text-base font-bold text-slate-800">No Active Work in this Zone</h3>
+                        <p class="mt-1 text-sm text-slate-500">Create a new Work Order or Assignment to get started.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ==================== DAILY DETAILS VIEW ==================== -->
+        <div id="view-dailydetails" class="view-content hidden p-4 md:p-6 space-y-6">
+            <div id="dailyDetailsContainer" class="glass-card p-6 mt-4"></div>
+        </div>
+
+        <!-- ==================== SUMMARY VIEW ==================== -->
+        <div id="view-summary" class="view-content hidden p-4 md:p-6 space-y-6">
+            <div class="glass-card p-6 no-print">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            📊 Daily Duties Summary
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Complement assignment matrix by branch and trade</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button onclick="exportSummaryCsv()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                            📤 Export CSV
+                        </button>
+                        <button onclick="printSummary()" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                            🖨️ Print / PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Date display -->
+                <div class="flex items-center justify-between mb-4 bg-slate-50 px-4 py-2 rounded-lg border border-slate-100">
+                    <span class="text-xs font-semibold text-slate-600">Selected Date:</span>
+                    <span id="summaryActiveDate" class="text-xs font-extrabold text-slate-800 bg-white px-2.5 py-1 rounded shadow-sm border border-slate-100">2026-07-16</span>
+                </div>
+            </div>
+
+            <!-- Print Header (Visible only on print) -->
+            <div class="print-header hidden">
+                <div class="flex justify-between items-center pb-2 border-b border-slate-800 mb-4">
+                    <div>
+                        <h2 class="text-md font-bold text-slate-900 uppercase">Daily Duties Summary Sheet</h2>
+                        <p class="text-[9px] text-slate-600">NCW-PS Trincomalee Dockyard</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-bold text-slate-900" id="printSummaryDate">2026.07.16</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scrollable Table Wrapper -->
+            <div class="glass-card p-4 overflow-x-auto rounded-xl border border-slate-100 shadow-sm print-table-container">
+                <table class="w-full text-left border-collapse border border-slate-200 text-xs" id="summaryMatrixTable">
+                    <thead>
+                        <tr class="bg-slate-900 text-white font-bold text-center">
+                            <th rowspan="2" class="px-3 py-2 border border-slate-700 text-left min-w-[200px]">Description</th>
+                            <th colspan="9" class="px-1 py-1 border border-slate-700">VSS</th>
+                            <th rowspan="2" class="px-1 py-2 border border-slate-700 min-w-[50px]">VSS SUB TOTAL</th>
+                            <th colspan="4" class="px-1 py-1 border border-slate-700">REGULAR</th>
+                            <th rowspan="2" class="px-1 py-2 border border-slate-700 min-w-[50px]">REG SUB TOTAL</th>
+                            <th rowspan="2" class="px-2 py-2 border border-slate-700 min-w-[55px]">FULL TOTAL</th>
+                        </tr>
+                        <tr class="bg-slate-800 text-white font-bold text-center text-[10px]">
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">MA</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">CA</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">PA</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">PL</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">BB</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">RW</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">WL</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">AL</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">SW</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">S/S</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">LME</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">ME</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">OJT</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryMatrixTableBody">
+                        <!-- Filled dynamically by renderSummaryView -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Signatures section at the bottom for print -->
+            <div class="print-signatures hidden mt-10 grid grid-cols-4 gap-4 text-center text-[10px] font-bold text-slate-800">
+                <div>
+                    <div class="border-t border-slate-400 pt-1">S/S INCHARGE</div>
+                </div>
+                <div>
+                    <div class="border-t border-slate-400 pt-1">SCE(M)</div>
+                </div>
+                <div>
+                    <div class="border-t border-slate-400 pt-1">CCEO (E)</div>
+                </div>
+                <div>
+                    <div class="border-t border-slate-400 pt-1">CCED (E)</div>
                 </div>
             </div>
         </div>
@@ -652,9 +1014,14 @@
                                         <span class="text-xs bg-amber-500/20 text-amber-200 px-2 py-0.5 rounded border border-amber-500/30 font-medium">📄 Estimate: <span id="selectedJobEstimateNo"></span></span>
                                     </div>
                                 </div>
-                                <div class="text-right">
+                                <div class="flex items-center gap-4">
+                                    <div class="text-right">
                                     <p class="text-sm text-blue-200">Total Material Cost</p>
                                     <p class="text-2xl font-bold" id="totalMaterialCost">Rs. 0.00</p>
+                                </div>
+                                    <button onclick="deleteJobCard()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium" id="deleteJobCardBtn" style="display: none;">
+                                        🗑️ Delete
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -774,16 +1141,19 @@
 
         <!-- ==================== INVENTORY VIEW ==================== -->
         <div id="view-inventory" class="view-content hidden">
-            <div class="flex items-center justify-between mb-6">
+            <div class="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between mb-6">
                 <div>
                     <h2 class="text-2xl font-bold" style="color:#0a1628">Inventory Management</h2>
-                    <p class="text-slate-500">Materials and Tools tracking by category</p>
+                    <p class="text-sm text-slate-500">Materials and Tools tracking by category</p>
                 </div>
-                <div class="flex gap-3">
-                    <button onclick="openBulkUploadModal('inventory')" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <div class="flex gap-2 flex-wrap">
+                    <button onclick="clearCurrentZoneInventory()" class="bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium" title="Clear all inventory items for this zone to perform a fresh upload">
+                        🗑️ Reset Zone Items
+                    </button>
+                    <button onclick="openBulkUploadModal('inventory')" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium">
                         📤 Bulk Upload
                     </button>
-                    <button onclick="openAddInventoryModal()" class="text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
+                    <button onclick="openAddInventoryModal()" class="text-white px-3.5 py-2.5 rounded-xl text-xs font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
                         + Add Item
                     </button>
                 </div>
@@ -796,23 +1166,23 @@
 
             <!-- Search & Filter Bar -->
             <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
-                <div class="flex gap-4">
+                <div class="flex flex-col sm:flex-row gap-3">
                     <input type="text" id="inventorySearch" placeholder="Search by description..." 
-                        class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                        class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
                         onkeyup="filterInventory()">
-                    <select id="inventoryLocation" onchange="filterInventory()" class="px-4 py-2 border border-slate-300 rounded-lg">
-                        <option value="">All Locations</option>
-                        <option value="Zone Store">Zone Store</option>
-                        <option value="Ready Use Store">Ready Use Store</option>
-                        <option value="Balance Store">Balance Store</option>
-                        <option value="Workshop">Workshop</option>
-                    </select>
-                    <select id="inventorySort" onchange="filterInventory()" class="px-4 py-2 border border-slate-300 rounded-lg">
-                        <option value="description">Sort: Description</option>
-                        <option value="quantity">Sort: Quantity</option>
-                        <option value="cost">Sort: Cost</option>
-                        <option value="date">Sort: Date Added</option>
-                    </select>
+                    <div class="flex gap-2">
+                        <select id="inventoryLocation" onchange="filterInventory()" class="flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                            <option value="">Current Locations & Zone</option>
+                            <option value="ALL_ZONES">All Locations & Zone</option>
+                            <option value="Balance Store">Balance Store</option>
+                        </select>
+                        <select id="inventorySort" onchange="filterInventory()" class="flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                            <option value="description">Sort: Description</option>
+                            <option value="quantity">Sort: Quantity</option>
+                            <option value="cost">Sort: Cost</option>
+                            <option value="date">Sort: Date Added</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
@@ -833,6 +1203,8 @@
                         </thead>
                         <tbody id="inventoryTableBody" class="divide-y divide-slate-100">
                         </tbody>
+                        <tfoot id="inventoryTableFoot">
+                        </tfoot>
                     </table>
                 </div>
             </div>
@@ -883,8 +1255,14 @@
                                     <button onclick="approveEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm" id="approveEstimateBtn">
                                         ✅ Approve
                                     </button>
+                                    <button onclick="deleteEstimate()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm" id="deleteEstimateBtn" style="display: none;">
+                                        🗑️ Delete
+                                    </button>
                                     <button onclick="printEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm">
                                         🖨️ Print This
+                                    </button>
+                                    <button onclick="shareEstimateWhatsApp()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1">
+                                        💬 Share
                                     </button>
                                 </div>
                             </div>
@@ -901,7 +1279,7 @@
         <div id="view-maintenance" class="view-content hidden">
             <div class="flex items-center justify-between mb-6">
                 <div>
-                    <h2 class="text-2xl font-bold" style="color:#0a1628">Last Maintenance Records</h2>
+                    <h2 class="text-2xl font-bold" style="color:#0a1628">Last Maintenance Date (LMD)</h2>
                     <p class="text-slate-500 text-sm">Track maintenance history by location</p>
                 </div>
                 <div class="flex gap-3">
@@ -938,14 +1316,22 @@
                 <div class="col-span-12 md:col-span-8">
                     <div class="glass-card overflow-hidden">
                         <div class="bg-gradient-to-r from-teal-600 to-cyan-600 text-white px-6 py-4">
-                            <div class="flex items-center justify-between">
+                            <div class="flex items-center justify-between flex-wrap gap-3">
                                 <div>
                                     <h3 class="font-semibold" id="selectedLocationName">Select a Location</h3>
                                     <p class="text-sm text-teal-200" id="selectedLocationZone"></p>
                                 </div>
-                                <button onclick="addMaintenanceRecord()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm" id="addMaintenanceBtn" style="display:none">
-                                    + Add Record
-                                </button>
+                                <div class="flex items-center gap-2" id="locationActionButtons" style="display:none">
+                                    <button onclick="editLocation()" class="bg-white/10 hover:bg-white/20 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1">
+                                        ✏️ Edit
+                                    </button>
+                                    <button onclick="deleteLocation()" class="bg-red-500/20 hover:bg-red-500/40 text-red-100 border border-red-500/30 px-3 py-1.5 rounded-lg text-sm flex items-center gap-1">
+                                        🗑️ Delete
+                                    </button>
+                                    <button onclick="addMaintenanceRecord()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm font-semibold" id="addMaintenanceBtn">
+                                        + Add Record
+                                    </button>
+                                </div>
                             </div>
                         </div>
                         <div id="maintenanceHistory" class="p-6">
@@ -980,7 +1366,7 @@
                     <button onclick="switchSettingsTab('offcharge')" id="stab-offcharge" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🚢 Off-Charge</button>
                     <button onclick="switchSettingsTab('workorder')" id="stab-workorder" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📋 Work Orders</button>
                     <button onclick="switchSettingsTab('display')" id="stab-display" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🎨 Display</button>
-                    <button onclick="switchSettingsTab('data')" id="stab-data" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">💾 Data</button>
+                    
                 </div>
 
                 <!-- ── Tab: System Identity ── -->
@@ -998,21 +1384,20 @@
                                 <input type="text" id="cfg-stationName" placeholder="SLN Docyard" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('stationName',this.value)">
                                 <p class="text-xs text-slate-400 mt-1">Header sub-line text (e.g., Naval Civil Works · Miss Garrison · Trincomalee)</p>
                             </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Google OAuth Client ID</label>
+                                <input type="text" id="cfg-googleClientId" placeholder="your-client-id.apps.googleusercontent.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('googleClientId',this.value)">
+                                <p class="text-xs text-slate-400 mt-1">Google Drive එකට PDF Backup Upload කිරීම සඳහා අවශ්‍ය OAuth Client ID එක මෙතැනට ඇතුළත් කරන්න.</p>
+                            </div>
                             <hr class="border-slate-100">
-                            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wide">Officer-In-Charge</p>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">OIC Name</label>
-                                <input type="text" id="cfg-oicName" placeholder="Cdr. A.B. Perera" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicName',this.value)">
+                            <div class="flex items-center justify-between">
+                                <p class="text-xs font-bold text-slate-500 uppercase tracking-wide">Officer-In-Charge Profiles</p>
+                                <button onclick="openOicProfileModal()" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1">
+                                    ➕ Add Officer
+                                </button>
                             </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">OIC Rank</label>
-                                <input type="text" id="cfg-oicRank" placeholder="Commander" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicRank',this.value)">
-                            </div>
-                                <input type="text" id="cfg-oicServiceNo" placeholder="NRX 00001" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicServiceNo',this.value)">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Command / OIC Profile Password</label>
-                                <input type="password" id="cfg-oicPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('oicPassword',this.value)">
+                            <div id="cfg-oicProfilesList" class="space-y-3">
+                                <!-- Dynamic List -->
                             </div>
                         </div>
                     </div>
@@ -1044,9 +1429,50 @@
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Service No (Off No)</label>
                                 <input type="text" id="cfg-userServiceNo" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
                             </div>
+                            
+                            <!-- Zone Sub In-Charge Profile Section -->
+                            <div class="relative">
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Zone Sub In-Charge Full Name (EC Sailors Only)</label>
+                                <input type="text" id="cfg-userSubName" placeholder="Type name or Off No to search..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showSettingsSubSailorResults()" oninput="filterSettingsSubSailorResults(this.value)" autocomplete="off">
+                                <input type="hidden" id="cfg-userSubSailorId">
+                                <div id="cfg-subSailorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Sub In-Charge Rank</label>
+                                <input type="text" id="cfg-userSubRank" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Sub In-Charge Service No (Off No)</label>
+                                <input type="text" id="cfg-userSubServiceNo" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
+                            </div>
+
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Profile Password</label>
                                 <input type="password" id="cfg-userPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" oninput="saveSettingsUserPassword(this.value)">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Work Order In-Charge (EC Sailors Only)</label>
+                                <div class="relative">
+                                    <input type="text" id="cfg-woInchargeName" placeholder="Search In-Charge..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showWoInchargeResults()" oninput="filterWoInchargeResults(this.value)" autocomplete="off">
+                                    <input type="hidden" id="cfg-woInchargeId">
+                                    <div id="cfg-woInchargeSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Work Order Supervisor (EC Sailors Only)</label>
+                                <div class="relative">
+                                    <input type="text" id="cfg-woSupervisorName" placeholder="Search Supervisor..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showWoSupervisorResults()" oninput="filterWoSupervisorResults(this.value)" autocomplete="off">
+                                    <input type="hidden" id="cfg-woSupervisorId">
+                                    <div id="cfg-woSupervisorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1">Work Order Artificer (AC Sailors Only)</label>
+                                <div class="relative">
+                                    <input type="text" id="cfg-woArtificerName" placeholder="Search Artificer..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showWoArtificerResults()" oninput="filterWoArtificerResults(this.value)" autocomplete="off">
+                                    <input type="hidden" id="cfg-woArtificerId">
+                                    <div id="cfg-woArtificerSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1146,47 +1572,210 @@
                     </div>
                 </div>
 
-                <!-- ── Tab: Data Management ── -->
-                <div id="stab-content-data" class="settings-tab-content hidden">
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
-                        <h3 class="font-bold text-slate-800 text-lg mb-1">💾 Data Management</h3>
-
-                        <!-- Firebase Status -->
-                        <div class="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-                            <div class="w-10 h-10 rounded-full flex items-center justify-center text-xl" id="fbStatusIcon" style="background:#dcfce7">✅</div>
-                            <div>
-                                <p class="font-semibold text-slate-700 text-sm">Firebase Connection</p>
-                                <p class="text-xs text-slate-500" id="fbStatusText">Connected to ncw-ps-operations</p>
-                            </div>
-                            <button onclick="checkFirebaseStatus()" class="ml-auto text-xs bg-white border border-slate-300 px-3 py-1.5 rounded-lg hover:bg-slate-50">Refresh</button>
-                        </div>
-
-                        <!-- Export JSON -->
-                        <div class="p-4 bg-blue-50 rounded-xl border border-blue-200">
-                            <h4 class="font-semibold text-blue-800 mb-1">📤 Export All Data</h4>
-                            <p class="text-xs text-blue-600 mb-3">Inventory, Work Orders, Locations, Settings ආදී සෑම දත්තයක්ම JSON file එකක් ලෙස download කරගන්න</p>
-                            <button onclick="exportAllDataJson()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">📤 Export JSON Backup</button>
-                        </div>
-
-                        <!-- Clear Completed WOs -->
-                        <div class="p-4 bg-amber-50 rounded-xl border border-amber-200">
-                            <h4 class="font-semibold text-amber-800 mb-1">🗂️ Archive Completed Work Orders</h4>
-                            <p class="text-xs text-amber-600 mb-3">Status 'Completed' ලෙස ඇති Work Orders Database එකෙන් ඉවත් කිරීම. (ඉවත් කිරීමට පෙර Export කිරීම නිර්දේශිතයි)</p>
-                            <button onclick="confirmArchiveCompleted()" class="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg text-sm font-medium">🗃️ Archive Completed WOs</button>
-                        </div>
-
-                        <!-- Danger Zone -->
-                        <div class="p-4 bg-red-50 rounded-xl border border-red-200">
-                            <h4 class="font-semibold text-red-800 mb-1">⚠️ Danger Zone</h4>
-                            <p class="text-xs text-red-600 mb-3">Inventory data සම්පූර්ණයෙන්ම clear කිරීම. <strong>undo කළ නොහැක!</strong></p>
-                            <button onclick="confirmClearInventory()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">🗑️ Clear All Inventory</button>
-                        </div>
-                    </div>
+                
                 </div>
 
             </div>
         </div>
-<div id="view-reports" class="view-content hidden">
+<!-- ==================== SAILORS VIEW ==================== -->
+        <div id="view-sailors" class="view-content hidden p-4 md:p-6 space-y-6">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                    <h2 class="text-2xl font-bold" style="color:#0a1628">⚓ Sailor Directory & Profiles</h2>
+                    <p class="text-slate-500 text-sm">නාවික නාමාවලිය සහ පැතිකඩ • View ratings, points, and leave eligibility</p>
+                </div>
+            </div>
+
+            <!-- Directory Controls Card -->
+            <div class="glass-card p-4 space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                    <!-- Search Input -->
+                    <div class="md:col-span-6 relative">
+                        <span class="absolute left-3 top-2.5 text-slate-400">🔍</span>
+                        <input type="text" id="directorySailorSearch" placeholder="Search by name, rank, service number or trade..." 
+                            class="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500"
+                            oninput="renderSailorsView()">
+                    </div>
+                    <!-- Sort Selection -->
+                    <div class="md:col-span-3 flex items-center gap-2">
+                        <label class="text-xs font-semibold text-slate-500 whitespace-nowrap">Sort By:</label>
+                        <select id="directorySailorSort" onchange="renderSailorsView()" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-green-500">
+                            <option value="points-desc">Highest Points</option>
+                            <option value="points-asc">Lowest Points</option>
+                            <option value="score-desc">Highest Avg Score</option>
+                            <option value="name-asc">Name (A-Z)</option>
+                        </select>
+                    </div>
+                    <!-- Stats summary inside controls -->
+                    <div class="md:col-span-3 text-right">
+                        <span class="text-xs bg-teal-50 text-teal-700 font-bold px-3 py-1.5 rounded-lg border border-teal-200" id="directoryTotalCount">
+                            Total: 0 Sailors
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Trade Filter Buttons -->
+                <div class="border-t border-slate-100 pt-3 flex flex-wrap gap-2 items-center">
+                    <span class="text-xs font-semibold text-slate-500 mr-1">Trade Filter:</span>
+                    <div class="flex flex-wrap gap-1.5" id="directoryTradeFilters">
+                        <button onclick="filterDirectoryTrade('ALL')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-800 text-white" id="dir-trade-ALL">ALL</button>
+                        <button onclick="filterDirectoryTrade('MA')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-MA">MA</button>
+                        <button onclick="filterDirectoryTrade('CA')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-CA">CA</button>
+                        <button onclick="filterDirectoryTrade('PA')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-PA">PA</button>
+                        <button onclick="filterDirectoryTrade('PL')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-PL">PL</button>
+                        <button onclick="filterDirectoryTrade('WE')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-WE">WE</button>
+                        <button onclick="filterDirectoryTrade('RW')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-RW">RW</button>
+                        <button onclick="filterDirectoryTrade('AL')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-AL">AL</button>
+                        <button onclick="filterDirectoryTrade('SW')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-SW">SW</button>
+                        <button onclick="filterDirectoryTrade('BB')" class="dir-trade-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600" id="dir-trade-BB">BB</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sailors Grid -->
+            <div id="directorySailorsGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <!-- Sailor cards loaded dynamically -->
+            </div>
+        </div>
+
+        
+<!-- ==================== SAILOR DASHBOARD VIEW ==================== -->
+        <div id="view-sailordashboard" class="view-content hidden p-4 md:p-6 max-w-lg mx-auto space-y-6 min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-teal-950 text-white rounded-3xl shadow-2xl animate-fade-in-up pb-10">
+            <style>
+            @keyframes fadeInUp {
+                from {
+                    opacity: 0;
+                    transform: translateY(20px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+            .animate-fade-in-up {
+                animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+            }
+            </style>
+            
+            <!-- Top brand / logout bar -->
+            <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center border border-teal-500/30 shadow-[0_0_10px_rgba(20,184,166,0.3)]">
+                        <span class="text-teal-400 text-sm">⚓</span>
+                    </div>
+                    <span class="font-black text-xs text-white tracking-widest uppercase">NCW-PS Portal</span>
+                </div>
+                <button onclick="logoutProfile()" class="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1 cursor-pointer shadow-[0_0_10px_rgba(239,68,68,0.1)] hover:scale-105 active:scale-95">
+                    🚪 Logout
+                </button>
+            </div>
+
+            <!-- Profile Summary Card -->
+            <div class="relative bg-slate-900/60 backdrop-blur-2xl border border-white/10 p-6 rounded-3xl flex flex-col items-center text-center shadow-[0_8px_32px_rgba(0,0,0,0.4)] overflow-hidden">
+                <!-- Ambient Backlight -->
+                <div class="absolute -left-10 -top-10 w-32 h-32 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute -right-10 -bottom-10 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <!-- Profile Avatar frame with rotating glow border -->
+                <div class="relative w-32 h-32 rounded-full p-[4.5px] overflow-hidden mb-4 shadow-[0_0_35px_rgba(20,184,166,0.75),_0_0_15px_rgba(99,102,241,0.5)] transition-transform hover:scale-105 duration-300 flex items-center justify-center">
+                    <!-- Rotating Glow Layer -->
+                    <div class="absolute inset-[-20px] bg-[conic-gradient(from_0deg,#14b8a6,#06b6d4,#6366f1,#14b8a6)] animate-[spin_4s_linear_infinite]"></div>
+                    <!-- Inner Mask -->
+                    <div class="absolute inset-[4.5px] rounded-full bg-slate-950 z-10 shadow-[inset_0_0_12px_rgba(20,184,166,0.3)]"></div>
+                    <!-- Image Container -->
+                    <div class="w-full h-full rounded-full overflow-hidden z-20 bg-slate-900 flex items-center justify-center" id="dashPicContainer">
+                        <!-- Image dynamically populated -->
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap justify-center gap-2 mb-3">
+                    <span class="text-[10px] bg-teal-500/20 text-teal-300 border border-teal-500/30 px-2.5 py-0.5 rounded-lg font-black tracking-wide uppercase shadow-[0_0_8px_rgba(20,184,166,0.2)]" id="dashTradeBadge">MA</span>
+                    <span class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2.5 py-0.5 rounded-lg font-black tracking-wide uppercase" id="dashCategory">Regular</span>
+                    <span class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-0.5 rounded-full font-black tracking-wide flex items-center gap-1.5 shadow-[0_0_8px_rgba(16,185,129,0.2)]" id="dashStatusBadge">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span>Available
+                    </span>
+                </div>
+
+                <h3 class="text-2xl font-black text-white tracking-wide" id="dashName">Kamal Perera</h3>
+                <p class="text-xs text-slate-400 font-bold mt-1 tracking-wider" id="dashRankOffNo">Able Seaman (MA) · Official No: EC124913</p>
+                <div class="mt-3 flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1 rounded-full text-[10px] text-slate-300 font-extrabold uppercase tracking-widest">
+                    <span class="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+                    <span id="dashActiveZone">Zone: A-Zone</span>
+                </div>
+            </div>
+
+            <!-- Points & Leave Stats Grid -->
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Points Box -->
+                <div class="relative overflow-hidden p-5 rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-2xl flex flex-col justify-between shadow-[0_8px_24px_rgba(0,0,0,0.3)] transition-transform hover:translate-y-[-2px] duration-300 group">
+                    <div class="absolute -right-4 -top-4 w-12 h-12 bg-teal-500/10 rounded-full blur-xl transition-all group-hover:scale-150 duration-500"></div>
+                    <div>
+                        <span class="text-[10px] font-black text-teal-400 tracking-widest uppercase">Operational Points</span>
+                        <p class="text-[9px] text-slate-500 font-bold mt-0.5 sinhala">ක්‍රියාකාරී ලකුණු</p>
+                    </div>
+                    <div class="flex items-baseline gap-1 mt-6">
+                        <span class="text-4xl font-black text-teal-300 tracking-tight" id="dashTotalPoints">124</span>
+                        <span class="text-[10px] text-teal-500 font-black uppercase tracking-wider">PTS</span>
+                    </div>
+                </div>
+                <!-- Leave Days Box -->
+                <div class="relative overflow-hidden p-5 rounded-3xl border border-white/10 bg-slate-900/60 backdrop-blur-2xl flex flex-col justify-between shadow-[0_8px_24px_rgba(0,0,0,0.3)] transition-transform hover:translate-y-[-2px] duration-300 group">
+                    <div class="absolute -right-4 -top-4 w-12 h-12 bg-indigo-500/10 rounded-full blur-xl transition-all group-hover:scale-150 duration-500"></div>
+                    <div>
+                        <span class="text-[10px] font-black text-indigo-400 tracking-widest uppercase">Leave Days Earned</span>
+                        <p class="text-[9px] text-slate-500 font-bold mt-0.5 sinhala">හිමිවන නිවාඩු දින ගණන</p>
+                    </div>
+                    <div class="flex items-baseline gap-1 mt-6">
+                        <span class="text-4xl font-black text-indigo-300 tracking-tight" id="dashLeaveDays">12</span>
+                        <span class="text-[10px] text-indigo-500 font-black uppercase tracking-wider">Days</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress to Next Leave Day -->
+            <div class="space-y-3 border border-white/10 p-5 rounded-3xl bg-slate-900/60 backdrop-blur-2xl shadow-[0_8px_24px_rgba(0,0,0,0.3)] relative overflow-hidden">
+                <div class="absolute -left-6 -bottom-6 w-16 h-16 bg-cyan-500/5 rounded-full blur-xl pointer-events-none"></div>
+                <div class="flex justify-between text-xs font-black text-slate-400 uppercase tracking-widest">
+                    <span class="sinhala text-[10px]">ඊළඟ නිවාඩු දිනයට ප්‍රගතිය</span>
+                    <span id="dashNextLeaveProgressText" class="text-teal-400">4 / 10 Points</span>
+                </div>
+                <div class="w-full bg-slate-950 rounded-full h-3 overflow-hidden p-0.5 border border-white/5">
+                    <div class="bg-gradient-to-r from-teal-400 via-cyan-400 to-indigo-500 h-full rounded-full transition-all duration-700 shadow-[0_0_12px_rgba(20,184,166,0.6)]" id="dashNextLeaveProgressBar" style="width: 40%"></div>
+                </div>
+                <p class="text-[9px] text-slate-500 italic font-semibold">Accumulate 10 points to unlock your next leave day allocation.</p>
+            </div>
+
+            <!-- Rating Summary -->
+            <div class="bg-slate-900/60 backdrop-blur-2xl border border-white/10 rounded-3xl p-5 shadow-[0_8px_24px_rgba(0,0,0,0.3)]">
+                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Performance Metrics</h4>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="bg-slate-950/60 border border-white/5 rounded-2xl p-4 flex items-center justify-between transition-colors hover:bg-slate-950/90 duration-300">
+                        <div class="min-w-0">
+                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Rolling Avg</span>
+                            <p class="text-[10px] text-slate-400 sinhala mt-0.5">සාමාන්‍යය</p>
+                        </div>
+                        <span class="text-base font-black text-teal-400 tracking-tight" id="dashAvgRating">7.8 / 10</span>
+                    </div>
+                    <div class="bg-slate-950/60 border border-white/5 rounded-2xl p-4 flex items-center justify-between transition-colors hover:bg-slate-950/90 duration-300">
+                        <div class="min-w-0">
+                            <span class="text-[9px] text-slate-500 font-bold uppercase tracking-wider">Yesterday</span>
+                            <p class="text-[10px] text-slate-400 sinhala mt-0.5">ඊයේ ලකුණ</p>
+                        </div>
+                        <span class="text-base font-black text-indigo-400 tracking-tight" id="dashYesterdayRating">8.5 / 10</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Duties Log -->
+            <div class="space-y-3">
+                <h4 class="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Operational Timeline</h4>
+                <div id="dashDutyLog" class="max-h-56 overflow-y-auto border border-white/10 rounded-3xl bg-slate-900/60 backdrop-blur-2xl shadow-[0_8px_24px_rgba(0,0,0,0.3)] scrollbar-thin divide-y divide-white/5 p-2">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </div>
+
+        <div id="view-reports" class="view-content hidden">
             <!-- Report Tabs -->
             <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
                 <div class="border-b border-slate-200 flex">
@@ -1534,8 +2123,8 @@
                             oninput="document.getElementById('woDetailProgressText').textContent = this.value + '%'; if(typeof toggleCompleteButton === 'function') toggleCompleteButton(this.value);">
                     </div>
 
-                    <!-- In-charge / Supervisor -->
-                    <div class="grid grid-cols-2 gap-4 mb-5">
+                    <!-- In-charge / Supervisor / Project Artificer -->
+                    <div class="grid grid-cols-3 gap-4 mb-5">
                         <div>
                             <label class="block text-sm font-medium text-slate-700 mb-1">In-Charge</label>
                             <select id="woDetailIncharge" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
@@ -1546,6 +2135,12 @@
                             <label class="block text-sm font-medium text-slate-700 mb-1">Supervisor</label>
                             <select id="woDetailSupervisor" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                                 <option value="">Select Supervisor...</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-1">Project Artificer</label>
+                            <select id="woDetailArtificer" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                                <option value="">Select Artificer...</option>
                             </select>
                         </div>
                     </div>
@@ -1569,6 +2164,7 @@
                             <button type="button" onclick="filterDetailTrade('PL')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
                             <button type="button" onclick="filterDetailTrade('WE')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
                             <button type="button" onclick="filterDetailTrade('RW')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                            <button type="button" onclick="filterDetailTrade('AL')"  class="detail-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">AL</button>
                         </div>
                         <!-- Sailor chips -->
                         <div id="detailSailorChips" class="p-3 flex flex-wrap gap-2 max-h-36 overflow-y-auto scrollbar-thin" style="background:rgba(248,250,252,0.8)">
@@ -1579,7 +2175,12 @@
                     <!-- Assigned Labour list -->
                     <div class="mb-2">
                         <div class="flex items-center justify-between mb-3">
-                            <h4 class="font-semibold text-slate-700">Assigned Labour</h4>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-semibold text-slate-700">Assigned Labour</h4>
+                                <button type="button" id="btnRestorePrevCrew" onclick="restorePreviousCrew()" class="hidden bg-purple-100 hover:bg-purple-200 text-purple-700 border border-purple-200 text-[10px] font-bold px-2 py-0.5 rounded-lg transition-all">
+                                    ↻ Restore Last Crew
+                                </button>
+                            </div>
                             <span class="text-sm text-slate-500" id="assignedLaborCount">0 assigned</span>
                         </div>
                         <div id="woDetailAssigned" class="space-y-2 max-h-56 overflow-y-auto p-3 bg-slate-50 rounded-xl"></div>
@@ -1601,7 +2202,10 @@
 
             <!-- Sticky footer: Save + Proceed -->
             <div class="px-6 py-4 border-t border-slate-200 bg-white sticky bottom-0 flex gap-3">
-                <button onclick="saveWorkOrderChanges()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium">
+                <button id="btnDeleteWo" onclick="deleteWorkOrder()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">
+                    🗑️ Delete
+                </button>
+                <button id="btnSaveWoChanges" onclick="saveWorkOrderChanges()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium">
                     💾 Save Changes
                 </button>
                 <button id="btnProceedWo" onclick="proceedWorkOrder()" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">
@@ -1694,14 +2298,20 @@
                     </div>
                 </div>
 
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Location</label>
-                    <input type="text" id="woLocationSelect" list="locationsDatalist" class="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="Type or select location...">
-                    <datalist id="locationsDatalist">
-                    </datalist>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Location</label>
+                        <select id="woLocationSelect" onchange="autofillLocationDetails(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="">Select Location...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Sub Location</label>
+                        <input type="text" id="woSubLocation" class="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="e.g. Server Room, Kitchen">
+                    </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">In-Charge</label>
                         <select id="woIncharge" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
@@ -1711,6 +2321,12 @@
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Supervisor</label>
                         <select id="woSupervisor" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="">Select...</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Project Artificer</label>
+                        <select id="woArtificer" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                             <option value="">Select...</option>
                         </select>
                     </div>
@@ -1737,6 +2353,9 @@
                         <button type="button" onclick="filterWoTrade('PL')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
                         <button type="button" onclick="filterWoTrade('WE')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
                         <button type="button" onclick="filterWoTrade('RW')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                        <button type="button" onclick="filterWoTrade('AL')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">AL</button>
+                        <button type="button" onclick="filterWoTrade('SW')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">SW</button>
+                        <button type="button" onclick="filterWoTrade('BB')"  class="wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">BB</button>
                     </div>
                     <!-- Sailor chips -->
                     <div id="woSailorChips" class="p-3 flex flex-wrap gap-2 max-h-36 overflow-y-auto scrollbar-thin"
@@ -1754,6 +2373,108 @@
                     <button type="submit" class="flex-1 px-4 py-2.5 text-white rounded-lg font-bold shadow-md"
                         style="background:linear-gradient(135deg,#059669,#0d9488)">
                         ⚓ Create Work Order
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- New Assign Modal (Simplified Work Order Modal) -->
+    <div id="assignModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0">
+                <h2 class="font-bold text-lg">New Assignment</h2>
+                <button onclick="closeModal('assignModal')" class="text-indigo-300 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="createAssignment(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Assign Type *</label>
+                    <select id="asType" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" onchange="updateAsPreview()">
+                        <option value="Admin Staff">Admin Staff</option>
+                        <option value="Utility">Utility</option>
+                        <option value="Stores">Stores</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
+                    <textarea id="asDescription" required rows="4" placeholder="Describe the work..."
+                        class="w-full px-3 py-2 border border-slate-300 rounded-lg" oninput="updateAsPreview()"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">In-Charge</label>
+                    <select id="asIncharge" class="w-full px-3 py-2 border border-slate-300 rounded-lg" onchange="updateAsPreview()">
+                        <option value="">Select...</option>
+                    </select>
+                </div>
+
+                <!-- ===== Sailor Assignment ===== -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="px-4 py-2.5 flex items-center justify-between"
+                        style="background:linear-gradient(135deg,#0a1628,#152a55)">
+                        <div class="flex items-center gap-2">
+                            <span class="text-white text-sm font-bold">⚓ Assign Sailors</span>
+                            <span id="asAssignedCount" class="text-xs bg-teal-500 text-white px-2 py-0.5 rounded-full font-bold">0 selected</span>
+                        </div>
+                        <input type="text" id="asSailorSearch" placeholder="Search name / number..."
+                            oninput="filterAsSailors()"
+                            class="text-xs px-2.5 py-1.5 rounded-lg border-0 bg-white/15 text-white placeholder-white/50 focus:outline-none focus:bg-white/25 w-44">
+                    </div>
+                    <!-- Trade filter pills -->
+                    <div class="px-3 py-2 flex gap-1.5 flex-wrap border-b border-slate-100 bg-slate-50">
+                        <button type="button" onclick="filterAsTrade('ALL')" class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white">ALL</button>
+                        <button type="button" onclick="filterAsTrade('MA')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">MA</button>
+                        <button type="button" onclick="filterAsTrade('CA')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">CA</button>
+                        <button type="button" onclick="filterAsTrade('PA')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PA</button>
+                        <button type="button" onclick="filterAsTrade('PL')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">PL</button>
+                        <button type="button" onclick="filterAsTrade('WE')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">WE</button>
+                        <button type="button" onclick="filterAsTrade('RW')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">RW</button>
+                        <button type="button" onclick="filterAsTrade('AL')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">AL</button>
+                        <button type="button" onclick="filterAsTrade('SW')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">SW</button>
+                        <button type="button" onclick="filterAsTrade('BB')"  class="as-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600">BB</button>
+                    </div>
+                    <!-- Sailor chips -->
+                    <div id="asSailorChips" class="p-3 flex flex-wrap gap-2 max-h-40 overflow-y-auto scrollbar-thin"
+                        style="background:rgba(248,250,252,0.8)">
+                        <p class="text-slate-400 text-xs">Loading sailors...</p>
+                    </div>
+                    <!-- Selected summary -->
+                    <div id="asSelectedSummary" class="hidden px-3 py-2 bg-teal-50 border-t border-teal-100">
+                        <p class="text-xs text-teal-700 font-semibold">Selected: <span id="asSelectedNames"></span></p>
+                    </div>
+                </div>
+
+                <!-- Live Preview Card -->
+                <div id="asPreviewCard" class="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">⚓ Assignment Details Preview</h4>
+                    <div class="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                            <span class="text-slate-400">Type:</span>
+                            <span id="asPrevType" class="font-semibold text-slate-700">Admin Staff</span>
+                        </div>
+                        <div>
+                            <span class="text-slate-400">In-Charge:</span>
+                            <span id="asPrevIncharge" class="font-semibold text-slate-700">None</span>
+                        </div>
+                    </div>
+                    <div class="text-xs">
+                        <span class="text-slate-400 font-medium">Description:</span>
+                        <p id="asPrevDesc" class="text-slate-600 italic mt-0.5 whitespace-pre-wrap">No description entered yet.</p>
+                    </div>
+                    <div class="text-xs">
+                        <span class="text-slate-400 font-medium">Selected Sailors:</span>
+                        <div id="asPrevSailors" class="flex flex-wrap gap-1 mt-1">
+                            <span class="text-slate-400 text-[10px]">None selected</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-2 border-t">
+                    <button type="button" onclick="closeModal('assignModal')" class="btn-secondary flex-1 px-4 py-2.5 border border-slate-300 rounded-lg text-slate-700 font-medium">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 text-white rounded-lg font-bold shadow-md"
+                        style="background:linear-gradient(135deg,#6366f1,#4f46e5)">
+                        ⚓ Create Assignment
                     </button>
                 </div>
             </form>
@@ -1923,6 +2644,31 @@
     </div>
 
     <!-- Add Inventory Item Modal -->
+    <!-- Password Verification Modal -->
+    <div id="passwordModal" class="fixed inset-0 bg-black/50 z-[60] hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm transform transition-all duration-300 scale-95 opacity-0" id="passwordModalContent">
+            <div class="bg-gradient-to-r from-slate-800 to-slate-900 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h3 class="text-md font-semibold flex items-center gap-2">
+                    🔑 Security Verification
+                </h3>
+                <button onclick="closePasswordModal()" class="text-white/80 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">Enter Admin Password</label>
+                    <input type="password" id="confirmAdminPassword" placeholder="••••••••" class="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-slate-800 text-sm tracking-widest text-center" onkeydown="if(event.key === 'Enter') submitPasswordVerification()">
+                </div>
+                <div id="passwordError" class="text-rose-500 text-xs text-center font-medium hidden">❌ Incorrect password</div>
+                <div class="flex justify-end gap-2 pt-2">
+                    <button type="button" onclick="closePasswordModal()" class="px-4 py-2 text-xs text-slate-500 hover:text-slate-700 font-medium">Cancel</button>
+                    <button type="button" onclick="submitPasswordVerification()" class="bg-slate-800 hover:bg-slate-900 text-white px-5 py-2 rounded-lg text-xs font-semibold">
+                        Verify
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bulk Upload Modal -->
     <div id="bulkUploadModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
@@ -1972,17 +2718,18 @@
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Category *</label>
-                        <input type="text" id="invCategory" list="invCategoryList" required placeholder="Select or type new..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-                        <datalist id="invCategoryList">
-                            <option value="BMS">
-                            <option value="Plumbing">
-                            <option value="Metal">
-                            <option value="General">
-                            <option value="Aluminium">
-                            <option value="Paint">
-                            <option value="Electrical">
-                            <option value="Tools">
-                        </datalist>
+                        <select id="invCategory" required class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                            <option value="">-- Select Category --</option>
+                            <option value="BMS">BMS</option>
+                            <option value="Plumbing">Plumbing</option>
+                            <option value="Metal">Metal</option>
+                            <option value="General">General</option>
+                            <option value="Aluminium">Aluminium</option>
+                            <option value="Paint">Paint</option>
+                            <option value="Electrical">Electrical</option>
+                            <option value="Tools">Tools</option>
+                            <option value="Lubricant Oil">Lubricant Oil</option>
+                        </select>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Date Added</label>
@@ -2084,10 +2831,12 @@
     <div id="addLocationModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div class="panel-header-teal text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
-                <h2 class="font-bold text-lg">Add Location</h2>
+                <h2 class="font-bold text-lg" id="locationModalTitle">Add Location</h2>
                 <button onclick="closeModal('addLocationModal')" class="text-teal-200 hover:text-white">✕</button>
             </div>
-            <form onsubmit="saveLocation(event)" class="p-6 space-y-4">
+            <form id="addLocationForm" onsubmit="saveLocation(event)" class="p-6 space-y-4">
+                <input type="hidden" id="locId">
+                <input type="hidden" id="locFbKey">
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1">Zone *</label>
                     <select id="locZone" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
@@ -2114,6 +2863,48 @@
                     <button type="submit" class="flex-1 px-4 py-2 bg-teal-600 text-white rounded-lg font-medium">Save Location</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- LMD Export / Print Options Modal -->
+    <div id="lmdExportModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-teal-600 to-cyan-600 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h3 class="text-lg font-bold" id="lmdExportModalTitle">Export Options</h3>
+                <button onclick="closeModal('lmdExportModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-slate-600">Please choose which details you want to export, print, or save as PDF:</p>
+                
+                <div class="space-y-3">
+                    <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                        <input type="radio" name="exportScope" value="all" checked onchange="toggleExportZoneSelect()" class="text-teal-600 focus:ring-teal-500">
+                        <div>
+                            <span class="block text-sm font-semibold text-slate-800">All Zone Details</span>
+                            <span class="block text-xs text-slate-500">Export/Print/PDF data for all zones combined.</span>
+                        </div>
+                    </label>
+                    
+                    <label class="flex items-center gap-3 p-3 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                        <input type="radio" name="exportScope" value="selected" onchange="toggleExportZoneSelect()" class="text-teal-600 focus:ring-teal-500">
+                        <div>
+                            <span class="block text-sm font-semibold text-slate-800">Selected Zone Details</span>
+                            <span class="block text-xs text-slate-500">Export/Print/PDF data for a specific zone only.</span>
+                        </div>
+                    </label>
+                </div>
+                
+                <div id="exportZoneSelectWrapper" class="hidden">
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Select Zone</label>
+                    <select id="exportZoneSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                    </select>
+                </div>
+                
+                <div class="flex gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('lmdExportModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">Cancel</button>
+                    <button type="button" onclick="executeLmdExport()" id="btnExecuteExport" class="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium">Proceed</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -2148,12 +2939,6 @@
                         <label class="block text-sm font-medium text-slate-700 mb-1">End User *</label>
                         <input type="text" id="estEndUser" required placeholder="e.g., Officers Wardroom / Mess Secretary" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                     </div>
-                </div>
-
-                <!-- Work Scope -->
-                <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Work Scope</label>
-                    <textarea id="estWorkScope" rows="3" placeholder="Describe the scope of work..." class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
                 </div>
 
                 <!-- Signatories (req 8) -->
@@ -2191,65 +2976,16 @@
                     </div>
                 </div>
 
-                <!-- Materials Section -->
-                <div class="border border-slate-200 rounded-xl p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h4 class="font-semibold text-slate-700">Materials</h4>
-                        <button type="button" onclick="addEstimateMaterialRow()" class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">+ Add Material</button>
+                <!-- Dynamic Work Scopes Section -->
+                <div class="border border-slate-200 rounded-xl p-4 bg-slate-50/50">
+                    <div class="flex items-center justify-between mb-4">
+                        <h4 class="font-semibold text-slate-800 text-base">📋 Work Scope Sections</h4>
+                        <button type="button" onclick="addWorkScopeBlock()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-sm">
+                            ➕ Add Scope Section
+                        </button>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead class="bg-slate-100">
-                                <tr>
-                                    <th class="px-2 py-2 text-left">Material</th>
-                                    <th class="px-2 py-2 text-center">Qty</th>
-                                    <th class="px-2 py-2 text-center">Unit</th>
-                                    <th class="px-2 py-2 text-right">Unit Cost</th>
-                                    <th class="px-2 py-2 text-right">Total</th>
-                                    <th class="px-2 py-2 text-center">Availability</th>
-                                    <th class="px-2 py-2"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="estMaterialsBody">
-                            </tbody>
-                            <tfoot class="bg-green-50">
-                                <tr>
-                                    <td colspan="4" class="px-2 py-2 text-right font-semibold">Materials Total:</td>
-                                    <td class="px-2 py-2 text-right font-bold text-green-600" id="estMaterialsTotal">Rs. 0.00</td>
-                                    <td colspan="2"></td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
-                </div>
-
-                <!-- Labor Section -->
-                <div class="border border-slate-200 rounded-xl p-4">
-                    <div class="flex items-center justify-between mb-3">
-                        <h4 class="font-semibold text-slate-700">Labor Requirement</h4>
-                        <button type="button" onclick="addEstimateLaborRow()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">+ Add Labor</button>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm">
-                            <thead class="bg-slate-100">
-                                <tr>
-                                    <th class="px-2 py-2 text-left">Trade/Role</th>
-                                    <th class="px-2 py-2 text-center">No. of Workers</th>
-                                    <th class="px-2 py-2 text-center">Man-Days</th>
-                                    <th class="px-2 py-2 text-left">Task Description</th>
-                                    <th class="px-2 py-2"></th>
-                                </tr>
-                            </thead>
-                            <tbody id="estLaborBody">
-                            </tbody>
-                            <tfoot class="bg-blue-50">
-                                <tr>
-                                    <td colspan="2" class="px-2 py-2 text-right font-semibold">Total Man-Days:</td>
-                                    <td class="px-2 py-2 text-center font-bold text-blue-600" id="estLaborTotal">0</td>
-                                    <td colspan="2"></td>
-                                </tr>
-                            </tfoot>
-                        </table>
+                    <div id="estWorkScopesContainer" class="space-y-6">
+                        <!-- Dynamically populated scope blocks will go here -->
                     </div>
                 </div>
 
@@ -2292,11 +3028,12 @@
             <div class="p-6 grid grid-cols-2 gap-6">
                 <div>
                     <h3 class="font-semibold text-slate-700 mb-2 flex items-center gap-2">✅ Current Team</h3>
-                    <div id="ztmCurrentList" class="space-y-2 max-h-[400px] overflow-y-auto pr-1"></div>
+                    <div id="ztmCurrentList" class="space-y-2 max-h-[350px] overflow-y-auto pr-1"></div>
                 </div>
                 <div>
                     <h3 class="font-semibold text-slate-700 mb-2 flex items-center gap-2">➕ Add From Zone</h3>
-                    <div id="ztmAvailableList" class="space-y-2 max-h-[400px] overflow-y-auto pr-1"></div>
+                    <input type="text" id="ztmSearch" oninput="filterZtmAvailableList()" placeholder="Search by name, rank or service no..." class="w-full text-xs border rounded-lg px-2.5 py-1.5 mb-2 focus:ring-1 focus:ring-green-500 outline-none">
+                    <div id="ztmAvailableList" class="space-y-2 max-h-[300px] overflow-y-auto pr-1"></div>
                 </div>
             </div>
             <div class="px-6 pb-6">
@@ -2419,6 +3156,7 @@
             <form onsubmit="submitProfilePassword(event)" class="p-6 space-y-4">
                 <input type="hidden" id="pwdModalTargetType">
                 <input type="hidden" id="pwdModalTargetZone">
+                <input type="hidden" id="pwdModalTargetOicProfileId">
                 <div class="text-center">
                     <p class="text-xs text-slate-500 mb-1">Enter password to access profile:</p>
                     <p class="font-bold text-slate-700 text-sm" id="pwdModalProfileName">—</p>
@@ -2475,7 +3213,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20260708022"></script>
+    <script src="app.js?v=20260716009"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
@@ -2492,31 +3230,298 @@
         } else {
             console.warn('⚠️ NCW-PS DB#1 (Sailors): DISCONNECTED');
         }
+    });
     </script>
     
     <!-- Bottom Mobile Navigation Bar (visible only on mobile) -->
-    <div class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-4 py-2 flex justify-around items-center z-40 backdrop-blur bg-opacity-95 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] no-print">
+    <div id="mobileTabBar" class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-2 py-2 flex justify-around items-center z-40 backdrop-blur bg-opacity-95 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] no-print">
         <button onclick="switchView('dashboard')" id="mobile-tab-dashboard" class="flex flex-col items-center gap-0.5 text-teal-400 flex-1">
             <span class="text-lg">📊</span>
-            <span class="text-[9px] font-semibold">Dashboard</span>
+            <span class="text-[8px] font-semibold">Dashboard</span>
+        </button>
+        <button onclick="switchView('dailydetails')" id="mobile-tab-dailydetails" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1" style="display: none;">
+            <span class="text-lg">📋</span>
+            <span class="text-[8px] font-semibold">Daily Details</span>
+        </button>
+        <button onclick="switchView('summary')" id="mobile-tab-summary" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1" style="display: none;">
+            <span class="text-lg">📊</span>
+            <span class="text-[8px] font-semibold">Summary</span>
         </button>
         <button onclick="switchView('jobcards')" id="mobile-tab-jobcards" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📋</span>
-            <span class="text-[9px] font-semibold">Job Cards</span>
+            <span class="text-[8px] font-semibold">Job Cards</span>
         </button>
         <button onclick="switchView('inventory')" id="mobile-tab-inventory" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📦</span>
-            <span class="text-[9px] font-semibold">Inventory</span>
+            <span class="text-[8px] font-semibold">Inventory</span>
+        </button>
+        <button onclick="switchView('estimates')" id="mobile-tab-estimates" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">📐</span>
+            <span class="text-[8px] font-semibold">Estimates</span>
+        </button>
+        <button onclick="switchView('maintenance')" id="mobile-tab-maintenance" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">🔧</span>
+            <span class="text-[8px] font-semibold">LMD</span>
+        </button>
+        <button onclick="switchView('sailors')" id="mobile-tab-sailors" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
+            <span class="text-lg">⚓</span>
+            <span class="text-[8px] font-semibold">Sailors</span>
         </button>
         <button onclick="switchView('reports')" id="mobile-tab-reports" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📈</span>
-            <span class="text-[9px] font-semibold">Reports</span>
+            <span class="text-[8px] font-semibold">Reports</span>
         </button>
         <button onclick="switchView('settings')" id="mobile-tab-settings" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">⚙️</span>
-            <span class="text-[9px] font-semibold">Settings</span>
+            <span class="text-[8px] font-semibold">Settings</span>
         </button>
     </div>
+
+    <!-- OIC Profile Modal -->
+    <div id="oicProfileModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-teal-600 to-cyan-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg" id="oicProfileModalTitle">Add Officer Profile</h2>
+                <button onclick="closeModal('oicProfileModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="saveOicProfile(event)" class="p-6 space-y-4">
+                <input type="hidden" id="oicProfId">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Full Name</label>
+                    <input type="text" id="oicProfName" required placeholder="Cdr. A.B. Perera" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Rank</label>
+                    <input type="text" id="oicProfRank" required placeholder="Commander / SCE (WW)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Service No (Off No)</label>
+                    <input type="text" id="oicProfServiceNo" required placeholder="NRX 00001 / NRC 3576" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Profile Password</label>
+                    <input type="password" id="oicProfPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                </div>
+                <div class="space-y-4 border-t border-slate-100 pt-3 max-h-60 overflow-y-auto scrollbar-thin pr-1">
+                    <div>
+                        <span class="block text-sm font-semibold text-slate-700 mb-2">Tab Permissions (ප්‍රධාන මෙනු අවසර)</span>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input type="checkbox" id="oicPermSettings" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>Settings Access</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input type="checkbox" id="oicPermDashboard" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>Dashboard</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input type="checkbox" id="oicPermJobCards" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>Job Cards</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input type="checkbox" id="oicPermInventory" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>Inventory</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input type="checkbox" id="oicPermEstimates" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>Estimates</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input type="checkbox" id="oicPermLMD" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>LMD</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input type="checkbox" id="oicPermSailors" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>Sailors</span>
+                            </label>
+                            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                <input type="checkbox" id="oicPermReports" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>Reports</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="block text-sm font-semibold text-slate-700">Zone Permissions (කලාප අවසර)</span>
+                            <label class="flex items-center gap-1.5 text-xs text-teal-600 cursor-pointer font-bold">
+                                <input type="checkbox" id="oicPermAllZones" onchange="toggleSelectAllZonesPerm(this.checked)" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                                <span>All Zones Access</span>
+                            </label>
+                        </div>
+                        <div id="oicZonesPermissionList" class="grid grid-cols-2 gap-2 border border-slate-100 p-2.5 rounded-xl bg-slate-50">
+                            <!-- Dynamically populated checkboxes for zones -->
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('oicProfileModal')" class="px-4 py-2 text-slate-500 hover:text-slate-700 font-medium">Cancel</button>
+                    <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg font-medium">
+                        Save Officer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Evaluation Details Modal -->
+    <div id="evalDetailsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div class="bg-gradient-to-r from-teal-950 via-slate-900 to-teal-950 text-white px-6 py-4 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl" id="evalDetailsModalIcon">📊</span>
+                    <h2 class="font-bold text-lg" id="evalDetailsModalTitle">Evaluation Details</h2>
+                </div>
+                <button onclick="closeModal('evalDetailsModal')" class="text-teal-200 hover:text-white text-lg font-bold">✕</button>
+            </div>
+            
+            <div class="p-6 overflow-y-auto flex-1">
+                <div class="overflow-x-auto rounded-xl border border-slate-100 shadow-sm bg-slate-50/50">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                                <th class="p-3">Service No</th>
+                                <th class="p-3">Rank & Name</th>
+                                <th class="p-3">Assigned Work / Shop</th>
+                                <th class="p-3">Zone & In-Charge</th>
+                                <th class="p-3" id="evalDetailsTableActionHeader">Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="evalDetailsTableBody" class="divide-y divide-slate-100 text-slate-600">
+                            <!-- Populated dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            
+            <div class="bg-slate-50 px-6 py-4 flex justify-end border-t border-slate-100">
+                <button onclick="closeModal('evalDetailsModal')" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-5 py-2 rounded-xl font-semibold text-sm transition-all">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sailor Profile Modal -->
+    <div id="sailorProfileModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
+                <div class="flex items-center gap-2">
+                    <span class="text-lg">⚓</span>
+                    <h2 class="font-bold text-lg sinhala">නාවික පැතිකඩ (Sailor Profile)</h2>
+                </div>
+                <button onclick="closeModal('sailorProfileModal')" class="text-slate-300 hover:text-white">✕</button>
+            </div>
+            
+            <div class="p-6 space-y-6">
+                <!-- Header Bio Block -->
+                <div class="flex flex-col sm:flex-row items-center gap-5 p-4 bg-slate-50 border border-slate-150 rounded-2xl">
+                    <!-- Profile Picture container -->
+                    <div class="w-24 h-24 rounded-full overflow-hidden border-2 border-teal-500 shadow-md flex-shrink-0 bg-slate-200 relative" id="profPicContainer">
+                        <!-- Image populated dynamically, with fallback -->
+                    </div>
+                    <!-- Details -->
+                    <div class="text-center sm:text-left flex-1 min-w-0">
+                        <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                            <span class="text-xs bg-slate-800 text-teal-300 px-2 py-0.5 rounded font-extrabold" id="profTradeBadge">MA</span>
+                            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold" id="profCategory">Regular</span>
+                            <span class="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1" id="profStatusBadge">
+                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>Available
+                            </span>
+                        </div>
+                        <h3 class="text-lg font-bold text-slate-800 mt-2" id="profName">Kamal Perera</h3>
+                        <p class="text-sm text-slate-500 font-medium mt-0.5" id="profRankOffNo">Able Seaman (MA) · Official No: EC124913</p>
+                        <p class="text-xs text-slate-400 mt-1" id="profActiveZone">Assigned Zone: A-Zone</p>
+                    </div>
+                </div>
+
+                <!-- Points & Leave Stats Grid -->
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- Points Box -->
+                    <div class="p-4 rounded-xl border border-teal-500/20 bg-teal-50/30 flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs font-bold text-teal-700 tracking-wide uppercase">Past 30 Days' Points</span>
+                            <p class="text-xs text-slate-400 mt-0.5 sinhala">පසුගිය දින 30 ක්‍රියාකාරී ලකුණු</p>
+                        </div>
+                        <div class="flex items-baseline gap-1 mt-4">
+                            <span class="text-3xl font-extrabold text-teal-600" id="profTotalPoints">124</span>
+                            <span class="text-xs text-teal-500 font-bold">Points</span>
+                        </div>
+                    </div>
+                    <!-- Leave Days Box -->
+                    <div class="p-4 rounded-xl border border-indigo-500/20 bg-indigo-50/30 flex flex-col justify-between">
+                        <div>
+                            <span class="text-xs font-bold text-indigo-700 tracking-wide uppercase">Leave Days Earned</span>
+                            <p class="text-xs text-slate-400 mt-0.5 sinhala">හිමිවන නිවාඩු දින ගණන</p>
+                        </div>
+                        <div class="flex items-baseline gap-1 mt-4">
+                            <span class="text-3xl font-extrabold text-indigo-600" id="profLeaveDays">12</span>
+                            <span class="text-xs text-indigo-500 font-bold">Days</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress to Next Leave Day -->
+                <div class="space-y-2 border border-slate-100 p-4 rounded-xl bg-slate-50/50">
+                    <div class="flex justify-between text-xs font-bold text-slate-500">
+                        <span class="sinhala">ඊළඟ නිවාඩු දිනයට ප්‍රගතිය</span>
+                        <span id="profNextLeaveProgressText">4 / 10 Points</span>
+                    </div>
+                    <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
+                        <div class="bg-gradient-to-r from-teal-500 to-indigo-600 h-full rounded-full transition-all duration-500" id="profNextLeaveProgressBar" style="width: 40%"></div>
+                    </div>
+                    <p class="text-[10px] text-slate-400 italic">Formula: 1 Day of Leave earned for every 10 Performance/Operational points accrued.</p>
+                </div>
+
+                <!-- Rating Breakdowns -->
+                <div class="space-y-3">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Performance Rating Summary</h4>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-white border rounded-xl p-3 flex items-center justify-between">
+                            <span class="text-xs text-slate-500">Rolling Avg Rating</span>
+                            <span class="text-sm font-extrabold text-slate-800" id="profAvgRating">7.8 / 10</span>
+                        </div>
+                        <div class="bg-white border rounded-xl p-3 flex items-center justify-between">
+                            <span class="text-xs text-slate-500">Yesterday's Rating</span>
+                            <span class="text-sm font-extrabold text-slate-800" id="profYesterdayRating">8.5 / 10</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Duties Log -->
+                <div class="space-y-3">
+                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Recent Operational Duties</h4>
+                    <div id="profDutyLog" class="max-h-40 overflow-y-auto divide-y divide-slate-100 border rounded-xl bg-white scrollbar-thin">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end gap-3 p-6 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
+                <button onclick="closeModal('sailorProfileModal')" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-medium">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Google Drive Config Modal -->
+    <div id="googleConfigModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div class="bg-gradient-to-r from-teal-600 to-cyan-600 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h3 class="text-lg font-bold">Google OAuth API Setup</h3>
+                <button onclick="closeModal('googleConfigModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <p class="text-sm text-slate-600">Google Drive එකට PDF උපස්ථ අප්ලෝඩ් කිරීම සඳහා ඔබගේ Google OAuth Client ID එක මෙතැනට ඇතුළත් කරන්න:</p>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1">Google OAuth Client ID</label>
+                    <input type="text" id="cfg-googleClientIdModal" placeholder="your-client-id.apps.googleusercontent.com" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50">
+                    <p class="text-xs text-slate-400 mt-2">මෙම අගය සාදා ගැනීමට Google Cloud Console හි OAuth 2.0 Client ID එකක් සකස් කර ගන්න.</p>
+                </div>
+                <div class="flex gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('googleConfigModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700">Cancel</button>
+                    <button type="button" onclick="saveGoogleConfigFromModal()" class="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium">Save & Proceed</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
 
