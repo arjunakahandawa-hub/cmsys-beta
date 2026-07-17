@@ -417,11 +417,12 @@ function standardizeInventoryCategory(cat) {
         'LUBRICANT OIL': 'Lubricant Oil',
         'LUBRICANT': 'Lubricant Oil',
         'OIL': 'Lubricant Oil',
+        'ENG': 'Eng',
     };
 
     if (mapping[cleaned]) return mapping[cleaned];
 
-    const standardCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
+    const standardCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil', 'Eng'];
     const matched = standardCats.find(sc => sc.toUpperCase() === cleaned);
     if (matched) return matched;
 
@@ -3866,13 +3867,10 @@ function renderInventoryCategories() {
     if (!container) return;
 
     // Default categories that should always appear
-    const defaultCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
+    const defaultCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil', 'Eng'];
     
-    // Extract unique categories from actual inventory items
-    const actualCats = [...new Set(store.inventory.map(i => i.category))].filter(c => c && c.trim() !== '');
-
-    // Combine and deduplicate, keeping defaults first
-    const allCats = [...new Set([...defaultCats, ...actualCats])];
+    // We only use the default allowed categories
+    const allCats = [...defaultCats];
 
     let html = `<button onclick="switchInventoryCategory('all')" class="inv-cat-tab px-6 py-3 text-sm font-medium whitespace-nowrap ${store.currentInventoryCategory === 'all' ? 'border-b-2 border-green-600 text-green-600 bg-green-50' : 'text-slate-500 hover:bg-slate-50'}">
         📦 All
@@ -3888,22 +3886,13 @@ function renderInventoryCategories() {
 
     container.innerHTML = html;
 
-    // Also update the select dropdown options, keeping standard ones and dynamically adding any database custom ones
+    // Also update the select dropdown options, keeping standard ones only
     const catSelect = document.getElementById('invCategory');
     if (catSelect) {
-        const standardCats = ['BMS', 'Plumbing', 'Metal', 'Stencil', 'General', 'Aluminium', 'Paint', 'Electrical', 'Tools', 'Lubricant Oil'];
-        const customCats = allCats.filter(c => !standardCats.includes(c));
-        
         let optionsHtml = '<option value="">-- Select Category --</option>';
-        standardCats.forEach(c => {
+        allCats.forEach(c => {
             optionsHtml += `<option value="${c}">${c}</option>`;
         });
-        if (customCats.length > 0) {
-            optionsHtml += '<option disabled>──────────</option>';
-            customCats.forEach(c => {
-                optionsHtml += `<option value="${c}">${c}</option>`;
-            });
-        }
         
         const prevVal = catSelect.value;
         catSelect.innerHTML = optionsHtml;
