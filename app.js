@@ -532,7 +532,7 @@ function initOpsListeners() {
         store.dailyAllocations = arr;
         const map = {};
         arr.forEach(a => {
-            map[`${a.date}_${a.sailor_id}`] = a;
+            map[`${a.date}_${sanitizeFbKey(a.sailor_id)}`] = a;
         });
         store.dailyAllocationsMap = map;
         refreshCurrentView();
@@ -618,8 +618,14 @@ function fbSaveLocation(data) {
 }
 
 // Save daily allocation
+// Sanitize keys for Firebase paths (replaces /, ., #, $, [, ] with -)
+function sanitizeFbKey(id) {
+    return String(id).replace(/[\/.#$\[\]]/g, '-');
+}
+
 function fbSaveDailyAllocation(data) {
-    return opsDB.ref('daily_allocations').push({ ...data, assigned_at: Date.now() });
+    const key = `${data.date}_${sanitizeFbKey(data.sailor_id)}`;
+    return opsDB.ref(`daily_allocations/${key}`).set({ ...data, assigned_at: Date.now() });
 }
 
 // Save approved pending job
@@ -917,7 +923,7 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
 
 function getSailorAssignmentOnDate(sailorId, dateVal) {
     if (!store.dailyAllocationsMap) return null;
-    const alloc = store.dailyAllocationsMap[`${dateVal}_${sailorId}`];
+    const alloc = store.dailyAllocationsMap[`${dateVal}_${sanitizeFbKey(sailorId)}`];
     if (alloc) {
         const wo = store.workOrders.find(w => 
             String(w.id) === String(alloc.work_order_id) || 
@@ -1577,8 +1583,8 @@ function updateCounters() {
             }
 
             // Resolve daily evaluation state from dailyAllocationsMap for active date
-            const allocKey = `${dateVal}_${s.id}`;
-            const allocKeyFb = `${dateVal}_${s._fbKey}`;
+            const allocKey = `${dateVal}_${sanitizeFbKey(s.id)}`;
+            const allocKeyFb = `${dateVal}_${sanitizeFbKey(s._fbKey)}`;
             const alloc = store.dailyAllocationsMap ? (store.dailyAllocationsMap[allocKey] || store.dailyAllocationsMap[allocKeyFb]) : null;
             if (alloc) {
                 s.evaluated = alloc.evaluated === true;
@@ -1665,7 +1671,7 @@ function handleDropOnCard(event, workOrderId) {
             if (window.fbSaveWorkOrder) {
                 fbSaveWorkOrder(prevWo);
             }
-            opsDB.ref(`daily_allocations/${today}_${draggedSailorId}`).remove();
+            opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(draggedSailorId)}`).remove();
         }
     }
 
@@ -1711,7 +1717,7 @@ function removeSailorFromOrder(sailorId, workOrderId) {
         const today = new Date().toISOString().split('T')[0];
         workOrder.last_assigned_date = today;
         
-        opsDB.ref(`daily_allocations/${today}_${sailorId}`).remove();
+        opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).remove();
 
         if (window.fbSaveWorkOrder) {
             fbSaveWorkOrder(workOrder).then(() => {
@@ -2067,7 +2073,7 @@ function toggleWoSailor(sailorId, name) {
                 if (window.fbSaveWorkOrder) {
                     fbSaveWorkOrder(prevWo);
                 }
-                opsDB.ref(`daily_allocations/${today}_${key}`).remove();
+                opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(key)}`).remove();
             }
             showToast(`Reassigned ${store.sailors.find(s => String(s.id ?? s._fbKey) === key)?.name || 'Sailor'} from ${assignment.zone}!`);
         }
@@ -2882,7 +2888,7 @@ function assignSingleLabor(sailorId) {
             if (window.fbSaveWorkOrder) {
                 fbSaveWorkOrder(prevWo);
             }
-            opsDB.ref(`daily_allocations/${today}_${sailorId}`).remove();
+            opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).remove();
         }
     }
 
@@ -2928,7 +2934,7 @@ function updateWorkOrderStatus() {
             const today = new Date().toISOString().split('T')[0];
             const allocationsToDelete = (store.dailyAllocations || []).filter(a => a.date === today && String(a.work_order_id) === String(wo.id));
             allocationsToDelete.forEach(a => {
-                opsDB.ref(`daily_allocations/${today}_${a.sailor_id}`).remove().catch(e => console.warn(e));
+                opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`).remove().catch(e => console.warn(e));
             });
         }
 
@@ -2966,7 +2972,7 @@ function saveWorkOrderChanges() {
             const today = new Date().toISOString().split('T')[0];
             const allocationsToDelete = (store.dailyAllocations || []).filter(a => a.date === today && String(a.work_order_id) === String(wo.id));
             allocationsToDelete.forEach(a => {
-                opsDB.ref(`daily_allocations/${today}_${a.sailor_id}`).remove().catch(e => console.warn(e));
+                opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`).remove().catch(e => console.warn(e));
             });
         }
 
@@ -3065,7 +3071,7 @@ function forwardToComplete() {
                     };
                     if (!store.dailyAllocations) store.dailyAllocations = [];
                     store.dailyAllocations.push(alloc);
-                    opsDB.ref(`daily_allocations/${today}_${sid}`).set(alloc);
+                    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
                 }
             });
         }
@@ -3163,7 +3169,7 @@ function proceedWorkOrder() {
         };
         store.dailyAllocations.push(alloc);
         if (sailor) { sailor.status = 'Assigned'; sailor.evaluated = false; }
-        opsDB.ref(`daily_allocations/${today}_${sid}`).set(alloc);
+        opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
     });
 
     closeModal('workOrderDetailModal');
@@ -3284,8 +3290,8 @@ function submitEvaluation(event) {
         // Save evaluation to local daily_allocations in Operations DB (failsafe + support history dates)
         const today = new Date().toISOString().split('T')[0];
         const dateVal = store.dashboardDate || today;
-        const allocKey = `${dateVal}_${sailor.id}`;
-        const allocKeyFb = `${dateVal}_${sailor._fbKey}`;
+        const allocKey = `${dateVal}_${sanitizeFbKey(sailor.id)}`;
+        const allocKeyFb = `${dateVal}_${sanitizeFbKey(sailor._fbKey)}`;
         let actualKey = allocKey;
         
         if (store.dailyAllocationsMap) {
