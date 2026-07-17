@@ -479,13 +479,21 @@ function initOpsListeners() {
         refreshCurrentView();
     });
 
+    // Helper to safely parse cost, handling commas and string prefixes like "Rs."
+    const safeParseCost = (val) => {
+        if (val === undefined || val === null) return 0;
+        if (typeof val === 'number') return val;
+        const cleaned = String(val).replace(/[^0-9.]/g, '');
+        return parseFloat(cleaned) || 0;
+    };
+
     // ── Inventory ──
     opsDB.ref('inventory').on('value', snapshot => {
         store.inventory = snapshotToArray(snapshot).map(item => ({
             ...item, id: item.id ?? item._fbKey,
             category: standardizeInventoryCategory(item.category),
             description: standardizeInventoryDescription(item.description),
-            cost_per_unit: parseFloat(item.cost_per_unit ?? item.unit_cost ?? item.cost ?? item.price ?? 0) || 0,
+            cost_per_unit: safeParseCost(item.cost_per_unit ?? item.unit_cost ?? item.cost ?? item.price ?? 0),
             on_charge_records:  item.on_charge_records  ? Object.values(item.on_charge_records)  : [],
             off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
         }));
