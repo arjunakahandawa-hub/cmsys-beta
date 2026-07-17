@@ -6019,7 +6019,7 @@ function normalizeInventoryCsvHeader(h) {
     if (clean.includes('category') || clean === 'cat' || clean === 'group') {
         return 'category';
     }
-    if (clean === 'deno' || clean.includes('unit') || clean === 'uom' || clean === 'denominations') {
+    if (clean === 'deno' || clean === 'unit' || clean === 'uom' || clean === 'denominations') {
         return 'deno';
     }
     if (clean.includes('quantity') || clean === 'qty' || clean === 'stock' || clean === 'amount') {
