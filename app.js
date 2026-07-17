@@ -3295,6 +3295,9 @@ function submitEvaluation(event) {
         }
         
         opsDB.ref(`daily_allocations/${actualKey}`).update({
+            date: dateVal,
+            sailor_id: sailor.id,
+            work_order_id: store.selectedWorkOrder || '',
             evaluated: true,
             score: avgScore
         }).catch(e => console.warn('Could not save evaluation to Operations DB:', e));
