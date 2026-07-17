@@ -1549,12 +1549,12 @@ function updateCounters() {
     const assignedIds = new Set();
     if (isToday) {
         activeWo.forEach(wo => {
-            if (wo.status === 'Active' && wo.assigned) {
+            if ((wo.status === 'Active' || wo.status === 'Pending') && wo.assigned) {
                 wo.assigned.forEach(id => assignedIds.add(String(id)));
             }
         });
         activeJc.forEach(jc => {
-            if (jc.status === 'Active' && jc.assigned) {
+            if ((jc.status === 'Active' || jc.status === 'Pending') && jc.assigned) {
                 jc.assigned.forEach(id => assignedIds.add(String(id)));
             }
         });
