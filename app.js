@@ -481,10 +481,36 @@ function initOpsListeners() {
 
     // Helper to safely parse cost, handling commas and string prefixes like "Rs."
     const safeParseCost = (val) => {
-        if (val === undefined || val === null) return 0;
+        if (val === undefined || val === null || val === '') return 0;
         if (typeof val === 'number') return val;
-        const cleaned = String(val).replace(/[^0-9.]/g, '');
-        return parseFloat(cleaned) || 0;
+        
+        let str = String(val).toLowerCase();
+        // Remove rs, rs., commas, and spaces
+        str = str.replace(/rs\.?/g, '').replace(/,/g, '').replace(/\\s/g, '');
+        
+        // Strip any remaining characters that are not digits or decimal point
+        str = str.replace(/[^0-9.]/g, '');
+        
+        const num = parseFloat(str);
+        return isNaN(num) ? 0 : num;
+    };
+
+    const extractCost = (item) => {
+        // Known keys
+        const knownCost = item.cost_per_unit ?? item.unit_cost ?? item.cost ?? item.price ?? item.Cost ?? item.Price;
+        if (knownCost !== undefined && knownCost !== null && knownCost !== '') {
+            return safeParseCost(knownCost);
+        }
+        
+        // Dynamic search for any key containing 'cost' or 'price'
+        for (let k of Object.keys(item)) {
+            let lk = k.toLowerCase();
+            if (lk.includes('cost') || lk.includes('price') || lk.includes('rate') || lk.includes('amount')) {
+                const parsed = safeParseCost(item[k]);
+                if (parsed > 0) return parsed;
+            }
+        }
+        return 0;
     };
 
     // ── Inventory ──
@@ -493,7 +519,7 @@ function initOpsListeners() {
             ...item, id: item.id ?? item._fbKey,
             category: standardizeInventoryCategory(item.category),
             description: standardizeInventoryDescription(item.description),
-            cost_per_unit: safeParseCost(item.cost_per_unit ?? item.unit_cost ?? item.cost ?? item.price ?? 0),
+            cost_per_unit: extractCost(item),
             on_charge_records:  item.on_charge_records  ? Object.values(item.on_charge_records)  : [],
             off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
         }));
