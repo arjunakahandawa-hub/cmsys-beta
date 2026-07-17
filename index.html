@@ -353,7 +353,23 @@
         /* ===== Print ===== */
         @media print {
             .no-print { display: none !important; }
-            body { background: white; }
+            body { background: white; color: black; font-family: sans-serif; }
+            .print-header { display: block !important; }
+            .print-signatures { display: grid !important; margin-top: 40px !important; }
+            .print-table-container { 
+                border: none !important; 
+                padding: 0 !important; 
+                box-shadow: none !important; 
+                background: white !important;
+                overflow: visible !important;
+            }
+            table { border-color: #000 !important; width: 100% !important; }
+            th, td { border-color: #000 !important; padding: 4px 6px !important; color: #000 !important; }
+            th { background-color: #f8fafc !important; color: #000 !important; }
+            /* Hide general layout structure in print */
+            #leftSidebarContainer, #sidebarToggleBtn, header, .header-container, #mobileTabBar { display: none !important; }
+            main, .view-content { padding: 0 !important; margin: 0 !important; width: 100% !important; display: block !important; }
+            .glass-card { background: white !important; box-shadow: none !important; border: none !important; }
         }
 
         /* ===== Button Hover & Active Effects ===== */
@@ -855,9 +871,92 @@
 
         <!-- ==================== SUMMARY VIEW ==================== -->
         <div id="view-summary" class="view-content hidden p-4 md:p-6 space-y-6">
-            <div class="glass-card p-6">
-                <h3 class="text-lg font-bold text-slate-800">📊 Summary Overview</h3>
-                <p class="text-sm text-slate-500 mt-2">Summary reports and analytics will be displayed here soon.</p>
+            <div class="glass-card p-6 no-print">
+                <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800 flex items-center gap-2">
+                            📊 Daily Duties Summary
+                        </h2>
+                        <p class="text-xs text-slate-500 mt-0.5">Complement assignment matrix by branch and trade</p>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <button onclick="exportSummaryCsv()" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                            📤 Export CSV
+                        </button>
+                        <button onclick="printSummary()" class="bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                            🖨️ Print / PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Date display -->
+                <div class="flex items-center justify-between mb-4 bg-slate-50 px-4 py-2 rounded-lg border border-slate-100">
+                    <span class="text-xs font-semibold text-slate-600">Selected Date:</span>
+                    <span id="summaryActiveDate" class="text-xs font-extrabold text-slate-800 bg-white px-2.5 py-1 rounded shadow-sm border border-slate-100">2026-07-16</span>
+                </div>
+            </div>
+
+            <!-- Print Header (Visible only on print) -->
+            <div class="print-header hidden">
+                <div class="flex justify-between items-center pb-2 border-b border-slate-800 mb-4">
+                    <div>
+                        <h2 class="text-md font-bold text-slate-900 uppercase">Daily Duties Summary Sheet</h2>
+                        <p class="text-[9px] text-slate-600">NCW-PS Trincomalee Dockyard</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-sm font-bold text-slate-900" id="printSummaryDate">2026.07.16</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scrollable Table Wrapper -->
+            <div class="glass-card p-4 overflow-x-auto rounded-xl border border-slate-100 shadow-sm print-table-container">
+                <table class="w-full text-left border-collapse border border-slate-200 text-xs" id="summaryMatrixTable">
+                    <thead>
+                        <tr class="bg-slate-900 text-white font-bold text-center">
+                            <th rowspan="2" class="px-3 py-2 border border-slate-700 text-left min-w-[200px]">Description</th>
+                            <th colspan="9" class="px-1 py-1 border border-slate-700">VSS</th>
+                            <th rowspan="2" class="px-1 py-2 border border-slate-700 min-w-[50px]">VSS SUB TOTAL</th>
+                            <th colspan="4" class="px-1 py-1 border border-slate-700">REGULAR</th>
+                            <th rowspan="2" class="px-1 py-2 border border-slate-700 min-w-[50px]">REG SUB TOTAL</th>
+                            <th rowspan="2" class="px-2 py-2 border border-slate-700 min-w-[55px]">FULL TOTAL</th>
+                        </tr>
+                        <tr class="bg-slate-800 text-white font-bold text-center text-[10px]">
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">MA</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">CA</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">PA</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">PL</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">BB</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">RW</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">WL</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">AL</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">SW</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">S/S</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">LME</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">ME</th>
+                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">OJT</th>
+                        </tr>
+                    </thead>
+                    <tbody id="summaryMatrixTableBody">
+                        <!-- Filled dynamically by renderSummaryView -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Signatures section at the bottom for print -->
+            <div class="print-signatures hidden mt-10 grid grid-cols-4 gap-4 text-center text-[10px] font-bold text-slate-800">
+                <div>
+                    <div class="border-t border-slate-400 pt-1">S/S INCHARGE</div>
+                </div>
+                <div>
+                    <div class="border-t border-slate-400 pt-1">SCE(M)</div>
+                </div>
+                <div>
+                    <div class="border-t border-slate-400 pt-1">CCEO (E)</div>
+                </div>
+                <div>
+                    <div class="border-t border-slate-400 pt-1">CCED (E)</div>
+                </div>
             </div>
         </div>
 

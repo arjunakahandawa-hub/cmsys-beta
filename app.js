@@ -1,20 +1,22 @@
 // =============================================
 // PWA SERVICE WORKER REGISTRATION
 // =============================================
+// Force unregister all service workers and clear cache to resolve browser caching bugs
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log('⚓ NCW-PS PWA Service Worker: REGISTERED (', reg.scope, ')'))
-            .catch(err => console.error('⚠️ NCW-PS PWA Service Worker: REGISTRATION FAILED:', err));
-    });
-
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (!refreshing) {
-            refreshing = true;
-            console.log('⚓ New Service Worker activated, reloading page...');
-            window.location.reload();
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+        for (let registration of registrations) {
+            registration.unregister().then(() => {
+                console.log('⚓ Active Service Worker unregistered!');
+            });
         }
+    });
+}
+if ('caches' in window) {
+    caches.keys().then(names => {
+        for (let name of names) {
+            caches.delete(name);
+        }
+        console.log('⚓ All caches cleared!');
     });
 }
 
@@ -688,6 +690,7 @@ function refreshCurrentViewImmediately() {
                 case 'maintenance': renderMaintenance();    break;
                 case 'reports':     renderReports();        break;
                 case 'dailydetails': renderDailyDetailsSpecialView(); break;
+                case 'summary':     renderSummaryView();    break;
                 case 'sailors':     renderSailorsView();    break;
                 case 'sailordashboard': renderSailorDashboardView(); break;
             }
@@ -801,7 +804,7 @@ function switchView(view, preventPushState = false) {
         case 'reports': renderReports(); break;
         case 'settings': renderSettings(); break;
         case 'dailydetails': renderDailyDetailsSpecialView(); break;
-        case 'summary': /* Placeholder for next phase */ break;
+        case 'summary': renderSummaryView(); break;
         case 'sailors': renderSailorsView(); break;
         case 'sailordashboard': renderSailorDashboardView(); break;
     }
@@ -1571,6 +1574,19 @@ function updateCounters() {
                 } else {
                     s.status = 'Available';
                 }
+            }
+
+            // Resolve daily evaluation state from dailyAllocationsMap for active date
+            const allocKey = `${dateVal}_${s.id}`;
+            const allocKeyFb = `${dateVal}_${s._fbKey}`;
+            const alloc = store.dailyAllocationsMap ? (store.dailyAllocationsMap[allocKey] || store.dailyAllocationsMap[allocKeyFb]) : null;
+            if (alloc) {
+                s.evaluated = alloc.evaluated === true;
+                if (alloc.score !== undefined) {
+                    s.yesterdayScore = parseFloat(alloc.score);
+                }
+            } else {
+                s.evaluated = false;
             }
         });
     }
@@ -3265,7 +3281,25 @@ function submitEvaluation(event) {
         sailor.avgScore = ((sailor.avgScore * 10) + avgScore) / 11; // Rolling average
         sailor.evaluated = true;
         
-        // Persist to sailorsDB
+        // Save evaluation to local daily_allocations in Operations DB (failsafe + support history dates)
+        const today = new Date().toISOString().split('T')[0];
+        const dateVal = store.dashboardDate || today;
+        const allocKey = `${dateVal}_${sailor.id}`;
+        const allocKeyFb = `${dateVal}_${sailor._fbKey}`;
+        let actualKey = allocKey;
+        
+        if (store.dailyAllocationsMap) {
+            if (store.dailyAllocationsMap[allocKeyFb]) {
+                actualKey = allocKeyFb;
+            }
+        }
+        
+        opsDB.ref(`daily_allocations/${actualKey}`).update({
+            evaluated: true,
+            score: avgScore
+        }).catch(e => console.warn('Could not save evaluation to Operations DB:', e));
+
+        // Persist to sailorsDB as secondary best-effort
         if (typeof sailorsDB !== 'undefined') {
             sailorsDB.ref('sailors/' + (sailor._fbKey || sailor.id)).update({
                 yesterdayScore: sailor.yesterdayScore,
@@ -8359,6 +8393,668 @@ function renderDailyDetailsSpecialView() {
             </table>
         </div>
     `;
+}
+
+// =============================================
+// SUMMARY VIEW IMPLEMENTATION
+// =============================================
+function renderSummaryView() {
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    // Update active date displays
+    const dateDisplay = document.getElementById('summaryActiveDate');
+    if (dateDisplay) dateDisplay.textContent = dateVal;
+    const printDateDisplay = document.getElementById('printSummaryDate');
+    if (printDateDisplay) printDateDisplay.textContent = dateVal.replace(/-/g, '.');
+
+    // 1. Fetch allocations for the active date
+    const activeAllocations = (store.dailyAllocations || []).filter(a => a.date === dateVal);
+    
+    // Helper to resolve sailor's category (VSS/Regular) and trade index
+    function getSailorBranchAndTradeIdx(sailor) {
+        const isVss = sailor.category === 'VAS';
+        
+        let tradeIdx = -1;
+        if (isVss) {
+            const vssTrades = ['MA', 'CA', 'PA', 'PL', 'BB', 'RW', 'WL', 'AL', 'SW'];
+            // Normalize WL / WE
+            let t = (sailor.trade || 'MA').toUpperCase();
+            if (t === 'WE' || t === 'WEL') t = 'WL';
+            tradeIdx = vssTrades.indexOf(t);
+            if (tradeIdx === -1) tradeIdx = 0; // Fallback to MA
+        } else {
+            const regTrades = ['S/S', 'LME', 'ME', 'OJT'];
+            // Determine category index
+            const rank = (sailor.rank || 'AB').toUpperCase();
+            const trade = (sailor.trade || '').toUpperCase();
+            
+            if (rank.includes('CPO') || rank.includes('PO') || rank.includes('CHIEF')) {
+                tradeIdx = 0; // S/S
+            } else if (rank === 'LME' || trade === 'LME' || rank.startsWith('L')) {
+                tradeIdx = 1; // LME
+            } else if (rank === 'ME' || trade === 'ME' || rank.startsWith('M')) {
+                tradeIdx = 2; // ME
+            } else if (rank.startsWith('OJT') || rank.startsWith('APP') || rank.startsWith('TRAIN') || trade.startsWith('OJT')) {
+                tradeIdx = 3; // OJT
+            } else {
+                tradeIdx = 2; // Default to ME
+            }
+        }
+        
+        return { isVss, tradeIdx };
+    }
+
+    // Initialize counts matrix helper
+    function createRowMatrix(description) {
+        return {
+            description: description,
+            vss: [0, 0, 0, 0, 0, 0, 0, 0, 0], // MA, CA, PA, PL, BB, RW, WL, AL, SW
+            reg: [0, 0, 0, 0], // S/S, LME, ME, OJT
+            vssSub: 0,
+            regSub: 0,
+            fullTotal: 0
+        };
+    }
+
+    // 2. Define the structure of our sections and rows
+    const sections = {
+        ongoing: {
+            title: "ONGOING CONSTRUCTIONS AT DOCKYARD",
+            rows: {
+                "NMA OTW SITE": createRowMatrix("NMA OTW SITE"),
+                "LOGISTICS MANAGEMENT SCHOOL": createRowMatrix("LOGISTICS MANAGEMENT SCHOOL")
+            }
+        },
+        workshop: {
+            title: "WORKSHOP",
+            rows: {
+                "CARPENTRY W/S": createRowMatrix("CARPENTRY W/S"),
+                "PAINT W/S": createRowMatrix("PAINT W/S"),
+                "SIG WRITER W/S": createRowMatrix("SIG WRITER W/S"),
+                "WELDING W/S": createRowMatrix("WELDING W/S"),
+                "PUMP HOUSE": createRowMatrix("PUMP HOUSE"),
+                "ALUMINUM W/S": createRowMatrix("ALUMINUM W/S"),
+                "BLACK SMITHY": createRowMatrix("BLACK SMITHY")
+            }
+        },
+        zones: {
+            title: "ZONE",
+            subsections: {
+                "A": { title: "A - ZONE", rows: { "RENOVATION WORK OF NAVY HOUSE ACCMADAICION": createRowMatrix("RENOVATION WORK OF NAVY HOUSE ACCMADAICION"), "DAY TO DAY BASE MAINTENANCE WORK": createRowMatrix("DAY TO DAY BASE MAINTENANCE WORK") } },
+                "B": { title: "B - ZONE", rows: { "RENOVATION WORK OF SENIOR SAILOR MESS AT SLNS TISSA": createRowMatrix("RENOVATION WORK OF SENIOR SAILOR MESS AT SLNS TISSA"), "RENOVATION WORKS OF MAIN GATE, VEHICLE PARK IN SSSO (D) AND RATHNA SECURITY POINT AT SLN DOCKYARD": createRowMatrix("RENOVATION WORKS OF MAIN GATE, VEHICLE PARK IN SSSO (D) AND RATHNA SECURITY POINT AT SLN DOCKYARD"), "HOSPITAL RENOVATION": createRowMatrix("HOSPITAL RENOVATION"), "GOLF HOTEL GREEN FENCE": createRowMatrix("GOLF HOTEL GREEN FENCE"), "HORSE STABLE (අස්තාලය)": createRowMatrix("HORSE STABLE (අස්තාලය)"), "DAY TO DAY BASE MAINTENANCE WORK": createRowMatrix("DAY TO DAY BASE MAINTENANCE WORK") } },
+                "C": { title: "C - ZONE", rows: { "PAYTON TERRACE TOILET BLOCK": createRowMatrix("PAYTON TERRACE TOILET BLOCK"), "PAYTON TERRACE 07-08 TOILET BLOCK": createRowMatrix("PAYTON TERRACE 07-08 TOILET BLOCK"), "NEW DURANTHAKASAN-A01": createRowMatrix("NEW DURANTHAKASAN-A01"), "DURANTHAKASAN-18": createRowMatrix("DURANTHAKASAN-18"), "WATER LOW EXTERNAL WALL RUBBLE WORK": createRowMatrix("WATER LOW EXTERNAL WALL RUBBLE WORK"), "DAY TO DAY BASE MAINTENANCE WORK": createRowMatrix("DAY TO DAY BASE MAINTENANCE WORK") } },
+                "D": { title: "D - ZONE", rows: { "RETAINING WALL NEAR POWER HOUSE": createRowMatrix("RETAINING WALL NEAR POWER HOUSE"), "RENOVATION OF ROOF AT COMMAD ADMINISTRATIVE BUILDING": createRowMatrix("RENOVATION OF ROOF AT COMMAD ADMINISTRATIVE BUILDING"), "DAY TO DAY BASE MAINTENANCE WORK": createRowMatrix("DAY TO DAY BASE MAINTENANCE WORK") } },
+                "E": { title: "E - ZONE", rows: { "DAY TO DAY BASE MAINTENANCE WORK": createRowMatrix("DAY TO DAY BASE MAINTENANCE WORK") } },
+                "FH": { title: "FH - ZONE", rows: { "RENOVATION WORKS OF ALL STORES, TUNNELS AND WORKSHOPS AT NAD": createRowMatrix("RENOVATION WORKS OF ALL STORES, TUNNELS AND WORKSHOPS AT NAD"), "RENOVATION WORKS OF STOREYARD OF CCED (E) AT SLN DOCKYARD": createRowMatrix("RENOVATION WORKS OF STOREYARD OF CCED (E) AT SLN DOCKYARD"), "DAY TO DAY BASE MAINTENANCE WORK": createRowMatrix("DAY TO DAY BASE MAINTENANCE WORK") } },
+                "G": { title: "G - ZONE", rows: { "CONSTRUCTION OF ACCESS ROAD TO FD ACCESS PIER-(පාරුතොටුපල කොන්ක්‍රීට්)": createRowMatrix("CONSTRUCTION OF ACCESS ROAD TO FD ACCESS PIER-(පාරුතොටුපල කොන්ක්‍රීට්)"), "RENOVATION OF EXISTING BUILDING FOR DSS MESS AT FD-මෙස්": createRowMatrix("RENOVATION OF EXISTING BUILDING FOR DSS MESS AT FD-මෙස්"), "F/DK": createRowMatrix("F/DK"), "CONSTRUCTION OF WATER SUMP AT FD": createRowMatrix("CONSTRUCTION OF WATER SUMP AT FD"), "CONSTRUCTION OF PUMP HOUSE AT FD": createRowMatrix("CONSTRUCTION OF PUMP HOUSE AT FD"), "ESTABLISHMENT OF WATER SUPPLY AND DISTRIBUTION SYSTEM FOR FD--ජල නල පද්ධතිය": createRowMatrix("ESTABLISHMENT OF WATER SUPPLY AND DISTRIBUTION SYSTEM FOR FD--ජල නල පද්ධතිය"), "RENOVATION OF ACCESS ROAD DSS TO OSTURNBURG RIDGE-(බැම්මපාර)": createRowMatrix("RENOVATION OF ACCESS ROAD DSS TO OSTURNBURG RIDGE-(බැම්මපාර)"), "OFFICE COMPLE": createRowMatrix("OFFICE COMPLE"), "EXTENSION GUIDE OF GUIDE PIER": createRowMatrix("EXTENSION GUIDE OF GUIDE PIER"), "DAY TO DAY BASE MAINTENANCE WORK": createRowMatrix("DAY TO DAY BASE MAINTENANCE WORK") } }
+            }
+        },
+        othersDuty: {
+            title: "OTHERS DUTY DOCK YARD",
+            rows: {
+                "ADMING OFFICE": createRowMatrix("ADMING OFFICE"),
+                "TOOL STORES": createRowMatrix("TOOL STORES"),
+                "JOB CARD": createRowMatrix("JOB CARD"),
+                "BALANCE STORES": createRowMatrix("BALANCE STORES"),
+                "MATERIAL OFFICE": createRowMatrix("MATERIAL OFFICE"),
+                "TEA MAKER & MESS MAN": createRowMatrix("TEA MAKER & MESS MAN"),
+                "AGRICULTURE AND LANDSCAPE DUTY": createRowMatrix("AGRICULTURE AND LANDSCAPE DUTY"),
+                "MAIN GATE DUTY (SICK SAILORS)": createRowMatrix("MAIN GATE DUTY (SICK SAILORS)"),
+                "MATERIAL LOADING TEAM": createRowMatrix("MATERIAL LOADING TEAM"),
+                "DUMPER & TRACTOR": createRowMatrix("DUMPER & TRACTOR"),
+                "VEHICLE SQUAD & WATER TOWER": createRowMatrix("VEHICLE SQUAD & WATER TOWER"),
+                "REDUSE STORES": createRowMatrix("REDUSE STORES"),
+                "SD OFFICE": createRowMatrix("SD OFFICE"),
+                "AUDIT TEAM": createRowMatrix("AUDIT TEAM")
+            }
+        },
+        otherBases: {
+            title: "OTHER BASES ENA",
+            rows: {
+                "SOBER ISLAND": createRowMatrix("SOBER ISLAND"),
+                "NAD": createRowMatrix("NAD"),
+                "SLNS TISSA FOR ANDANMKULAM": createRowMatrix("SLNS TISSA FOR ANDANMKULAM"),
+                "SLNS TISSA / (NALP)": createRowMatrix("SLNS TISSA / (NALP)"),
+                "SLNS MAHAWALI": createRowMatrix("SLNS MAHAWALI"),
+                "SLNS VIJAYABA": createRowMatrix("SLNS VIJAYABA"),
+                "SLNS VIDURA": createRowMatrix("SLNS VIDURA"),
+                "SLNS PARAKUMBA": createRowMatrix("SLNS PARAKUMBA"),
+                "SLNS LANKAPATUNA": createRowMatrix("SLNS LANKAPATUNA"),
+                "SLNS WALAGAMBA": createRowMatrix("SLNS WALAGAMBA"),
+                "SLNS KASHYAPA": createRowMatrix("SLNS KASHYAPA"),
+                "SLNS GOKANNA": createRowMatrix("SLNS GOKANNA"),
+                "SLNS RANWALI": createRowMatrix("SLNS RANWALI"),
+                "SLNS GOTABAYA": createRowMatrix("SLNS GOTABAYA"),
+                "SBS": createRowMatrix("SBS"),
+                "NMA": createRowMatrix("NMA"),
+                "SLNS TISSA": createRowMatrix("SLNS TISSA")
+            }
+        },
+        socialResponsible: {
+            title: "SOCIAL RESPONSIBLE WORKS AT ENA",
+            rows: {
+                "RANGIRI ULPATHA RAJAMAHA VIHARAYA - GOMARANKADAWALA": createRowMatrix("RANGIRI ULPATHA RAJAMAHA VIHARAYA - GOMARANKADAWALA"),
+                "ARISIMALE ARANYA SENASANYA": createRowMatrix("ARISIMALE ARANYA SENASANYA"),
+                "RANMADUWA RAJAMAHAVIHARAYA": createRowMatrix("RANMADUWA RAJAMAHAVIHARAYA"),
+                "NELUGALA VIHARAYA": createRowMatrix("NELUGALA VIHARAYA"),
+                "KUTTIYARAMA MAHA VIHARYA": createRowMatrix("KUTTIYARAMA MAHA VIHARYA"),
+                "TECHNICAL COLLEGE TRINCOMALEE (CLEAN SRI LANKA)": createRowMatrix("TECHNICAL COLLEGE TRINCOMALEE (CLEAN SRI LANKA)"),
+                "SLNS MAHAWALI (ocean university)": createRowMatrix("SLNS MAHAWALI (ocean university)"),
+                "LME DG KIRTHISHINGHA VAS 67389/PROJECT": createRowMatrix("LME DG KIRTHISHINGHA VAS 67389/PROJECT"),
+                "W/COM BANDARA WXC 109592": createRowMatrix("W/COM BANDARA WXC 109592"),
+                "HOUSING PROJECT LCDR KASM WIJERATHNA": createRowMatrix("HOUSING PROJECT LCDR KASM WIJERATHNA"),
+                "LME BGLE SAMARASINHA": createRowMatrix("LME BGLE SAMARASINHA"),
+                "HOUSING PROJECT LME CHANDRAPALA (MEDIRIGIRIYA)": createRowMatrix("HOUSING PROJECT LME CHANDRAPALA (MEDIRIGIRIYA)")
+            }
+        },
+        temporaryDraft: {
+            title: "TEMPORAY DRAFT TO OTHER NAVAL AREA",
+            rows: {
+                "R -LINK": createRowMatrix("R -LINK"),
+                "REFRESHER COURSE (SLNS THAKSHILA)": createRowMatrix("REFRESHER COURSE (SLNS THAKSHILA)"),
+                "REFRESHER COURSE (NMA)": createRowMatrix("REFRESHER COURSE (NMA)"),
+                "NGH WALISARA": createRowMatrix("NGH WALISARA"),
+                "SLNS SHILPA (TEMPORY 01 MONTH)": createRowMatrix("SLNS SHILPA (TEMPORY 01 MONTH)"),
+                "SLNS MAHASEN (KIT STORES)": createRowMatrix("SLNS MAHASEN (KIT STORES)"),
+                "SLNS NIPUNA LEDERSHIP": createRowMatrix("SLNS NIPUNA LEDERSHIP"),
+                "INTER COMMND DRILL COMPTISION": createRowMatrix("INTER COMMND DRILL COMPTISION")
+            }
+        },
+        leaveSick: {
+            title: "LEAVE, SICK & ATTENDANCE",
+            rows: {
+                "LEAVE & WEEKEND DOKYARD": createRowMatrix("LEAVE & WEEKEND DOKYARD"),
+                "LEAVE DOKYARD TEMPORARY EAST OTHER BASE": createRowMatrix("LEAVE DOKYARD TEMPORARY EAST OTHER BASE"),
+                "ADMIT & SIQ": createRowMatrix("ADMIT & SIQ"),
+                "LEAVING ROOTING @ JONING": createRowMatrix("LEAVING ROOTING @ JONING"),
+                "ROUTING": createRowMatrix("ROUTING"),
+                "SICK REPORT": createRowMatrix("SICK REPORT"),
+                "BARRACK PUNISHMENT": createRowMatrix("BARRACK PUNISHMENT")
+            }
+        }
+    };
+
+    // Helper to match a work order description / zone to a specific section and row key
+    function getSectionAndRow(woDesc, zoneId) {
+        const descUpper = (woDesc || '').toUpperCase();
+        
+        // 1. Ongoing Constructions
+        if (zoneId === 'OTW') {
+            return { section: sections.ongoing, rowKey: "NMA OTW SITE" };
+        }
+        if (zoneId === 'Supply-School') {
+            return { section: sections.ongoing, rowKey: "LOGISTICS MANAGEMENT SCHOOL" };
+        }
+        
+        // 2. Workshop
+        if (zoneId === 'Carpentry-Shop') {
+            return { section: sections.workshop, rowKey: "CARPENTRY W/S" };
+        }
+        if (zoneId === 'Paint-Workshop') {
+            return { section: sections.workshop, rowKey: "PAINT W/S" };
+        }
+        if (zoneId === 'Signwriter') {
+            return { section: sections.workshop, rowKey: "SIG WRITER W/S" };
+        }
+        if (zoneId === 'Welding-Shop') {
+            return { section: sections.workshop, rowKey: "WELDING W/S" };
+        }
+        if (zoneId === 'Concrete-Precast') {
+            return { section: sections.workshop, rowKey: "PUMP HOUSE" };
+        }
+        if (zoneId === 'Aluminum-Work-Shop') {
+            return { section: sections.workshop, rowKey: "ALUMINUM W/S" };
+        }
+        if (zoneId === 'Blacksmith') {
+            return { section: sections.workshop, rowKey: "BLACK SMITHY" };
+        }
+        
+        // 3. Zones A-G
+        if (zoneId === 'A-Zone') {
+            const rowKey = descUpper.includes('NAVY HOUSE') || descUpper.includes('NAVY-HOUSE') || descUpper.includes('NAVYHOUSE')
+                ? "RENOVATION WORK OF NAVY HOUSE ACCMADAICION"
+                : "DAY TO DAY BASE MAINTENANCE WORK";
+            return { section: sections.zones.subsections["A"], rowKey };
+        }
+        if (zoneId === 'B-Zone') {
+            let rowKey = "DAY TO DAY BASE MAINTENANCE WORK";
+            if (descUpper.includes('SENIOR SAILOR MESS') || descUpper.includes('TISSA MESS')) {
+                rowKey = "RENOVATION WORK OF SENIOR SAILOR MESS AT SLNS TISSA";
+            } else if (descUpper.includes('MAIN GATE') || descUpper.includes('VEHICLE PARK') || descUpper.includes('RATHNA')) {
+                rowKey = "RENOVATION WORKS OF MAIN GATE, VEHICLE PARK IN SSSO (D) AND RATHNA SECURITY POINT AT SLN DOCKYARD";
+            } else if (descUpper.includes('HOSPITAL')) {
+                rowKey = "HOSPITAL RENOVATION";
+            } else if (descUpper.includes('GOLF') || descUpper.includes('GREEN FENCE') || descUpper.includes('FENCE')) {
+                rowKey = "GOLF HOTEL GREEN FENCE";
+            } else if (descUpper.includes('HORSE') || descUpper.includes('STABLE') || descUpper.includes('අස්තාලය')) {
+                rowKey = "HORSE STABLE (අස්තාලය)";
+            }
+            return { section: sections.zones.subsections["B"], rowKey };
+        }
+        if (zoneId === 'C-Zone') {
+            let rowKey = "DAY TO DAY BASE MAINTENANCE WORK";
+            if (descUpper.includes('PAYTON TERRACE') && descUpper.includes('07-08')) {
+                rowKey = "PAYTON TERRACE 07-08 TOILET BLOCK";
+            } else if (descUpper.includes('PAYTON TERRACE')) {
+                rowKey = "PAYTON TERRACE TOILET BLOCK";
+            } else if (descUpper.includes('DURANTHAKASAN-A01') || descUpper.includes('A-01')) {
+                rowKey = "NEW DURANTHAKASAN-A01";
+            } else if (descUpper.includes('DURANTHAKASAN-18') || descUpper.includes('28') || descUpper.includes('18')) {
+                rowKey = "DURANTHAKASAN-18";
+            } else if (descUpper.includes('WATER LOW') || descUpper.includes('EXTERNAL WALL') || descUpper.includes('RUBBLE')) {
+                rowKey = "WATER LOW EXTERNAL WALL RUBBLE WORK";
+            }
+            return { section: sections.zones.subsections["C"], rowKey };
+        }
+        if (zoneId === 'D-Zone') {
+            let rowKey = "DAY TO DAY BASE MAINTENANCE WORK";
+            if (descUpper.includes('RETAINING') || descUpper.includes('RUBBLE FILLING') || descUpper.includes('6X9')) {
+                rowKey = "RETAINING WALL NEAR POWER HOUSE";
+            } else if (descUpper.includes('ROOF') || descUpper.includes('ADMIN BUILDING') || descUpper.includes('ROOFING')) {
+                rowKey = "RENOVATION OF ROOF AT COMMAD ADMINISTRATIVE BUILDING";
+            }
+            return { section: sections.zones.subsections["D"], rowKey };
+        }
+        if (zoneId === 'E-Zone') {
+            return { section: sections.zones.subsections["E"], rowKey: "DAY TO DAY BASE MAINTENANCE WORK" };
+        }
+        if (zoneId === 'FH-Zone') {
+            let rowKey = "DAY TO DAY BASE MAINTENANCE WORK";
+            if (descUpper.includes('ALL STORES') || descUpper.includes('TUNNELS') || descUpper.includes('STORES REPAIR') || descUpper.includes('NAD')) {
+                rowKey = "RENOVATION WORKS OF ALL STORES, TUNNELS AND WORKSHOPS AT NAD";
+            } else if (descUpper.includes('STOREYARD') || descUpper.includes('CCED')) {
+                rowKey = "RENOVATION WORKS OF STOREYARD OF CCED (E) AT SLN DOCKYARD";
+            }
+            return { section: sections.zones.subsections["FH"], rowKey };
+        }
+        if (zoneId === 'Genaral-Zone') {
+            let rowKey = "DAY TO DAY BASE MAINTENANCE WORK";
+            if (descUpper.includes('ACCESS ROAD TO FD') || descUpper.includes('FD ACCESS PIER') || descUpper.includes('කොන්ක්‍රීට්')) {
+                rowKey = "CONSTRUCTION OF ACCESS ROAD TO FD ACCESS PIER-(පාරුතොටුපල කොන්ක්‍රීට්)";
+            } else if (descUpper.includes('EXISTING BUILDING') || descUpper.includes('DSS MESS') || descUpper.includes('FD MESS')) {
+                rowKey = "RENOVATION OF EXISTING BUILDING FOR DSS MESS AT FD-මෙස්";
+            } else if (descUpper.includes('F/DK') || descUpper.includes('FLOATING DOCK') || descUpper.includes('ACCOMADATION')) {
+                rowKey = "F/DK";
+            } else if (descUpper.includes('WATER SUMP')) {
+                rowKey = "CONSTRUCTION OF WATER SUMP AT FD";
+            } else if (descUpper.includes('PUMP HOUSE')) {
+                rowKey = "CONSTRUCTION OF PUMP HOUSE AT FD";
+            } else if (descUpper.includes('WATER SUPPLY') || descUpper.includes('DISTRIBUTION') || descUpper.includes('ජල නල')) {
+                rowKey = "ESTABLISHMENT OF WATER SUPPLY AND DISTRIBUTION SYSTEM FOR FD--ජල නල පද්ධතිය";
+            } else if (descUpper.includes('OSTURNBURG') || descUpper.includes('RIDGE') || descUpper.includes('බැම්මපාර')) {
+                rowKey = "RENOVATION OF ACCESS ROAD DSS TO OSTURNBURG RIDGE-(බැම්මපාර)";
+            } else if (descUpper.includes('OFFICE COMPLE') || descUpper.includes('OFFICE COMPLEX')) {
+                rowKey = "OFFICE COMPLE";
+            } else if (descUpper.includes('GUIDE PIER')) {
+                rowKey = "EXTENSION GUIDE OF GUIDE PIER";
+            }
+            return { section: sections.zones.subsections["G"], rowKey };
+        }
+
+        // 4. Others Duty
+        if (zoneId === 'Admin-&-Staff-Duties') {
+            let rowKey = "ADMING OFFICE";
+            if (descUpper.includes('ATTENDING') || descUpper.includes('ADMIN OFFICE') || descUpper.includes('MAKING ATTENDING')) {
+                rowKey = "ADMING OFFICE";
+            } else if (descUpper.includes('TOOL STORES') || descUpper.includes('ගබඩාව')) {
+                rowKey = "TOOL STORES";
+            } else if (descUpper.includes('JOB CARD')) {
+                rowKey = "JOB CARD";
+            } else if (descUpper.includes('BALANCE STORES')) {
+                rowKey = "BALANCE STORES";
+            } else if (descUpper.includes('MATERIAL OFFICE')) {
+                rowKey = "MATERIAL OFFICE";
+            } else if (descUpper.includes('TEA MAKER') || descUpper.includes('MESS MAN') || descUpper.includes('T/M')) {
+                rowKey = "TEA MAKER & MESS MAN";
+            } else if (descUpper.includes('AGRICULTURE') || descUpper.includes('LANDSCAPE') || descUpper.includes('GARDEN')) {
+                rowKey = "AGRICULTURE AND LANDSCAPE DUTY";
+            } else if (descUpper.includes('MAIN GATE') || descUpper.includes('SICK SAILORS') || descUpper.includes('GATE DUTY')) {
+                rowKey = "MAIN GATE DUTY (SICK SAILORS)";
+            } else if (descUpper.includes('LOADING TEAM') || descUpper.includes('LODING') || descUpper.includes('LOADING')) {
+                rowKey = "MATERIAL LOADING TEAM";
+            } else if (descUpper.includes('DUMPER') || descUpper.includes('TRACTOR') || descUpper.includes('VEHICLE')) {
+                rowKey = "DUMPER & TRACTOR";
+            } else if (descUpper.includes('SQUAD') || descUpper.includes('WATER TOWER')) {
+                rowKey = "VEHICKLE SQUAD & WATER TOWER";
+            } else if (descUpper.includes('REDUSE STORES') || descUpper.includes('REDUCE')) {
+                rowKey = "REDUSE STORES";
+            } else if (descUpper.includes('SD OFFICE') || descUpper.includes('SD')) {
+                rowKey = "SD OFFICE";
+            } else if (descUpper.includes('AUDIT')) {
+                rowKey = "AUDIT TEAM";
+            }
+            return { section: sections.othersDuty, rowKey };
+        }
+
+        // 5. Other Bases
+        if (zoneId === 'Other-Base') {
+            let rowKey = "SLNS TISSA";
+            if (descUpper.includes('SOBER') || descUpper.includes('SOBA')) {
+                rowKey = "SOBER ISLAND";
+            } else if (descUpper.includes('NAD')) {
+                rowKey = "NAD";
+            } else if (descUpper.includes('TISSA') && descUpper.includes('ANDANMKULAM')) {
+                rowKey = "SLNS TISSA FOR ANDANMKULAM";
+            } else if (descUpper.includes('TISSA') && descUpper.includes('NALP')) {
+                rowKey = "SLNS TISSA / (NALP)";
+            } else if (descUpper.includes('MAHAWALI') || descUpper.includes('OCEAN')) {
+                rowKey = "SLNS MAHAWALI";
+            } else if (descUpper.includes('VIJAYABA')) {
+                rowKey = "SLNS VIJAYABA";
+            } else if (descUpper.includes('VIDURA')) {
+                rowKey = "SLNS VIDURA";
+            } else if (descUpper.includes('PARAKUMBA')) {
+                rowKey = "SLNS PARAKUMBA";
+            } else if (descUpper.includes('LANKAPATUNA')) {
+                rowKey = "SLNS LANKAPATUNA";
+            } else if (descUpper.includes('WALAGAMBA')) {
+                rowKey = "SLNS WALAGAMBA";
+            } else if (descUpper.includes('KASHYAPA')) {
+                rowKey = "SLNS KASHYAPA";
+            } else if (descUpper.includes('GOKANNA')) {
+                rowKey = "SLNS GOKANNA";
+            } else if (descUpper.includes('RANWALI')) {
+                rowKey = "SLNS RANWALI";
+            } else if (descUpper.includes('GOTABAYA')) {
+                rowKey = "SLNS GOTABAYA";
+            } else if (descUpper.includes('SBS')) {
+                rowKey = "SBS";
+            } else if (descUpper.includes('NMA')) {
+                rowKey = "NMA";
+            }
+            return { section: sections.otherBases, rowKey };
+        }
+
+        // 6. Social Responsible Works
+        if (zoneId === 'Out-Project' || zoneId === 'Housing-Project') {
+            if (descUpper.includes('SOBER') || descUpper.includes('SOBA')) {
+                return { section: sections.otherBases, rowKey: "SOBER ISLAND" };
+            }
+            
+            let rowKey = "NELUGALA VIHARAYA";
+            if (descUpper.includes('RANGIRI') || descUpper.includes('ULPATHA') || descUpper.includes('GOMARANKADAWALA')) {
+                rowKey = "RANGIRI ULPATHA RAJAMAHA VIHARAYA - GOMARANKADAWALA";
+            } else if (descUpper.includes('ARISIMALE')) {
+                rowKey = "ARISIMALE ARANYA SENASANYA";
+            } else if (descUpper.includes('RANMADUWA')) {
+                rowKey = "RANMADUWA RAJAMAHAVIHARAYA";
+            } else if (descUpper.includes('NELUGALA')) {
+                rowKey = "NELUGALA VIHARAYA";
+            } else if (descUpper.includes('KUTTIYARAMA')) {
+                rowKey = "KUTTIYARAMA MAHA VIHARYA";
+            } else if (descUpper.includes('TECHNICAL COLLEGE') || descUpper.includes('CLEAN SRI LANKA')) {
+                rowKey = "TECHNICAL COLLEGE TRINCOMALEE (CLEAN SRI LANKA)";
+            } else if (descUpper.includes('SLNS MAHAWALI (OCEAN UNIVERSITY)')) {
+                rowKey = "SLNS MAHAWALI (ocean university)";
+            } else if (descUpper.includes('KIRTHISHINGHA') || descUpper.includes('KEERTHISINGHE')) {
+                rowKey = "LME DG KIRTHISHINGHA VAS 67389/PROJECT";
+            } else if (descUpper.includes('BANDARA')) {
+                rowKey = "W/COM BANDARA WXC 109592";
+            } else if (descUpper.includes('WIJERATHNE') || descUpper.includes('WIJERATHNA')) {
+                rowKey = "HOUSING PROJECT LCDR KASM WIJERATHNA";
+            } else if (descUpper.includes('SAMARASINGHE') || descUpper.includes('SAMARASINHA')) {
+                rowKey = "LME BGLE SAMARASINHA";
+            } else if (descUpper.includes('CHANDRAPALA') || descUpper.includes('MEDIRIGIRIYA')) {
+                rowKey = "HOUSING PROJECT LME CHANDRAPALA (MEDIRIGIRIYA)";
+            }
+            return { section: sections.socialResponsible, rowKey };
+        }
+
+        // Default fallback to day-to-day base maintenance in A-Zone
+        return { section: sections.zones.subsections["A"], rowKey: "DAY TO DAY BASE MAINTENANCE WORK" };
+    }
+
+    // 3. Process allocations and categorize sailors
+    activeAllocations.forEach(a => {
+        const sailor = store.sailors.find(s => String(s.id) === String(a.sailor_id) || String(s._fbKey) === String(a.sailor_id));
+        const wo = store.workOrders.find(w => String(w.id) === String(a.work_order_id) || String(w._fbKey) === String(a.work_order_id));
+        
+        if (sailor && wo) {
+            const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
+            const { section, rowKey } = getSectionAndRow(wo.description, wo.zone_id);
+            
+            if (section && section.rows && section.rows[rowKey]) {
+                const targetRow = section.rows[rowKey];
+                if (isVss) {
+                    targetRow.vss[tradeIdx]++;
+                } else {
+                    targetRow.reg[tradeIdx]++;
+                }
+            }
+        }
+    });
+
+    // 4. Process explicit leaves/sick statuses from sailorsDB
+    store.sailors.forEach(sailor => {
+        const isAllocated = activeAllocations.some(a => String(a.sailor_id) === String(sailor.id) || String(a.sailor_id) === String(sailor._fbKey));
+        
+        if (!isAllocated && (sailor.attendance === 'Leave' || sailor.attendance === 'Sick')) {
+            const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
+            let rowKey = "LEAVE & WEEKEND DOKYARD";
+            if (sailor.attendance === 'Sick') {
+                rowKey = "SICK REPORT";
+            }
+            
+            const targetRow = sections.leaveSick.rows[rowKey];
+            if (targetRow) {
+                if (isVss) {
+                    targetRow.vss[tradeIdx]++;
+                } else {
+                    targetRow.reg[tradeIdx]++;
+                }
+            }
+        }
+    });
+
+    // 5. Build and render the table rows with subtotals and grand totals
+    let tableHtml = '';
+
+    // Columns counters helper
+    function getColumnsSum(rowsArray) {
+        const sums = {
+            vss: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+            reg: [0, 0, 0, 0],
+            vssSub: 0,
+            regSub: 0,
+            fullTotal: 0
+        };
+        rowsArray.forEach(r => {
+            r.vssSub = r.vss.reduce((sum, val) => sum + val, 0);
+            r.regSub = r.reg.reduce((sum, val) => sum + val, 0);
+            r.fullTotal = r.vssSub + r.regSub;
+            
+            r.vss.forEach((val, idx) => sums.vss[idx] += val);
+            r.reg.forEach((val, idx) => sums.reg[idx] += val);
+            sums.vssSub += r.vssSub;
+            sums.regSub += r.regSub;
+            sums.fullTotal += r.fullTotal;
+        });
+        return sums;
+    }
+
+    const columnGrandTotals = {
+        vss: [0, 0, 0, 0, 0, 0, 0, 0, 0],
+        reg: [0, 0, 0, 0],
+        vssSub: 0,
+        regSub: 0,
+        fullTotal: 0
+    };
+
+    function appendSectionToTable(sectionObj) {
+        const rowsList = Object.values(sectionObj.rows);
+        const sums = getColumnsSum(rowsList);
+        
+        tableHtml += `
+            <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
+                <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">${sectionObj.title}</td>
+            </tr>
+        `;
+        
+        rowsList.forEach(r => {
+            tableHtml += `
+                <tr class="hover:bg-slate-50 border-b border-slate-100 text-center">
+                    <td class="px-3 py-1.5 text-left text-slate-700 font-medium">${r.description}</td>
+                    ${r.vss.map(val => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ''}</td>`).join('')}
+                    <td class="px-1 py-1.5 bg-slate-50 font-bold border-l-2 border-r-2 border-slate-200">${r.vssSub || ''}</td>
+                    ${r.reg.map(val => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ''}</td>`).join('')}
+                    <td class="px-1 py-1.5 bg-slate-50 font-bold border-l-2 border-r border-slate-200">${r.regSub || ''}</td>
+                    <td class="px-2 py-1.5 bg-teal-50/50 font-bold text-slate-800 border-l border-slate-300">${r.fullTotal || ''}</td>
+                </tr>
+            `;
+        });
+        
+        tableHtml += `
+            <tr class="bg-slate-50 font-bold text-center border-b-2 border-slate-300">
+                <td class="px-3 py-2 text-left uppercase text-[10px]">SUB TOTAL</td>
+                ${sums.vss.map(val => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ''}</td>`).join('')}
+                <td class="px-1 py-2 bg-slate-100/80 border-l-2 border-r-2 border-slate-300">${sums.vssSub || ''}</td>
+                ${sums.reg.map(val => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ''}</td>`).join('')}
+                <td class="px-1 py-2 bg-slate-100/80 border-l-2 border-r border-slate-300">${sums.regSub || ''}</td>
+                <td class="px-2 py-2 bg-teal-100/30 text-teal-800 border-l border-slate-300">${sums.fullTotal || ''}</td>
+            </tr>
+        `;
+        
+        sums.vss.forEach((val, idx) => columnGrandTotals.vss[idx] += val);
+        sums.reg.forEach((val, idx) => columnGrandTotals.reg[idx] += val);
+        columnGrandTotals.vssSub += sums.vssSub;
+        columnGrandTotals.regSub += sums.regSub;
+        columnGrandTotals.fullTotal += sums.fullTotal;
+    }
+
+    // 1. Ongoing Constructions
+    appendSectionToTable(sections.ongoing);
+    
+    // 2. Workshop
+    appendSectionToTable(sections.workshop);
+    
+    // 3. Zones (A-G grouped under main ZONE header)
+    tableHtml += `
+        <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
+            <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">ZONE</td>
+        </tr>
+    `;
+    
+    const zoneRowsList = [];
+    Object.values(sections.zones.subsections).forEach(sub => {
+        const subRows = Object.values(sub.rows);
+        const subSums = getColumnsSum(subRows);
+        
+        tableHtml += `
+            <tr class="bg-slate-50 font-bold border-b border-slate-200 text-[10px] text-slate-600">
+                <td colspan="17" class="px-4 py-1.5 pl-6">${sub.title}</td>
+            </tr>
+        `;
+        
+        subRows.forEach(r => {
+            tableHtml += `
+                <tr class="hover:bg-slate-50 border-b border-slate-100 text-center">
+                    <td class="px-3 py-1.5 pl-8 text-left text-slate-700 font-medium">${r.description}</td>
+                    ${r.vss.map(val => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ''}</td>`).join('')}
+                    <td class="px-1 py-1.5 bg-slate-50/50 font-bold border-l-2 border-r-2 border-slate-200">${r.vssSub || ''}</td>
+                    ${r.reg.map(val => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ''}</td>`).join('')}
+                    <td class="px-1 py-1.5 bg-slate-50/50 font-bold border-l-2 border-r border-slate-200">${r.regSub || ''}</td>
+                    <td class="px-2 py-1.5 bg-teal-50/30 font-bold text-slate-800 border-l border-slate-300">${r.fullTotal || ''}</td>
+                </tr>
+            `;
+            zoneRowsList.push(r);
+        });
+        
+        tableHtml += `
+            <tr class="bg-slate-50 font-semibold text-center border-b border-slate-200 text-slate-600">
+                <td class="px-3 py-1.5 pl-8 text-left uppercase text-[9px]">${sub.title} FULL TOTAL</td>
+                ${subSums.vss.map(val => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ''}</td>`).join('')}
+                <td class="px-1 py-1.5 bg-slate-100/50 border-l-2 border-r-2 border-slate-200">${subSums.vssSub || ''}</td>
+                ${subSums.reg.map(val => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ''}</td>`).join('')}
+                <td class="px-1 py-1.5 bg-slate-100/50 border-l-2 border-r border-slate-200">${subSums.regSub || ''}</td>
+                <td class="px-2 py-1.5 bg-teal-50/50 border-l border-slate-300">${subSums.fullTotal || ''}</td>
+            </tr>
+        `;
+    });
+    
+    const zoneMainSums = getColumnsSum(zoneRowsList);
+    tableHtml += `
+        <tr class="bg-slate-100 font-bold text-center border-b-2 border-slate-300 text-slate-800">
+            <td class="px-3 py-2 text-left uppercase text-[10px] pl-6">ZONE TOTAL SUB TOTAL</td>
+            ${zoneMainSums.vss.map(val => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ''}</td>`).join('')}
+            <td class="px-1 py-2 bg-slate-200/50 border-l-2 border-r-2 border-slate-300">${zoneMainSums.vssSub || ''}</td>
+            ${zoneMainSums.reg.map(val => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ''}</td>`).join('')}
+            <td class="px-1 py-2 bg-slate-200/50 border-l-2 border-r border-slate-300">${zoneMainSums.regSub || ''}</td>
+            <td class="px-2 py-2 bg-teal-100/40 text-teal-800 border-l border-slate-300">${zoneMainSums.fullTotal || ''}</td>
+        </tr>
+    `;
+    
+    zoneMainSums.vss.forEach((val, idx) => columnGrandTotals.vss[idx] += val);
+    zoneMainSums.reg.forEach((val, idx) => columnGrandTotals.reg[idx] += val);
+    columnGrandTotals.vssSub += zoneMainSums.vssSub;
+    columnGrandTotals.regSub += zoneMainSums.regSub;
+    columnGrandTotals.fullTotal += zoneMainSums.fullTotal;
+
+    // 4. Others Duty
+    appendSectionToTable(sections.othersDuty);
+    
+    // 5. Other Bases
+    appendSectionToTable(sections.otherBases);
+    
+    // 6. Social Responsible Works
+    appendSectionToTable(sections.socialResponsible);
+    
+    // 7. Temporary Draft
+    appendSectionToTable(sections.temporaryDraft);
+    
+    // 8. Leave & Attendance
+    appendSectionToTable(sections.leaveSick);
+
+    // Render Grand Total Row at the absolute bottom
+    tableHtml += `
+        <tr class="bg-slate-900 text-white font-extrabold text-center text-sm border-t-4 border-slate-800">
+            <td class="px-3 py-3 text-left uppercase">GRAND TOTAL</td>
+            ${columnGrandTotals.vss.map(val => `<td class="px-0.5 py-3 border-l border-slate-800">${val || ''}</td>`).join('')}
+            <td class="px-1 py-3 bg-slate-800 border-l-2 border-r-2 border-slate-800">${columnGrandTotals.vssSub || ''}</td>
+            ${columnGrandTotals.reg.map(val => `<td class="px-0.5 py-3 border-l border-slate-800">${val || ''}</td>`).join('')}
+            <td class="px-1 py-3 bg-slate-800 border-l-2 border-r border-slate-800">${columnGrandTotals.regSub || ''}</td>
+            <td class="px-2 py-3 bg-teal-800 text-teal-100 border-l border-slate-800">${columnGrandTotals.fullTotal || ''}</td>
+        </tr>
+    `;
+
+    document.getElementById('summaryMatrixTableBody').innerHTML = tableHtml;
+}
+
+function exportSummaryCsv() {
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    const table = document.getElementById('summaryMatrixTable');
+    if (!table) return;
+    
+    let csv = [];
+    csv.push(`Date: ${dateVal}`);
+    csv.push('');
+    
+    const rows = table.querySelectorAll('tr');
+    rows.forEach(tr => {
+        let cols = tr.querySelectorAll('th, td');
+        let rowData = [];
+        cols.forEach(col => {
+            let text = col.innerText.trim().replace(/,/g, ';').replace(/\r?\n/g, ' ');
+            rowData.push(`"${text}"`);
+        });
+        csv.push(rowData.join(','));
+    });
+    
+    const csvContent = "\uFEFF" + csv.join("\n"); // Include BOM for proper Excel UTF-8 encoding
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const encodedUri = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Duties_Summary_${dateVal}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+function printSummary() {
+    window.print();
 }
 
 function openLmdExportModal(action) {
