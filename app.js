@@ -5422,30 +5422,70 @@ function buildEstimatePrintHTML(est) {
     </div>`;
 }
 
-function printEstimatesByIds(ids) {
+function printEstimatesByIds(ids, settings = null) {
     // Only print estimates belonging to the current zone
     const ests = store.estimates.filter(e => ids.includes(e.id) && (!e.zone_id || e.zone_id === store.currentZone));
     if (ests.length === 0) { showToast('No estimates found for this zone to print', 'error'); return; }
 
-    const sheets = ests.map(e => buildEstimatePrintHTML(e)).join('<div style="page-break-after:always;"></div>');
+    let sheetsHtml = '';
+    let customCSS = '';
+
+    if (settings && settings.isTiled) {
+        // Tiled: 2 estimates per A4 portrait page
+        customCSS = `
+            @page { size: A4 portrait; margin: 10mm; }
+            body { margin: 0; }
+            .est-sheet { 
+                width: 100%; 
+                height: 135mm; /* Roughly half of A4 printable height (297-20 = 277. Half = 138.5) */
+                margin-bottom: 5mm; 
+                padding: 0;
+                box-sizing: border-box;
+                overflow: hidden;
+            }
+            .html-page-break { page-break-after: always; }
+        `;
+        sheetsHtml = ests.map((e, i) => {
+            let html = buildEstimatePrintHTML(e);
+            if ((i + 1) % 2 === 0 && i !== ests.length - 1) {
+                html += '<div class="html-page-break"></div>';
+            }
+            return html;
+        }).join('');
+    } else {
+        // Normal printing
+        sheetsHtml = ests.map(e => buildEstimatePrintHTML(e)).join('<div class="html-page-break"></div>');
+        
+        let pSize = 'A4';
+        let pOri = 'portrait';
+        if (settings) {
+            pSize = settings.pageSize === 'Custom' ? 'A4' : settings.pageSize;
+            pOri = settings.orientation;
+        }
+        
+        customCSS = `
+            @page { size: ${pSize} ${pOri}; margin: 10mm 12mm; }
+            body { margin: 0; }
+            .est-sheet { width: 100%; margin: 0; padding: 0; }
+            .html-page-break { page-break-after: always; }
+        `;
+    }
+
     const win = window.open('', '_blank');
     win.document.write(`<!DOCTYPE html>
 <html><head><title>NCW Estimate Print</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; }
-  .est-sheet { width: 185mm; margin: 0 auto; padding: 10mm 0; }
   .est-table { width: 100%; border-collapse: collapse; font-size: 10px; }
   .est-table th { border: 1px solid #555; padding: 4px 5px; background: #e2e8f0; text-align: left; font-size: 10px; }
   .est-table td { border: 1px solid #555; padding: 3px 5px; font-size: 10px; }
   .est-table tfoot td { background: #f1f5f9; font-weight: bold; }
   @media print {
-    @page { size: A4 portrait; margin: 10mm 12mm; }
-    body { margin: 0; }
-    .est-sheet { width: 100%; margin: 0; padding: 0; }
+      ${customCSS}
   }
 </style></head>
-<body>${sheets}</body></html>`);
+<body>${sheetsHtml}</body></html>`);
     win.document.close();
     win.focus();
     setTimeout(() => { win.print(); }, 500);
@@ -5462,12 +5502,18 @@ function exportEstimatesToPDFByIds(ids) {
 
     showToast('Generating PDF, please wait...', 'info');
 
-    // Create a container (not attached to the body)
+    // Create a container attached to the body (visible but covering everything temporarily)
+    // This is the ONLY reliable way to ensure html2canvas doesn't clip on different viewports
     const tempDiv = document.createElement('div');
+    tempDiv.style.position = 'absolute';
+    tempDiv.style.top = '0';
+    tempDiv.style.left = '0';
+    tempDiv.style.zIndex = '99999';
     tempDiv.style.width = '794px';
     tempDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
     tempDiv.style.color = '#000';
     tempDiv.style.backgroundColor = '#fff';
+    tempDiv.style.minHeight = '100vh';
     
     // buildEstimatePrintHTML(e) already returns <div class="est-sheet">...</div>
     tempDiv.innerHTML = ests.map(e => buildEstimatePrintHTML(e)).join('<div class="html2pdf__page-break"></div>');
@@ -5483,6 +5529,10 @@ function exportEstimatesToPDFByIds(ids) {
         .html2pdf__page-break { page-break-after: always; }
     `;
     tempDiv.appendChild(style);
+    document.body.appendChild(tempDiv);
+    
+    // Scroll to top to ensure html2canvas captures from the beginning
+    window.scrollTo(0, 0);
 
     const filename = ests.length === 1 
         ? `Estimate_${ests[0].estimate_number.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
@@ -5497,9 +5547,11 @@ function exportEstimatesToPDFByIds(ids) {
     };
     
     html2pdf().set(opt).from(tempDiv).save().then(() => {
+        document.body.removeChild(tempDiv);
         showToast('PDF exported successfully', 'success');
     }).catch((err) => {
         console.error("PDF Export Error:", err);
+        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
         showToast('PDF export failed, please try again', 'error');
     });
 }
@@ -5514,12 +5566,38 @@ function exportEstimatePDF() {
     exportEstimatesToPDFByIds([store.selectedEstimate]);
 }
 
-function bulkPrintEstimates() {
+function openBulkPrintSettings() {
     if (store.selectedEstimatesForPrint.length === 0) {
         showToast('Tick the estimates you want to print first', 'error');
         return;
     }
-    printEstimatesByIds([...store.selectedEstimatesForPrint]);
+    document.getElementById('bpsPageSize').value = 'A4';
+    document.getElementById('bpsOrientation').value = 'landscape';
+    document.getElementById('bpsTiled').checked = false;
+    toggleTiledPrintOption();
+    document.getElementById('bulkPrintSettingsModal').classList.remove('hidden');
+}
+
+function toggleTiledPrintOption() {
+    const orientation = document.getElementById('bpsOrientation').value;
+    const tiledContainer = document.getElementById('tiledOptionContainer');
+    
+    // Tiled option is only available if orientation is landscape AND there are 2 or more documents
+    if (orientation === 'landscape' && store.selectedEstimatesForPrint.length >= 2) {
+        tiledContainer.classList.remove('hidden');
+    } else {
+        tiledContainer.classList.add('hidden');
+        document.getElementById('bpsTiled').checked = false;
+    }
+}
+
+function executeBulkPrint() {
+    closeModal('bulkPrintSettingsModal');
+    const pageSize = document.getElementById('bpsPageSize').value;
+    const orientation = document.getElementById('bpsOrientation').value;
+    const isTiled = document.getElementById('bpsTiled').checked;
+    
+    printEstimatesByIds([...store.selectedEstimatesForPrint], { pageSize, orientation, isTiled });
 }
 
 function bulkExportEstimatesPDF() {
