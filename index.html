@@ -7,14 +7,14 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#0a1628">
     <link rel="manifest" href="manifest.json">
-    <title>NCW-PS v2.2 | Naval Civil Works Productivity Suite — SLN Trincomalee</title>
+    <title>CMSys v2.2 | CE Management System — SLN Trincomalee</title>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
     // =============================================
-    // NCW-PS DUAL FIREBASE CONFIGURATION
+    // CE Management System DUAL FIREBASE CONFIGURATION
     // =============================================
 
     // Firebase DB #1 — Sailors / Personnel (READ ONLY)
@@ -29,7 +29,7 @@
         appId:             "1:1093761746400:web:1984fad8019641b2ca5785"
     };
 
-    // Firebase DB #2 — NCW-PS Operations (READ + WRITE)
+    // Firebase DB #2 — CE Management System Operations (READ + WRITE)
     // Project: ncw-ps-operations
     const opsFirebaseConfig = {
         apiKey:            "AIzaSyCRgW9qcd42Ks_C56csNL85jXd5OsLD8q0",
@@ -45,11 +45,11 @@
     const sailorsApp = firebase.initializeApp(sailorsFirebaseConfig, 'sailors');
     const sailorsDB  = firebase.database(sailorsApp);
 
-    // Initialize Firebase App #2 — NCW-PS Operations DB (named 'operations')
+    // Initialize Firebase App #2 — CE Management System Operations DB (named 'operations')
     const opsApp = firebase.initializeApp(opsFirebaseConfig, 'operations');
     const opsDB  = firebase.database(opsApp);
 
-    console.log('✅ NCW-PS: Dual Firebase initialized');
+    console.log('✅ CMSys: Dual Firebase initialized');
     console.log('   DB#1 (Sailors):', sailorsFirebaseConfig.projectId);
     console.log('   DB#2 (Ops):', opsFirebaseConfig.projectId);
     </script>
@@ -457,8 +457,8 @@
                     <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
                 </div>
                 <div>
-                    <h2 class="text-xl font-bold text-white tracking-wide">NCW-PS Portal</h2>
-                    <p class="text-xs text-teal-400 font-medium">Naval Civil Works Management Hub</p>
+                    <h2 class="text-xl font-bold text-white tracking-wide">CE Management System Portal</h2>
+                    <p class="text-xs text-teal-400 font-medium">CE Management Hub</p>
                 </div>
             </div>
 
@@ -521,9 +521,9 @@
                     </div>
                     <div>
                         <div class="flex items-center gap-2">
-                            <h1 class="text-[15px] font-bold text-white tracking-wide">NCW-PS <span class="text-teal-400 font-extrabold">v2.2</span></h1>
+                            <h1 class="text-[15px] font-bold text-white tracking-wide">CMSys <span class="text-teal-400 font-extrabold">v2.2</span></h1>
                         </div>
-                        <p class="brand-tag leading-none hidden sm:block">Naval Civil Works · Miss Garrison · Trincomalee</p>
+                        <p class="brand-tag leading-none hidden sm:block">CE Management · Miss Garrison · Trincomalee</p>
                     </div>
                 </div>
 
@@ -909,7 +909,7 @@
                 <div class="flex justify-between items-center pb-2 border-b border-slate-800 mb-4">
                     <div>
                         <h2 class="text-md font-bold text-slate-900 uppercase">Daily Duties Summary Sheet</h2>
-                        <p class="text-[9px] text-slate-600">NCW-PS Trincomalee Dockyard</p>
+                        <p class="text-[9px] text-slate-600">CE Management System Trincomalee Dockyard</p>
                     </div>
                     <div class="text-right">
                         <p class="text-sm font-bold text-slate-900" id="printSummaryDate">2026.07.16</p>
@@ -1367,7 +1367,7 @@
                     <div class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl" style="background:linear-gradient(135deg,#0a1628,#152a55)">⚙️</div>
                     <div>
                         <h2 class="text-2xl font-bold text-slate-800">System Settings</h2>
-                        <p class="text-sm text-slate-500">Configure your NCW-PS system preferences</p>
+                        <p class="text-sm text-slate-500">Configure your CE Management System preferences</p>
                     </div>
                     <div class="ml-auto">
                         <span id="settingsSaveStatus" class="hidden text-xs text-green-600 font-medium bg-green-50 px-3 py-1.5 rounded-full">✓ Saved to Firebase</span>
@@ -1393,7 +1393,7 @@
                         <div class="grid grid-cols-1 gap-5 max-w-lg">
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">System Title</label>
-                                <input type="text" id="cfg-systemTitle" placeholder="NCW-PS v2.2" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('systemTitle',this.value)">
+                                <input type="text" id="cfg-systemTitle" placeholder="CMSys v2.2" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('systemTitle',this.value)">
                             </div>
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Station Name</label>
@@ -1679,7 +1679,7 @@
                     <div class="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center border border-teal-500/30 shadow-[0_0_10px_rgba(20,184,166,0.3)]">
                         <span class="text-teal-400 text-sm">⚓</span>
                     </div>
-                    <span class="font-black text-xs text-white tracking-widest uppercase">NCW-PS Portal</span>
+                    <span class="font-black text-xs text-white tracking-widest uppercase">CMSys Portal</span>
                 </div>
                 <button onclick="logoutProfile()" class="bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 font-bold px-3 py-1.5 rounded-xl text-xs transition-all flex items-center gap-1 cursor-pointer shadow-[0_0_10px_rgba(239,68,68,0.1)] hover:scale-105 active:scale-95">
                     🚪 Logout
@@ -3286,16 +3286,16 @@
     // Show Firebase connection status in console on load
     opsDB.ref('.info/connected').on('value', snap => {
         if (snap.val() === true) {
-            console.log('🔥 NCW-PS DB#2 (Operations): CONNECTED');
+            console.log('🔥 CMSys DB#2 (Operations): CONNECTED');
         } else {
-            console.warn('⚠️ NCW-PS DB#2 (Operations): DISCONNECTED - check internet/Firebase config');
+            console.warn('⚠️ CMSys DB#2 (Operations): DISCONNECTED - check internet/Firebase config');
         }
     });
     sailorsDB.ref('.info/connected').on('value', snap => {
         if (snap.val() === true) {
-            console.log('⚓ NCW-PS DB#1 (Sailors): CONNECTED');
+            console.log('⚓ CMSys DB#1 (Sailors): CONNECTED');
         } else {
-            console.warn('⚠️ NCW-PS DB#1 (Sailors): DISCONNECTED');
+            console.warn('⚠️ CMSys DB#1 (Sailors): DISCONNECTED');
         }
     });
     </script>
