@@ -540,6 +540,18 @@ function initOpsListeners() {
             on_charge_records:  item.on_charge_records  ? Object.values(item.on_charge_records)  : [],
             off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
         }));
+        
+        // Populate global datalist for materials
+        let dl = document.getElementById('inventoryDatalist');
+        if (!dl) {
+            dl = document.createElement('datalist');
+            dl.id = 'inventoryDatalist';
+            document.body.appendChild(dl);
+        }
+        dl.innerHTML = store.inventory.filter(i => i.category !== 'Tools').map(i => 
+            `<option value="${i.description}">${i.quantity || 0} ${i.deno || ''} @ Rs. ${formatCurrency(i.cost_per_unit)}</option>`
+        ).join('');
+        
         refreshCurrentView();
         console.log(`📦 DB#2: ${store.inventory.length} inventory items loaded`);
     });
@@ -3777,15 +3789,8 @@ function openAddMaterialToJobModal() {
     
     document.getElementById('matJobCardId').value = store.selectedJobCard;
     
-    // Populate inventory dropdown
-    document.getElementById('matFromInventory').innerHTML = '<option value="">-- Select from Inventory --</option>' +
-        store.inventory.filter(i => i.category !== 'Tools').map(i => 
-            `<option value="${i.id}" data-name="${i.description}" data-unit="${i.deno}" data-cost="${i.cost_per_unit}" data-qty="${i.quantity}">
-                ${i.description} (${i.quantity} ${i.deno} @ ${formatCurrency(i.cost_per_unit)})
-            </option>`
-        ).join('');
-    
     // Reset form
+    document.getElementById('matFromInventory').value = '';
     document.getElementById('matName').value = '';
     document.getElementById('matQuantity').value = '';
     document.getElementById('matCost').value = '';
@@ -3795,13 +3800,13 @@ function openAddMaterialToJobModal() {
 }
 
 function fillMaterialFromInventory() {
-    const select = document.getElementById('matFromInventory');
-    const option = select.selectedOptions[0];
+    const inputVal = document.getElementById('matFromInventory').value;
+    const item = store.inventory.find(i => i.description === inputVal && i.category !== 'Tools');
     
-    if (option && option.value) {
-        document.getElementById('matName').value = option.dataset.name;
-        document.getElementById('matUnit').value = option.dataset.unit;
-        document.getElementById('matCost').value = option.dataset.cost;
+    if (item) {
+        document.getElementById('matName').value = item.description;
+        document.getElementById('matUnit').value = item.deno;
+        document.getElementById('matCost').value = item.cost_per_unit || '';
         calculateMaterialTotal();
     }
 }
@@ -4741,12 +4746,11 @@ function addScopeMaterialRow(scopeId, data = null) {
     row.className = `scope-mat-row`;
     row.innerHTML = `
         <td class="px-2 py-1.5">
-            <select class="est-mat-select w-full px-2 py-1 border rounded text-xs" onchange="fillScopeMaterialFromInventory(${scopeId}, ${rowId})">
-                <option value="">Select...</option>
-                ${store.inventory.filter(i => i.category !== 'Tools').map(i => 
-                    `<option value="${i.id}" data-desc="${i.description}" data-unit="${i.deno}" data-cost="${i.cost_per_unit}" data-loc="${i.location}" ${data?.description === i.description ? 'selected' : ''}>${i.description}</option>`
-                ).join('')}
-            </select>
+            <input type="text" list="inventoryDatalist" class="est-mat-select w-full px-2 py-1 border rounded text-xs" 
+                   value="${data?.description || ''}" 
+                   placeholder="Search material..."
+                   onchange="fillScopeMaterialFromInventory(${scopeId}, ${rowId}, this.value)">
+            <input type="hidden" class="est-mat-id" value="${data?.id || ''}">
         </td>
         <td class="px-2 py-1.5"><input type="number" class="est-mat-qty w-full px-2 py-1 border rounded text-xs text-center" value="${data?.qty || ''}" onchange="updateEstimateTotals()"></td>
         <td class="px-2 py-1.5"><input type="text" class="est-mat-unit w-full px-2 py-1 border rounded text-xs text-center bg-slate-50" value="${data?.unit || ''}" readonly></td>
@@ -4758,16 +4762,23 @@ function addScopeMaterialRow(scopeId, data = null) {
     tbody.appendChild(row);
 }
 
-function fillScopeMaterialFromInventory(scopeId, rowId) {
+function fillScopeMaterialFromInventory(scopeId, rowId, desc) {
     const row = document.getElementById(`scopeMatRow-${scopeId}-${rowId}`);
     if (!row) return;
-    const select = row.querySelector('.est-mat-select');
-    const option = select.selectedOptions[0];
     
-    if (option && option.value) {
-        row.querySelector('.est-mat-unit').value = option.dataset.unit || '';
-        row.querySelector('.est-mat-cost').value = option.dataset.cost || '';
-        row.querySelector('.est-mat-avail').textContent = option.dataset.loc || '-';
+    const item = store.inventory.find(i => i.description === desc && i.category !== 'Tools');
+    
+    if (item) {
+        row.querySelector('.est-mat-id').value = item.id || item._fbKey || '';
+        row.querySelector('.est-mat-unit').value = item.deno || '';
+        row.querySelector('.est-mat-cost').value = item.cost_per_unit || '';
+        row.querySelector('.est-mat-avail').textContent = item.location || '-';
+        updateEstimateTotals();
+    } else {
+        row.querySelector('.est-mat-id').value = '';
+        row.querySelector('.est-mat-unit').value = '';
+        row.querySelector('.est-mat-cost').value = '';
+        row.querySelector('.est-mat-avail').textContent = '-';
         updateEstimateTotals();
     }
 }
@@ -4871,8 +4882,8 @@ function saveEstimate(event) {
         
         const materials = [];
         b.querySelectorAll(`#estScopeMaterialsBody-${sId} tr`).forEach(row => {
-            const select = row.querySelector('.est-mat-select');
-            const description = select.selectedOptions[0]?.text || '';
+            const matInput = row.querySelector('.est-mat-select');
+            const description = matInput?.value.trim() || '';
             if (!description || description === 'Select...') return;
             
             const item = {
