@@ -5492,7 +5492,7 @@ function exportEstimatesToPDFByIds(ids) {
         margin:       10,
         filename:     filename,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false },
+        html2canvas:  { scale: 2, useCORS: true, logging: false, windowWidth: 800, width: 750 },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     
