@@ -871,6 +871,8 @@ function switchView(view, preventPushState = false) {
 
 function changeZone() {
     store.currentZone = document.getElementById('zoneSelector').value;
+    store.selectedEstimate = null;
+    store.selectedEstimatesForPrint = [];
     applySettings();
     toggleViewsBasedOnZone();
     refreshCurrentView();
@@ -5328,8 +5330,16 @@ function buildEstimatePrintHTML(est) {
 
         sectionsHtml = `
             <table class="est-table" style="margin-top:10px;">
+                <colgroup>
+                    <col style="width:5%">
+                    <col style="width:39%">
+                    <col style="width:8%">
+                    <col style="width:8%">
+                    <col style="width:18%">
+                    <col style="width:22%">
+                </colgroup>
                 <thead>
-                    <tr><th>#</th><th>Material</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr>
+                    <tr><th>#</th><th>Material</th><th>Qty</th><th>Unit</th><th style="text-align:right;">Unit Cost</th><th style="text-align:right;">Total</th></tr>
                 </thead>
                 <tbody>${matRows}</tbody>
                 <tfoot>
@@ -5338,6 +5348,7 @@ function buildEstimatePrintHTML(est) {
             </table>
 
             <table class="est-table" style="margin-top:10px;">
+                <colgroup><col style="width:25%"><col style="width:15%"><col style="width:15%"><col style="width:45%"></colgroup>
                 <thead><tr><th>Trade / Role</th><th>Workers</th><th>Man-Days</th><th>Task Description</th></tr></thead>
                 <tbody>${labRows}</tbody>
                 <tfoot><tr><td colspan="2" style="text-align:right;"><b>Total Man-Days</b></td><td colspan="2" style="text-align:left; padding-left: 10px;"><b>${est.totalManDays || 0}</b></td></tr></tfoot>
@@ -5350,8 +5361,8 @@ function buildEstimatePrintHTML(est) {
         <div style="display:flex;align-items:center;justify-content:center;border-bottom:2.5px solid #000;padding-bottom:10px;margin-bottom:12px;">
             <img src="${window.location.href.split('?')[0].split('#')[0].replace('index.html', '')}navy_crest.jpg" style="height:55px;margin-right:15px;" alt="SLN Crest">
             <div style="text-align:left;">
-                <div style="font-size:16px;font-weight:800;letter-spacing:0.5px;color:#0f172a;">SRI LANKA NAVY — CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
-                <div style="font-size:11px;font-weight:bold;color:#475569;margin-top:2px;letter-spacing:0.5px;">${store.zones.find(z => z.id === (est.zone_id || store.currentZone))?.name || 'Naval Civil Works'} — Cost Estimate</div>
+                <div style="font-size:16px;font-weight:800;letter-spacing:0.5px;color:#0f172a;line-height:1.2;">SRI LANKA NAVY<br>CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
+                <div style="font-size:11px;font-weight:bold;color:#475569;margin-top:4px;letter-spacing:0.5px;">${store.zones.find(z => z.id === (est.zone_id || store.currentZone))?.name || 'Naval Civil Works'} — Cost Estimate</div>
             </div>
         </div>
         <table style="width:100%;font-size:11px;margin-bottom:6px;">
@@ -5402,21 +5413,23 @@ function buildEstimatePrintHTML(est) {
 }
 
 function printEstimatesByIds(ids) {
-    const ests = store.estimates.filter(e => ids.includes(e.id));
-    if (ests.length === 0) { showToast('Nothing selected to print', 'error'); return; }
+    // Only print estimates belonging to the current zone
+    const ests = store.estimates.filter(e => ids.includes(e.id) && (!e.zone_id || e.zone_id === store.currentZone));
+    if (ests.length === 0) { showToast('No estimates found for this zone to print', 'error'); return; }
 
     const sheets = ests.map(e => buildEstimatePrintHTML(e)).join('<div class="page-break"></div>');
     const win = window.open('', '_blank');
     win.document.write(`
         <html><head><title>NCW Estimate Print</title>
         <style>
-            body { font-family: Arial, sans-serif; color:#000; margin:0; padding:14px; }
-            .est-sheet { padding:6px 4px 14px; }
-            .est-table { width:100%; border-collapse:collapse; font-size:11px; }
-            .est-table th, .est-table td { border:1px solid #555; padding:3px 5px; }
-            .est-table thead th { background:#e5e7eb; }
+            body { font-family: Arial, sans-serif; color:#000; margin:0; padding:10mm 12mm; }
+            .est-sheet { padding:0 0 14px; max-width: 100%; box-sizing: border-box; }
+            .est-table { width:100%; border-collapse:collapse; font-size:10px; table-layout: fixed; }
+            .est-table th, .est-table td { border:1px solid #555; padding:3px 5px; overflow:hidden; }
+            .est-table thead th { background:#e5e7eb; font-size:10px; }
+            .est-table tfoot td { font-size:10px; }
             .page-break { page-break-after: always; }
-            @media print { @page { size:A4; margin:12mm; } }
+            @media print { @page { size:A4; margin:10mm 12mm; } body { padding:0; } }
         </style></head>
         <body>${sheets}</body></html>`);
     win.document.close();
@@ -5425,8 +5438,9 @@ function printEstimatesByIds(ids) {
 }
 
 function exportEstimatesToPDFByIds(ids) {
-    const ests = store.estimates.filter(e => ids.includes(e.id));
-    if (ests.length === 0) { showToast('Nothing selected to export', 'error'); return; }
+    // Only export estimates belonging to the current zone
+    const ests = store.estimates.filter(e => ids.includes(e.id) && (!e.zone_id || e.zone_id === store.currentZone));
+    if (ests.length === 0) { showToast('No estimates found for this zone to export', 'error'); return; }
     
     if (typeof html2pdf === 'undefined') {
         showToast('PDF library is loading, please try again in a few seconds.', 'error');
@@ -5439,15 +5453,18 @@ function exportEstimatesToPDFByIds(ids) {
     tempDiv.innerHTML = ests.map(e => `<div class="est-sheet">${buildEstimatePrintHTML(e)}</div>`).join('<div class="html2pdf__page-break"></div>');
     tempDiv.style.fontFamily = 'Arial, sans-serif';
     tempDiv.style.color = '#000';
-    tempDiv.style.padding = '14px';
-    tempDiv.style.width = '800px'; 
+    tempDiv.style.padding = '0';
+    tempDiv.style.width = '700px'; 
+    tempDiv.style.maxWidth = '100%'; 
     
     // Inject the necessary table styles for PDF
     const style = document.createElement('style');
     style.innerHTML = `
-        .est-table { width:100%; border-collapse:collapse; font-size:11px; }
-        .est-table th, .est-table td { border:1px solid #555; padding:3px 5px; }
+        .est-sheet { padding: 10px; width: 100%; box-sizing: border-box; }
+        .est-table { width:100%; border-collapse:collapse; font-size:10px; table-layout: fixed; word-wrap: break-word; }
+        .est-table th, .est-table td { border:1px solid #555; padding:3px 4px; word-wrap: break-word; }
         .est-table thead th { background:#e5e7eb; }
+        .html2pdf__page-break { page-break-after: always; }
     `;
     tempDiv.appendChild(style);
 
@@ -5459,7 +5476,7 @@ function exportEstimatesToPDFByIds(ids) {
         margin:       10,
         filename:     filename,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true },
+        html2canvas:  { scale: 2, useCORS: true, windowWidth: 800 },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     
