@@ -5480,6 +5480,14 @@ function exportEstimatesToPDFByIds(ids) {
     `;
     wrapper.appendChild(styleEl);
 
+    // Attach to DOM so html2canvas renders it fully without clipping.
+    // Position it at 0,0 but hide it behind everything else.
+    wrapper.style.position = 'absolute';
+    wrapper.style.left = '0';
+    wrapper.style.top = '0';
+    wrapper.style.zIndex = '-9999';
+    document.body.appendChild(wrapper);
+
     const filename = ests.length === 1 
         ? `Estimate_${ests[0].estimate_number.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
         : `Estimates_Bulk_Export.pdf`;
@@ -5488,13 +5496,16 @@ function exportEstimatesToPDFByIds(ids) {
         margin:       [10, 10, 10, 10],
         filename:     filename,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false, width: 794, windowWidth: 794 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: 794, width: 794 },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     
     html2pdf().set(opt).from(wrapper).save().then(() => {
+        document.body.removeChild(wrapper);
         showToast('PDF exported successfully', 'success');
-    }).catch(() => {
+    }).catch((err) => {
+        console.error("PDF Export Error:", err);
+        document.body.removeChild(wrapper);
         showToast('PDF export failed, please try again', 'error');
     });
 }
