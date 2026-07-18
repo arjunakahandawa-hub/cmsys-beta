@@ -5466,7 +5466,7 @@ function exportEstimatesToPDFByIds(ids) {
     // Build wrapper with inline styles (no class dependency)
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'width:794px;font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;';
-    wrapper.innerHTML = ests.map(e => buildEstimatePrintHTML(e)).join('<div style="page-break-after:always;height:1px;"></div>');
+    wrapper.innerHTML = ests.map(e => buildEstimatePrintHTML(e)).join('<div class="html2pdf__page-break"></div>');
     
     // Inject table styles into the wrapper
     const styleEl = document.createElement('style');
@@ -5476,14 +5476,9 @@ function exportEstimatesToPDFByIds(ids) {
         .est-table th { border: 1px solid #555 !important; padding: 4px 5px; background: #e2e8f0; text-align: left; }
         .est-table td { border: 1px solid #555 !important; padding: 3px 5px; }
         .est-table tfoot td { background: #f1f5f9; font-weight: bold; }
+        .html2pdf__page-break { page-break-after: always; }
     `;
     wrapper.appendChild(styleEl);
-
-    // Must be in DOM for html2canvas to measure correctly
-    wrapper.style.position = 'absolute';
-    wrapper.style.top = '-9999px';
-    wrapper.style.left = '0';
-    document.body.appendChild(wrapper);
 
     const filename = ests.length === 1 
         ? `Estimate_${ests[0].estimate_number.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
@@ -5498,10 +5493,8 @@ function exportEstimatesToPDFByIds(ids) {
     };
     
     html2pdf().set(opt).from(wrapper).save().then(() => {
-        document.body.removeChild(wrapper);
         showToast('PDF exported successfully', 'success');
     }).catch(() => {
-        document.body.removeChild(wrapper);
         showToast('PDF export failed, please try again', 'error');
     });
 }
