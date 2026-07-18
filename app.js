@@ -1605,21 +1605,45 @@ function updateCounters() {
     const isToday = dateVal === today;
 
     const assignedIds = new Set();
+    const naIds = new Set();
+    
+    // Helper to check if text contains NA keywords
+    const isNA = (text) => {
+        if (!text) return false;
+        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b)/i.test(text);
+    };
+
     if (isToday) {
         activeWo.forEach(wo => {
             if ((wo.status === 'Active' || wo.status === 'Pending') && wo.assigned) {
-                wo.assigned.forEach(id => assignedIds.add(String(id)));
+                if (isNA(wo.description) || isNA(wo.reference_no)) {
+                    wo.assigned.forEach(id => naIds.add(String(id)));
+                } else {
+                    wo.assigned.forEach(id => assignedIds.add(String(id)));
+                }
             }
         });
         activeJc.forEach(jc => {
             if ((jc.status === 'Active' || jc.status === 'Pending') && jc.assigned) {
-                jc.assigned.forEach(id => assignedIds.add(String(id)));
+                if (isNA(jc.description) || isNA(jc.title)) {
+                    jc.assigned.forEach(id => naIds.add(String(id)));
+                } else {
+                    jc.assigned.forEach(id => assignedIds.add(String(id)));
+                }
             }
         });
     } else {
         (store.dailyAllocations || []).forEach(alloc => {
             if (alloc.date === dateVal) {
-                assignedIds.add(String(alloc.sailor_id));
+                const wo = activeWo.find(w => String(w.id) === String(alloc.work_order_id));
+                const jc = activeJc.find(j => String(j.id) === String(alloc.work_order_id));
+                
+                if ((wo && (isNA(wo.description) || isNA(wo.reference_no))) || 
+                    (jc && (isNA(jc.description) || isNA(jc.title)))) {
+                    naIds.add(String(alloc.sailor_id));
+                } else {
+                    assignedIds.add(String(alloc.sailor_id));
+                }
             }
         });
     }
@@ -1627,7 +1651,9 @@ function updateCounters() {
     if (store.sailors) {
         store.sailors.forEach(s => {
             if (s.status !== 'Leave' && s.status !== 'Sick') {
-                if (assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey))) {
+                if (naIds.has(String(s.id)) || naIds.has(String(s._fbKey))) {
+                    s.status = 'NA';
+                } else if (assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey))) {
                     s.status = 'Assigned';
                 } else {
                     s.status = 'Available';
@@ -1651,9 +1677,13 @@ function updateCounters() {
 
     const available = store.sailors ? store.sailors.filter(s => s.status === 'Available').length : 0;
     const assigned = store.sailors ? store.sailors.filter(s => s.status === 'Assigned').length : 0;
-    document.getElementById('netForce').textContent = available + assigned;
+    const naCount = store.sailors ? store.sailors.filter(s => s.status === 'NA').length : 0;
+    
+    document.getElementById('netForce').textContent = available + assigned + naCount;
     document.getElementById('assignedCount').textContent = assigned;
     document.getElementById('availableCount').textContent = available;
+    const todayNaEl = document.getElementById('todayNaCount');
+    if (todayNaEl) todayNaEl.textContent = naCount;
 }
 
 function updatePendingEvals() {
