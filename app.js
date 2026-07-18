@@ -4834,9 +4834,9 @@ function addScopeMaterialRow(scopeId, data = null) {
                    placeholder="Search material...">
             <input type="hidden" class="est-mat-id" value="${data?.id || ''}">
         </td>
-        <td class="px-2 py-1.5"><input type="number" class="est-mat-qty w-full px-2 py-1 border rounded text-xs text-center" value="${data?.qty || ''}" onchange="updateEstimateTotals()"></td>
+        <td class="px-2 py-1.5"><input type="number" step="any" class="est-mat-qty w-full px-2 py-1 border rounded text-xs text-center" value="${data?.qty || ''}" onchange="updateEstimateTotals()"></td>
         <td class="px-2 py-1.5"><input type="text" class="est-mat-unit w-full px-2 py-1 border rounded text-xs text-center bg-slate-50" value="${data?.unit || ''}" readonly></td>
-        <td class="px-2 py-1.5"><input type="number" class="est-mat-cost w-full px-2 py-1 border rounded text-xs text-right" value="${data?.cost || ''}" onchange="updateEstimateTotals()"></td>
+        <td class="px-2 py-1.5"><input type="number" step="any" class="est-mat-cost w-full px-2 py-1 border rounded text-xs text-right" value="${data?.cost || ''}" onchange="updateEstimateTotals()"></td>
         <td class="px-2 py-1.5 text-right font-medium est-mat-total">${formatCurrency((data?.qty || 0) * (data?.cost || 0))}</td>
         <td class="px-2 py-1.5 text-center"><span class="est-mat-avail text-xxs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">${data?.availability || '-'}</span></td>
         <td class="px-2 py-1.5 text-center"><button type="button" onclick="removeScopeRow('scopeMatRow-${scopeId}-${rowId}')" class="text-red-500 hover:text-red-700 font-bold text-sm">×</button></td>
@@ -4896,8 +4896,8 @@ function addScopeLaborRow(scopeId, data = null) {
                 <option value="RW" ${data?.trade === 'RW' ? 'selected' : ''}>RW</option>
             </select>
         </td>
-        <td class="px-2 py-1.5"><input type="number" class="est-lab-workers w-full px-2 py-1 border rounded text-xs text-center" value="${data?.workers || 1}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-1.5"><input type="number" class="est-lab-days w-full px-2 py-1 border rounded text-xs text-center" value="${data?.manDays || ''}" onchange="updateEstimateTotals()"></td>
+        <td class="px-2 py-1.5"><input type="number" step="any" class="est-lab-workers w-full px-2 py-1 border rounded text-xs text-center" value="${data?.workers || 1}" onchange="updateEstimateTotals()"></td>
+        <td class="px-2 py-1.5"><input type="number" step="any" class="est-lab-days w-full px-2 py-1 border rounded text-xs text-center" value="${data?.manDays || ''}" onchange="updateEstimateTotals()"></td>
         <td class="px-2 py-1.5"><input type="text" class="est-lab-desc w-full px-2 py-1 border rounded text-xs" placeholder="Task description" value="${data?.taskDescription || data?.desc || ''}"></td>
         <td class="px-2 py-1.5 text-center"><button type="button" onclick="removeScopeRow('scopeLabRow-${scopeId}-${rowId}')" class="text-red-500 hover:text-red-700 font-bold text-sm">×</button></td>
     `;
