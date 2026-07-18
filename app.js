@@ -4732,18 +4732,24 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
     if (inputElement.hasAttribute('data-autocomplete-init')) return;
     inputElement.setAttribute('data-autocomplete-init', 'true');
     inputElement.setAttribute('autocomplete', 'off');
-    inputElement.removeAttribute('list'); // Remove native datalist
+    inputElement.removeAttribute('list');
 
-    const wrapper = document.createElement('div');
-    wrapper.className = 'relative w-full text-left';
-    inputElement.parentNode.insertBefore(wrapper, inputElement);
-    wrapper.appendChild(inputElement);
-
+    // Create a global dropdown if it doesn't exist for this input
     const dropdown = document.createElement('div');
-    dropdown.className = 'hidden absolute z-[100] w-[350px] bg-white border border-slate-300 rounded-lg shadow-xl max-h-60 overflow-y-auto mt-1 left-0 text-left';
-    wrapper.appendChild(dropdown);
+    dropdown.className = 'hidden absolute z-[9999] w-[350px] bg-white border border-slate-300 rounded-lg shadow-2xl max-h-60 overflow-y-auto text-left';
+    document.body.appendChild(dropdown);
 
     const closeDropdown = () => dropdown.classList.add('hidden');
+
+    const updatePosition = () => {
+        const rect = inputElement.getBoundingClientRect();
+        dropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
+        dropdown.style.left = `${rect.left + window.scrollX}px`;
+        // Ensure it doesn't overflow screen width
+        if (rect.left + 350 > window.innerWidth) {
+            dropdown.style.left = `${window.innerWidth - 360}px`;
+        }
+    };
 
     const renderResults = (query) => {
         const lowerQuery = query.toLowerCase();
@@ -4757,7 +4763,7 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
             
             if (!query || item.description.toLowerCase().includes(lowerQuery)) {
                 html += `<div class="px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-id="${item.id}" data-desc="${item.description}">
-                    <div class="text-sm font-medium text-slate-800">${item.description}</div>
+                    <div class="text-sm font-medium text-slate-800 leading-tight mb-1">${item.description}</div>
                     <div class="text-xs text-slate-500">${item.quantity || 0} ${item.deno || ''} @ Rs. ${formatCurrency(item.cost_per_unit)}</div>
                 </div>`;
                 count++;
@@ -4770,6 +4776,7 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
         }
         
         dropdown.innerHTML = html;
+        updatePosition();
         dropdown.classList.remove('hidden');
         
         dropdown.querySelectorAll('.autocomplete-item').forEach(el => {
@@ -4797,6 +4804,14 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
     inputElement.addEventListener('blur', () => {
         setTimeout(closeDropdown, 150);
     });
+    
+    // Update position on window resize or scroll
+    window.addEventListener('resize', () => {
+        if (!dropdown.classList.contains('hidden')) updatePosition();
+    });
+    document.addEventListener('scroll', () => {
+        if (!dropdown.classList.contains('hidden')) updatePosition();
+    }, true);
 }
 
 let scopeMatRowIdCounter = 0;
