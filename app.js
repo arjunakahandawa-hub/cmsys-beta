@@ -5464,7 +5464,7 @@ function exportEstimatesToPDFByIds(ids) {
 
     // Create a container (not attached to the body)
     const tempDiv = document.createElement('div');
-    tempDiv.style.width = '794px';
+    tempDiv.style.width = '750px';
     tempDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
     tempDiv.style.color = '#000';
     tempDiv.style.backgroundColor = '#fff';
@@ -5475,10 +5475,10 @@ function exportEstimatesToPDFByIds(ids) {
     // Inject the necessary table styles for PDF
     const style = document.createElement('style');
     style.innerHTML = `
-        .est-sheet { padding: 20px; width: 100%; box-sizing: border-box; }
-        .est-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+        .est-sheet { padding: 10px; width: 100%; box-sizing: border-box; }
+        .est-table { width: 100%; border-collapse: collapse; font-size: 10px; table-layout: fixed; word-wrap: break-word; }
         .est-table th { border: 1px solid #555; padding: 4px 5px; background: #e2e8f0; text-align: left; }
-        .est-table td { border: 1px solid #555; padding: 3px 5px; }
+        .est-table td { border: 1px solid #555; padding: 3px 5px; word-wrap: break-word; }
         .est-table tfoot td { background: #f1f5f9; font-weight: bold; }
         .html2pdf__page-break { page-break-after: always; }
     `;
