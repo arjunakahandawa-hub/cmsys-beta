@@ -1920,7 +1920,7 @@ function openNewWorkOrderModal() {
     });
     document.querySelector('.wo-trade-btn').className = 'wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white';
 
-    const isAdminStaff = store.currentZone === 'admin_staff_duties';
+    const isAdminStaff = isAdminStaffDuties(store.currentZone);
     
     // Elements to hide
     const typePriorityWrapper = document.getElementById('woTypePriorityWrapper');
