@@ -11,6 +11,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script>
     // =============================================
     // NCW-PS DUAL FIREBASE CONFIGURATION
@@ -1225,9 +1226,14 @@
                     <p class="text-slate-500">Material costs with availability • Labor requirements</p>
                 </div>
                 <div class="flex gap-3">
-                    <button onclick="bulkPrintEstimates()" id="bulkPrintBtn" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                        🖨️ Bulk Print (<span id="bulkPrintCount">0</span>)
-                    </button>
+                    <div class="flex gap-2">
+                        <button onclick="bulkPrintEstimates()" id="bulkPrintBtn" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                            🖨️ Bulk Print (<span id="bulkPrintCount">0</span>)
+                        </button>
+                        <button onclick="bulkExportEstimatesPDF()" id="bulkPdfBtn" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                            📄 Bulk PDF
+                        </button>
+                    </div>
                     <button onclick="openNewEstimateModal()" class="text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
                         + New Estimate
                     </button>
@@ -1267,6 +1273,9 @@
                                     </button>
                                     <button onclick="printEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm">
                                         🖨️ Print This
+                                    </button>
+                                    <button onclick="exportEstimatePDF()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm">
+                                        📄 Export PDF
                                     </button>
                                     <button onclick="shareEstimateWhatsApp()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1">
                                         💬 Share
