@@ -4883,15 +4883,15 @@ function addScopeLaborRow(scopeId, data = null) {
     row.innerHTML = `
         <td class="px-2 py-1.5">
             <select class="est-lab-trade w-full px-2 py-1 border rounded text-xs">
-                <option value="MA" ${data?.trade === 'MA' ? 'selected' : ''}>MA (Mason)</option>
-                <option value="CA" ${data?.trade === 'CA' ? 'selected' : ''}>CA (Carpenter)</option>
-                <option value="PA" ${data?.trade === 'PA' ? 'selected' : ''}>PA (Painter)</option>
-                <option value="PL" ${data?.trade === 'PL' ? 'selected' : ''}>PL (Plumber)</option>
-                <option value="WE" ${data?.trade === 'WE' ? 'selected' : ''}>WE (Welder)</option>
-                <option value="BB" ${data?.trade === 'BB' ? 'selected' : ''}>BB (Barbender)</option>
-                <option value="SW" ${data?.trade === 'SW' ? 'selected' : ''}>SW (Steel Worker)</option>
-                <option value="AL" ${data?.trade === 'AL' ? 'selected' : ''}>AL (Alu. Fabricator)</option>
-                <option value="RW" ${data?.trade === 'RW' ? 'selected' : ''}>RW (Road Worker)</option>
+                <option value="MA" ${data?.trade === 'MA' ? 'selected' : ''}>MA</option>
+                <option value="CA" ${data?.trade === 'CA' ? 'selected' : ''}>CA</option>
+                <option value="PA" ${data?.trade === 'PA' ? 'selected' : ''}>PA</option>
+                <option value="PL" ${data?.trade === 'PL' ? 'selected' : ''}>PL</option>
+                <option value="WE" ${data?.trade === 'WE' ? 'selected' : ''}>WE</option>
+                <option value="BB" ${data?.trade === 'BB' ? 'selected' : ''}>BB</option>
+                <option value="SW" ${data?.trade === 'SW' ? 'selected' : ''}>SW</option>
+                <option value="AL" ${data?.trade === 'AL' ? 'selected' : ''}>AL</option>
+                <option value="RW" ${data?.trade === 'RW' ? 'selected' : ''}>RW</option>
             </select>
         </td>
         <td class="px-2 py-1.5"><input type="number" class="est-lab-workers w-full px-2 py-1 border rounded text-xs text-center" value="${data?.workers || 1}" onchange="updateEstimateTotals()"></td>
