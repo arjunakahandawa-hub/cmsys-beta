@@ -2958,9 +2958,7 @@
                         <div>
                             <p class="text-xs font-medium text-slate-500 mb-1">Created By <span class="text-slate-400">(person who visited & created)</span></p>
                             <div class="grid grid-cols-3 gap-2">
-                                <select id="estCreatedName" onchange="autoFillSignatory('Created')" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white cursor-pointer">
-                                    <option value="">Select Name...</option>
-                                </select>
+                                <input type="text" id="estCreatedName" placeholder="Search Name..." autocomplete="off" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
                                 <input type="text" id="estCreatedRank" placeholder="Rank" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
                                 <input type="text" id="estCreatedSvc" placeholder="Service No." class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
                             </div>
@@ -2968,9 +2966,7 @@
                         <div>
                             <p class="text-xs font-medium text-slate-500 mb-1">Checked By <span class="text-slate-400">(person who checked the estimate)</span></p>
                             <div class="grid grid-cols-3 gap-2">
-                                <select id="estCheckedName" onchange="autoFillSignatory('Checked')" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white cursor-pointer">
-                                    <option value="">Select Name...</option>
-                                </select>
+                                <input type="text" id="estCheckedName" placeholder="Search Name..." autocomplete="off" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
                                 <input type="text" id="estCheckedRank" placeholder="Rank" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
                                 <input type="text" id="estCheckedSvc" placeholder="Service No." class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
                             </div>

@@ -5079,47 +5079,108 @@ function saveEstimate(event) {
 }
 
 // Signatory Dropdown Helper
-function populateSignatoryDropdowns() {
-    // Filter sailors whose off_no starts with 'EC' or 'AC'
-    const eligibleSailors = store.sailors.filter(s => {
-        const off = String(s.official_number || s.service_no || '').trim().toUpperCase();
-        return off.startsWith('EC') || off.startsWith('AC');
-    });
+let activeSignatoryDropdown = null;
 
-    let optionsHtml = '<option value="">Select Name...</option>';
-    eligibleSailors.forEach(s => {
-        const offNo = s.official_number || s.service_no || '';
-        optionsHtml += `<option value="${s.name}" data-rank="${s.rank || ''}" data-svc="${offNo}">${s.name} (${offNo})</option>`;
-    });
-
-    const createdEl = document.getElementById('estCreatedName');
-    const checkedEl = document.getElementById('estCheckedName');
-    
-    // Store current values before overwriting HTML
-    const curCreated = createdEl ? createdEl.value : '';
-    const curChecked = checkedEl ? checkedEl.value : '';
-
-    if (createdEl) createdEl.innerHTML = optionsHtml;
-    if (checkedEl) checkedEl.innerHTML = optionsHtml;
-
-    // Restore selected values if they exist in the new options
-    if (createdEl && curCreated) createdEl.value = curCreated;
-    if (checkedEl && curChecked) checkedEl.value = curChecked;
-}
-
-function autoFillSignatory(prefix) {
-    const selectEl = document.getElementById(`est${prefix}Name`);
+function setupSignatoryAutocomplete(prefix) {
+    const inputElement = document.getElementById(`est${prefix}Name`);
     const rankEl = document.getElementById(`est${prefix}Rank`);
     const svcEl = document.getElementById(`est${prefix}Svc`);
     
-    if (selectEl && selectEl.selectedIndex > 0) {
-        const option = selectEl.options[selectEl.selectedIndex];
-        if (rankEl) rankEl.value = option.getAttribute('data-rank');
-        if (svcEl) svcEl.value = option.getAttribute('data-svc');
-    } else {
+    if (!inputElement || inputElement.hasAttribute('data-autocomplete-init')) return;
+    inputElement.setAttribute('data-autocomplete-init', 'true');
+
+    // Create a global dropdown if it doesn't exist for this input
+    const dropdown = document.createElement('div');
+    dropdown.className = 'hidden absolute z-[9999] w-[350px] bg-white border border-slate-300 rounded-lg shadow-2xl max-h-60 overflow-y-auto text-left';
+    document.body.appendChild(dropdown);
+
+    const closeDropdown = () => dropdown.classList.add('hidden');
+
+    const updatePosition = () => {
+        const rect = inputElement.getBoundingClientRect();
+        dropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
+        dropdown.style.left = `${rect.left + window.scrollX}px`;
+        if (rect.left + 350 > window.innerWidth) {
+            dropdown.style.left = `${window.innerWidth - 360}px`;
+        }
+    };
+
+    const renderResults = (query) => {
+        const lowerQuery = query.toLowerCase();
+        let count = 0;
+        const maxResults = 50;
+        let html = '';
+        
+        // Filter sailors whose off_no starts with 'EC' or 'AC'
+        const eligibleSailors = store.sailors.filter(s => {
+            const off = String(s.official_number || s.service_no || '').trim().toUpperCase();
+            return off.startsWith('EC') || off.startsWith('AC');
+        });
+        
+        for (let i = 0; i < eligibleSailors.length; i++) {
+            const s = eligibleSailors[i];
+            const offNo = s.official_number || s.service_no || '';
+            const searchStr = `${s.name} ${offNo} ${s.rank || ''}`.toLowerCase();
+            
+            if (!query || searchStr.includes(lowerQuery)) {
+                html += `<div class="px-3 py-2 hover:bg-indigo-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-name="${s.name}" data-rank="${s.rank || ''}" data-svc="${offNo}">
+                    <div class="text-sm font-medium text-slate-800">${s.name}</div>
+                    <div class="text-xs text-slate-500">${s.rank || '-'} • ${offNo}</div>
+                </div>`;
+                count++;
+                if (count >= maxResults) break;
+            }
+        }
+        
+        if (count === 0) {
+            html = `<div class="px-3 py-2 text-sm text-slate-500 italic">No names found</div>`;
+        }
+        
+        dropdown.innerHTML = html;
+        updatePosition();
+        dropdown.classList.remove('hidden');
+        
+        dropdown.querySelectorAll('.autocomplete-item').forEach(el => {
+            el.addEventListener('mousedown', (e) => {
+                e.preventDefault(); 
+                inputElement.value = el.getAttribute('data-name');
+                if (rankEl) rankEl.value = el.getAttribute('data-rank');
+                if (svcEl) svcEl.value = el.getAttribute('data-svc');
+                closeDropdown();
+            });
+        });
+    };
+
+    inputElement.addEventListener('focus', () => {
+        if (activeSignatoryDropdown && activeSignatoryDropdown !== dropdown) {
+            activeSignatoryDropdown.classList.add('hidden');
+        }
+        activeSignatoryDropdown = dropdown;
+        renderResults(inputElement.value);
+    });
+
+    inputElement.addEventListener('input', () => {
+        renderResults(inputElement.value);
+        // Clear rank and svc if they modify the name manually
         if (rankEl) rankEl.value = '';
         if (svcEl) svcEl.value = '';
-    }
+    });
+
+    inputElement.addEventListener('blur', () => {
+        setTimeout(closeDropdown, 150);
+    });
+    
+    window.addEventListener('resize', () => {
+        if (!dropdown.classList.contains('hidden')) updatePosition();
+    });
+    document.addEventListener('scroll', () => {
+        if (!dropdown.classList.contains('hidden')) updatePosition();
+    }, true);
+}
+
+function populateSignatoryDropdowns() {
+    setupSignatoryAutocomplete('Created');
+    setupSignatoryAutocomplete('Checked');
 }
 
 // ---- Approval (req 9) ----
