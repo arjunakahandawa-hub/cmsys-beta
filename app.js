@@ -5328,18 +5328,18 @@ function buildEstimatePrintHTML(est) {
                 <td>${l.taskDescription || ''}</td>
             </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;">No labour</td></tr>';
 
+
         sectionsHtml = `
             <table class="est-table" style="margin-top:10px;">
-                <colgroup>
-                    <col style="width:5%">
-                    <col style="width:39%">
-                    <col style="width:8%">
-                    <col style="width:8%">
-                    <col style="width:18%">
-                    <col style="width:22%">
-                </colgroup>
                 <thead>
-                    <tr><th>#</th><th>Material</th><th>Qty</th><th>Unit</th><th style="text-align:right;">Unit Cost</th><th style="text-align:right;">Total</th></tr>
+                    <tr>
+                        <th style="width:4%;text-align:center;">#</th>
+                        <th>Material</th>
+                        <th style="width:8%;text-align:center;">Qty</th>
+                        <th style="width:8%;text-align:center;">Unit</th>
+                        <th style="width:16%;text-align:right;">Unit Cost</th>
+                        <th style="width:18%;text-align:right;">Total</th>
+                    </tr>
                 </thead>
                 <tbody>${matRows}</tbody>
                 <tfoot>
@@ -5348,10 +5348,14 @@ function buildEstimatePrintHTML(est) {
             </table>
 
             <table class="est-table" style="margin-top:10px;">
-                <colgroup><col style="width:25%"><col style="width:15%"><col style="width:15%"><col style="width:45%"></colgroup>
-                <thead><tr><th>Trade / Role</th><th>Workers</th><th>Man-Days</th><th>Task Description</th></tr></thead>
+                <thead><tr>
+                    <th style="width:25%;">Trade / Role</th>
+                    <th style="width:15%;text-align:center;">Workers</th>
+                    <th style="width:15%;text-align:center;">Man-Days</th>
+                    <th>Task Description</th>
+                </tr></thead>
                 <tbody>${labRows}</tbody>
-                <tfoot><tr><td colspan="2" style="text-align:right;"><b>Total Man-Days</b></td><td colspan="2" style="text-align:left; padding-left: 10px;"><b>${est.totalManDays || 0}</b></td></tr></tfoot>
+                <tfoot><tr><td colspan="2" style="text-align:right;"><b>Total Man-Days</b></td><td colspan="2" style="padding-left:10px;"><b>${est.totalManDays || 0}</b></td></tr></tfoot>
             </table>
         `;
     }
@@ -5423,25 +5427,28 @@ function printEstimatesByIds(ids) {
     const ests = store.estimates.filter(e => ids.includes(e.id) && (!e.zone_id || e.zone_id === store.currentZone));
     if (ests.length === 0) { showToast('No estimates found for this zone to print', 'error'); return; }
 
-    const sheets = ests.map(e => buildEstimatePrintHTML(e)).join('<div class="page-break"></div>');
+    const sheets = ests.map(e => buildEstimatePrintHTML(e)).join('<div style="page-break-after:always;"></div>');
     const win = window.open('', '_blank');
-    win.document.write(`
-        <html><head><title>NCW Estimate Print</title>
-        <style>
-            * { box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; color:#000; margin:0; padding:12mm 14mm; }
-            .est-sheet { width:100%; }
-            .est-table { width:100%; border-collapse:collapse; font-size:10.5px; table-layout:fixed; }
-            .est-table th, .est-table td { border:1px solid #555; padding:3px 5px; }
-            .est-table thead th { background:#e2e8f0; text-align:left; }
-            .est-table tfoot td { background:#f1f5f9; }
-            .page-break { page-break-after: always; }
-            @media print { @page { size:A4 portrait; margin:10mm 12mm; } body { padding:0; } }
-        </style></head>
-        <body>${sheets}</body></html>`);
+    win.document.write(`<!DOCTYPE html>
+<html><head><title>NCW Estimate Print</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; }
+  .est-sheet { width: 185mm; margin: 0 auto; padding: 10mm 0; }
+  .est-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  .est-table th { border: 1px solid #555; padding: 4px 5px; background: #e2e8f0; text-align: left; font-size: 10px; }
+  .est-table td { border: 1px solid #555; padding: 3px 5px; font-size: 10px; }
+  .est-table tfoot td { background: #f1f5f9; font-weight: bold; }
+  @media print {
+    @page { size: A4 portrait; margin: 10mm 12mm; }
+    body { margin: 0; }
+    .est-sheet { width: 100%; margin: 0; padding: 0; }
+  }
+</style></head>
+<body>${sheets}</body></html>`);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); }, 400);
+    setTimeout(() => { win.print(); }, 500);
 }
 
 function exportEstimatesToPDFByIds(ids) {
@@ -5456,39 +5463,46 @@ function exportEstimatesToPDFByIds(ids) {
 
     showToast('Generating PDF, please wait...', 'info');
 
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = ests.map(e => `<div class="est-sheet">${buildEstimatePrintHTML(e)}</div>`).join('<div class="html2pdf__page-break"></div>');
-    tempDiv.style.fontFamily = 'Arial, sans-serif';
-    tempDiv.style.color = '#000';
-    tempDiv.style.padding = '0';
-    tempDiv.style.width = '700px'; 
-    tempDiv.style.maxWidth = '100%'; 
+    // Build wrapper with inline styles (no class dependency)
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'width:794px;font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;';
+    wrapper.innerHTML = ests.map(e => buildEstimatePrintHTML(e)).join('<div style="page-break-after:always;height:1px;"></div>');
     
-    // Inject the necessary table styles for PDF
-    const style = document.createElement('style');
-    style.innerHTML = `
-        .est-sheet { padding: 10px; width: 100%; box-sizing: border-box; }
-        .est-table { width:100%; border-collapse:collapse; font-size:10px; table-layout: fixed; word-wrap: break-word; }
-        .est-table th, .est-table td { border:1px solid #555; padding:3px 4px; word-wrap: break-word; }
-        .est-table thead th { background:#e5e7eb; }
-        .html2pdf__page-break { page-break-after: always; }
+    // Inject table styles into the wrapper
+    const styleEl = document.createElement('style');
+    styleEl.innerHTML = `
+        .est-sheet { padding: 20px; width: 100%; box-sizing: border-box; }
+        .est-table { width: 100% !important; border-collapse: collapse !important; font-size: 10px; }
+        .est-table th { border: 1px solid #555 !important; padding: 4px 5px; background: #e2e8f0; text-align: left; }
+        .est-table td { border: 1px solid #555 !important; padding: 3px 5px; }
+        .est-table tfoot td { background: #f1f5f9; font-weight: bold; }
     `;
-    tempDiv.appendChild(style);
+    wrapper.appendChild(styleEl);
+
+    // Must be in DOM for html2canvas to measure correctly
+    wrapper.style.position = 'absolute';
+    wrapper.style.top = '-9999px';
+    wrapper.style.left = '0';
+    document.body.appendChild(wrapper);
 
     const filename = ests.length === 1 
         ? `Estimate_${ests[0].estimate_number.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
         : `Estimates_Bulk_Export.pdf`;
 
     const opt = {
-        margin:       10,
+        margin:       [10, 10, 10, 10],
         filename:     filename,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, windowWidth: 800 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false, width: 794, windowWidth: 794 },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     
-    html2pdf().set(opt).from(tempDiv).save().then(() => {
+    html2pdf().set(opt).from(wrapper).save().then(() => {
+        document.body.removeChild(wrapper);
         showToast('PDF exported successfully', 'success');
+    }).catch(() => {
+        document.body.removeChild(wrapper);
+        showToast('PDF export failed, please try again', 'error');
     });
 }
 
