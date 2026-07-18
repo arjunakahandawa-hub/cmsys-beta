@@ -927,7 +927,7 @@ function updateDashboardButtons() {
         newAssignBtn.classList.toggle('hidden', !isAdminStaff || !isToday);
     }
     if (newWorkOrderBtn) {
-        newWorkOrderBtn.classList.toggle('hidden', isAdminStaff || !isToday);
+        newWorkOrderBtn.classList.toggle('hidden', !isToday);
     }
     if (btnContinueYesterday) {
         btnContinueYesterday.classList.toggle('hidden', !isToday);
@@ -1919,6 +1919,34 @@ function openNewWorkOrderModal() {
         b.className = 'wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-200 text-slate-600';
     });
     document.querySelector('.wo-trade-btn').className = 'wo-trade-btn text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-700 text-white';
+
+    const isAdminStaff = store.currentZone === 'admin_staff_duties';
+    
+    // Elements to hide
+    const typePriorityWrapper = document.getElementById('woTypePriorityWrapper');
+    const referenceWrapper = document.getElementById('woReferenceWrapper');
+    const estimateWrapper = document.getElementById('woEstimateWrapper');
+    const costDurationWrapper = document.getElementById('woCostDurationWrapper');
+    const supervisorWrapper = document.getElementById('woSupervisorWrapper');
+    const artificerWrapper = document.getElementById('woArtificerWrapper');
+    const staffWrapper = document.getElementById('woStaffWrapper');
+
+    if (typePriorityWrapper) typePriorityWrapper.classList.toggle('hidden', isAdminStaff);
+    if (referenceWrapper) referenceWrapper.classList.toggle('hidden', isAdminStaff);
+    if (estimateWrapper) estimateWrapper.classList.toggle('hidden', isAdminStaff);
+    if (costDurationWrapper) costDurationWrapper.classList.toggle('hidden', isAdminStaff);
+    if (supervisorWrapper) supervisorWrapper.classList.toggle('hidden', isAdminStaff);
+    if (artificerWrapper) artificerWrapper.classList.toggle('hidden', isAdminStaff);
+
+    if (staffWrapper) {
+        if (isAdminStaff) {
+            staffWrapper.classList.remove('grid-cols-3');
+            staffWrapper.classList.add('grid-cols-1');
+        } else {
+            staffWrapper.classList.remove('grid-cols-1');
+            staffWrapper.classList.add('grid-cols-3');
+        }
+    }
 
     document.getElementById('workOrderModal').classList.remove('hidden');
 }
