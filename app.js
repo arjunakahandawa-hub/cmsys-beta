@@ -5452,7 +5452,6 @@ function printEstimatesByIds(ids) {
 }
 
 function exportEstimatesToPDFByIds(ids) {
-    // Only export estimates belonging to the current zone
     const ests = store.estimates.filter(e => ids.includes(e.id) && (!e.zone_id || e.zone_id === store.currentZone));
     if (ests.length === 0) { showToast('No estimates found for this zone to export', 'error'); return; }
     
@@ -5463,49 +5462,44 @@ function exportEstimatesToPDFByIds(ids) {
 
     showToast('Generating PDF, please wait...', 'info');
 
-    // Build wrapper with inline styles (no class dependency)
-    const wrapper = document.createElement('div');
-    wrapper.style.cssText = 'width:794px;font-family:Arial,Helvetica,sans-serif;color:#000;background:#fff;';
-    wrapper.innerHTML = ests.map(e => buildEstimatePrintHTML(e)).join('<div class="html2pdf__page-break"></div>');
+    // Create a container (not attached to the body)
+    const tempDiv = document.createElement('div');
+    tempDiv.style.width = '794px';
+    tempDiv.style.fontFamily = 'Arial, Helvetica, sans-serif';
+    tempDiv.style.color = '#000';
+    tempDiv.style.backgroundColor = '#fff';
     
-    // Inject table styles into the wrapper
-    const styleEl = document.createElement('style');
-    styleEl.innerHTML = `
+    // buildEstimatePrintHTML(e) already returns <div class="est-sheet">...</div>
+    tempDiv.innerHTML = ests.map(e => buildEstimatePrintHTML(e)).join('<div class="html2pdf__page-break"></div>');
+    
+    // Inject the necessary table styles for PDF
+    const style = document.createElement('style');
+    style.innerHTML = `
         .est-sheet { padding: 20px; width: 100%; box-sizing: border-box; }
-        .est-table { width: 100% !important; border-collapse: collapse !important; font-size: 10px; }
-        .est-table th { border: 1px solid #555 !important; padding: 4px 5px; background: #e2e8f0; text-align: left; }
-        .est-table td { border: 1px solid #555 !important; padding: 3px 5px; }
+        .est-table { width: 100%; border-collapse: collapse; font-size: 10px; }
+        .est-table th { border: 1px solid #555; padding: 4px 5px; background: #e2e8f0; text-align: left; }
+        .est-table td { border: 1px solid #555; padding: 3px 5px; }
         .est-table tfoot td { background: #f1f5f9; font-weight: bold; }
         .html2pdf__page-break { page-break-after: always; }
     `;
-    wrapper.appendChild(styleEl);
-
-    // Attach to DOM so html2canvas renders it fully without clipping.
-    // Position it at 0,0 but hide it behind everything else.
-    wrapper.style.position = 'absolute';
-    wrapper.style.left = '0';
-    wrapper.style.top = '0';
-    wrapper.style.zIndex = '-9999';
-    document.body.appendChild(wrapper);
+    tempDiv.appendChild(style);
 
     const filename = ests.length === 1 
         ? `Estimate_${ests[0].estimate_number.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
         : `Estimates_Bulk_Export.pdf`;
 
     const opt = {
-        margin:       [10, 10, 10, 10],
+        margin:       10,
         filename:     filename,
         image:        { type: 'jpeg', quality: 0.98 },
-        html2canvas:  { scale: 2, useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: 794, width: 794 },
+        html2canvas:  { scale: 2, useCORS: true, logging: false },
         jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     
-    html2pdf().set(opt).from(wrapper).save().then(() => {
-        document.body.removeChild(wrapper);
+    html2pdf().set(opt).from(tempDiv).save().then(() => {
         showToast('PDF exported successfully', 'success');
     }).catch((err) => {
         console.error("PDF Export Error:", err);
-        document.body.removeChild(wrapper);
         showToast('PDF export failed, please try again', 'error');
     });
 }
