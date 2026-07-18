@@ -5358,12 +5358,18 @@ function buildEstimatePrintHTML(est) {
 
     return `
     <div class="est-sheet">
-        <div style="display:flex;align-items:center;justify-content:center;border-bottom:2.5px solid #000;padding-bottom:10px;margin-bottom:12px;">
-            <img src="${window.location.href.split('?')[0].split('#')[0].replace('index.html', '')}navy_crest.jpg" style="height:55px;margin-right:15px;" alt="SLN Crest">
-            <div style="text-align:left;">
-                <div style="font-size:16px;font-weight:800;letter-spacing:0.5px;color:#0f172a;line-height:1.2;">SRI LANKA NAVY<br>CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
-                <div style="font-size:11px;font-weight:bold;color:#475569;margin-top:4px;letter-spacing:0.5px;">${store.zones.find(z => z.id === (est.zone_id || store.currentZone))?.name || 'Naval Civil Works'} — Cost Estimate</div>
-            </div>
+        <div style="width:100%;border-bottom:2.5px solid #000;padding-bottom:10px;margin-bottom:12px;">
+            <table style="width:100%;border:none;border-collapse:collapse;">
+                <tr>
+                    <td style="border:none;padding:0;width:70px;vertical-align:middle;">
+                        <img src="${window.location.href.split('?')[0].split('#')[0].replace('index.html', '')}navy_crest.jpg" style="height:60px;display:block;" alt="SLN Crest">
+                    </td>
+                    <td style="border:none;padding:0 0 0 12px;vertical-align:middle;">
+                        <div style="font-size:15px;font-weight:800;letter-spacing:0.5px;color:#0f172a;line-height:1.25;">SRI LANKA NAVY<br>CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
+                        <div style="font-size:11px;font-weight:bold;color:#475569;margin-top:4px;">${store.zones.find(z => z.id === (est.zone_id || store.currentZone))?.name || 'Naval Civil Works'} — Cost Estimate</div>
+                    </td>
+                </tr>
+            </table>
         </div>
         <table style="width:100%;font-size:11px;margin-bottom:6px;">
             <tr>
@@ -5422,19 +5428,20 @@ function printEstimatesByIds(ids) {
     win.document.write(`
         <html><head><title>NCW Estimate Print</title>
         <style>
-            body { font-family: Arial, sans-serif; color:#000; margin:0; padding:10mm 12mm; }
-            .est-sheet { padding:0 0 14px; max-width: 100%; box-sizing: border-box; }
-            .est-table { width:100%; border-collapse:collapse; font-size:10px; table-layout: fixed; }
-            .est-table th, .est-table td { border:1px solid #555; padding:3px 5px; overflow:hidden; }
-            .est-table thead th { background:#e5e7eb; font-size:10px; }
-            .est-table tfoot td { font-size:10px; }
+            * { box-sizing: border-box; }
+            body { font-family: Arial, sans-serif; color:#000; margin:0; padding:12mm 14mm; }
+            .est-sheet { width:100%; }
+            .est-table { width:100%; border-collapse:collapse; font-size:10.5px; table-layout:fixed; }
+            .est-table th, .est-table td { border:1px solid #555; padding:3px 5px; }
+            .est-table thead th { background:#e2e8f0; text-align:left; }
+            .est-table tfoot td { background:#f1f5f9; }
             .page-break { page-break-after: always; }
-            @media print { @page { size:A4; margin:10mm 12mm; } body { padding:0; } }
+            @media print { @page { size:A4 portrait; margin:10mm 12mm; } body { padding:0; } }
         </style></head>
         <body>${sheets}</body></html>`);
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); }, 300);
+    setTimeout(() => { win.print(); }, 400);
 }
 
 function exportEstimatesToPDFByIds(ids) {
