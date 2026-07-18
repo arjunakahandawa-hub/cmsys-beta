@@ -541,17 +541,6 @@ function initOpsListeners() {
             off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
         }));
         
-        // Populate global datalist for materials
-        let dl = document.getElementById('inventoryDatalist');
-        if (!dl) {
-            dl = document.createElement('datalist');
-            dl.id = 'inventoryDatalist';
-            document.body.appendChild(dl);
-        }
-        dl.innerHTML = store.inventory.filter(i => i.category !== 'Tools').map(i => 
-            `<option value="${i.description}">${i.quantity || 0} ${i.deno || ''} @ Rs. ${formatCurrency(i.cost_per_unit)}</option>`
-        ).join('');
-        
         refreshCurrentView();
         console.log(`📦 DB#2: ${store.inventory.length} inventory items loaded`);
     });
@@ -3790,11 +3779,15 @@ function openAddMaterialToJobModal() {
     document.getElementById('matJobCardId').value = store.selectedJobCard;
     
     // Reset form
-    document.getElementById('matFromInventory').value = '';
+    const matInput = document.getElementById('matFromInventory');
+    matInput.value = '';
     document.getElementById('matName').value = '';
     document.getElementById('matQuantity').value = '';
     document.getElementById('matCost').value = '';
     document.getElementById('matTotalCost').textContent = 'Rs. 0.00';
+    
+    setupMaterialAutocomplete(matInput, fillMaterialFromInventory);
+    matInput.addEventListener('change', fillMaterialFromInventory);
     
     document.getElementById('addMaterialModal').classList.remove('hidden');
 }
@@ -4732,6 +4725,79 @@ function renumberScopeBlocks() {
         if (numSpan) numSpan.textContent = idx + 1;
     });
 }
+// --- Custom Autocomplete for Materials ---
+let activeAutocompleteDropdown = null;
+
+function setupMaterialAutocomplete(inputElement, onSelectCallback) {
+    if (inputElement.hasAttribute('data-autocomplete-init')) return;
+    inputElement.setAttribute('data-autocomplete-init', 'true');
+    inputElement.setAttribute('autocomplete', 'off');
+    inputElement.removeAttribute('list'); // Remove native datalist
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'relative w-full text-left';
+    inputElement.parentNode.insertBefore(wrapper, inputElement);
+    wrapper.appendChild(inputElement);
+
+    const dropdown = document.createElement('div');
+    dropdown.className = 'hidden absolute z-[100] w-[350px] bg-white border border-slate-300 rounded-lg shadow-xl max-h-60 overflow-y-auto mt-1 left-0 text-left';
+    wrapper.appendChild(dropdown);
+
+    const closeDropdown = () => dropdown.classList.add('hidden');
+
+    const renderResults = (query) => {
+        const lowerQuery = query.toLowerCase();
+        let count = 0;
+        const maxResults = 50;
+        let html = '';
+        
+        for (let i = 0; i < store.inventory.length; i++) {
+            const item = store.inventory[i];
+            if (item.category === 'Tools') continue;
+            
+            if (!query || item.description.toLowerCase().includes(lowerQuery)) {
+                html += `<div class="px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-id="${item.id}" data-desc="${item.description}">
+                    <div class="text-sm font-medium text-slate-800">${item.description}</div>
+                    <div class="text-xs text-slate-500">${item.quantity || 0} ${item.deno || ''} @ Rs. ${formatCurrency(item.cost_per_unit)}</div>
+                </div>`;
+                count++;
+                if (count >= maxResults) break;
+            }
+        }
+        
+        if (count === 0) {
+            html = `<div class="px-3 py-2 text-sm text-slate-500 italic">No items found</div>`;
+        }
+        
+        dropdown.innerHTML = html;
+        dropdown.classList.remove('hidden');
+        
+        dropdown.querySelectorAll('.autocomplete-item').forEach(el => {
+            el.addEventListener('mousedown', (e) => {
+                e.preventDefault(); 
+                inputElement.value = el.getAttribute('data-desc');
+                closeDropdown();
+                if (onSelectCallback) onSelectCallback(inputElement.value);
+            });
+        });
+    };
+
+    inputElement.addEventListener('focus', () => {
+        if (activeAutocompleteDropdown && activeAutocompleteDropdown !== dropdown) {
+            activeAutocompleteDropdown.classList.add('hidden');
+        }
+        activeAutocompleteDropdown = dropdown;
+        renderResults(inputElement.value);
+    });
+
+    inputElement.addEventListener('input', () => {
+        renderResults(inputElement.value);
+    });
+
+    inputElement.addEventListener('blur', () => {
+        setTimeout(closeDropdown, 150);
+    });
+}
 
 let scopeMatRowIdCounter = 0;
 function addScopeMaterialRow(scopeId, data = null) {
@@ -4746,10 +4812,9 @@ function addScopeMaterialRow(scopeId, data = null) {
     row.className = `scope-mat-row`;
     row.innerHTML = `
         <td class="px-2 py-1.5">
-            <input type="text" list="inventoryDatalist" class="est-mat-select w-full px-2 py-1 border rounded text-xs" 
+            <input type="text" class="est-mat-select w-full px-2 py-1 border rounded text-xs" 
                    value="${data?.description || ''}" 
-                   placeholder="Search material..."
-                   onchange="fillScopeMaterialFromInventory(${scopeId}, ${rowId}, this.value)">
+                   placeholder="Search material...">
             <input type="hidden" class="est-mat-id" value="${data?.id || ''}">
         </td>
         <td class="px-2 py-1.5"><input type="number" class="est-mat-qty w-full px-2 py-1 border rounded text-xs text-center" value="${data?.qty || ''}" onchange="updateEstimateTotals()"></td>
@@ -4760,6 +4825,12 @@ function addScopeMaterialRow(scopeId, data = null) {
         <td class="px-2 py-1.5 text-center"><button type="button" onclick="removeScopeRow('scopeMatRow-${scopeId}-${rowId}')" class="text-red-500 hover:text-red-700 font-bold text-sm">×</button></td>
     `;
     tbody.appendChild(row);
+
+    const inputEl = row.querySelector('.est-mat-select');
+    setupMaterialAutocomplete(inputEl, (val) => fillScopeMaterialFromInventory(scopeId, rowId, val));
+    
+    // If there's an initial value (editing), handle changes as well
+    inputEl.addEventListener('change', () => fillScopeMaterialFromInventory(scopeId, rowId, inputEl.value));
 }
 
 function fillScopeMaterialFromInventory(scopeId, rowId, desc) {
