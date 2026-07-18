@@ -8536,7 +8536,7 @@ function renderSummaryView() {
 
     // 2. Define the structure of our sections dynamically
     const sections = {
-        ongoing: { title: "ONGOING CONSTRUCTIONS AT DOCKYARD", rows: {} },
+        ongoing: { title: "ONGOING CONSTRUCTIONS (OTW / SUPPLY SCHOOL)", rows: {} },
         workshop: { title: "WORKSHOP", rows: {} },
         zones: {
             title: "ZONE",
