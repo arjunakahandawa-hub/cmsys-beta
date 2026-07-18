@@ -8536,7 +8536,6 @@ function renderSummaryView() {
 
     // 2. Define the structure of our sections dynamically
     const sections = {
-        ongoing: { title: "ONGOING CONSTRUCTIONS (OTW / SUPPLY SCHOOL)", rows: {} },
         workshop: { title: "WORKSHOP", rows: {} },
         zones: {
             title: "ZONE",
@@ -8547,7 +8546,9 @@ function renderSummaryView() {
                 "D": { title: "D - ZONE", rows: {} },
                 "E": { title: "E - ZONE", rows: {} },
                 "FH": { title: "FH - ZONE", rows: {} },
-                "G": { title: "G - ZONE", rows: {} }
+                "G": { title: "G - ZONE", rows: {} },
+                "OTW": { title: "OTW", rows: {} },
+                "Supply-School": { title: "SUPPLY SCHOOL", rows: {} }
             }
         },
         othersDuty: { title: "OTHERS DUTY DOCK YARD", rows: {} },
@@ -8559,7 +8560,9 @@ function renderSummaryView() {
 
     // Helper to get the correct section based on zoneId
     function getSectionForZone(zoneId) {
-        if (zoneId === 'OTW' || zoneId === 'Supply-School') return sections.ongoing;
+        if (zoneId === 'OTW') return sections.zones.subsections["OTW"];
+        if (zoneId === 'Supply-School') return sections.zones.subsections["Supply-School"];
+        
         if (['Carpentry-Shop', 'Paint-Workshop', 'Signwriter', 'Welding-Shop', 'Concrete-Precast', 'Aluminum-Work-Shop', 'Blacksmith'].includes(zoneId)) {
             return sections.workshop;
         }
@@ -8653,7 +8656,11 @@ function renderSummaryView() {
     });
 
     // 5. Build and render the table rows with subtotals and grand totals
-    let tableHtml = '';
+    let tableHtml = `
+        <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
+            <td colspan="17" class="px-3 py-2 text-slate-800 font-extrabold uppercase text-[11px] tracking-wider">ONGOING CONSTRUCTIONS AT DOCKYARD</td>
+        </tr>
+    `;
 
     // Columns counters helper
     function getColumnsSum(rowsArray) {
@@ -8727,9 +8734,6 @@ function renderSummaryView() {
         columnGrandTotals.fullTotal += sums.fullTotal;
     }
 
-    // 1. Ongoing Constructions
-    appendSectionToTable(sections.ongoing);
-    
     // 2. Workshop
     appendSectionToTable(sections.workshop);
     
