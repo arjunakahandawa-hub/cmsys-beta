@@ -8536,7 +8536,6 @@ function renderSummaryView() {
 
     // 2. Define the structure of our sections dynamically
     const sections = {
-        ongoing: { title: "ONGOING CONSTRUCTIONS AT DOCKYARD", rows: {} },
         workshop: { title: "WORKSHOP", rows: {} },
         zones: {
             title: "ZONE",
@@ -8559,7 +8558,7 @@ function renderSummaryView() {
 
     // Helper to get the correct section based on zoneId
     function getSectionForZone(zoneId) {
-        if (zoneId === 'OTW' || zoneId === 'Supply-School') return sections.ongoing;
+        if (zoneId === 'OTW' || zoneId === 'Supply-School') return sections.othersDuty;
         if (['Carpentry-Shop', 'Paint-Workshop', 'Signwriter', 'Welding-Shop', 'Concrete-Precast', 'Aluminum-Work-Shop', 'Blacksmith'].includes(zoneId)) {
             return sections.workshop;
         }
@@ -8727,9 +8726,6 @@ function renderSummaryView() {
         columnGrandTotals.fullTotal += sums.fullTotal;
     }
 
-    // 1. Ongoing Constructions
-    appendSectionToTable(sections.ongoing);
-    
     // 2. Workshop
     appendSectionToTable(sections.workshop);
     
