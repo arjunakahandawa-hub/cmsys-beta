@@ -9136,6 +9136,38 @@ function renderSummaryView() {
         });
     });
 
+
+    // Add long term deployments to summary
+    const longTerm = getLongTermAllocations();
+    
+    [...longTerm.housing, ...longTerm.outProject].forEach(alloc => {
+        allAllocatedSailorIds.add(String(alloc.sailor.id));
+        if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
+        
+        const rowKey = (alloc.projectName || 'UNNAMED PROJECT').toUpperCase().trim();
+        const section = sections.socialResponsible;
+        if (!section.rows[rowKey]) {
+            section.rows[rowKey] = createRowMatrix(rowKey);
+        }
+        const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(alloc.sailor);
+        if (isVss) section.rows[rowKey].vss[tradeIdx]++;
+        else section.rows[rowKey].reg[tradeIdx]++;
+    });
+
+    longTerm.otherBase.forEach(alloc => {
+        allAllocatedSailorIds.add(String(alloc.sailor.id));
+        if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
+        
+        const rowKey = (alloc.projectName || 'UNKNOWN BASE').toUpperCase().trim();
+        const section = sections.otherBases; // Matching 'Other-Base' logic
+        if (!section.rows[rowKey]) {
+            section.rows[rowKey] = createRowMatrix(rowKey);
+        }
+        const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(alloc.sailor);
+        if (isVss) section.rows[rowKey].vss[tradeIdx]++;
+        else section.rows[rowKey].reg[tradeIdx]++;
+    });
+
     // 4. Process explicit leaves/sick statuses from sailorsDB
     store.sailors.forEach(sailor => {
         const isAllocated = allAllocatedSailorIds.has(String(sailor.id)) || (sailor._fbKey && allAllocatedSailorIds.has(String(sailor._fbKey)));
