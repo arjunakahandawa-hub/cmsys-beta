@@ -5988,8 +5988,8 @@ function renderZoneSelectors() {
         let displayStr = z.name;
         
         if (zoneOrders.length > 0) {
-            const completedCount = zoneOrders.filter(wo => (wo.progress || 0) >= 100).length;
-            const percentage = Math.round((completedCount / zoneOrders.length) * 100);
+            const totalProgress = zoneOrders.reduce((sum, wo) => sum + (parseInt(wo.progress) || 0), 0);
+            const percentage = Math.round(totalProgress / zoneOrders.length);
             
             let emoji = '⚠️';
             if (percentage === 100) emoji = '✅';
