@@ -941,6 +941,7 @@ function changeDashboardDate(val) {
     if (!val) return;
     store.dashboardDate = val;
     renderDashboard();
+    renderZoneSelectors(); // Re-render dropdown to update zone progress percentages
     
     const today = new Date().toISOString().split('T')[0];
     if (val !== today) {
@@ -3092,6 +3093,7 @@ function saveWorkOrderChanges() {
         if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
 
         renderDashboard();
+        renderZoneSelectors(); // Update Zone dropdown percentages
         showToast('Work order updated successfully!');
         
         // Auto-close modal if no longer showing on the planning board
@@ -5977,7 +5979,29 @@ function renderZoneSelectors() {
     }
 
     const visibleZones = store.zones.filter(z => allowedZones.includes(z.id));
-    let optionsHtml = visibleZones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+    
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    let optionsHtml = visibleZones.map(z => {
+        const zoneOrders = (store.workOrders || []).filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        let displayStr = z.name;
+        
+        if (zoneOrders.length > 0) {
+            const completedCount = zoneOrders.filter(wo => (wo.progress || 0) >= 100).length;
+            const percentage = Math.round((completedCount / zoneOrders.length) * 100);
+            
+            let emoji = '⚠️';
+            if (percentage === 100) emoji = '✅';
+            else if (percentage === 0) emoji = '❌';
+            
+            displayStr = `${emoji} ${z.name} (${percentage}%)`;
+        } else {
+            displayStr = `➖ ${z.name} (N/A)`;
+        }
+        
+        return `<option value="${z.id}">${displayStr}</option>`;
+    }).join('');
     
     // Add Admin & Staff Duties special option
     if (hasAllZoneAccess) {
