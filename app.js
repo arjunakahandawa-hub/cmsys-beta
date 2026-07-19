@@ -8879,7 +8879,8 @@ function renderDailyDetailsSpecialView() {
         // Group by project name
         const grouped = {};
         dataArray.forEach(item => {
-            if (item.sailor.attendance === 'Leave' || item.sailor.attendance === 'Sick') return;
+            const isLeave = item.sailor.attendance === 'Leave' || item.sailor.attendance === 'Sick' || item.sailor.status === 'NA' || item.sailor.status === 'Leave' || item.sailor.status === 'Sick';
+            if (isLeave) return;
             const p = item.projectName || 'Unknown';
             if (!grouped[p]) grouped[p] = [];
             grouped[p].push(item.sailor);
@@ -9125,6 +9126,10 @@ function renderSummaryView() {
                 const targetRow = section.rows[rowKey];
                 
                 assignedSailors.forEach(sailor => {
+                    // Skip if sailor is actually on Leave/Sick/NA (they should go to the leave section)
+                    const isLeave = sailor.attendance === 'Leave' || sailor.attendance === 'Sick' || sailor.status === 'NA' || sailor.status === 'Leave' || sailor.status === 'Sick';
+                    if (isLeave) return;
+                    
                     // Track for Leave/Sick check
                     allAllocatedSailorIds.add(String(sailor.id));
                     if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
@@ -9145,7 +9150,8 @@ function renderSummaryView() {
     const longTerm = getLongTermAllocations();
     
     [...longTerm.housing, ...longTerm.outProject].forEach(alloc => {
-        if (alloc.sailor.attendance === 'Leave' || alloc.sailor.attendance === 'Sick') return;
+        const isLeave = alloc.sailor.attendance === 'Leave' || alloc.sailor.attendance === 'Sick' || alloc.sailor.status === 'NA' || alloc.sailor.status === 'Leave' || alloc.sailor.status === 'Sick';
+        if (isLeave) return;
         
         allAllocatedSailorIds.add(String(alloc.sailor.id));
         if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
@@ -9161,7 +9167,8 @@ function renderSummaryView() {
     });
 
     longTerm.otherBase.forEach(alloc => {
-        if (alloc.sailor.attendance === 'Leave' || alloc.sailor.attendance === 'Sick') return;
+        const isLeave = alloc.sailor.attendance === 'Leave' || alloc.sailor.attendance === 'Sick' || alloc.sailor.status === 'NA' || alloc.sailor.status === 'Leave' || alloc.sailor.status === 'Sick';
+        if (isLeave) return;
         
         allAllocatedSailorIds.add(String(alloc.sailor.id));
         if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
@@ -9180,11 +9187,34 @@ function renderSummaryView() {
     store.sailors.forEach(sailor => {
         const isAllocated = allAllocatedSailorIds.has(String(sailor.id)) || (sailor._fbKey && allAllocatedSailorIds.has(String(sailor._fbKey)));
         
-        if (!isAllocated && (sailor.attendance === 'Leave' || sailor.attendance === 'Sick')) {
+        const isLeave = sailor.attendance === 'Leave' || sailor.attendance === 'Sick' || sailor.status === 'NA' || sailor.status === 'Leave' || sailor.status === 'Sick';
+        
+        if (!isAllocated && isLeave) {
             const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
             let rowKey = "LEAVE & WEEKEND DOKYARD";
-            if (sailor.attendance === 'Sick') {
+            
+            if (sailor.attendance === 'Sick' || sailor.status === 'Sick') {
                 rowKey = "SICK REPORT";
+            } else if (sailor.status === 'NA' && sailor.attendance !== 'Leave') {
+                // Try to infer if it was sick from work orders
+                let isSickWo = false;
+                const activeWo = store.workOrders || [];
+                const activeJc = store.jobCards || [];
+                let assignedWo = null;
+                
+                if (dateVal === today) {
+                    assignedWo = activeWo.find(wo => wo.assigned && (wo.assigned.includes(String(sailor.id)) || wo.assigned.includes(String(sailor._fbKey))));
+                    if (!assignedWo) assignedWo = activeJc.find(jc => jc.assigned && (jc.assigned.includes(String(sailor.id)) || jc.assigned.includes(String(sailor._fbKey))));
+                } else {
+                    const alloc = (store.dailyAllocations || []).find(a => a.date === dateVal && (String(a.sailor_id) === String(sailor.id) || String(a.sailor_id) === String(sailor._fbKey)));
+                    if (alloc) {
+                        assignedWo = activeWo.find(w => String(w.id) === String(alloc.work_order_id)) || activeJc.find(j => String(j.id) === String(alloc.work_order_id));
+                    }
+                }
+                
+                if (assignedWo && /(ගිලන්|\bsiq\b|\badmit\b)/i.test(assignedWo.description || assignedWo.title || '')) {
+                    rowKey = "SICK REPORT";
+                }
             }
             
             if (!sections.leaveSick.rows[rowKey]) {
