@@ -138,6 +138,8 @@ const store = {
 
     // ── Loaded from Firebase DB #1 (ce-admin-panel2025) ──
     sailors: [],
+    outProjects: {},
+    tempDrafts: {},
 
     // ── Loaded from Firebase DB #2 (operations database) ──
     workOrders:          [],
@@ -330,6 +332,17 @@ function initSailorsListener() {
         
     }, error => {
         console.error('❌ DB#1 Sailors listener error:', error);
+    });
+}
+
+function initLongTermDeploymentsListeners() {
+    sailorsDB.ref('out_projects').on('value', snapshot => {
+        store.outProjects = snapshot.val() || {};
+        renderDashboard();
+    });
+    sailorsDB.ref('temp_drafts').on('value', snapshot => {
+        store.tempDrafts = snapshot.val() || {};
+        renderDashboard();
     });
 }
 
@@ -1652,11 +1665,26 @@ function updateCounters() {
         });
     }
 
+    const longTerm = getLongTermAllocations();
+    const longTermIds = new Set();
+    [...longTerm.housing, ...longTerm.outProject, ...longTerm.otherBase].forEach(a => {
+        longTermIds.add(String(a.sailor.id ?? a.sailor._fbKey));
+    });
+
+    const housingCount = document.getElementById('housingProjectCount');
+    if (housingCount) housingCount.textContent = longTerm.housing.length;
+    const outProjCount = document.getElementById('outProjectCount');
+    if (outProjCount) outProjCount.textContent = longTerm.outProject.length;
+    const otherBaseCount = document.getElementById('otherBaseCount');
+    if (otherBaseCount) otherBaseCount.textContent = longTerm.otherBase.length;
+
     if (store.sailors) {
         store.sailors.forEach(s => {
             if (s.status !== 'Leave' && s.status !== 'Sick') {
                 if (naIds.has(String(s.id)) || naIds.has(String(s._fbKey))) {
                     s.status = 'NA';
+                } else if (longTermIds.has(String(s.id)) || longTermIds.has(String(s._fbKey))) {
+                    s.status = 'LongTermDeployed';
                 } else if (assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey))) {
                     s.status = 'Assigned';
                 } else {
@@ -7818,6 +7846,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Start Firebase listeners ──
     // DB#1: Load sailors from ce-admin-panel2025 (realtime, read-only)
     initSailorsListener();
+    initLongTermDeploymentsListeners();
 
     // DB#2: Load & sync all CE Management System operational data from ncw-ps-operations (realtime, read-write)
     initOpsListeners();
@@ -8798,6 +8827,59 @@ function renderDailyDetailsSpecialView() {
             });
         }
     });
+
+    // ─────────────────────────────────────────────
+    // APPEND LONG-TERM DEPLOYMENTS (HOUSING, OUT, OTHER BASE)
+    // ─────────────────────────────────────────────
+    const longTerm = getLongTermAllocations();
+    
+    const renderLongTermCategory = (title, icon, dataArray, bgColor, textColor) => {
+        if (dataArray.length === 0) return;
+        hasAllocations = true;
+        tableRows += `
+            <tr class="${bgColor} ${textColor} font-bold">
+                <td colspan="6" class="px-4 py-2.5 text-xs uppercase tracking-wider">
+                    ${icon} ${title}
+                </td>
+            </tr>
+        `;
+        
+        // Group by project name
+        const grouped = {};
+        dataArray.forEach(item => {
+            const p = item.projectName || 'Unknown';
+            if (!grouped[p]) grouped[p] = [];
+            grouped[p].push(item.sailor);
+        });
+
+        Object.keys(grouped).forEach(projName => {
+            tableRows += `
+                <tr class="bg-slate-50 font-bold border-b border-slate-200">
+                    <td colspan="6" class="px-4 py-2 text-[10px] text-slate-700 text-center underline uppercase tracking-wide">
+                        📋 PROJECT: ${projName.toUpperCase()}
+                    </td>
+                </tr>
+            `;
+            grouped[projName].forEach((s, idx) => {
+                const serNo = String(idx + 1).padStart(2, '0');
+                const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                tableRows += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors text-xs text-slate-800">
+                        <td class="px-4 py-2 text-center font-medium">${serNo}</td>
+                        <td class="px-4 py-2">${s.rank || 'AB'}</td>
+                        <td class="px-4 py-2 font-semibold text-slate-900">${s.name}</td>
+                        <td class="px-4 py-2 text-center"><span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-medium">${parsedOffNo.type}</span></td>
+                        <td class="px-4 py-2 font-mono">${parsedOffNo.num}</td>
+                        <td class="px-4 py-2 text-center"><span class="bg-teal-50 text-teal-700 px-2 py-0.5 rounded font-bold">${s.trade || '—'}</span></td>
+                    </tr>
+                `;
+            });
+        });
+    };
+
+    renderLongTermCategory('HOUSING PROJECTS', '🏠', longTerm.housing, 'bg-indigo-900', 'text-indigo-100');
+    renderLongTermCategory('OUT PROJECTS', '🏗️', longTerm.outProject, 'bg-fuchsia-900', 'text-fuchsia-100');
+    renderLongTermCategory('OTHER BASE', '⚓', longTerm.otherBase, 'bg-cyan-900', 'text-cyan-100');
 
     if (!hasAllocations) {
         tableRows = `
