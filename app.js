@@ -8876,6 +8876,18 @@ function renderDailyDetailsSpecialView() {
     
     const renderLongTermCategory = (title, icon, dataArray, bgColor, textColor) => {
         if (dataArray.length === 0) return;
+        // Group by project name
+        const grouped = {};
+        dataArray.forEach(item => {
+            if (item.sailor.attendance === 'Leave' || item.sailor.attendance === 'Sick') return;
+            const p = item.projectName || 'Unknown';
+            if (!grouped[p]) grouped[p] = [];
+            grouped[p].push(item.sailor);
+        });
+
+        const activeProjects = Object.keys(grouped);
+        if (activeProjects.length === 0) return;
+        
         hasAllocations = true;
         tableRows += `
             <tr class="${bgColor} ${textColor} font-bold">
@@ -8884,16 +8896,8 @@ function renderDailyDetailsSpecialView() {
                 </td>
             </tr>
         `;
-        
-        // Group by project name
-        const grouped = {};
-        dataArray.forEach(item => {
-            const p = item.projectName || 'Unknown';
-            if (!grouped[p]) grouped[p] = [];
-            grouped[p].push(item.sailor);
-        });
 
-        Object.keys(grouped).forEach(projName => {
+        activeProjects.forEach(projName => {
             tableRows += `
                 <tr class="bg-slate-50 font-bold border-b border-slate-200">
                     <td colspan="6" class="px-4 py-2 text-[10px] text-slate-700 text-center underline uppercase tracking-wide">
@@ -9141,6 +9145,8 @@ function renderSummaryView() {
     const longTerm = getLongTermAllocations();
     
     [...longTerm.housing, ...longTerm.outProject].forEach(alloc => {
+        if (alloc.sailor.attendance === 'Leave' || alloc.sailor.attendance === 'Sick') return;
+        
         allAllocatedSailorIds.add(String(alloc.sailor.id));
         if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
         
@@ -9155,6 +9161,8 @@ function renderSummaryView() {
     });
 
     longTerm.otherBase.forEach(alloc => {
+        if (alloc.sailor.attendance === 'Leave' || alloc.sailor.attendance === 'Sick') return;
+        
         allAllocatedSailorIds.add(String(alloc.sailor.id));
         if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
         
