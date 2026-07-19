@@ -1614,6 +1614,47 @@ function toggleZoneTeam(sailorId, addToTeam) {
     renderAvailableSailors();
 }
 
+function getLongTermAllocations() {
+    let allocs = { housing: [], outProject: [], otherBase: [] };
+
+    if (store.outProjects) {
+        Object.keys(store.outProjects).forEach(pid => {
+            const proj = store.outProjects[pid];
+            const name = (proj.name || '').trim();
+            const isHousing = name.toUpperCase().includes('HOUSING');
+            
+            if (proj.assigned_sailors) {
+                Object.keys(proj.assigned_sailors).forEach(sailorFbKey => {
+                    const sailor = store.sailors.find(s => s._fbKey === sailorFbKey || s.id === sailorFbKey);
+                    if (sailor && sailor.status === 'Active') {
+                        const rec = { sailor, projectName: name, projectId: pid, date: proj.assigned_sailors[sailorFbKey].assigned_date };
+                        if (isHousing) allocs.housing.push(rec);
+                        else allocs.outProject.push(rec);
+                    }
+                });
+            }
+        });
+    }
+
+    if (store.tempDrafts) {
+        Object.keys(store.tempDrafts).forEach(did => {
+            const draft = store.tempDrafts[did];
+            const name = (draft.draft_name || draft.name || 'Unknown Base').trim();
+            
+            if (draft.assigned_sailors) {
+                Object.keys(draft.assigned_sailors).forEach(sailorFbKey => {
+                    const sailor = store.sailors.find(s => s._fbKey === sailorFbKey || s.id === sailorFbKey);
+                    if (sailor && sailor.status === 'Active') {
+                        allocs.otherBase.push({ sailor, projectName: name, projectId: did, date: draft.assigned_sailors[sailorFbKey].assigned_date });
+                    }
+                });
+            }
+        });
+    }
+
+    return allocs;
+}
+
 function updateCounters() {
     const activeWo = store.workOrders || [];
     const activeJc = store.jobCards || [];
