@@ -1665,10 +1665,9 @@ function updateCounters() {
     const assignedIds = new Set();
     const naIds = new Set();
     
-    // Helper to check if text contains NA keywords
     const isNA = (text) => {
         if (!text) return false;
-        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b)/i.test(text);
+        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b|\bweekend\b|\boff\b|\bholiday\b|\babsent\b|\bawol\b)/i.test(text);
     };
 
     if (isToday) {
@@ -8789,7 +8788,7 @@ function renderDailyDetailsSpecialView() {
     dailyDetailsContainer.classList.remove('hidden');
     dailyDetailsContainer.style.display = 'block';
 
-    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const zones = store.zones; // included Admin & Staff Duties
     
     let tableRows = '';
     let hasAllocations = false;
@@ -9091,8 +9090,7 @@ function renderSummaryView() {
         return sections.zones.subsections["A"];
     }
 
-    // 3. Process allocations and categorize sailors based on Daily Details logic
-    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const zones = store.zones; // included Admin & Staff Duties
     const allAllocatedSailorIds = new Set();
     
     zones.forEach(z => {
@@ -9448,7 +9446,7 @@ function openLmdExportModal(action) {
     else if (action === 'whatsapp') title = 'WhatsApp Share Options';
     document.getElementById('lmdExportModalTitle').textContent = title;
     
-    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const zones = store.zones; // included Admin & Staff Duties
     document.getElementById('exportZoneSelect').innerHTML = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
     
     document.querySelector('input[name="exportScope"][value="all"]').checked = true;
@@ -9485,7 +9483,7 @@ function exportLmdCSV(scope, selectedZone) {
     
     let zones = [];
     if (scope === 'all') {
-        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+        zones = store.zones;
     } else {
         const z = store.zones.find(x => x.id === selectedZone);
         if (z) zones.push(z);
@@ -9571,7 +9569,7 @@ function printLmdDetails(scope, selectedZone) {
     
     let zones = [];
     if (scope === 'all') {
-        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+        zones = store.zones;
     } else {
         const z = store.zones.find(x => x.id === selectedZone);
         if (z) zones.push(z);
@@ -10014,7 +10012,7 @@ function shareLmdWhatsApp(scope, selectedZone) {
     
     let zones = [];
     if (scope === 'all') {
-        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+        zones = store.zones;
     } else {
         const z = store.zones.find(x => x.id === selectedZone);
         if (z) zones.push(z);
@@ -10707,7 +10705,7 @@ function generateWorkOrdersPdfBlob(dateVal) {
     
     // Generate the exact same HTML rows as printLmdDetails but for all zones
     let rowsHtml = '';
-    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const zones = store.zones;
     
     zones.forEach(z => {
         const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, targetDate));
