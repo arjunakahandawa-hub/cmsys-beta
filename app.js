@@ -1668,7 +1668,7 @@ function updateCounters() {
     // Helper to check if text contains NA keywords
     const isNA = (text) => {
         if (!text) return false;
-        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b)/i.test(text);
+        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b)/i.test(text);
     };
 
     if (isToday) {
@@ -9212,7 +9212,7 @@ function renderSummaryView() {
                     }
                 }
                 
-                if (assignedWo && /(ගිලන්|\bsiq\b|\badmit\b)/i.test(assignedWo.description || assignedWo.title || '')) {
+                if (assignedWo && /(ගිලන්|\bsiq\b|\badmit\b|\bsick\b)/i.test(assignedWo.description || assignedWo.title || '')) {
                     rowKey = "SICK REPORT";
                 }
             }
