@@ -37,7 +37,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
 });
 
 window.addEventListener('appinstalled', (evt) => {
-    console.log('⚓ NCW-PS PWA was installed successfully!');
+    console.log('⚓ CE Management System PWA was installed successfully!');
     deferredPrompt = null;
     const installBtn = document.getElementById('installAppBtn');
     if (installBtn) {
@@ -82,7 +82,7 @@ window.addEventListener('error', function(e) {
 });
 
 // =============================================
-// NCW-PS v2.2 - Naval Civil Works Productivity Suite
+// CMSys v2.2 - CE Management System
 // Main Application JavaScript
 // =============================================
 
@@ -139,7 +139,7 @@ const store = {
     // ── Loaded from Firebase DB #1 (ce-admin-panel2025) ──
     sailors: [],
 
-    // ── Loaded from Firebase DB #2 (ncw-ps-operations) ──
+    // ── Loaded from Firebase DB #2 (operations database) ──
     workOrders:          [],
     jobCards:            [],
     jobCardMaterials:    [],
@@ -176,7 +176,7 @@ const store = {
 // =============================================
 // FIREBASE INTEGRATION LAYER
 // DB#1 = sailorsDB  (ce-admin-panel2025)   → READ ONLY
-// DB#2 = opsDB      (ncw-ps-operations)    → READ + WRITE
+// DB#2 = opsDB      (operations database)    → READ + WRITE
 // =============================================
 
 // Helper to safely parse cost, handling commas and string prefixes like "Rs."
@@ -214,14 +214,14 @@ function snapshotToArray(snapshot) {
     }));
 }
 
-// ── Helper: generate NCW-PS numeric id from Firebase key ──
+// ── Helper: generate CMSys numeric id from Firebase key ──
 let _idCounter = Date.now();
 function nextId() { return ++_idCounter; }
 
 // ─────────────────────────────────────────────
 // DB #1 LISTENERS — Sailors (READ ONLY)
 // Reads from the "sailors" node in ce-admin-panel2025
-// Maps Firebase fields → NCW-PS store.sailors format
+// Maps Firebase fields → CMSys store.sailors format
 // ─────────────────────────────────────────────
 function initSailorsListener() {
     sailorsDB.ref('sailors').on('value', snapshot => {
@@ -334,7 +334,7 @@ function initSailorsListener() {
 }
 
 // ─────────────────────────────────────────────
-// DB #2 LISTENERS — NCW-PS Operations (READ + WRITE)
+// DB #2 LISTENERS — CE Management System Operations (READ + WRITE)
 // ─────────────────────────────────────────────
 
 function standardizeInventoryDescription(desc) {
@@ -5372,7 +5372,7 @@ function buildEstimatePrintHTML(est) {
                     </td>
                     <td style="border:none;padding:0 0 0 12px;vertical-align:middle;">
                         <div style="font-size:15px;font-weight:800;letter-spacing:0.5px;color:#0f172a;line-height:1.25;">SRI LANKA NAVY<br>CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
-                        <div style="font-size:11px;font-weight:bold;color:#475569;margin-top:4px;">${store.zones.find(z => z.id === (est.zone_id || store.currentZone))?.name || 'Naval Civil Works'} — Cost Estimate</div>
+                        <div style="font-size:11px;font-weight:bold;color:#475569;margin-top:4px;">${store.zones.find(z => z.id === (est.zone_id || store.currentZone))?.name || 'CE Management System'} — Cost Estimate</div>
                     </td>
                 </tr>
             </table>
@@ -6582,8 +6582,8 @@ function resetBulkUploadBtn() {
 
 // Default settings (used if Firebase has nothing)
 const defaultSettings = {
-    systemTitle: 'NCW-PS v2.2',
-    stationName: 'Naval Civil Works · Miss Garrison · Trincomalee',
+    systemTitle: 'CMSys v2.2',
+    stationName: 'CE Management System · Miss Garrison · Trincomalee',
     oicName: '',
     oicRank: '',
     oicServiceNo: '',
@@ -7819,13 +7819,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // DB#1: Load sailors from ce-admin-panel2025 (realtime, read-only)
     initSailorsListener();
 
-    // DB#2: Load & sync all NCW-PS operational data from ncw-ps-operations (realtime, read-write)
+    // DB#2: Load & sync all CE Management System operational data from ncw-ps-operations (realtime, read-write)
     initOpsListeners();
 
     // DB#3: Load Settings from Firebase DB2
     initSettingsListener();
 
-    console.log('🚀 NCW-PS v2.2 initialized with dual Firebase');
+    console.log('🚀 CMSys v2.2 initialized with dual Firebase');
 });
 
 // Global event listeners
@@ -8005,7 +8005,7 @@ function renderProfileDropdown() {
             <div class="border-t border-slate-100 mt-1">
                 <div onclick="triggerPwaInstall()" class="px-4 py-2.5 hover:bg-teal-50 text-teal-600 font-semibold cursor-pointer transition-colors text-xs flex items-center gap-3">
                     <span class="text-sm">📥</span>
-                    <span>Install NCW-PS App</span>
+                    <span>Install CMSys App</span>
                 </div>
             </div>
         `;
@@ -9785,7 +9785,7 @@ function shareViaWhatsAppOrSystem(text, filename) {
 
     if (canUseShare) {
         navigator.share({
-            title: 'NCW-PS Share Report',
+            title: 'CMSys Share Report',
             text: text,
             url: window.location.href
         })
@@ -9827,7 +9827,7 @@ function shareLmdWhatsApp(scope, selectedZone) {
         if (z) zones.push(z);
     }
     
-    let text = `*⚓ NCW-PS DAILY ALLOCATION REPORT*\n`;
+    let text = `*⚓ CMSys DAILY ALLOCATION REPORT*\n`;
     text += `*📅 Date:* ${dateVal}\n`;
     if (scope === 'selected' && zones.length > 0) {
         text += `*🗺️ Zone:* ${zones[0].name.toUpperCase()}\n`;
@@ -10603,8 +10603,8 @@ function generateWorkOrdersPdfBlob(dateVal) {
         <div style="font-family: 'Segoe UI', Arial, sans-serif; color:#000;">
             <div style="display: flex; align-items: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px;">
                 <div style="text-align: left;">
-                    <h1 style="font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">NCW-PS Daily Details Report</h1>
-                    <h2 style="font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">Naval Civil Works • Miss Garrison</h2>
+                    <h1 style="font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">CMSys Daily Details Report</h1>
+                    <h2 style="font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">CE Management System • Miss Garrison</h2>
                 </div>
             </div>
             
@@ -10615,7 +10615,7 @@ function generateWorkOrdersPdfBlob(dateVal) {
                 </div>
                 <div style="text-align: right;">
                     <strong>Generated At:</strong> ${new Date().toLocaleString()}<br>
-                    <strong>Authorized By:</strong> NCW-PS System
+                    <strong>Authorized By:</strong> CMSys System
                 </div>
             </div>
             
