@@ -1625,8 +1625,8 @@ function getLongTermAllocations() {
             
             if (proj.assigned_sailors) {
                 Object.keys(proj.assigned_sailors).forEach(sailorFbKey => {
-                    const sailor = store.sailors.find(s => s._fbKey === sailorFbKey || s.id === sailorFbKey);
-                    if (sailor && sailor.status === 'Active') {
+                    const sailor = store.sailors.find(s => String(s._fbKey) === String(sailorFbKey) || String(s.id) === String(sailorFbKey));
+                    if (sailor) {
                         const rec = { sailor, projectName: name, projectId: pid, date: proj.assigned_sailors[sailorFbKey].assigned_date };
                         if (isHousing) allocs.housing.push(rec);
                         else allocs.outProject.push(rec);
@@ -1643,8 +1643,8 @@ function getLongTermAllocations() {
             
             if (draft.assigned_sailors) {
                 Object.keys(draft.assigned_sailors).forEach(sailorFbKey => {
-                    const sailor = store.sailors.find(s => s._fbKey === sailorFbKey || s.id === sailorFbKey);
-                    if (sailor && sailor.status === 'Active') {
+                    const sailor = store.sailors.find(s => String(s._fbKey) === String(sailorFbKey) || String(s.id) === String(sailorFbKey));
+                    if (sailor) {
                         allocs.otherBase.push({ sailor, projectName: name, projectId: did, date: draft.assigned_sailors[sailorFbKey].assigned_date });
                     }
                 });
