@@ -1169,6 +1169,9 @@
                     <p class="text-sm text-slate-500">Materials and Tools tracking by category</p>
                 </div>
                 <div class="flex gap-2 flex-wrap">
+                    <button onclick="migrateInventoryLocationAndBookNo()" class="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium" title="Scan and repair inventory location entry errors by moving Stock Book No into Book No field and setting Location to Zone">
+                        🔧 Fix Location & Book No
+                    </button>
                     <button onclick="clearCurrentZoneInventory()" class="bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium" title="Clear all inventory items for this zone to perform a fresh upload">
                         🗑️ Reset Zone Items
                     </button>
@@ -1189,7 +1192,7 @@
             <!-- Search & Filter Bar -->
             <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
                 <div class="flex flex-col sm:flex-row gap-3">
-                    <input type="text" id="inventorySearch" placeholder="Search by description..." 
+                    <input type="text" id="inventorySearch" placeholder="Search by description or book no..." 
                         class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
                         onkeyup="filterInventory()">
                     <div class="flex gap-2">
@@ -1203,6 +1206,7 @@
                             <option value="quantity">Sort: Quantity</option>
                             <option value="cost">Sort: Cost</option>
                             <option value="date">Sort: Date Added</option>
+                            <option value="book_no">Sort: Book No</option>
                         </select>
                     </div>
                 </div>
@@ -1219,6 +1223,7 @@
                                 <th class="px-4 py-3 text-center font-semibold">Deno</th>
                                 <th class="px-4 py-3 text-center font-semibold">Qty</th>
                                 <th class="px-4 py-3 text-right font-semibold">Cost (Rs)</th>
+                                <th class="px-4 py-3 text-center font-semibold">Book No</th>
                                 <th class="px-4 py-3 text-center font-semibold">Location</th>
                                 <th class="px-4 py-3 text-center font-semibold">Actions</th>
                             </tr>
@@ -2865,15 +2870,14 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Book No (Stock Book)</label>
+                        <input type="text" id="invBookNo" placeholder="e.g. Book 01, BK-105" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Location</label>
-                        <select id="invLocation" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-                            <option value="Zone Store">Zone Store</option>
-                            <option value="Ready Use Store">Ready Use Store</option>
-                            <option value="Balance Store">Balance Store</option>
-                            <option value="Workshop">Workshop</option>
-                        </select>
+                        <input type="text" id="invLocation" placeholder="e.g. Zone Store, Workshop" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">On Charge Ref</label>

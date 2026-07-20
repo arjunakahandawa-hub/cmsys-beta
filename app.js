@@ -581,14 +581,24 @@ function initOpsListeners() {
 
     // ── Inventory ──
     opsDB.ref('inventory').on('value', snapshot => {
-        store.inventory = snapshotToArray(snapshot).map(item => ({
-            ...item, id: item.id ?? item._fbKey,
-            category: standardizeInventoryCategory(item.category),
-            description: standardizeInventoryDescription(item.description),
-            cost_per_unit: extractCost(item),
-            on_charge_records:  item.on_charge_records  ? Object.values(item.on_charge_records)  : [],
-            off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
-        }));
+        store.inventory = snapshotToArray(snapshot).map(item => {
+            let bookNo = item.book_no || '';
+            let loc = item.location || '';
+            if (!bookNo && loc && !['Zone Store', 'Ready Use Store', 'Balance Store', 'Workshop'].includes(loc)) {
+                bookNo = loc;
+                loc = item.zone_id || 'Zone Store';
+            }
+            return {
+                ...item, id: item.id ?? item._fbKey,
+                category: standardizeInventoryCategory(item.category),
+                description: standardizeInventoryDescription(item.description),
+                cost_per_unit: extractCost(item),
+                book_no: bookNo,
+                location: loc || 'Zone Store',
+                on_charge_records:  item.on_charge_records  ? Object.values(item.on_charge_records)  : [],
+                off_charge_records: item.off_charge_records ? Object.values(item.off_charge_records) : [],
+            };
+        });
         
         refreshCurrentView();
         console.log(`📦 DB#2: ${store.inventory.length} inventory items loaded`);
@@ -4092,7 +4102,7 @@ function renderInventoryTable() {
     // Filter by search
     const search = document.getElementById('inventorySearch')?.value?.toLowerCase() || '';
     if (search) {
-        items = items.filter(i => (i.description || "").toLowerCase().includes(search));
+        items = items.filter(i => (i.description || "").toLowerCase().includes(search) || (i.book_no || "").toLowerCase().includes(search));
     }
     
     // Filter by location
@@ -4107,14 +4117,15 @@ function renderInventoryTable() {
             case 'quantity': return b.quantity - a.quantity;
             case 'cost': return b.cost_per_unit - a.cost_per_unit;
             case 'date': return new Date(b.date_added || 0) - new Date(a.date_added || 0);
+            case 'book_no': return (a.book_no || '').localeCompare(b.book_no || '');
             default: return (a.description || '').localeCompare(b.description || '');
         }
     });
     
-    // Group same items (same description, deno, cost, location)
+    // Group same items (same description, deno, cost, location, book_no)
     const grouped = {};
     items.forEach(item => {
-        const key = `${item.description}|${item.deno}|${item.cost_per_unit}|${item.location}`;
+        const key = `${item.description}|${item.deno}|${item.cost_per_unit}|${item.location}|${item.book_no || ''}`;
         if (!grouped[key]) {
             grouped[key] = {...item, totalQty: item.quantity, items: [item]};
         } else {
@@ -4139,6 +4150,7 @@ function renderInventoryTable() {
                 ${isLow ? '<span class="ml-1 text-[10px] text-rose-500 font-medium">⚠ Low</span>' : ''}
             </td>
             <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm">${formatCurrency(item.cost_per_unit)}</td>
+            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center"><span class="mono text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">${item.book_no || '—'}</span></td>
             <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}${item.zone_id && item.zone_id !== store.currentZone ? ` (${item.zone_id})` : ''}</span></td>
             <td class="px-4 py-2.5 text-center">
                 <div class="flex items-center justify-center gap-2">
@@ -4151,7 +4163,7 @@ function renderInventoryTable() {
                 </div>
             </td>
         </tr>`;
-    }).join('') || '<tr><td colspan="7" class="px-4 py-10 text-center text-slate-400">No inventory items found</td></tr>';
+    }).join('') || '<tr><td colspan="8" class="px-4 py-10 text-center text-slate-400">No inventory items found</td></tr>';
 
     // Calculate total valuation
     const totalValuation = items.reduce((sum, item) => sum + ((item.quantity || 0) * (item.cost_per_unit || 0)), 0);
@@ -4229,7 +4241,11 @@ function showInventoryDetail(itemId) {
                     <p class="font-bold text-amber-600">${formatCurrency(item.quantity * item.cost_per_unit)}</p>
                 </div>
             </div>
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-3 gap-4">
+                <div>
+                    <p class="text-sm text-slate-500">Book No (Stock Book)</p>
+                    <p class="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 inline-block text-xs">${item.book_no || '—'}</p>
+                </div>
                 <div>
                     <p class="text-sm text-slate-500">Location</p>
                     <p class="font-medium">${item.location}</p>
@@ -4406,6 +4422,10 @@ function clearCurrentZoneInventory() {
 
 function openAddInventoryModal() {
     document.getElementById('invId').value = '';
+    const bookNoEl = document.getElementById('invBookNo');
+    if (bookNoEl) bookNoEl.value = '';
+    const locEl = document.getElementById('invLocation');
+    if (locEl) locEl.value = 'Zone Store';
     document.getElementById('invDate').value = new Date().toISOString().split('T')[0];
     populateProjectDropdown();
     // Pre-select current zone
@@ -4425,7 +4445,9 @@ function editInventoryItem(itemId) {
     document.getElementById('invDeno').value = item.deno;
     document.getElementById('invQuantity').value = item.quantity;
     document.getElementById('invCost').value = item.cost_per_unit;
-    document.getElementById('invLocation').value = item.location;
+    const bookNoEl = document.getElementById('invBookNo');
+    if (bookNoEl) bookNoEl.value = item.book_no || '';
+    document.getElementById('invLocation').value = item.location || 'Zone Store';
     document.getElementById('invOnCharge').value = item.on_charge_ref || '';
     document.getElementById('invDate').value = item.date_added;
     // Populate and set zone
@@ -4444,6 +4466,7 @@ function saveInventoryItem(event) {
     
     const id = document.getElementById('invId').value;
     const requirement = document.getElementById('invRequirement').value || document.getElementById('invRequirementText').value;
+    const bookNoVal = document.getElementById('invBookNo')?.value?.trim() || '';
     
     const itemData = {
         category: document.getElementById('invCategory').value,
@@ -4452,7 +4475,8 @@ function saveInventoryItem(event) {
         quantity: parseFloat(document.getElementById('invQuantity').value),
         cost_per_unit: safeParseCost(document.getElementById('invCost').value),
         requirement: requirement,
-        location: document.getElementById('invLocation').value,
+        book_no: bookNoVal,
+        location: document.getElementById('invLocation').value || 'Zone Store',
         on_charge_ref: document.getElementById('invOnCharge').value,
         date_added: document.getElementById('invDate').value,
         zone_id: document.getElementById('invZone').value || store.currentZone
@@ -6452,7 +6476,7 @@ function downloadCsvTemplate() {
     let filename = '';
     
     if (type === 'inventory') {
-        headers = 'Description,Category,Deno,Quantity,Unit Cost,Requirement,Location,On-Charge Ref,Date Added\n';
+        headers = 'Description,Category,Deno,Quantity,Unit Cost,Requirement,Book No,Location,On-Charge Ref,Date Added\n';
         filename = 'inventory_template.csv';
     } else if (type === 'locations') {
         headers = 'Zone,Building Name,Sub-location,Description\n';
@@ -6543,6 +6567,9 @@ function normalizeInventoryCsvHeader(h) {
     if (clean.includes('requirement') || clean === 'req') {
         return 'requirement';
     }
+    if (clean.includes('book') || clean === 'book_no' || clean === 'book no' || clean === 'bookno') {
+        return 'book_no';
+    }
     if (clean.includes('location') || clean === 'loc' || clean === 'store') {
         return 'location';
     }
@@ -6572,6 +6599,46 @@ function normalizeLocationsCsvHeader(h) {
     return clean;
 }
 
+function migrateInventoryLocationAndBookNo() {
+    const itemsToFix = store.inventory.filter(i => {
+        const hasBookNo = !!(i.book_no && i.book_no.trim());
+        const loc = (i.location || '').trim();
+        const isStandardLoc = ['Zone Store', 'Ready Use Store', 'Balance Store', 'Workshop'].includes(loc);
+        return !hasBookNo && loc.length > 0;
+    });
+
+    if (itemsToFix.length === 0) {
+        showToast('All inventory items already have valid Location and Book No!', 'info');
+        return;
+    }
+
+    const zoneName = store.zones.find(z => z.id === store.currentZone)?.name || store.currentZone;
+    if (confirm(`🔧 Found ${itemsToFix.length} items where Stock Book numbers are recorded in the Location field.\n\nDo you want to move these Stock Book numbers to the 'Book No' column and set the Location to '${zoneName}'?`)) {
+        let updatedCount = 0;
+        itemsToFix.forEach(item => {
+            const fbKey = item._fbKey || item.id;
+            const currentLoc = item.location || '';
+            const newBookNo = item.book_no || currentLoc;
+            const newLocation = item.zone_id || 'Zone Store';
+
+            item.book_no = newBookNo;
+            item.location = newLocation;
+
+            if (fbKey) {
+                opsDB.ref(`inventory/${fbKey}`).update({
+                    book_no: newBookNo,
+                    location: newLocation
+                }).then(() => {
+                    updatedCount++;
+                    if (updatedCount === itemsToFix.length) {
+                        showToast(`Successfully repaired ${updatedCount} inventory items!`);
+                    }
+                }).catch(err => console.error(err));
+            }
+        });
+    }
+}
+
 function processInventoryCsv(csvText) {
     const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length <= 1) {
@@ -6595,31 +6662,28 @@ function processInventoryCsv(csvText) {
             if (header === 'quantity') itemData.quantity = parseFloat(values[index]) || 0;
             if (header === 'unit cost') itemData.cost_per_unit = safeParseCost(values[index]);
             if (header === 'requirement') itemData.requirement = values[index];
+            if (header === 'book_no') itemData.book_no = values[index];
             if (header === 'location') itemData.location = values[index];
             if (header === 'on-charge ref') itemData.on_charge_ref = values[index];
             if (header === 'date added') {
-                // If provided date, try to parse it, else use today
                 let d = values[index] ? new Date(values[index]) : new Date();
                 if (isNaN(d.getTime())) d = new Date();
                 itemData.date_added = d.toISOString().split('T')[0];
             }
         });
         
-        // Validation - Category and Quantity are required minimums
         if (!itemData.category || isNaN(itemData.quantity)) {
             skippedCount++;
             continue;
         }
         
-        // Fill missing strings with empty
         itemData.description = itemData.description || '';
         itemData.deno = itemData.deno || 'Nos';
+        itemData.book_no = itemData.book_no || '';
         itemData.location = itemData.location || 'Zone Store';
         if (!itemData.date_added) itemData.date_added = new Date().toISOString().split('T')[0];
-        // Tag with current zone
         itemData.zone_id = store.currentZone;
         
-        // Save to Firebase
         fbSaveInventoryItem(itemData);
         addedCount++;
     }
