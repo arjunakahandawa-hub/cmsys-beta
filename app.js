@@ -1666,9 +1666,14 @@ function updateCounters() {
     const assignedIds = new Set();
     const naIds = new Set();
     
+    const isLeaveState = (val) => {
+        if (!val) return false;
+        return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(val.trim());
+    };
+
     const isNA = (text) => {
         if (!text) return false;
-        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b|\bweekend\b|\boff\b|\bholiday\b|\babsent\b|\bawol\b)/i.test(text);
+        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b|\bweekend\b|\boff\b|\bholiday\b|\babsent\b|\bawol\b|\bL\b|\bDL\b|\bWE\b|\bHD\b|T\/D|M\/D)/i.test(text);
     };
 
     if (isToday) {
@@ -1721,7 +1726,7 @@ function updateCounters() {
 
     if (store.sailors) {
         store.sailors.forEach(s => {
-            if (s.status !== 'Leave' && s.status !== 'Sick') {
+            if (!isLeaveState(s.status) && !isLeaveState(s.attendance)) {
                 if (naIds.has(String(s.id)) || naIds.has(String(s._fbKey))) {
                     s.status = 'NA';
                 } else if (longTermIds.has(String(s.id)) || longTermIds.has(String(s._fbKey))) {
@@ -1750,7 +1755,7 @@ function updateCounters() {
 
     const available = store.sailors ? store.sailors.filter(s => s.status === 'Available').length : 0;
     const assigned = store.sailors ? store.sailors.filter(s => s.status === 'Assigned').length : 0;
-    const naCount = store.sailors ? store.sailors.filter(s => s.status === 'NA').length : 0;
+    const naCount = store.sailors ? store.sailors.filter(s => isLeaveState(s.status) || isLeaveState(s.attendance)).length : 0;
     
     document.getElementById('netForce').textContent = available + assigned + naCount;
     document.getElementById('assignedCount').textContent = assigned;
@@ -9125,7 +9130,8 @@ function renderSummaryView() {
                 
                 assignedSailors.forEach(sailor => {
                     // Skip if sailor is actually on Leave/Sick/NA (they should go to the leave section)
-                    const isLeave = sailor.attendance === 'Leave' || sailor.attendance === 'Sick' || sailor.status === 'NA' || sailor.status === 'Leave' || sailor.status === 'Sick';
+                    const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(val.trim());
+                    const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status);
                     if (isLeave) return;
                     
                     // Track for Leave/Sick check
@@ -9181,15 +9187,17 @@ function renderSummaryView() {
     store.sailors.forEach(sailor => {
         const isAllocated = allAllocatedSailorIds.has(String(sailor.id)) || (sailor._fbKey && allAllocatedSailorIds.has(String(sailor._fbKey)));
         
-        const isLeave = sailor.attendance === 'Leave' || sailor.attendance === 'Sick' || sailor.status === 'NA' || sailor.status === 'Leave' || sailor.status === 'Sick';
+        const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(val.trim());
+        const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status);
         
         if (isLeave) {
             const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
             let rowKey = "LEAVE & WEEKEND DOKYARD";
             
-            if (sailor.attendance === 'Sick' || sailor.status === 'Sick') {
+            const isSick = sailor.attendance && /^(Sick|M\/D)$/i.test(sailor.attendance.trim()) || sailor.status && /^(Sick|M\/D)$/i.test(sailor.status.trim());
+            if (isSick) {
                 rowKey = "SICK REPORT";
-            } else if (sailor.status === 'NA' && sailor.attendance !== 'Leave') {
+            } else if (sailor.status === 'NA' && (!sailor.attendance || !/^(Leave|L|DL|WE|HD|T\/D)$/i.test(sailor.attendance.trim()))) {
                 // Try to infer if it was sick from work orders
                 let isSickWo = false;
                 const activeWo = store.workOrders || [];
