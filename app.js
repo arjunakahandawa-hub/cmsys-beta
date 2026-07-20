@@ -9061,9 +9061,8 @@ function renderSummaryView() {
             }
         },
         othersDuty: { title: "OTHERS DUTY DOCK YARD", rows: {} },
-        otherBases: { title: "OTHER BASES ENA", rows: {} },
+        otherBases: { title: "TEMPORARY DRAFT TO OTHER NAVAL AREA", rows: {} },
         socialResponsible: { title: "SOCIAL RESPONSIBLE WORKS AT ENA", rows: {} },
-        temporaryDraft: { title: "TEMPORAY DRAFT TO OTHER NAVAL AREA", rows: {} },
         leaveSick: { title: "LEAVE, SICK & ATTENDANCE", rows: {} }
     };
 
@@ -9148,8 +9147,6 @@ function renderSummaryView() {
     const longTerm = getLongTermAllocations();
     
     [...longTerm.housing, ...longTerm.outProject].forEach(alloc => {
-        const isLeave = alloc.sailor.attendance === 'Leave' || alloc.sailor.attendance === 'Sick' || alloc.sailor.status === 'NA' || alloc.sailor.status === 'Leave' || alloc.sailor.status === 'Sick';
-        if (isLeave) return;
         
         allAllocatedSailorIds.add(String(alloc.sailor.id));
         if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
@@ -9165,8 +9162,6 @@ function renderSummaryView() {
     });
 
     longTerm.otherBase.forEach(alloc => {
-        const isLeave = alloc.sailor.attendance === 'Leave' || alloc.sailor.attendance === 'Sick' || alloc.sailor.status === 'NA' || alloc.sailor.status === 'Leave' || alloc.sailor.status === 'Sick';
-        if (isLeave) return;
         
         allAllocatedSailorIds.add(String(alloc.sailor.id));
         if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
@@ -9381,10 +9376,7 @@ function renderSummaryView() {
     // 6. Social Responsible Works
     appendSectionToTable(sections.socialResponsible);
     
-    // 7. Temporary Draft
-    appendSectionToTable(sections.temporaryDraft);
-    
-    // 8. Leave & Attendance
+    // 7. Leave & Attendance
     appendSectionToTable(sections.leaveSick);
 
     // Render Grand Total Row at the absolute bottom
