@@ -1,4 +1,17 @@
 // =============================================
+// GLOBAL ERROR HANDLER (DEBUG)
+// =============================================
+window.onerror = function(msg, url, line, col, error) {
+    console.error('🚨 JS ERROR:', msg, 'at', url, 'line:', line);
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:red;color:white;padding:8px 12px;font-size:12px;font-family:monospace;cursor:pointer;';
+    errDiv.textContent = '🚨 JS Error: ' + msg + ' (line ' + line + ')';
+    errDiv.onclick = function() { this.remove(); };
+    document.body.appendChild(errDiv);
+    return false;
+};
+
+// =============================================
 // PWA SERVICE WORKER REGISTRATION
 // =============================================
 // Force unregister all service workers and clear cache to resolve browser caching bugs
