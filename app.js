@@ -750,6 +750,7 @@ function refreshCurrentView() {
 
 function refreshCurrentViewImmediately() {
     computeYesterdayJobs();
+    updateCounters();
     const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary','sailors','sailordashboard'];
     for (const v of views) {
         const el = document.getElementById(`view-${v}`);
