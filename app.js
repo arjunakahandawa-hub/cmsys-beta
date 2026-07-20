@@ -138,6 +138,7 @@ const store = {
 
     // ── Loaded from Firebase DB #1 (ce-admin-panel2025) ──
     sailors: [],
+    availability: {},
     outProjects: {},
     tempDrafts: {},
 
@@ -313,9 +314,12 @@ function initSailorsListener() {
         console.log(`✅ DB#1: Loaded ${store.sailors.length} sailors`);
         console.log(`   Sample Off No: "${store.sailors[0]?.official_number}"`);
 
-        // Re-render dashboard if visible
+        // Re-render dashboard or summary if visible
         if (!document.getElementById('view-dashboard').classList.contains('hidden')) {
             renderDashboard();
+        }
+        if (typeof renderSummaryView === 'function' && !document.getElementById('view-summary').classList.contains('hidden')) {
+            renderSummaryView();
         }
 
         // Re-render personal sailor dashboard if active profile is Sailor
@@ -332,6 +336,25 @@ function initSailorsListener() {
         
     }, error => {
         console.error('❌ DB#1 Sailors listener error:', error);
+    });
+}
+
+function initAvailabilityListener() {
+    sailorsDB.ref('availability').on('value', snapshot => {
+        if (snapshot.exists()) {
+            store.availability = snapshot.val();
+        } else {
+            store.availability = {};
+        }
+        if (typeof renderDashboard === 'function' && !document.getElementById('view-dashboard').classList.contains('hidden')) {
+            renderDashboard();
+        }
+        if (typeof renderSummaryView === 'function' && !document.getElementById('view-summary').classList.contains('hidden')) {
+            renderSummaryView();
+        }
+    }, (error) => {
+        console.error("Availability read error:", error);
+        showToast("Error reading Leave data: " + error.message, 'error');
     });
 }
 
@@ -7892,6 +7915,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Start Firebase listeners ──
     // DB#1: Load sailors from ce-admin-panel2025 (realtime, read-only)
     initSailorsListener();
+    initAvailabilityListener();
     initLongTermDeploymentsListeners();
 
     // DB#2: Load & sync all NCW-PS operational data from ncw-ps-operations (realtime, read-write)
@@ -9129,9 +9153,15 @@ function renderSummaryView() {
                 const targetRow = section.rows[rowKey];
                 
                 assignedSailors.forEach(sailor => {
+                    // Check fbStatus to accurately skip leaves
+                    const [yyyy, mm, dd] = dateVal.split('-');
+                    const monthKey = `${yyyy}-${mm}`;
+                    const dayKey = parseInt(dd, 10).toString();
+                    const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][sailor._fbKey] : null;
+
                     // Skip if sailor is actually on Leave/Sick/NA (they should go to the leave section)
-                    const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(val.trim());
-                    const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status);
+                    const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(val.trim());
+                    const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status) || isLeaveCode(fbStatus);
                     if (isLeave) return;
                     
                     // Track for Leave/Sick check
@@ -9154,6 +9184,13 @@ function renderSummaryView() {
     const longTerm = getLongTermAllocations();
     
     [...longTerm.housing, ...longTerm.outProject].forEach(alloc => {
+        const [yyyy, mm, dd] = dateVal.split('-');
+        const monthKey = `${yyyy}-${mm}`;
+        const dayKey = parseInt(dd, 10).toString();
+        const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][alloc.sailor._fbKey] : null;
+        const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(val.trim());
+        const isLeave = isLeaveCode(alloc.sailor.attendance) || isLeaveCode(alloc.sailor.status) || isLeaveCode(fbStatus);
+        if (isLeave) return;
         
         allAllocatedSailorIds.add(String(alloc.sailor.id));
         if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
@@ -9169,6 +9206,13 @@ function renderSummaryView() {
     });
 
     longTerm.otherBase.forEach(alloc => {
+        const [yyyy, mm, dd] = dateVal.split('-');
+        const monthKey = `${yyyy}-${mm}`;
+        const dayKey = parseInt(dd, 10).toString();
+        const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][alloc.sailor._fbKey] : null;
+        const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(val.trim());
+        const isLeave = isLeaveCode(alloc.sailor.attendance) || isLeaveCode(alloc.sailor.status) || isLeaveCode(fbStatus);
+        if (isLeave) return;
         
         allAllocatedSailorIds.add(String(alloc.sailor.id));
         if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
@@ -9187,14 +9231,22 @@ function renderSummaryView() {
     store.sailors.forEach(sailor => {
         const isAllocated = allAllocatedSailorIds.has(String(sailor.id)) || (sailor._fbKey && allAllocatedSailorIds.has(String(sailor._fbKey)));
         
-        const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(val.trim());
-        const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status);
+        // Extract YYYY-MM and DD from dateVal
+        const [yyyy, mm, dd] = dateVal.split('-');
+        const monthKey = `${yyyy}-${mm}`;
+        const dayKey = parseInt(dd, 10).toString(); // Removes leading zero
+        
+        const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][sailor._fbKey] : null;
+        
+        const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(val.trim());
+        const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status) || isLeaveCode(fbStatus);
         
         if (isLeave) {
             const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
             let rowKey = "LEAVE & WEEKEND DOKYARD";
             
-            const isSick = sailor.attendance && /^(Sick|M\/D)$/i.test(sailor.attendance.trim()) || sailor.status && /^(Sick|M\/D)$/i.test(sailor.status.trim());
+            const isSickCode = (val) => val && /^(Sick|M\/D|SIQ|S\/R|SL|ADM)$/i.test(val.trim());
+            const isSick = isSickCode(sailor.attendance) || isSickCode(sailor.status) || isSickCode(fbStatus);
             if (isSick) {
                 rowKey = "SICK REPORT";
             } else if (sailor.status === 'NA' && (!sailor.attendance || !/^(Leave|L|DL|WE|HD|T\/D)$/i.test(sailor.attendance.trim()))) {
