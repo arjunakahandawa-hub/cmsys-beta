@@ -1691,12 +1691,14 @@ function updateCounters() {
     
     const isLeaveState = (val) => {
         if (!val) return false;
-        return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(val.trim());
+        const s = typeof val === 'string' ? val.trim() : String(val).trim();
+        return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(s);
     };
 
     const isNA = (text) => {
         if (!text) return false;
-        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b|\bweekend\b|\boff\b|\bholiday\b|\babsent\b|\bawol\b|\bL\b|\bDL\b|\bWE\b|\bHD\b|T\/D|M\/D)/i.test(text);
+        const s = typeof text === 'string' ? text : String(text);
+        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b|\bweekend\b|\boff\b|\bholiday\b|\babsent\b|\bawol\b|\bL\b|\bDL\b|\bWE\b|\bHD\b|T\/D|M\/D)/i.test(s);
     };
 
     if (isToday) {
@@ -9160,7 +9162,7 @@ function renderSummaryView() {
                     const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][sailor._fbKey] : null;
 
                     // Skip if sailor is actually on Leave/Sick/NA (they should go to the leave section)
-                    const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(val.trim());
+                    const isLeaveCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s); };
                     const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status) || isLeaveCode(fbStatus);
                     if (isLeave) return;
                     
@@ -9188,7 +9190,7 @@ function renderSummaryView() {
         const monthKey = `${yyyy}-${mm}`;
         const dayKey = parseInt(dd, 10).toString();
         const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][alloc.sailor._fbKey] : null;
-        const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(val.trim());
+        const isLeaveCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s); };
         const isLeave = isLeaveCode(alloc.sailor.attendance) || isLeaveCode(alloc.sailor.status) || isLeaveCode(fbStatus);
         if (isLeave) return;
         
@@ -9210,7 +9212,7 @@ function renderSummaryView() {
         const monthKey = `${yyyy}-${mm}`;
         const dayKey = parseInt(dd, 10).toString();
         const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][alloc.sailor._fbKey] : null;
-        const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(val.trim());
+        const isLeaveCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s); };
         const isLeave = isLeaveCode(alloc.sailor.attendance) || isLeaveCode(alloc.sailor.status) || isLeaveCode(fbStatus);
         if (isLeave) return;
         
@@ -9238,18 +9240,18 @@ function renderSummaryView() {
         
         const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][sailor._fbKey] : null;
         
-        const isLeaveCode = (val) => val && /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(val.trim());
+        const isLeaveCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s); };
         const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status) || isLeaveCode(fbStatus);
         
         if (isLeave) {
             const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
             let rowKey = "LEAVE & WEEKEND DOKYARD";
             
-            const isSickCode = (val) => val && /^(Sick|M\/D|SIQ|S\/R|SL|ADM)$/i.test(val.trim());
+            const isSickCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Sick|M\/D|SIQ|S\/R|SL|ADM)$/i.test(s); };
             const isSick = isSickCode(sailor.attendance) || isSickCode(sailor.status) || isSickCode(fbStatus);
             if (isSick) {
                 rowKey = "SICK REPORT";
-            } else if (sailor.status === 'NA' && (!sailor.attendance || !/^(Leave|L|DL|WE|HD|T\/D)$/i.test(sailor.attendance.trim()))) {
+            } else if (sailor.status === 'NA' && (!sailor.attendance || !/^(Leave|L|DL|WE|HD|T\/D)$/i.test(typeof sailor.attendance === 'string' ? sailor.attendance.trim() : String(sailor.attendance).trim()))) {
                 // Try to infer if it was sick from work orders
                 let isSickWo = false;
                 const activeWo = store.workOrders || [];
