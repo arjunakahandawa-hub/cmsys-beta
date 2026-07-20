@@ -1,4 +1,17 @@
 // =============================================
+// GLOBAL ERROR HANDLER (DEBUG)
+// =============================================
+window.onerror = function(msg, url, line, col, error) {
+    console.error('🚨 JS ERROR:', msg, 'at', url, 'line:', line);
+    const errDiv = document.createElement('div');
+    errDiv.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:red;color:white;padding:8px 12px;font-size:12px;font-family:monospace;cursor:pointer;';
+    errDiv.textContent = '🚨 JS Error: ' + msg + ' (line ' + line + ')';
+    errDiv.onclick = function() { this.remove(); };
+    document.body.appendChild(errDiv);
+    return false;
+};
+
+// =============================================
 // PWA SERVICE WORKER REGISTRATION
 // =============================================
 // Force unregister all service workers and clear cache to resolve browser caching bugs
@@ -138,6 +151,9 @@ const store = {
 
     // ── Loaded from Firebase DB #1 (ce-admin-panel2025) ──
     sailors: [],
+    availability: {},
+    outProjects: {},
+    tempDrafts: {},
 
     // ── Loaded from Firebase DB #2 (operations database) ──
     workOrders:          [],
@@ -311,9 +327,12 @@ function initSailorsListener() {
         console.log(`✅ DB#1: Loaded ${store.sailors.length} sailors`);
         console.log(`   Sample Off No: "${store.sailors[0]?.official_number}"`);
 
-        // Re-render dashboard if visible
+        // Re-render dashboard or summary if visible
         if (!document.getElementById('view-dashboard').classList.contains('hidden')) {
             renderDashboard();
+        }
+        if (typeof renderSummaryView === 'function' && !document.getElementById('view-summary').classList.contains('hidden')) {
+            renderSummaryView();
         }
 
         // Re-render personal sailor dashboard if active profile is Sailor
@@ -330,6 +349,36 @@ function initSailorsListener() {
         
     }, error => {
         console.error('❌ DB#1 Sailors listener error:', error);
+    });
+}
+
+function initAvailabilityListener() {
+    sailorsDB.ref('availability').on('value', snapshot => {
+        if (snapshot.exists()) {
+            store.availability = snapshot.val();
+        } else {
+            store.availability = {};
+        }
+        if (typeof renderDashboard === 'function' && !document.getElementById('view-dashboard').classList.contains('hidden')) {
+            renderDashboard();
+        }
+        if (typeof renderSummaryView === 'function' && !document.getElementById('view-summary').classList.contains('hidden')) {
+            renderSummaryView();
+        }
+    }, (error) => {
+        console.error("Availability read error:", error);
+        showToast("Error reading Leave data: " + error.message, 'error');
+    });
+}
+
+function initLongTermDeploymentsListeners() {
+    sailorsDB.ref('out_projects').on('value', snapshot => {
+        store.outProjects = snapshot.val() || {};
+        renderDashboard();
+    });
+    sailorsDB.ref('temp_drafts').on('value', snapshot => {
+        store.tempDrafts = snapshot.val() || {};
+        renderDashboard();
     });
 }
 
@@ -737,6 +786,7 @@ function refreshCurrentView() {
 
 function refreshCurrentViewImmediately() {
     computeYesterdayJobs();
+    updateCounters();
     const views = ['dashboard','jobcards','inventory','estimates','maintenance','reports','dailydetails','summary','sailors','sailordashboard'];
     for (const v of views) {
         const el = document.getElementById(`view-${v}`);
@@ -941,6 +991,7 @@ function changeDashboardDate(val) {
     if (!val) return;
     store.dashboardDate = val;
     renderDashboard();
+    renderZoneSelectors(); // Re-render dropdown to update zone progress percentages
     
     const today = new Date().toISOString().split('T')[0];
     if (val !== today) {
@@ -1600,6 +1651,47 @@ function toggleZoneTeam(sailorId, addToTeam) {
     renderAvailableSailors();
 }
 
+function getLongTermAllocations() {
+    let allocs = { housing: [], outProject: [], otherBase: [] };
+
+    if (store.outProjects) {
+        Object.keys(store.outProjects).forEach(pid => {
+            const proj = store.outProjects[pid];
+            const name = (proj.name || '').trim();
+            const isHousing = name.toUpperCase().includes('HOUSING');
+            
+            if (proj.assigned_sailors) {
+                Object.keys(proj.assigned_sailors).forEach(sailorFbKey => {
+                    const sailor = store.sailors.find(s => String(s._fbKey) === String(sailorFbKey) || String(s.id) === String(sailorFbKey));
+                    if (sailor) {
+                        const rec = { sailor, projectName: name, projectId: pid, date: proj.assigned_sailors[sailorFbKey].assigned_date };
+                        if (isHousing) allocs.housing.push(rec);
+                        else allocs.outProject.push(rec);
+                    }
+                });
+            }
+        });
+    }
+
+    if (store.tempDrafts) {
+        Object.keys(store.tempDrafts).forEach(did => {
+            const draft = store.tempDrafts[did];
+            const name = (draft.draft_name || draft.name || 'Unknown Base').trim();
+            
+            if (draft.assigned_sailors) {
+                Object.keys(draft.assigned_sailors).forEach(sailorFbKey => {
+                    const sailor = store.sailors.find(s => String(s._fbKey) === String(sailorFbKey) || String(s.id) === String(sailorFbKey));
+                    if (sailor) {
+                        allocs.otherBase.push({ sailor, projectName: name, projectId: did, date: draft.assigned_sailors[sailorFbKey].assigned_date });
+                    }
+                });
+            }
+        });
+    }
+
+    return allocs;
+}
+
 function updateCounters() {
     const activeWo = store.workOrders || [];
     const activeJc = store.jobCards || [];
@@ -1610,10 +1702,16 @@ function updateCounters() {
     const assignedIds = new Set();
     const naIds = new Set();
     
-    // Helper to check if text contains NA keywords
+    const isLeaveState = (val) => {
+        if (!val) return false;
+        const s = typeof val === 'string' ? val.trim() : String(val).trim();
+        return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(s);
+    };
+
     const isNA = (text) => {
         if (!text) return false;
-        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b)/i.test(text);
+        const s = typeof text === 'string' ? text : String(text);
+        return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b|\bweekend\b|\boff\b|\bholiday\b|\babsent\b|\bawol\b|\bL\b|\bDL\b|\bWE\b|\bHD\b|T\/D|M\/D)/i.test(s);
     };
 
     if (isToday) {
@@ -1651,11 +1749,26 @@ function updateCounters() {
         });
     }
 
+    const longTerm = getLongTermAllocations();
+    const longTermIds = new Set();
+    [...longTerm.housing, ...longTerm.outProject, ...longTerm.otherBase].forEach(a => {
+        longTermIds.add(String(a.sailor.id ?? a.sailor._fbKey));
+    });
+
+    const housingCount = document.getElementById('housingProjectCount');
+    if (housingCount) housingCount.textContent = longTerm.housing.length;
+    const outProjCount = document.getElementById('outProjectCount');
+    if (outProjCount) outProjCount.textContent = longTerm.outProject.length;
+    const otherBaseCount = document.getElementById('otherBaseCount');
+    if (otherBaseCount) otherBaseCount.textContent = longTerm.otherBase.length;
+
     if (store.sailors) {
         store.sailors.forEach(s => {
-            if (s.status !== 'Leave' && s.status !== 'Sick') {
+            if (!isLeaveState(s.status) && !isLeaveState(s.attendance)) {
                 if (naIds.has(String(s.id)) || naIds.has(String(s._fbKey))) {
                     s.status = 'NA';
+                } else if (longTermIds.has(String(s.id)) || longTermIds.has(String(s._fbKey))) {
+                    s.status = 'LongTermDeployed';
                 } else if (assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey))) {
                     s.status = 'Assigned';
                 } else {
@@ -1680,7 +1793,7 @@ function updateCounters() {
 
     const available = store.sailors ? store.sailors.filter(s => s.status === 'Available').length : 0;
     const assigned = store.sailors ? store.sailors.filter(s => s.status === 'Assigned').length : 0;
-    const naCount = store.sailors ? store.sailors.filter(s => s.status === 'NA').length : 0;
+    const naCount = store.sailors ? store.sailors.filter(s => isLeaveState(s.status) || isLeaveState(s.attendance)).length : 0;
     
     document.getElementById('netForce').textContent = available + assigned + naCount;
     document.getElementById('assignedCount').textContent = assigned;
@@ -3092,6 +3205,7 @@ function saveWorkOrderChanges() {
         if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
 
         renderDashboard();
+        renderZoneSelectors(); // Update Zone dropdown percentages
         showToast('Work order updated successfully!');
         
         // Auto-close modal if no longer showing on the planning board
@@ -3229,7 +3343,8 @@ function forwardToComplete() {
 
 // Proceed button (req 2): commit daily labour allocation -> dashboard + DB
 function proceedWorkOrder() {
-    const wo = store.workOrders.find(w => w.id === store.selectedWorkOrder);
+    const woKey = store.selectedWorkOrder;
+    const wo = store.workOrders.find(w => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey));
     if (!wo) return;
 
     // Save any pending field edits first
@@ -3270,9 +3385,9 @@ function proceedWorkOrder() {
     wo.assigned.forEach(sid => {
         const sailor = store.sailors.find(s => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
         // remove existing same-day allocation for this sailor (one job per day)
-        store.dailyAllocations = store.dailyAllocations.filter(a => !(a.date === today && a.sailor_id === sid));
+        store.dailyAllocations = (store.dailyAllocations || []).filter(a => !(a.date === today && a.sailor_id === sid));
         const alloc = {
-            id: store.dailyAllocations.length + 1,
+            id: (store.dailyAllocations || []).length + 1,
             date: today,
             sailor_id: sid,
             work_order_id: wo.id,
@@ -5977,7 +6092,29 @@ function renderZoneSelectors() {
     }
 
     const visibleZones = store.zones.filter(z => allowedZones.includes(z.id));
-    let optionsHtml = visibleZones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
+    
+    const today = new Date().toISOString().split('T')[0];
+    const dateVal = store.dashboardDate || today;
+    
+    let optionsHtml = visibleZones.map(z => {
+        const zoneOrders = (store.workOrders || []).filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal));
+        let displayStr = z.name;
+        
+        if (zoneOrders.length > 0) {
+            const totalProgress = zoneOrders.reduce((sum, wo) => sum + (parseInt(wo.progress) || 0), 0);
+            const percentage = Math.round(totalProgress / zoneOrders.length);
+            
+            let emoji = '⚠️';
+            if (percentage === 100) emoji = '✅';
+            else if (percentage === 0) emoji = '❌';
+            
+            displayStr = `${emoji} ${z.name} (${percentage}%)`;
+        } else {
+            displayStr = `➖ ${z.name} (N/A)`;
+        }
+        
+        return `<option value="${z.id}">${displayStr}</option>`;
+    }).join('');
     
     // Add Admin & Staff Duties special option
     if (hasAllZoneAccess) {
@@ -7794,6 +7931,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // ── Start Firebase listeners ──
     // DB#1: Load sailors from ce-admin-panel2025 (realtime, read-only)
     initSailorsListener();
+    initAvailabilityListener();
+    initLongTermDeploymentsListeners();
 
     // DB#2: Load & sync all CE Management System operational data from ncw-ps-operations (realtime, read-write)
     initOpsListeners();
@@ -8695,7 +8834,7 @@ function renderDailyDetailsSpecialView() {
     dailyDetailsContainer.classList.remove('hidden');
     dailyDetailsContainer.style.display = 'block';
 
-    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const zones = store.zones; // included Admin & Staff Duties
     
     let tableRows = '';
     let hasAllocations = false;
@@ -8774,6 +8913,64 @@ function renderDailyDetailsSpecialView() {
             });
         }
     });
+
+    // ─────────────────────────────────────────────
+    // APPEND LONG-TERM DEPLOYMENTS (HOUSING, OUT, OTHER BASE)
+    // ─────────────────────────────────────────────
+    const longTerm = getLongTermAllocations();
+    
+    const renderLongTermCategory = (title, icon, dataArray, bgColor, textColor) => {
+        if (dataArray.length === 0) return;
+        // Group by project name
+        const grouped = {};
+        dataArray.forEach(item => {
+            const isLeave = item.sailor.attendance === 'Leave' || item.sailor.attendance === 'Sick' || item.sailor.status === 'NA' || item.sailor.status === 'Leave' || item.sailor.status === 'Sick';
+            if (isLeave) return;
+            const p = item.projectName || 'Unknown';
+            if (!grouped[p]) grouped[p] = [];
+            grouped[p].push(item.sailor);
+        });
+
+        const activeProjects = Object.keys(grouped);
+        if (activeProjects.length === 0) return;
+        
+        hasAllocations = true;
+        tableRows += `
+            <tr class="${bgColor} ${textColor} font-bold">
+                <td colspan="6" class="px-4 py-2.5 text-xs uppercase tracking-wider">
+                    ${icon} ${title}
+                </td>
+            </tr>
+        `;
+
+        activeProjects.forEach(projName => {
+            tableRows += `
+                <tr class="bg-slate-50 font-bold border-b border-slate-200">
+                    <td colspan="6" class="px-4 py-2 text-[10px] text-slate-700 text-center underline uppercase tracking-wide">
+                        📋 PROJECT: ${projName.toUpperCase()}
+                    </td>
+                </tr>
+            `;
+            grouped[projName].forEach((s, idx) => {
+                const serNo = String(idx + 1).padStart(2, '0');
+                const parsedOffNo = parseOfficialNumber(s.official_number || s.service_no);
+                tableRows += `
+                    <tr class="hover:bg-slate-50 border-b border-slate-100 transition-colors text-xs text-slate-800">
+                        <td class="px-4 py-2 text-center font-medium">${serNo}</td>
+                        <td class="px-4 py-2">${s.rank || 'AB'}</td>
+                        <td class="px-4 py-2 font-semibold text-slate-900">${s.name}</td>
+                        <td class="px-4 py-2 text-center"><span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded font-mono font-medium">${parsedOffNo.type}</span></td>
+                        <td class="px-4 py-2 font-mono">${parsedOffNo.num}</td>
+                        <td class="px-4 py-2 text-center"><span class="bg-teal-50 text-teal-700 px-2 py-0.5 rounded font-bold">${s.trade || '—'}</span></td>
+                    </tr>
+                `;
+            });
+        });
+    };
+
+    renderLongTermCategory('HOUSING PROJECTS', '🏠', longTerm.housing, 'bg-indigo-900', 'text-indigo-100');
+    renderLongTermCategory('OUT PROJECTS', '🏗️', longTerm.outProject, 'bg-fuchsia-900', 'text-fuchsia-100');
+    renderLongTermCategory('OTHER BASE', '⚓', longTerm.otherBase, 'bg-cyan-900', 'text-cyan-100');
 
     if (!hasAllocations) {
         tableRows = `
@@ -8910,9 +9107,8 @@ function renderSummaryView() {
             }
         },
         othersDuty: { title: "OTHERS DUTY DOCK YARD", rows: {} },
-        otherBases: { title: "OTHER BASES ENA", rows: {} },
+        otherBases: { title: "TEMPORARY DRAFT TO OTHER NAVAL AREA", rows: {} },
         socialResponsible: { title: "SOCIAL RESPONSIBLE WORKS AT ENA", rows: {} },
-        temporaryDraft: { title: "TEMPORAY DRAFT TO OTHER NAVAL AREA", rows: {} },
         leaveSick: { title: "LEAVE, SICK & ATTENDANCE", rows: {} }
     };
 
@@ -8939,8 +9135,7 @@ function renderSummaryView() {
         return sections.zones.subsections["A"];
     }
 
-    // 3. Process allocations and categorize sailors based on Daily Details logic
-    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const zones = store.zones; // included Admin & Staff Duties
     const allAllocatedSailorIds = new Set();
     
     zones.forEach(z => {
@@ -8974,6 +9169,17 @@ function renderSummaryView() {
                 const targetRow = section.rows[rowKey];
                 
                 assignedSailors.forEach(sailor => {
+                    // Check fbStatus to accurately skip leaves
+                    const [yyyy, mm, dd] = dateVal.split('-');
+                    const monthKey = `${yyyy}-${mm}`;
+                    const dayKey = parseInt(dd, 10).toString();
+                    const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][sailor._fbKey] : null;
+
+                    // Skip if sailor is actually on Leave/Sick/NA (they should go to the leave section)
+                    const isLeaveCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s); };
+                    const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status) || isLeaveCode(fbStatus);
+                    if (isLeave) return;
+                    
                     // Track for Leave/Sick check
                     allAllocatedSailorIds.add(String(sailor.id));
                     if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
@@ -8989,15 +9195,96 @@ function renderSummaryView() {
         });
     });
 
+
+    // Add long term deployments to summary
+    const longTerm = getLongTermAllocations();
+    
+    [...longTerm.housing, ...longTerm.outProject].forEach(alloc => {
+        const [yyyy, mm, dd] = dateVal.split('-');
+        const monthKey = `${yyyy}-${mm}`;
+        const dayKey = parseInt(dd, 10).toString();
+        const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][alloc.sailor._fbKey] : null;
+        const isLeaveCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s); };
+        const isLeave = isLeaveCode(alloc.sailor.attendance) || isLeaveCode(alloc.sailor.status) || isLeaveCode(fbStatus);
+        if (isLeave) return;
+        
+        allAllocatedSailorIds.add(String(alloc.sailor.id));
+        if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
+        
+        const rowKey = (alloc.projectName || 'UNNAMED PROJECT').toUpperCase().trim();
+        const section = sections.socialResponsible;
+        if (!section.rows[rowKey]) {
+            section.rows[rowKey] = createRowMatrix(rowKey);
+        }
+        const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(alloc.sailor);
+        if (isVss) section.rows[rowKey].vss[tradeIdx]++;
+        else section.rows[rowKey].reg[tradeIdx]++;
+    });
+
+    longTerm.otherBase.forEach(alloc => {
+        const [yyyy, mm, dd] = dateVal.split('-');
+        const monthKey = `${yyyy}-${mm}`;
+        const dayKey = parseInt(dd, 10).toString();
+        const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][alloc.sailor._fbKey] : null;
+        const isLeaveCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s); };
+        const isLeave = isLeaveCode(alloc.sailor.attendance) || isLeaveCode(alloc.sailor.status) || isLeaveCode(fbStatus);
+        if (isLeave) return;
+        
+        allAllocatedSailorIds.add(String(alloc.sailor.id));
+        if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
+        
+        const rowKey = (alloc.projectName || 'UNKNOWN BASE').toUpperCase().trim();
+        const section = sections.otherBases; // Matching 'Other-Base' logic
+        if (!section.rows[rowKey]) {
+            section.rows[rowKey] = createRowMatrix(rowKey);
+        }
+        const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(alloc.sailor);
+        if (isVss) section.rows[rowKey].vss[tradeIdx]++;
+        else section.rows[rowKey].reg[tradeIdx]++;
+    });
+
     // 4. Process explicit leaves/sick statuses from sailorsDB
     store.sailors.forEach(sailor => {
         const isAllocated = allAllocatedSailorIds.has(String(sailor.id)) || (sailor._fbKey && allAllocatedSailorIds.has(String(sailor._fbKey)));
         
-        if (!isAllocated && (sailor.attendance === 'Leave' || sailor.attendance === 'Sick')) {
+        // Extract YYYY-MM and DD from dateVal
+        const [yyyy, mm, dd] = dateVal.split('-');
+        const monthKey = `${yyyy}-${mm}`;
+        const dayKey = parseInt(dd, 10).toString(); // Removes leading zero
+        
+        const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][sailor._fbKey] : null;
+        
+        const isLeaveCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s); };
+        const isLeave = isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status) || isLeaveCode(fbStatus);
+        
+        if (isLeave) {
             const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
             let rowKey = "LEAVE & WEEKEND DOKYARD";
-            if (sailor.attendance === 'Sick') {
+            
+            const isSickCode = (val) => { if (!val) return false; const s = typeof val === 'string' ? val.trim() : String(val).trim(); return /^(Sick|M\/D|SIQ|S\/R|SL|ADM)$/i.test(s); };
+            const isSick = isSickCode(sailor.attendance) || isSickCode(sailor.status) || isSickCode(fbStatus);
+            if (isSick) {
                 rowKey = "SICK REPORT";
+            } else if (sailor.status === 'NA' && (!sailor.attendance || !/^(Leave|L|DL|WE|HD|T\/D)$/i.test(typeof sailor.attendance === 'string' ? sailor.attendance.trim() : String(sailor.attendance).trim()))) {
+                // Try to infer if it was sick from work orders
+                let isSickWo = false;
+                const activeWo = store.workOrders || [];
+                const activeJc = store.jobCards || [];
+                let assignedWo = null;
+                
+                if (dateVal === today) {
+                    assignedWo = activeWo.find(wo => wo.assigned && (wo.assigned.includes(String(sailor.id)) || wo.assigned.includes(String(sailor._fbKey))));
+                    if (!assignedWo) assignedWo = activeJc.find(jc => jc.assigned && (jc.assigned.includes(String(sailor.id)) || jc.assigned.includes(String(sailor._fbKey))));
+                } else {
+                    const alloc = (store.dailyAllocations || []).find(a => a.date === dateVal && (String(a.sailor_id) === String(sailor.id) || String(a.sailor_id) === String(sailor._fbKey)));
+                    if (alloc) {
+                        assignedWo = activeWo.find(w => String(w.id) === String(alloc.work_order_id)) || activeJc.find(j => String(j.id) === String(alloc.work_order_id));
+                    }
+                }
+                
+                if (assignedWo && /(ගිලන්|\bsiq\b|\badmit\b|\bsick\b)/i.test(assignedWo.description || assignedWo.title || '')) {
+                    rowKey = "SICK REPORT";
+                }
             }
             
             if (!sections.leaveSick.rows[rowKey]) {
@@ -9166,10 +9453,7 @@ function renderSummaryView() {
     // 6. Social Responsible Works
     appendSectionToTable(sections.socialResponsible);
     
-    // 7. Temporary Draft
-    appendSectionToTable(sections.temporaryDraft);
-    
-    // 8. Leave & Attendance
+    // 7. Leave & Attendance
     appendSectionToTable(sections.leaveSick);
 
     // Render Grand Total Row at the absolute bottom
@@ -9231,7 +9515,7 @@ function openLmdExportModal(action) {
     else if (action === 'whatsapp') title = 'WhatsApp Share Options';
     document.getElementById('lmdExportModalTitle').textContent = title;
     
-    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const zones = store.zones; // included Admin & Staff Duties
     document.getElementById('exportZoneSelect').innerHTML = zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
     
     document.querySelector('input[name="exportScope"][value="all"]').checked = true;
@@ -9268,7 +9552,7 @@ function exportLmdCSV(scope, selectedZone) {
     
     let zones = [];
     if (scope === 'all') {
-        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+        zones = store.zones;
     } else {
         const z = store.zones.find(x => x.id === selectedZone);
         if (z) zones.push(z);
@@ -9354,7 +9638,7 @@ function printLmdDetails(scope, selectedZone) {
     
     let zones = [];
     if (scope === 'all') {
-        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+        zones = store.zones;
     } else {
         const z = store.zones.find(x => x.id === selectedZone);
         if (z) zones.push(z);
@@ -9797,7 +10081,7 @@ function shareLmdWhatsApp(scope, selectedZone) {
     
     let zones = [];
     if (scope === 'all') {
-        zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+        zones = store.zones;
     } else {
         const z = store.zones.find(x => x.id === selectedZone);
         if (z) zones.push(z);
@@ -10490,7 +10774,7 @@ function generateWorkOrdersPdfBlob(dateVal) {
     
     // Generate the exact same HTML rows as printLmdDetails but for all zones
     let rowsHtml = '';
-    const zones = store.zones.filter(z => !isAdminStaffDuties(z.id));
+    const zones = store.zones;
     
     zones.forEach(z => {
         const wos = store.workOrders.filter(wo => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, targetDate));
