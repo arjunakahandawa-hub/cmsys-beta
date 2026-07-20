@@ -3343,7 +3343,8 @@ function forwardToComplete() {
 
 // Proceed button (req 2): commit daily labour allocation -> dashboard + DB
 function proceedWorkOrder() {
-    const wo = store.workOrders.find(w => w.id === store.selectedWorkOrder);
+    const woKey = store.selectedWorkOrder;
+    const wo = store.workOrders.find(w => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey));
     if (!wo) return;
 
     // Save any pending field edits first
@@ -3384,9 +3385,9 @@ function proceedWorkOrder() {
     wo.assigned.forEach(sid => {
         const sailor = store.sailors.find(s => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
         // remove existing same-day allocation for this sailor (one job per day)
-        store.dailyAllocations = store.dailyAllocations.filter(a => !(a.date === today && a.sailor_id === sid));
+        store.dailyAllocations = (store.dailyAllocations || []).filter(a => !(a.date === today && a.sailor_id === sid));
         const alloc = {
-            id: store.dailyAllocations.length + 1,
+            id: (store.dailyAllocations || []).length + 1,
             date: today,
             sailor_id: sid,
             work_order_id: wo.id,
