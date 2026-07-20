@@ -9183,7 +9183,7 @@ function renderSummaryView() {
         
         const isLeave = sailor.attendance === 'Leave' || sailor.attendance === 'Sick' || sailor.status === 'NA' || sailor.status === 'Leave' || sailor.status === 'Sick';
         
-        if (!isAllocated && isLeave) {
+        if (isLeave) {
             const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
             let rowKey = "LEAVE & WEEKEND DOKYARD";
             
