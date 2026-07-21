@@ -2120,9 +2120,17 @@ function updateCounters() {
   if (outProjCount) outProjCount.textContent = longTerm.outProject.length;
   const otherBaseCount = document.getElementById("otherBaseCount");
   if (otherBaseCount) otherBaseCount.textContent = longTerm.otherBase.length;
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+
   if (store.sailors) {
     store.sailors.forEach((s) => {
-      if (!isLeaveState(s.status) && !isLeaveState(s.attendance)) {
+      // Check Firebase daily attendance first
+      const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][s._fbKey] : null;
+      const isLeave = isLeaveState(s.status) || isLeaveState(s.attendance) || isLeaveState(fbStatus);
+        
+      if (!isLeave) {
         if (naIds.has(String(s.id)) || naIds.has(String(s._fbKey))) {
           s.status = "NA";
         } else if (
@@ -2138,7 +2146,13 @@ function updateCounters() {
         } else {
           s.status = "Available";
         }
-      } // Resolve daily evaluation state from dailyAllocationsMap for active date
+      } else {
+          // If they are on leave according to fbStatus, make sure s.status reflects it 
+          // so that subsequent filters count them correctly as leave, not Available.
+          s.status = fbStatus || s.attendance || s.status;
+      }
+      
+      // Resolve daily evaluation state from dailyAllocationsMap for active date
       const allocKey = `${dateVal}_${sanitizeFbKey(s.id)}`;
       const allocKeyFb = `${dateVal}_${sanitizeFbKey(s._fbKey)}`;
       const alloc = store.dailyAllocationsMap
@@ -2162,9 +2176,7 @@ function updateCounters() {
     ? store.sailors.filter((s) => s.status === "Assigned").length
     : 0;
   const naCount = store.sailors
-    ? store.sailors.filter(
-        (s) => isLeaveState(s.status) || isLeaveState(s.attendance),
-      ).length
+    ? store.sailors.filter((s) => isLeaveState(s.status) || isLeaveState(s.attendance)).length
     : 0;
   document.getElementById("netForce").textContent =
     available + assigned + naCount;
