@@ -1055,7 +1055,12 @@ function showToast(message, type = "success") {
 }
 let _justClosedModal = false;
 function closeModal(modalId) {
-  document.getElementById(modalId).classList.add("hidden");
+  const m = document.getElementById(modalId);
+  m.classList.add("hidden");
+  m.style.removeProperty("display");
+  m.style.removeProperty("opacity");
+  m.style.removeProperty("visibility");
+  m.style.removeProperty("z-index");
   _justClosedModal = true;
   setTimeout(() => {
     _justClosedModal = false;
@@ -8193,8 +8198,13 @@ function openOicProfileModal() {
   renderOicZonesPermissionCheckboxes(store.zones.map((z) => z.id));
   toggleSelectAllZonesPerm(true);
   if (document.getElementById("oicProfileModal")) {
-    document.getElementById("oicProfileModal").classList.remove("hidden");
-    console.log("Removed hidden class from modal");
+    const modal = document.getElementById("oicProfileModal");
+    modal.classList.remove("hidden");
+    modal.style.setProperty("display", "flex", "important");
+    modal.style.setProperty("opacity", "1", "important");
+    modal.style.setProperty("visibility", "visible", "important");
+    modal.style.setProperty("z-index", "999999", "important");
+    console.log("Forced modal to show using inline styles");
   } else {
     alert("CRITICAL ERROR: oicProfileModal not found in DOM!");
   }
@@ -8237,7 +8247,14 @@ function editOicProfile(id) {
   if (allZonesChecked) {
     toggleSelectAllZonesPerm(true);
   }
-  document.getElementById("oicProfileModal").classList.remove("hidden");
+  
+  const modal = document.getElementById("oicProfileModal");
+  modal.classList.remove("hidden");
+  modal.style.setProperty("display", "flex", "important");
+  modal.style.setProperty("opacity", "1", "important");
+  modal.style.setProperty("visibility", "visible", "important");
+  modal.style.setProperty("z-index", "999999", "important");
+  
   } catch (err) {
     alert("Error opening edit modal: " + err.message);
     console.error(err);
