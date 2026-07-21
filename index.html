@@ -8,10 +8,10 @@
     <meta name="theme-color" content="#0a1628">
     <link rel="manifest" href="manifest.json">
     <title>CMSys v2.2 | CE Management System — SLN Trincomalee</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
     <script>
     // =============================================
     // CE Management System DUAL FIREBASE CONFIGURATION
@@ -187,6 +187,7 @@
         /* 100dvh App Height Lock on Mobile to avoid scrolling top and bottom bars */
         @media (max-width: 767px) {
             body {
+                height: 100vh; /* Fallback for older browsers */
                 height: 100dvh;
                 display: flex;
                 flex-direction: column;
@@ -441,8 +442,7 @@
         .settings-tab-btn:hover { background: #e2e8f0; color: #334155; }
         .active-stab { background: linear-gradient(135deg,#0a1628,#152a55) !important; color: #5eead4 !important; }
     </style>
-    <!-- PDF Generation Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- PDF Generation Library (Moved to head) -->
     <!-- Google Identity Services (OAuth 2.0) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
