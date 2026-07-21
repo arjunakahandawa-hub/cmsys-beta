@@ -8225,8 +8225,14 @@ function openOicProfileModal() {
 function editOicProfile(id) {
   console.log("editOicProfile clicked with id:", id);
   try {
-    const profile = getOicProfiles().find((p) => p.id === id);
-  if (!profile) return;
+    const profiles = getOicProfiles();
+    console.log("Available profiles:", profiles);
+    const profile = profiles.find((p) => String(p.id) === String(id));
+    if (!profile) {
+        console.error("Profile not found! ID:", id);
+        alert("Error: Profile not found in store! ID: " + id);
+        return;
+    }
   document.getElementById("oicProfileModalTitle").textContent =
     "Edit Officer Profile";
   document.getElementById("oicProfId").value = profile.id;
@@ -8263,6 +8269,7 @@ function editOicProfile(id) {
   modal.style.setProperty("opacity", "1", "important");
   modal.style.setProperty("visibility", "visible", "important");
   modal.style.setProperty("z-index", "999999", "important");
+  modal.classList.remove("modal-overlay"); // Remove animation class!
   
   } catch (err) {
     alert("Error opening edit modal: " + err.message);
