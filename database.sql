@@ -148,7 +148,8 @@ CREATE TABLE inventory (
     quantity DECIMAL(12,2) NOT NULL DEFAULT 0,
     cost_per_unit DECIMAL(12,2) NOT NULL COMMENT 'Rs Inclusive VAT',
     requirement VARCHAR(200) COMMENT 'Project name or General',
-    location ENUM('Zone Store', 'Ready Use Store', 'Balance Store', 'Workshop') DEFAULT 'Zone Store',
+    location VARCHAR(200) DEFAULT 'Zone Store' COMMENT 'Respective Zone, project, or store location',
+    book_no VARCHAR(100) COMMENT 'Stock Book number / reference',
     on_charge_ref VARCHAR(100) COMMENT 'Nav 254, Nav 255 references',
     off_charge_ref VARCHAR(100) COMMENT 'Job card number, Nav 254',
     min_stock_level DECIMAL(10,2) DEFAULT 0,
@@ -158,7 +159,8 @@ CREATE TABLE inventory (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_category (category),
     INDEX idx_description (description),
-    INDEX idx_location (location)
+    INDEX idx_location (location),
+    INDEX idx_book_no (book_no)
 );
 
 -- =============================================

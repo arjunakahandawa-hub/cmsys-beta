@@ -8,10 +8,10 @@
     <meta name="theme-color" content="#0a1628">
     <link rel="manifest" href="manifest.json">
     <title>CMSys v2.2 | CE Management System — SLN Trincomalee</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" defer></script>
     <script>
     // =============================================
     // CE Management System DUAL FIREBASE CONFIGURATION
@@ -187,6 +187,7 @@
         /* 100dvh App Height Lock on Mobile to avoid scrolling top and bottom bars */
         @media (max-width: 767px) {
             body {
+                height: 100vh; /* Fallback for older browsers */
                 height: 100dvh;
                 display: flex;
                 flex-direction: column;
@@ -441,8 +442,7 @@
         .settings-tab-btn:hover { background: #e2e8f0; color: #334155; }
         .active-stab { background: linear-gradient(135deg,#0a1628,#152a55) !important; color: #5eead4 !important; }
     </style>
-    <!-- PDF Generation Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- PDF Generation Library (Moved to head) -->
     <!-- Google Identity Services (OAuth 2.0) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
@@ -532,10 +532,10 @@
                     <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300 tab-active">
                         <span class="hidden xl:inline">📊 </span>Dashboard
                     </button>
-                    <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300" style="display: none;">
+                    <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📋 </span>Daily Details
                     </button>
-                    <button onclick="switchView('summary')" id="tab-summary" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300" style="display: none;">
+                    <button onclick="switchView('summary')" id="tab-summary" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📊 </span>Summary
                     </button>
                     <button onclick="switchView('jobcards')" id="tab-jobcards" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
@@ -1169,6 +1169,9 @@
                     <p class="text-sm text-slate-500">Materials and Tools tracking by category</p>
                 </div>
                 <div class="flex gap-2 flex-wrap">
+                    <button onclick="migrateInventoryLocationAndBookNo()" class="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium" title="Scan and repair inventory location entry errors by moving Stock Book No into Book No field and setting Location to Zone">
+                        🔧 Fix Location & Book No
+                    </button>
                     <button onclick="clearCurrentZoneInventory()" class="bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium" title="Clear all inventory items for this zone to perform a fresh upload">
                         🗑️ Reset Zone Items
                     </button>
@@ -1189,7 +1192,7 @@
             <!-- Search & Filter Bar -->
             <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
                 <div class="flex flex-col sm:flex-row gap-3">
-                    <input type="text" id="inventorySearch" placeholder="Search by description..." 
+                    <input type="text" id="inventorySearch" placeholder="Search by description or book no..." 
                         class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
                         onkeyup="filterInventory()">
                     <div class="flex gap-2">
@@ -1203,6 +1206,7 @@
                             <option value="quantity">Sort: Quantity</option>
                             <option value="cost">Sort: Cost</option>
                             <option value="date">Sort: Date Added</option>
+                            <option value="book_no">Sort: Book No</option>
                         </select>
                     </div>
                 </div>
@@ -1219,6 +1223,7 @@
                                 <th class="px-4 py-3 text-center font-semibold">Deno</th>
                                 <th class="px-4 py-3 text-center font-semibold">Qty</th>
                                 <th class="px-4 py-3 text-right font-semibold">Cost (Rs)</th>
+                                <th class="px-4 py-3 text-center font-semibold">Book No</th>
                                 <th class="px-4 py-3 text-center font-semibold">Location</th>
                                 <th class="px-4 py-3 text-center font-semibold">Actions</th>
                             </tr>
@@ -2865,15 +2870,14 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4">
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Book No (Stock Book)</label>
+                        <input type="text" id="invBookNo" placeholder="e.g. Book 01, BK-105" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Location</label>
-                        <select id="invLocation" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-                            <option value="Zone Store">Zone Store</option>
-                            <option value="Ready Use Store">Ready Use Store</option>
-                            <option value="Balance Store">Balance Store</option>
-                            <option value="Workshop">Workshop</option>
-                        </select>
+                        <input type="text" id="invLocation" placeholder="e.g. Zone Store, Workshop" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">On Charge Ref</label>
@@ -3320,11 +3324,11 @@
             <span class="text-lg">📊</span>
             <span class="text-[8px] font-semibold">Dashboard</span>
         </button>
-        <button onclick="switchView('dailydetails')" id="mobile-tab-dailydetails" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1" style="display: none;">
+        <button onclick="switchView('dailydetails')" id="mobile-tab-dailydetails" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📋</span>
             <span class="text-[8px] font-semibold">Daily Details</span>
         </button>
-        <button onclick="switchView('summary')" id="mobile-tab-summary" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1" style="display: none;">
+        <button onclick="switchView('summary')" id="mobile-tab-summary" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
             <span class="text-lg">📊</span>
             <span class="text-[8px] font-semibold">Summary</span>
         </button>

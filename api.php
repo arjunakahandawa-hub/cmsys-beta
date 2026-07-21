@@ -185,8 +185,8 @@ switch ($action) {
         } elseif ($method === 'POST') {
             $stmt = $db->prepare("INSERT INTO inventory 
                 (type, description, deno, quantity, cost_per_unit, requirement, on_charge_ref, off_charge_ref, 
-                location, min_stock_level, created_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                location, book_no, min_stock_level, created_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
             $stmt->execute([
                 $input['type'] ?? 'material',
                 $input['description'],
@@ -197,6 +197,7 @@ switch ($action) {
                 $input['on_charge_ref'] ?? null,
                 $input['off_charge_ref'] ?? null,
                 $input['location'] ?? 'Zone Store',
+                $input['book_no'] ?? null,
                 $input['min_stock_level'] ?? 0
             ]);
             
@@ -205,7 +206,7 @@ switch ($action) {
         } elseif ($method === 'PUT') {
             $stmt = $db->prepare("UPDATE inventory SET 
                 description = ?, deno = ?, quantity = ?, cost_per_unit = ?, 
-                requirement = ?, on_charge_ref = ?, off_charge_ref = ?, location = ? 
+                requirement = ?, on_charge_ref = ?, off_charge_ref = ?, location = ?, book_no = ? 
                 WHERE id = ?");
             $stmt->execute([
                 $input['description'],
@@ -216,6 +217,7 @@ switch ($action) {
                 $input['on_charge_ref'] ?? null,
                 $input['off_charge_ref'] ?? null,
                 $input['location'] ?? 'Zone Store',
+                $input['book_no'] ?? null,
                 $input['id']
             ]);
             
@@ -231,8 +233,8 @@ switch ($action) {
             $inserted = 0;
             foreach ($items as $item) {
                 $stmt = $db->prepare("INSERT INTO inventory 
-                    (type, description, deno, quantity, cost_per_unit, requirement, on_charge_ref, location, created_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())");
+                    (type, description, deno, quantity, cost_per_unit, requirement, on_charge_ref, location, book_no, created_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())");
                 $stmt->execute([
                     $item['type'] ?? 'material',
                     $item['description'],
@@ -241,7 +243,8 @@ switch ($action) {
                     $item['cost_per_unit'],
                     $item['requirement'] ?? null,
                     $item['on_charge_ref'] ?? null,
-                    $item['location'] ?? 'Zone Store'
+                    $item['location'] ?? 'Zone Store',
+                    $item['book_no'] ?? null
                 ]);
                 $inserted++;
             }
