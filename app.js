@@ -7113,6 +7113,12 @@ function renderZoneSelectors() {
       } else if (localStorage.getItem("ncw_saved_zone")) {
         prev = localStorage.getItem("ncw_saved_zone");
       }
+      
+      // Prevent overwriting a valid saved zone before Firebase zones load
+      if (prev && !visibleZones.some((z) => z.id === prev) && !isAdminStaffDuties(prev)) {
+        optionsHtml += `<option value="${prev}">${prev}</option>`;
+        visibleZones.push({ id: prev, name: prev });
+      }
     }
     sel.innerHTML = optionsHtml;
     if (
