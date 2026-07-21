@@ -120,7 +120,7 @@ function parseOfficialNumber(offNo) {
 // Hardcoded fallback data retained as safety defaults
 // =============================================
 const store = {
-  currentZone: "A-Zone",
+  currentZone: localStorage.getItem("ncw_saved_zone") || "A-Zone",
   activeProfileType: null,
   activeProfileZone: null,
   currentFilter: "all",
