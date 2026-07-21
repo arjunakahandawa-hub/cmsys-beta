@@ -8204,11 +8204,13 @@ function openOicProfileModal() {
     modal.style.setProperty("opacity", "1", "important");
     modal.style.setProperty("visibility", "visible", "important");
     modal.style.setProperty("z-index", "999999", "important");
-    console.log("Forced modal to show using inline styles");
+    modal.classList.remove("modal-overlay"); // Remove animation class!
+    console.log("Forced modal to show using inline styles and removed modal-overlay");
     
     // Diagnostics
     setTimeout(() => {
         console.log("Computed display:", window.getComputedStyle(modal).display);
+        console.log("Inner Div opacity:", window.getComputedStyle(modal.firstElementChild).opacity);
         console.log("Modal HTML:", modal.outerHTML.substring(0, 300));
     }, 100);
     
