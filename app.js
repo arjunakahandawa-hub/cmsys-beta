@@ -8205,6 +8205,13 @@ function openOicProfileModal() {
     modal.style.setProperty("visibility", "visible", "important");
     modal.style.setProperty("z-index", "999999", "important");
     console.log("Forced modal to show using inline styles");
+    
+    // Diagnostics
+    setTimeout(() => {
+        console.log("Computed display:", window.getComputedStyle(modal).display);
+        console.log("Modal HTML:", modal.outerHTML.substring(0, 300));
+    }, 100);
+    
   } else {
     alert("CRITICAL ERROR: oicProfileModal not found in DOM!");
   }
