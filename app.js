@@ -8172,6 +8172,8 @@ function renderSettingsOicProfilesList() {
     .join("");
 }
 function openOicProfileModal() {
+  console.log("openOicProfileModal clicked");
+  try {
   document.getElementById("oicProfileModalTitle").textContent =
     "Add Officer Profile";
   document.getElementById("oicProfId").value = "";
@@ -8190,9 +8192,19 @@ function openOicProfileModal() {
   document.getElementById("oicPermAllZones").checked = true;
   renderOicZonesPermissionCheckboxes(store.zones.map((z) => z.id));
   toggleSelectAllZonesPerm(true);
-  document.getElementById("oicProfileModal").classList.remove("hidden");
+  if (document.getElementById("oicProfileModal")) {
+    document.getElementById("oicProfileModal").classList.remove("hidden");
+    console.log("Removed hidden class from modal");
+  } else {
+    alert("CRITICAL ERROR: oicProfileModal not found in DOM!");
+  }
+  } catch (err) {
+    alert("Error in openOicProfileModal: " + err.message);
+    console.error(err);
+  }
 }
 function editOicProfile(id) {
+  console.log("editOicProfile clicked with id:", id);
   try {
     const profile = getOicProfiles().find((p) => p.id === id);
   if (!profile) return;
