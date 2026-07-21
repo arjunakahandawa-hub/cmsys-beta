@@ -2178,8 +2178,11 @@ function updateCounters() {
   const naCount = store.sailors
     ? store.sailors.filter((s) => isLeaveState(s.status) || isLeaveState(s.attendance)).length
     : 0;
+  const longTermCount = store.sailors
+    ? store.sailors.filter((s) => s.status === "LongTermDeployed").length
+    : 0;
   document.getElementById("netForce").textContent =
-    available + assigned + naCount;
+    available + assigned + naCount + longTermCount;
   document.getElementById("assignedCount").textContent = assigned;
   document.getElementById("availableCount").textContent = available;
   const todayNaEl = document.getElementById("todayNaCount");
