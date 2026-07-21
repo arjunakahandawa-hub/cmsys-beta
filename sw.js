@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ncw-ps-cache-v4.48';
+const CACHE_NAME = 'ncw-ps-cache-v4.49';
 const ASSETS = [
   './',
   './index.html',
