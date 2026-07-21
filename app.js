@@ -7105,13 +7105,23 @@ function renderZoneSelectors() {
   ["zoneSelector", "locZone"].forEach((selId) => {
     const sel = document.getElementById(selId);
     if (!sel) return;
-    const prev = sel.value;
+    let prev = sel.value;
+    if (selId === "zoneSelector") {
+      if (store.currentZone) {
+        prev = store.currentZone;
+      } else if (localStorage.getItem("ncw_saved_zone")) {
+        prev = localStorage.getItem("ncw_saved_zone");
+      }
+    }
     sel.innerHTML = optionsHtml;
     if (
       visibleZones.some((z) => z.id === prev) ||
       (isAdminStaffDuties(prev) && hasAllZoneAccess)
     ) {
       sel.value = prev;
+      if (selId === "zoneSelector") {
+        store.currentZone = prev;
+      }
     } else {
       // Select the first visible zone
       if (visibleZones.length > 0) {
