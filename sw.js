@@ -1,8 +1,8 @@
-const CACHE_NAME = 'ncw-ps-cache-v4.49';
+const CACHE_NAME = 'ncw-ps-cache-v4.50';
 const ASSETS = [
-  './',
-  './index.html',
-  './app.js',
+  './?v=4.50',
+  './index.html?v=4.50',
+  './app.js?v=4.50',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -44,7 +44,7 @@ self.addEventListener('fetch', e => {
   }
 
   e.respondWith(
-    caches.match(e.request).then(cachedResponse => {
+    caches.match(e.request, { ignoreSearch: true }).then(cachedResponse => {
       const fetchPromise = fetch(e.request)
         .then(networkResponse => {
           if (networkResponse && networkResponse.status === 200) {
