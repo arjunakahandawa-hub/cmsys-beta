@@ -8193,7 +8193,8 @@ function openOicProfileModal() {
   document.getElementById("oicProfileModal").classList.remove("hidden");
 }
 function editOicProfile(id) {
-  const profile = getOicProfiles().find((p) => p.id === id);
+  try {
+    const profile = getOicProfiles().find((p) => p.id === id);
   if (!profile) return;
   document.getElementById("oicProfileModalTitle").textContent =
     "Edit Officer Profile";
@@ -8225,6 +8226,10 @@ function editOicProfile(id) {
     toggleSelectAllZonesPerm(true);
   }
   document.getElementById("oicProfileModal").classList.remove("hidden");
+  } catch (err) {
+    alert("Error opening edit modal: " + err.message);
+    console.error(err);
+  }
 }
 function saveOicProfile(event) {
   event.preventDefault();
@@ -8303,7 +8308,7 @@ function renderOicZonesPermissionCheckboxes(selectedZones = []) {
   const listEl = document.getElementById("oicZonesPermissionList");
   if (!listEl) return; // Sort zones by name for cleaner display
   const sortedZones = [...store.zones].sort((a, b) =>
-    a.name.localeCompare(b.name),
+    (a.name || "").localeCompare(b.name || ""),
   );
   listEl.innerHTML =
     sortedZones
