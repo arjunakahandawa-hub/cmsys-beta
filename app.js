@@ -1153,6 +1153,7 @@ function switchView(view, preventPushState = false) {
 }
 function changeZone() {
   store.currentZone = document.getElementById("zoneSelector").value;
+  localStorage.setItem("ncw_saved_zone", store.currentZone);
   store.selectedEstimate = null;
   store.selectedEstimatesForPrint = [];
   applySettings();
