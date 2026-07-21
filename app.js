@@ -10334,27 +10334,29 @@ function renderSummaryView() {
     workshop: { title: "WORKSHOP", rows: {} },
     zones: {
       title: "ZONE",
-      subsections: {
-        A: { title: "A - ZONE", rows: {} },
-        B: { title: "B - ZONE", rows: {} },
-        C: { title: "C - ZONE", rows: {} },
-        D: { title: "D - ZONE", rows: {} },
-        E: { title: "E - ZONE", rows: {} },
-        FH: { title: "FH - ZONE", rows: {} },
-        G: { title: "G - ZONE", rows: {} },
-        OTW: { title: "OTW", rows: {} },
-        "Supply-School": { title: "SUPPLY SCHOOL", rows: {} },
-      },
+      subsections: {},
     },
     othersDuty: { title: "OTHERS DUTY DOCK YARD", rows: {} },
     otherBases: { title: "TEMPORARY DRAFT TO OTHER NAVAL AREA", rows: {} },
     socialResponsible: { title: "SOCIAL RESPONSIBLE WORKS AT ENA", rows: {} },
     leaveSick: { title: "LEAVE, SICK & ATTENDANCE", rows: {} },
-  }; // Helper to get the correct section based on zoneId
+  };
+  
+  // Dynamically build zone subsections based on user's defined zones
+  if (store.zones) {
+      store.zones.forEach(z => {
+          if ([
+              "Carpentry-Shop", "Paint-Workshop", "Signwriter", "Welding-Shop",
+              "Concrete-Precast", "Aluminum-Work-Shop", "Blacksmith",
+              "Admin-&-Staff-Duties", "Other-Base", "Out-Project", "Housing-Project"
+          ].includes(z.id)) return;
+          
+          sections.zones.subsections[z.id] = { title: z.name.toUpperCase(), rows: {} };
+      });
+  }
+
+  // Helper to get the correct section based on zoneId
   function getSectionForZone(zoneId) {
-    if (zoneId === "OTW") return sections.zones.subsections["OTW"];
-    if (zoneId === "Supply-School")
-      return sections.zones.subsections["Supply-School"];
     if (
       [
         "Carpentry-Shop",
@@ -10368,18 +10370,19 @@ function renderSummaryView() {
     ) {
       return sections.workshop;
     }
-    if (zoneId === "A-Zone") return sections.zones.subsections["A"];
-    if (zoneId === "B-Zone") return sections.zones.subsections["B"];
-    if (zoneId === "C-Zone") return sections.zones.subsections["C"];
-    if (zoneId === "D-Zone") return sections.zones.subsections["D"];
-    if (zoneId === "E-Zone") return sections.zones.subsections["E"];
-    if (zoneId === "FH-Zone") return sections.zones.subsections["FH"];
-    if (zoneId === "Genaral-Zone") return sections.zones.subsections["G"];
     if (zoneId === "Admin-&-Staff-Duties") return sections.othersDuty;
     if (zoneId === "Other-Base") return sections.otherBases;
     if (zoneId === "Out-Project" || zoneId === "Housing-Project")
-      return sections.socialResponsible; // Default fallback
-    return sections.zones.subsections["A"];
+      return sections.socialResponsible;
+      
+    // Return dynamically defined zone subsection
+    if (sections.zones.subsections[zoneId]) {
+        return sections.zones.subsections[zoneId];
+    }
+    
+    // Fallback: create subsection on the fly if it doesn't exist
+    sections.zones.subsections[zoneId] = { title: zoneId.replace(/-/g, " ").toUpperCase(), rows: {} };
+    return sections.zones.subsections[zoneId];
   }
   const zones = store.zones; // included Admin & Staff Duties
   const allAllocatedSailorIds = new Set();
