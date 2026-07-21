@@ -12377,3 +12377,33 @@ function saveGoogleConfigFromModal() {
     uploadWorkOrdersPdfToDrive();
   }, 1000);
 }
+
+// AVAIL Copy Function
+document.addEventListener('DOMContentLoaded', () => {
+  const availSpan = document.getElementById('availableCount');
+  if (availSpan && availSpan.parentElement) {
+    availSpan.parentElement.style.cursor = 'pointer';
+    availSpan.parentElement.title = 'Click to copy Available Sailors list';
+    availSpan.parentElement.addEventListener('click', () => {
+      if (!store.sailors) return;
+      const availableSailors = store.sailors.filter(s => s.status === 'Available');
+      if (availableSailors.length === 0) {
+        if (typeof showToast === 'function') showToast('No available sailors to copy!', 'error');
+        return;
+      }
+      let textToCopy = 'AVAILABLE SAILORS (' + availableSailors.length + ')\n';
+      textToCopy += '--------------------------------------------------\n';
+      textToCopy += 'RANK\tNAME\tOFF NO\tTRADE\n';
+      textToCopy += '--------------------------------------------------\n';
+      availableSailors.forEach(s => {
+        textToCopy += `${s.rank || '-'} \t${s.name || '-'} \t${s.official_no || '-'} \t${s.trade || '-'}\n`;
+      });
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        if (typeof showToast === 'function') showToast(`Successfully copied ${availableSailors.length} Available Sailors to clipboard!`);
+      }).catch(err => {
+        console.error('Failed to copy text: ', err);
+        if (typeof showToast === 'function') showToast('Failed to copy text. Check console for details.', 'error');
+      });
+    });
+  }
+});
