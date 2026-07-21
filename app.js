@@ -2052,7 +2052,7 @@ function updateCounters() {
   const isLeaveState = (val) => {
     if (!val) return false;
     const s = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D)$/i.test(s);
+    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
   };
   const isNA = (text) => {
     if (!text) return false;
