@@ -1,8 +1,9 @@
-const CACHE_NAME = 'ncw-ps-cache-v4.56';
+const CACHE_NAME = 'ncw-ps-cache-v4.63';
 const ASSETS = [
-  './?v=4.51',
-  './index.html?v=4.51',
-  './app.js?v=4.51',
+  './?v=4.63',
+  './index.html?v=4.63',
+  './app.js?v=4.63',
+  './style.css?v=4.63',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',

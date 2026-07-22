@@ -119,6 +119,15 @@ function parseOfficialNumber(offNo) {
 // NOTE: Arrays start empty — Firebase listeners populate them
 // Hardcoded fallback data retained as safety defaults
 // =============================================
+// Helper for UTC safe timezone processing (Sri Lanka local date)
+function getLocalDateString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 const store = {
   currentZone: localStorage.getItem("ncw_saved_zone") || "A-Zone",
   activeProfileType: null,
@@ -630,7 +639,7 @@ function initOpsListeners() {
   // ── Work Orders ──
   opsDB.ref("work_orders").on("value", (snapshot) => {
     const raw = snapshotToArray(snapshot);
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateString();
     store.workOrders = raw.map((wo) => {
       var _wo$id, _wo$assigned, _wo$last_assigned;
       const mappedWo = {
@@ -894,7 +903,7 @@ function fbSaveInventoryItem(data) {
   }
   return opsDB
     .ref("inventory")
-    .push({ ...clean, date_added: new Date().toISOString().split("T")[0] });
+    .push({ ...clean, date_added: getLocalDateString() });
 } // Save / update estimate
 function fbSaveEstimate(data) {
   const { _fbKey, ...clean } = data;
@@ -941,7 +950,7 @@ function fbUpdateSailorZoneTeam(fbKey, isZoneTeam) {
 // ─────────────────────────────────────────────
 function computeYesterdayJobs() {
   if (!store.dailyAllocations || !store.sailors) return;
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today; // Find the most recent date in dailyAllocations that is strictly before dateVal
   const pastDates = [...new Set(store.dailyAllocations.map((a) => a.date))]
     .filter((d) => d < dateVal)
@@ -1164,7 +1173,7 @@ function changeZone() {
 // DASHBOARD
 // =============================================
 function renderDashboard() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const isToday = dateVal === today; // Show/hide views and sidebar
   toggleViewsBasedOnZone();
@@ -1188,6 +1197,7 @@ function renderDashboard() {
   renderZoneTeam();
   updateCounters();
   updatePendingEvals();
+  renderZoneSelectors();
   updateBoardEmptyState();
   updateDashboardButtons();
 }
@@ -1200,7 +1210,7 @@ function updateDashboardButtons() {
   const newAssignBtn = document.getElementById("newAssignBtn");
   const newWorkOrderBtn = document.getElementById("newWorkOrderBtn");
   const btnContinueYesterday = document.getElementById("btnContinueYesterday");
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const isToday = !store.dashboardDate || store.dashboardDate === today;
   if (newAssignBtn) {
     newAssignBtn.classList.toggle("hidden", !isAdminStaff || !isToday);
@@ -1217,13 +1227,13 @@ function changeDashboardDate(val) {
   store.dashboardDate = val;
   renderDashboard();
   renderZoneSelectors(); // Re-render dropdown to update zone progress percentages
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   if (val !== today) {
     showToast(`Viewing historical data for ${val} (Read Only)`, "info");
   }
 }
 function isWorkOrderActiveOnDate(wo, dateStr) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   if (dateStr === today) {
     return wo.status !== "Completed" && wo.status !== "Hold";
   } // Check if there are daily allocations for this work order on this date
@@ -1288,7 +1298,7 @@ function getSailorCurrentAssignment(sailorId) {
 function renderAvailableSailors() {
   const container = document.getElementById("availableSailors");
   if (!container) return;
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const isToday = dateVal === today; // Recalculate status for the selected date
   const assignedIds = new Set();
@@ -1481,7 +1491,7 @@ function renderWorkOrders() {
   let projectCount = 0,
     jobCount = 0,
     taskCount = 0;
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   let projectTradesStr = "",
     jobTradesStr = "",
@@ -1552,7 +1562,7 @@ function renderWorkOrders() {
 function renderQuickAssignments() {
   const container = document.getElementById("quickAssignmentsList");
   if (!container) return;
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today; // Filter work orders that have an assign_type and belong to active zone
   const quickOrders = store.workOrders.filter(
     (wo) =>
@@ -1571,7 +1581,7 @@ function renderQuickAssignments() {
     .join("");
 }
 function updateBoardEmptyState() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const projects = store.workOrders.filter(
     (wo) =>
@@ -2045,7 +2055,7 @@ function getLongTermAllocations() {
 function updateCounters() {
   const activeWo = store.workOrders || [];
   const activeJc = store.jobCards || [];
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const isToday = dateVal === today;
   const assignedIds = new Set();
@@ -2245,7 +2255,7 @@ function handleDropOnCard(event, workOrderId) {
       prevWo.assigned = (prevWo.assigned || []).filter(
         (id) => String(id) !== String(draggedSailorId),
       );
-      const today = new Date().toISOString().split("T")[0];
+      const today = getLocalDateString();
       prevWo.last_assigned_date = today;
       if (window.fbSaveWorkOrder) {
         fbSaveWorkOrder(prevWo);
@@ -2261,7 +2271,7 @@ function handleDropOnCard(event, workOrderId) {
     workOrder.assigned.push(draggedSailorId);
     sailor.status = "Assigned";
     sailor.evaluated = false;
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateString();
     workOrder.last_assigned_date = today;
     if (window.fbSaveWorkOrder) {
       fbSaveWorkOrder(workOrder);
@@ -2282,7 +2292,7 @@ function removeSailorFromOrder(sailorId, workOrderId) {
       String(wo.id) === String(workOrderId) ||
       String(wo._fbKey) === String(workOrderId),
   );
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const isToday = !store.dashboardDate || store.dashboardDate === today;
   if (!isToday) {
     showToast("Historical data is read-only!", "error");
@@ -2293,7 +2303,7 @@ function removeSailorFromOrder(sailorId, workOrderId) {
       (id) => String(id) !== String(sailorId),
     );
     sailor.status = "Available";
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateString();
     workOrder.last_assigned_date = today;
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).remove();
     if (window.fbSaveWorkOrder) {
@@ -2726,7 +2736,7 @@ function toggleWoSailor(sailorId, name) {
         prevWo.assigned = (prevWo.assigned || []).filter(
           (id) => String(id) !== key,
         );
-        const today = new Date().toISOString().split("T")[0];
+        const today = getLocalDateString();
         prevWo.last_assigned_date = today;
         if (window.fbSaveWorkOrder) {
           fbSaveWorkOrder(prevWo);
@@ -2838,7 +2848,7 @@ function createWorkOrder(event) {
         location: newOrder.location,
         zone_id: store.currentZone,
         status: "Active",
-        start_date: new Date().toISOString().split("T")[0],
+        start_date: getLocalDateString(),
         total_material_cost: 0,
         feedbackSent: false,
         feedbackReceived: false,
@@ -3213,7 +3223,7 @@ function createAssignment(event) {
         location: "",
         zone_id: store.currentZone,
         status: "Active",
-        start_date: new Date().toISOString().split("T")[0],
+        start_date: getLocalDateString(),
         total_material_cost: 0,
         feedbackSent: false,
         feedbackReceived: false,
@@ -3275,7 +3285,7 @@ function openWorkOrderDetail(workOrderId) {
     console.warn("Work order not found:", workOrderId);
     return;
   }
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const isToday = dateVal === today; // Reset to details tab each open
   switchWoTab("details"); // Toggle Evaluation tab button
@@ -3712,7 +3722,7 @@ function assignSingleLabor(sailorId) {
       prevWo.assigned = (prevWo.assigned || []).filter(
         (id) => String(id) !== String(sailorId),
       );
-      const today = new Date().toISOString().split("T")[0];
+      const today = getLocalDateString();
       prevWo.last_assigned_date = today;
       if (window.fbSaveWorkOrder) {
         fbSaveWorkOrder(prevWo);
@@ -3730,7 +3740,7 @@ function assignSingleLabor(sailorId) {
     wo.assigned.push(sailorId);
     sailor.status = "Assigned";
     sailor.evaluated = false;
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateString();
     wo.last_assigned_date = today;
     if (typeof fbSaveWorkOrder === "function") {
       fbSaveWorkOrder(wo);
@@ -3761,7 +3771,7 @@ function updateWorkOrderStatus() {
       newStatus === "Completed" ||
       newStatus === "Pending"
     ) {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getLocalDateString();
       const allocationsToDelete = (store.dailyAllocations || []).filter(
         (a) => a.date === today && String(a.work_order_id) === String(wo.id),
       );
@@ -3824,7 +3834,7 @@ function saveWorkOrderChanges() {
       newStatus === "Completed" ||
       newStatus === "Pending"
     ) {
-      const today = new Date().toISOString().split("T")[0];
+      const today = getLocalDateString();
       const allocationsToDelete = (store.dailyAllocations || []).filter(
         (a) => a.date === today && String(a.work_order_id) === String(wo.id),
       );
@@ -3914,7 +3924,7 @@ function forwardToComplete() {
     (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey),
   );
   if (wo) {
-    const today = new Date().toISOString().split("T")[0]; // Collect currently assigned sailors to free them up locally
+    const today = getLocalDateString(); // Collect currently assigned sailors to free them up locally
     const assignedIds = (wo.assigned || []).map(String); // Auto-commit crew to daily allocations for today before clearing them
     if (assignedIds.length > 0) {
       assignedIds.forEach((sid) => {
@@ -4009,7 +4019,7 @@ function proceedWorkOrder() {
     return;
   } // Save any pending field edits first
   saveWorkOrderChanges();
-  const today = new Date().toISOString().split("T")[0]; // Auto-restore previous crew if current assigned is empty
+  const today = getLocalDateString(); // Auto-restore previous crew if current assigned is empty
   if (
     (!wo.assigned || wo.assigned.length === 0) &&
     wo.last_assigned &&
@@ -4094,7 +4104,7 @@ function restorePreviousCrew() {
     (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey),
   );
   if (wo && wo.last_assigned && wo.last_assigned.length > 0) {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateString();
     wo.assigned = [...wo.last_assigned];
     wo.last_assigned_date = today; // Mark sailors as Assigned locally
     if (store.sailors) {
@@ -4221,7 +4231,7 @@ function submitEvaluation(event) {
     sailor.yesterdayScore = avgScore;
     sailor.avgScore = (sailor.avgScore * 10 + avgScore) / 11; // Rolling average
     sailor.evaluated = true; // Save evaluation to local daily_allocations in Operations DB (failsafe + support history dates)
-    const today = new Date().toISOString().split("T")[0];
+    const today = getLocalDateString();
     const dateVal = store.dashboardDate || today;
     const allocKey = `${dateVal}_${sanitizeFbKey(sailor.id)}`;
     const allocKeyFb = `${dateVal}_${sanitizeFbKey(sailor._fbKey)}`;
@@ -7140,26 +7150,73 @@ function renderZoneSelectors() {
     hasAllZoneAccess = false;
   }
   const visibleZones = store.zones.filter((z) => allowedZones.includes(z.id));
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   let optionsHtml = visibleZones
     .map((z) => {
       const zoneOrders = (store.workOrders || []).filter(
         (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
       );
-      let displayStr = z.name;
-      if (zoneOrders.length > 0) {
-        const totalProgress = zoneOrders.reduce(
-          (sum, wo) => sum + (parseInt(wo.progress) || 0),
-          0,
-        );
-        const percentage = Math.round(totalProgress / zoneOrders.length);
-        let emoji = "⚠️";
-        if (percentage === 100) emoji = "✅";
-        else if (percentage === 0) emoji = "❌";
-        displayStr = `${emoji} ${z.name} (${percentage}%)`;
+
+      const assignedIds = new Set();
+      if (dateVal === today) {
+        zoneOrders.forEach((wo) => {
+          if (wo.assigned && Array.isArray(wo.assigned)) {
+            wo.assigned.forEach((id) => assignedIds.add(String(id)));
+          }
+        });
       } else {
-        displayStr = `➖ ${z.name} (N/A)`;
+        (store.dailyAllocations || []).forEach((alloc) => {
+          if (alloc.date === dateVal) {
+            const woMatch = zoneOrders.some(
+              (wo) => String(wo.id) === String(alloc.work_order_id) || String(wo._fbKey) === String(alloc.work_order_id)
+            );
+            if (woMatch) {
+              assignedIds.add(String(alloc.sailor_id));
+            }
+          }
+        });
+      }
+
+      const isLeaveCode = (val) => {
+        if (!val) return false;
+        const s = typeof val === "string" ? val.trim() : String(val).trim();
+        return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
+      };
+
+      let pendingEvalCount = 0;
+      let activeEvalCount = 0;
+
+      if (assignedIds.size > 0 && store.sailors) {
+        store.sailors.forEach((s) => {
+          if (assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey))) {
+            const isLeave = isLeaveCode(s.status) || isLeaveCode(s.attendance);
+            if (isLeave) return; // Leave sailors are excluded from evaluation
+
+            const allocKey = `${dateVal}_${sanitizeFbKey(s.id)}`;
+            const allocKeyFb = `${dateVal}_${sanitizeFbKey(s._fbKey)}`;
+            const alloc = store.dailyAllocationsMap
+              ? store.dailyAllocationsMap[allocKey] || store.dailyAllocationsMap[allocKeyFb]
+              : (store.dailyAllocations || []).find(
+                  (a) => a.date === dateVal && (String(a.sailor_id) === String(s.id) || String(a.sailor_id) === String(s._fbKey))
+                );
+            const isEval = alloc ? alloc.evaluated === true : s.evaluated === true;
+            if (isEval) {
+              activeEvalCount++;
+            } else {
+              pendingEvalCount++;
+            }
+          }
+        });
+      }
+
+      const totalActiveSailors = activeEvalCount + pendingEvalCount;
+
+      let displayStr = z.name;
+      if (totalActiveSailors > 0) {
+        displayStr = `${z.name} (🟢 ${totalActiveSailors} | 🔴 ${pendingEvalCount} Eval)`;
+      } else {
+        displayStr = `${z.name} (N/A)`;
       }
       return `<option value="${z.id}">${displayStr}</option>`;
     })
@@ -7858,7 +7915,7 @@ function processInventoryCsv(csvText) {
     itemData.book_no = itemData.book_no || "";
     itemData.location = itemData.location || "Zone Store";
     if (!itemData.date_added)
-      itemData.date_added = new Date().toISOString().split("T")[0];
+      itemData.date_added = getLocalDateString();
     itemData.zone_id = store.currentZone;
     fbSaveInventoryItem(itemData);
     addedCount++;
@@ -9311,7 +9368,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateDateTime();
   setInterval(updateDateTime, 1000);
   renderZoneSelectors(); // Initialize dashboardDate to today
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   store.dashboardDate = today;
   const datePicker = document.getElementById("dashboardDatePicker");
   if (datePicker) {
@@ -10142,7 +10199,7 @@ function toggleViewsBasedOnZone() {
   }
 }
 function renderDailyDetailsSpecialView() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   let dailyDetailsContainer = document.getElementById("dailyDetailsContainer");
   if (!dailyDetailsContainer) {
@@ -10373,7 +10430,7 @@ function renderDailyDetailsSpecialView() {
 // SUMMARY VIEW IMPLEMENTATION
 // =============================================
 function renderSummaryView() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today; // Update active date displays
   const dateDisplay = document.getElementById("summaryActiveDate");
   if (dateDisplay) dateDisplay.textContent = dateVal;
@@ -10540,7 +10597,7 @@ function renderSummaryView() {
             isLeaveCode(sailor.attendance) ||
             isLeaveCode(sailor.status) ||
             isLeaveCode(fbStatus);
-          if (isLeave) return; // Track for Leave/Sick check
+          // if (isLeave) return; // Track for Leave/Sick check (Removed to match dashboard totals)
           allAllocatedSailorIds.add(String(sailor.id));
           if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
           const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
@@ -10865,7 +10922,7 @@ function renderSummaryView() {
   document.getElementById("summaryMatrixTableBody").innerHTML = tableHtml;
 }
 function exportSummaryCsv() {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const table = document.getElementById("summaryMatrixTable");
   if (!table) return;
@@ -10936,7 +10993,7 @@ function executeLmdExport() {
   }
 }
 function exportLmdCSV(scope, selectedZone) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   let zones = [];
   if (scope === "all") {
@@ -11023,7 +11080,7 @@ function exportLmdCSV(scope, selectedZone) {
   showToast("CSV downloaded successfully!");
 }
 function printLmdDetails(scope, selectedZone) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   let zones = [];
   if (scope === "all") {
@@ -11209,7 +11266,7 @@ function printLmdDetails(scope, selectedZone) {
   }, 300);
 }
 function openEvalDetailsModal(mode) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const modalTitle = document.getElementById("evalDetailsModalTitle");
   const modalIcon = document.getElementById("evalDetailsModalIcon");
@@ -11480,7 +11537,7 @@ function fallbackWhatsAppShare(text) {
   }
 }
 function shareLmdWhatsApp(scope, selectedZone) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   let zones = [];
   if (scope === "all") {
@@ -11726,7 +11783,7 @@ function renderSailorsView() {
   if (totalCountBadge) {
     totalCountBadge.textContent = `Total: ${mapped.length} Sailors`;
   }
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   container.innerHTML =
     mapped
       .map((s) => {
@@ -12192,7 +12249,7 @@ window.addEventListener("click", function (e) {
 // PDF BACKUP & GOOGLE DRIVE BACKUP SYSTEM
 // =============================================
 function generateWorkOrdersPdfBlob(dateVal) {
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const targetDate = dateVal || store.dashboardDate || today; // Generate the exact same HTML rows as printLmdDetails but for all zones
   let rowsHtml = "";
   const zones = store.zones;
@@ -12340,7 +12397,7 @@ function generateWorkOrdersPdfBlob(dateVal) {
 }
 function downloadWorkOrdersPdfBackup() {
   showToast("Preparing PDF backup...", "info");
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const element = generateWorkOrdersPdfBlob(dateVal);
   const opt = {
@@ -12386,7 +12443,7 @@ function uploadWorkOrdersPdfToDrive() {
 }
 function performGoogleDriveUpload(accessToken) {
   showToast("Generating PDF & Uploading...", "info");
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const element = generateWorkOrdersPdfBlob(dateVal);
   const opt = {
