@@ -2776,6 +2776,15 @@ function selectApprovedJob() {
 }
 function createWorkOrder(event) {
   event.preventDefault();
+  
+  const submitBtn = event.target.querySelector('button[type="submit"]');
+  if (submitBtn) {
+    if (submitBtn.disabled) return;
+    submitBtn.disabled = true;
+    submitBtn.dataset.originalText = submitBtn.innerHTML;
+    submitBtn.innerHTML = "Processing...";
+  }
+  
   const estimateId = document.getElementById("woEstimateSelect").value || null;
   const newOrder = {
     type: document.getElementById("woType").value,
@@ -2844,10 +2853,18 @@ function createWorkOrder(event) {
       closeModal("workOrderModal");
       showToast(`Work order and Job Card ${jobNumber} created! 🔥`);
       event.target.reset();
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = submitBtn.dataset.originalText;
+      }
     })
     .catch((err) => {
       console.error("❌ Work order save failed:", err);
       showToast("Save failed — check Firebase connection", "error");
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = submitBtn.dataset.originalText;
+      }
     });
 } // =============================================
 // NEW SIMPLIFIED ASSIGNMENT WORKFLOW
@@ -3755,10 +3772,25 @@ function updateWorkOrderStatus() {
   }
 }
 function saveWorkOrderChanges() {
+  const btn = document.getElementById("btnSaveWoChanges");
+  if (btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.dataset.originalText = btn.innerHTML;
+    btn.innerHTML = "Saving...";
+  }
+
   const woKey = store.selectedWorkOrder;
   const wo = store.workOrders.find(
     (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey),
   );
+  if (!wo) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.originalText;
+    }
+    return;
+  }
   if (wo) {
     const newStatus = document.getElementById("woDetailStatus").value;
     wo.status = newStatus;
@@ -3805,6 +3837,12 @@ function saveWorkOrderChanges() {
     if (newStatus === "Hold" || newStatus === "Completed") {
       closeModal("workOrderDetailModal");
     }
+  }
+  if (btn) {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.originalText;
+    }, 500);
   }
 }
 function deleteWorkOrder() {
@@ -3946,11 +3984,25 @@ function forwardToComplete() {
   }
 } // Proceed button (req 2): commit daily labour allocation -> dashboard + DB
 function proceedWorkOrder() {
+  const btn = document.getElementById("btnProceedWo");
+  if (btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.dataset.originalText = btn.innerHTML;
+    btn.innerHTML = "Processing...";
+  }
+
   const woKey = store.selectedWorkOrder;
   const wo = store.workOrders.find(
     (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey),
   );
-  if (!wo) return; // Save any pending field edits first
+  if (!wo) {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.originalText;
+    }
+    return;
+  } // Save any pending field edits first
   saveWorkOrderChanges();
   const today = new Date().toISOString().split("T")[0]; // Auto-restore previous crew if current assigned is empty
   if (
@@ -3975,6 +4027,10 @@ function proceedWorkOrder() {
   }
   if (!wo.assigned || wo.assigned.length === 0) {
     showToast("Assign at least one sailor before proceeding", "error");
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.originalText;
+    }
     return;
   } // Activate the work order and write today's allocations
   wo.status = "Active";
@@ -4020,6 +4076,12 @@ function proceedWorkOrder() {
   showToast(
     `✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 28)}…" for ${today}`,
   );
+  if (btn) {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.originalText;
+    }, 500);
+  }
 }
 function restorePreviousCrew() {
   const woKey = store.selectedWorkOrder;
