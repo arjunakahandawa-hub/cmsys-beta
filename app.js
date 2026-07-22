@@ -2256,7 +2256,8 @@ function handleDropOnCard(event, workOrderId) {
     }
   }
   if (!workOrder.assigned) workOrder.assigned = [];
-  if (!workOrder.assigned.includes(draggedSailorId)) {
+  const alreadyAssigned = workOrder.assigned.some(id => String(id) === String(draggedSailorId));
+  if (!alreadyAssigned) {
     workOrder.assigned.push(draggedSailorId);
     sailor.status = "Assigned";
     sailor.evaluated = false;
@@ -2339,10 +2340,14 @@ function continueYesterdayJobs() {
   );
   continuations.forEach((sailor) => {
     const wo = store.workOrders.find((w) => w.id === sailor.yesterdayJob);
-    if (wo && !wo.assigned.includes(sailor.id)) {
-      wo.assigned.push(sailor.id);
-      sailor.status = "Assigned";
-      sailor.evaluated = false;
+    if (wo) {
+      if (!wo.assigned) wo.assigned = [];
+      const alreadyAssigned = wo.assigned.some(id => String(id) === String(sailor.id));
+      if (!alreadyAssigned) {
+        wo.assigned.push(sailor.id);
+        sailor.status = "Assigned";
+        sailor.evaluated = false;
+      }
     }
   });
   renderDashboard();
@@ -10675,15 +10680,13 @@ function renderSummaryView() {
           assignedWo = activeWo.find(
             (wo) =>
               wo.assigned &&
-              (wo.assigned.includes(String(sailor.id)) ||
-                wo.assigned.includes(String(sailor._fbKey))),
+              wo.assigned.some(id => String(id) === String(sailor.id) || String(id) === String(sailor._fbKey))
           );
           if (!assignedWo)
             assignedWo = activeJc.find(
               (jc) =>
                 jc.assigned &&
-                (jc.assigned.includes(String(sailor.id)) ||
-                  jc.assigned.includes(String(sailor._fbKey))),
+                jc.assigned.some(id => String(id) === String(sailor.id) || String(id) === String(sailor._fbKey))
             );
         } else {
           const alloc = (store.dailyAllocations || []).find(
