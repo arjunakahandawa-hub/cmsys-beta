@@ -7214,7 +7214,7 @@ function renderZoneSelectors() {
 
       let displayStr = z.name;
       if (totalActiveSailors > 0) {
-        displayStr = `${z.name} (🟢 ${totalActiveSailors} | 🔴 ${pendingEvalCount} Eval)`;
+        displayStr = `${z.name} (🟢 ${activeEvalCount} Done | 🔴 ${pendingEvalCount} Pending)`;
       } else {
         displayStr = `${z.name} (N/A)`;
       }
