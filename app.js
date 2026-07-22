@@ -10219,26 +10219,85 @@ function renderDailyDetailsSpecialView() {
   zones.forEach((z) => {
     const wos = store.workOrders.filter(
       (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
-    ); // Find if this zone has any active allocations
-    let zoneHasAllocations = false;
+    // Find if this zone has any active allocations and collect unique sailors
+    const zoneSailorMap = new Map();
     wos.forEach((wo) => {
-      let assignedCount = 0;
+      let sailorsInWo = [];
       if (dateVal === today) {
-        assignedCount = (wo.assigned || []).length;
+        const assignedIds = (wo.assigned || []).map(String);
+        sailorsInWo = store.sailors.filter(
+          (s) =>
+            assignedIds.includes(String(s.id)) ||
+            assignedIds.includes(String(s._fbKey)),
+        );
       } else {
-        assignedCount = (store.dailyAllocations || []).filter(
-          (a) =>
-            a.date === dateVal && String(a.work_order_id) === String(wo.id),
-        ).length;
+        const assignedIds = (store.dailyAllocations || [])
+          .filter(
+            (a) =>
+              a.date === dateVal && String(a.work_order_id) === String(wo.id),
+          )
+          .map((a) => String(a.sailor_id));
+        sailorsInWo = store.sailors.filter(
+          (s) =>
+            assignedIds.includes(String(s.id)) ||
+            assignedIds.includes(String(s._fbKey)),
+        );
       }
-      if (assignedCount > 0) zoneHasAllocations = true;
+      sailorsInWo.forEach((s) => {
+        const key = String(s.id || s._fbKey);
+        if (!zoneSailorMap.has(key)) zoneSailorMap.set(key, s);
+      });
     });
+
+    const zoneSailors = Array.from(zoneSailorMap.values());
+    const zoneHasAllocations = zoneSailors.length > 0;
+
     if (zoneHasAllocations) {
-      hasAllocations = true; // Add Zone Group Header row spanning all 6 columns
+      hasAllocations = true;
+      const totalCount = zoneSailors.length;
+      const isSsRank = (rankStr) => {
+        if (!rankStr) return false;
+        const r = rankStr.trim().toUpperCase();
+        return (
+          /^(PO|CPO|FCPO|MCPO|MCA|CPOA|WPO|SWPO)/.test(r) ||
+          r.includes("PO") ||
+          r.includes("CPO") ||
+          r.includes("CHIEF") ||
+          r.includes("MCA")
+        );
+      };
+      const ssCount = zoneSailors.filter((s) => isSsRank(s.rank)).length;
+
+      const tradeCounts = {};
+      zoneSailors.forEach((s) => {
+        const t = (s.trade || "Other").trim().toUpperCase();
+        tradeCounts[t] = (tradeCounts[t] || 0) + 1;
+      });
+      const tradeSummaryStr =
+        Object.entries(tradeCounts)
+          .map(([trade, count]) => `${trade}: ${count}`)
+          .join(" | ") || "None";
+
+      // Add Zone Group Header row spanning all 6 columns
       tableRows += `
                 <tr class="bg-slate-900 text-white font-bold">
                     <td colspan="6" class="px-4 py-2.5 text-xs uppercase tracking-wider">
-                        🗺️ ZONE: ${z.name.toUpperCase()}
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span>🗺️ ZONE: ${z.name.toUpperCase()}</span>
+                                <span class="bg-teal-950/80 text-teal-300 px-2 py-0.5 rounded-full text-[10px] border border-teal-700/50 font-bold tracking-normal normal-case">
+                                    👥 Total: ${totalCount}
+                                </span>
+                            </div>
+                            <div class="flex flex-wrap items-center gap-2 text-[11px] font-normal normal-case">
+                                <span class="bg-amber-950/90 text-amber-300 px-2.5 py-0.5 rounded-md border border-amber-600/50 font-semibold shadow-sm">
+                                    🎖️ S/S: ${ssCount}
+                                </span>
+                                <span class="bg-slate-800/90 text-slate-200 px-2.5 py-0.5 rounded-md border border-slate-700 font-medium">
+                                    🛠️ ${tradeSummaryStr}
+                                </span>
+                            </div>
+                        </div>
                     </td>
                 </tr>
             `;
