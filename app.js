@@ -660,31 +660,14 @@ function initOpsListeners() {
                 ? _wo$last_assigned
                 : {},
             ),
-      }; // Initialise last_assigned_date on first load if it doesn't exist yet
+      };
+      // Update last_assigned_date if missing
       if (
         mappedWo.assigned &&
         mappedWo.assigned.length > 0 &&
         !mappedWo.last_assigned_date
       ) {
         mappedWo.last_assigned_date = today;
-        if (window.fbSaveWorkOrder) fbSaveWorkOrder(mappedWo);
-      } // Midnight Auto-Reset: if last_assigned_date is in the past, auto-clear assignments
-      if (
-        (mappedWo.status === "Active" || mappedWo.status === "Pending") &&
-        mappedWo.last_assigned_date &&
-        mappedWo.last_assigned_date !== today &&
-        mappedWo.assigned &&
-        mappedWo.assigned.length > 0
-      ) {
-        console.log(
-          `⏰ Auto-clearing assignments for WO ${mappedWo.id} (new day started)`,
-        );
-        mappedWo.last_assigned = mappedWo.assigned;
-        mappedWo.assigned = [];
-        mappedWo.last_assigned_date = today;
-        if (window.fbSaveWorkOrder) {
-          fbSaveWorkOrder(mappedWo);
-        }
       }
       return mappedWo;
     });
@@ -1253,7 +1236,9 @@ function changeDashboardDate(val) {
   }
 }
 function isWorkOrderActiveOnDate(wo, dateStr) {
+  if (!wo) return false;
   const today = getLocalDateString();
+  if (!dateStr) dateStr = today;
   if (dateStr === today) {
     return wo.status !== "Completed" && wo.status !== "Hold";
   } // Check if there are daily allocations for this work order on this date
@@ -1262,19 +1247,26 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
   );
   if (hasAllocations) return true; // Check if it was created before or on this date and is not completed/held
   if (wo.created_at) {
-    const createdDate = new Date(wo.created_at).toISOString().split("T")[0];
-    if (createdDate <= dateStr) {
-      if (wo.status === "Completed" || wo.status === "Hold") {
-        const compDate =
-          wo.completed_date ||
-          wo.last_commit_date ||
-          wo.last_assigned_date ||
-          today;
-        if (compDate < dateStr) {
-          return false;
+    try {
+      const d = new Date(wo.created_at);
+      if (!isNaN(d.getTime())) {
+        const createdDate = d.toISOString().split("T")[0];
+        if (createdDate <= dateStr) {
+          if (wo.status === "Completed" || wo.status === "Hold") {
+            const compDate =
+              wo.completed_date ||
+              wo.last_commit_date ||
+              wo.last_assigned_date ||
+              today;
+            if (compDate < dateStr) {
+              return false;
+            }
+          }
+          return true;
         }
       }
-      return true;
+    } catch (e) {
+      console.warn("Invalid date in work order created_at:", wo.created_at);
     }
   }
   return false;
