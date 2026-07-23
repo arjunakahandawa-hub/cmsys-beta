@@ -1913,9 +1913,18 @@
                     <!-- Daily State Board -->
                     <div class="col-span-12 md:col-span-8">
                         <div class="glass-card overflow-hidden">
-                            <div class="bg-slate-700 text-white px-4 py-3 flex items-center justify-between">
-                                <h2 class="font-semibold">Daily State Board - <span id="reportDate"></span></h2>
-                                <button onclick="exportDailyReport()" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded text-sm">Export PDF</button>
+                            <div class="bg-slate-700 text-white px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                                <div class="flex items-center gap-2">
+                                    <h2 class="font-semibold text-sm md:text-base flex items-center gap-2">
+                                        <span>📅 Daily State Board -</span>
+                                        <input type="date" id="reportDatePicker" onchange="changeReportDate(this.value)" class="bg-slate-800 border border-slate-600 text-teal-300 font-bold px-2.5 py-1 rounded text-xs cursor-pointer focus:outline-none focus:ring-1 focus:ring-teal-400">
+                                    </h2>
+                                    <span id="reportDate" class="hidden"></span>
+                                </div>
+                                <button onclick="exportDailyStateBoardPdf()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow transition-all">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                                    Export PDF
+                                </button>
                             </div>
                             <div class="overflow-x-auto">
                                 <table class="w-full text-sm">
@@ -3316,10 +3325,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v4.77
+        App Version: v4.79
     </div>
 
-    <script src="app.js?v=4.77"></script>
+    <script src="app.js?v=4.79"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

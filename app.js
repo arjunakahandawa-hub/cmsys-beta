@@ -7341,98 +7341,213 @@ function switchReportTab(tab) {
   );
   document.getElementById(`reportTab-${tab}`).classList.remove("hidden");
 }
+function changeReportDate(dateVal) {
+  if (!dateVal) return;
+  store.reportDate = dateVal;
+  renderDailyReport();
+}
+
 function renderDailyReport() {
-  // Stats
-  document.getElementById("rptActiveProjects").textContent =
-    store.workOrders.filter(
-      (wo) =>
-        wo.type === "PROJECT" &&
-        wo.status === "Active" &&
-        wo.zone_id === store.currentZone,
-    ).length;
-  document.getElementById("rptActiveJobs").textContent =
-    store.workOrders.filter(
-      (wo) =>
-        wo.type === "JOB" &&
-        wo.status === "Active" &&
-        wo.zone_id === store.currentZone,
-    ).length;
-  document.getElementById("rptTodayTasks").textContent =
-    store.workOrders.filter(
-      (wo) =>
-        wo.type === "TASK" &&
-        wo.status === "Active" &&
-        wo.zone_id === store.currentZone,
-    ).length;
-  const zoneSailors = store.sailors.filter(
-    (s) => s.zone_assigned === store.currentZone,
+  const todayStr = getLocalDateString();
+  const dateVal = store.reportDate || store.dashboardDate || todayStr;
+  
+  const reportDatePicker = document.getElementById("reportDatePicker");
+  if (reportDatePicker && reportDatePicker.value !== dateVal) {
+    reportDatePicker.value = dateVal;
+  }
+  const reportDateEl = document.getElementById("reportDate");
+  if (reportDateEl) {
+    reportDateEl.textContent = dateVal;
+  }
+
+  // Calculate assignedIds for dateVal
+  const assignedIds = new Set();
+  if (dateVal === todayStr) {
+    (store.workOrders || []).forEach((wo) => {
+      if ((wo.status === "Active" || wo.status === "Pending") && wo.assigned) {
+        const list = Array.isArray(wo.assigned) ? wo.assigned : Object.values(wo.assigned);
+        list.forEach((id) => assignedIds.add(String(id)));
+      }
+    });
+  } else {
+    (store.dailyAllocations || []).forEach((a) => {
+      if (a && a.date === dateVal && a.sailor_id) {
+        assignedIds.add(String(a.sailor_id));
+      }
+    });
+  }
+
+  // Calculate availability for dateVal
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+  const dayAvail = (store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey]) || {};
+
+  // Active Projects / Jobs / Tasks filtering
+  const activeWos = store.workOrders.filter(
+    (wo) =>
+      (wo.status === "Active" || wo.status === "Pending") &&
+      (!store.currentZone || store.currentZone === "all" || wo.zone_id === store.currentZone)
   );
-  const avgPerf = zoneSailors.length
-    ? zoneSailors.reduce((sum, s) => sum + s.avgScore, 0) / zoneSailors.length
-    : 0;
-  document.getElementById("rptAvgPerf").textContent = avgPerf.toFixed(1);
-  const feedbacks = store.jobCards.filter(
+
+  const activeProjects = activeWos.filter(
+    (wo) => wo.type === "PROJECT" || wo.assign_type === "PROJECT" || (wo.description || "").toLowerCase().includes("project")
+  ).length;
+
+  const activeJobs = activeWos.filter(
+    (wo) => wo.type === "JOB" || wo.assign_type === "JOB" || (!wo.type && !wo.assign_type)
+  ).length;
+
+  const activeTasks = activeWos.filter(
+    (wo) => wo.type === "TASK" || wo.assign_type === "TASK"
+  ).length;
+
+  const activeProjectsEl = document.getElementById("rptActiveProjects");
+  if (activeProjectsEl) activeProjectsEl.textContent = activeProjects;
+  
+  const activeJobsEl = document.getElementById("rptActiveJobs");
+  if (activeJobsEl) activeJobsEl.textContent = activeJobs;
+  
+  const todayTasksEl = document.getElementById("rptTodayTasks");
+  if (todayTasksEl) todayTasksEl.textContent = activeTasks;
+
+  // Resolve Sailors for Daily State Board
+  let zoneSailors = (store.sailors || []).filter(
+    (s) => s.zone_assigned === store.currentZone
+  );
+  if (zoneSailors.length === 0 && store.currentZone && store.currentZone !== "all") {
+    const zoneWoIds = new Set(
+      store.workOrders
+        .filter((wo) => wo.zone_id === store.currentZone)
+        .map((wo) => String(wo.id))
+    );
+    const assignedInZone = new Set();
+    (store.dailyAllocations || []).forEach((a) => {
+      if (zoneWoIds.has(String(a.work_order_id))) {
+        assignedInZone.add(String(a.sailor_id));
+      }
+    });
+    store.workOrders.forEach((wo) => {
+      if (wo.zone_id === store.currentZone && wo.assigned) {
+        const list = Array.isArray(wo.assigned) ? wo.assigned : Object.values(wo.assigned);
+        list.forEach((id) => assignedInZone.add(String(id)));
+      }
+    });
+    if (assignedInZone.size > 0) {
+      zoneSailors = store.sailors.filter(
+        (s) => assignedInZone.has(String(s.id)) || assignedInZone.has(String(s._fbKey))
+      );
+    }
+  }
+
+  const targetSailors = (zoneSailors && zoneSailors.length > 0) ? zoneSailors : (store.sailors || []);
+
+  const avgPerf = targetSailors.length
+    ? targetSailors.reduce((sum, s) => sum + (s.avgScore || 7.0), 0) / targetSailors.length
+    : 7.0;
+  const avgPerfEl = document.getElementById("rptAvgPerf");
+  if (avgPerfEl) avgPerfEl.textContent = avgPerf.toFixed(1);
+
+  const feedbacks = (store.jobCards || []).filter(
     (jc) =>
-      jc.feedbackReceived && jc.feedback && jc.zone_id === store.currentZone,
+      jc.feedbackReceived && jc.feedback && (!store.currentZone || store.currentZone === "all" || jc.zone_id === store.currentZone)
   );
   const avgFeedback = feedbacks.length
-    ? feedbacks.reduce((sum, jc) => sum + jc.feedback.overall, 0) /
-      feedbacks.length
+    ? feedbacks.reduce((sum, jc) => sum + (jc.feedback.overall || 0), 0) / feedbacks.length
     : 0;
-  document.getElementById("rptUserFeedback").textContent =
-    avgFeedback.toFixed(1); // State Board - dynamically calculate from zoneSailors
+  const userFeedbackEl = document.getElementById("rptUserFeedback");
+  if (userFeedbackEl) userFeedbackEl.textContent = avgFeedback.toFixed(1);
+
+  // Daily State Board Matrix
+  const isLeaveState = (val) => {
+    if (!val) return false;
+    const s = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
+  };
+
   const trades = ["MA", "CA", "PA", "PL", "WE", "RW", "AL", "SW", "BB"];
-  document.getElementById("stateBoard").innerHTML = trades
-    .map((trade) => {
-      const tradeSailors = zoneSailors.filter((s) => s.trade === trade);
-      const strength = tradeSailors.length;
-      const present = tradeSailors.filter(
-        (s) =>
-          s.status === "Active" ||
-          s.status === "Available" ||
-          s.status === "Assigned" ||
-          (s.attendance || "Present") === "Present",
-      ).length;
-      const leave = tradeSailors.filter(
-        (s) => s.status === "Leave" || (s.attendance || "") === "Leave",
-      ).length;
-      const sick = tradeSailors.filter(
-        (s) => s.status === "Sick" || (s.attendance || "") === "Sick",
-      ).length;
-      const deployed = tradeSailors.filter(
-        (s) => s.status === "Assigned",
-      ).length;
-      return `
-            <tr>
-                <td class="px-4 py-3 font-medium">${trade}</td>
-                <td class="px-4 py-3 text-center">${strength}</td>
-                <td class="px-4 py-3 text-center text-green-600 font-medium">${present}</td>
-                <td class="px-4 py-3 text-center text-amber-600">${leave}</td>
-                <td class="px-4 py-3 text-center text-red-600">${sick}</td>
-                <td class="px-4 py-3 text-center"><span class="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">${deployed}</span></td>
-            </tr>
-        `;
-    })
-    .join(""); // Top Performers
-  const topSailors = zoneSailors
-    .sort((a, b) => b.avgScore - a.avgScore)
+  let totStrength = 0, totPresent = 0, totLeave = 0, totSick = 0, totDeployed = 0;
+
+  const stateBoardEl = document.getElementById("stateBoard");
+  if (stateBoardEl) {
+    const rowsHtml = trades
+      .map((trade) => {
+        const tradeSailors = targetSailors.filter((s) => {
+          const t = (s.trade || "MA").trim().toUpperCase();
+          return (t === "WEL" ? "WE" : t) === trade;
+        });
+        const strength = tradeSailors.length;
+        
+        let sick = 0, leave = 0, deployed = 0;
+        tradeSailors.forEach((s) => {
+          const fbStatus = dayAvail[s._fbKey || s.id];
+          const isL = isLeaveState(s.status) || isLeaveState(s.attendance) || isLeaveState(fbStatus);
+          const isS = /sick|siq|m\/d|gilan/i.test(String(s.status || "")) || /sick|siq|m\/d|gilan/i.test(String(s.attendance || "")) || /sick|siq|m\/d|gilan/i.test(String(fbStatus || ""));
+          const isAssigned = assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey));
+
+          if (isS) sick++;
+          else if (isL) leave++;
+          else if (isAssigned) deployed++;
+        });
+
+        const present = Math.max(0, strength - leave - sick);
+
+        totStrength += strength;
+        totPresent += present;
+        totLeave += leave;
+        totSick += sick;
+        totDeployed += deployed;
+
+        return `
+              <tr class="hover:bg-slate-50 transition-colors border-b border-slate-100 text-sm">
+                  <td class="px-4 py-2.5 font-bold text-slate-800">${trade}</td>
+                  <td class="px-4 py-2.5 text-center font-semibold text-slate-700">${strength}</td>
+                  <td class="px-4 py-2.5 text-center text-emerald-600 font-bold">${present}</td>
+                  <td class="px-4 py-2.5 text-center text-amber-600 font-semibold">${leave}</td>
+                  <td class="px-4 py-2.5 text-center text-rose-600 font-semibold">${sick}</td>
+                  <td class="px-4 py-2.5 text-center"><span class="px-2.5 py-1 bg-blue-100 text-blue-700 rounded-lg text-xs font-bold">${deployed}</span></td>
+              </tr>
+          `;
+      })
+      .join("");
+
+    const totalRowHtml = `
+          <tr class="bg-slate-900 text-white font-bold text-sm border-t-2 border-slate-700">
+              <td class="px-4 py-3 uppercase tracking-wider">TOTAL</td>
+              <td class="px-4 py-3 text-center text-white">${totStrength}</td>
+              <td class="px-4 py-3 text-center text-emerald-400">${totPresent}</td>
+              <td class="px-4 py-3 text-center text-amber-400">${totLeave}</td>
+              <td class="px-4 py-3 text-center text-rose-400">${totSick}</td>
+              <td class="px-4 py-3 text-center"><span class="px-2.5 py-1 bg-blue-500 text-white rounded-lg text-xs font-bold">${totDeployed}</span></td>
+          </tr>
+      `;
+
+    stateBoardEl.innerHTML = rowsHtml + totalRowHtml;
+  }
+
+  // Top Performers
+  const topSailors = [...targetSailors]
+    .sort((a, b) => (b.avgScore || 7.0) - (a.avgScore || 7.0))
     .slice(0, 5);
-  document.getElementById("topPerformers").innerHTML = topSailors
-    .map(
-      (s, i) => `
-        <div class="p-3 flex items-center gap-3">
-            <span class="w-8 h-8 flex items-center justify-center rounded-full ${i === 0 ? "bg-yellow-400" : i === 1 ? "bg-gray-300" : i === 2 ? "bg-amber-600" : "bg-slate-200"} text-white font-bold text-sm">
-                ${i + 1}
-            </span>
-            <div class="flex-1">
-                <p class="font-medium text-slate-700 text-sm">${s.name}</p>
-                <p class="text-xs text-slate-500">${s.trade} • ${s.rank}</p>
-            </div>
-            <span class="text-lg font-bold ${getPerformanceTextColor(s.avgScore)}">${s.avgScore.toFixed(1)}</span>
-        </div>
-    `,
-    )
-    .join(""); // User Feedback Summary
+  const topPerformersEl = document.getElementById("topPerformers");
+  if (topPerformersEl) {
+    topPerformersEl.innerHTML = topSailors
+      .map(
+        (s, i) => `
+          <div class="p-3 flex items-center gap-3">
+              <span class="w-8 h-8 flex items-center justify-center rounded-full ${i === 0 ? "bg-yellow-400" : i === 1 ? "bg-gray-300" : i === 2 ? "bg-amber-600" : "bg-slate-200"} text-white font-bold text-sm">
+                  ${i + 1}
+              </span>
+              <div class="flex-1">
+                  <p class="font-medium text-slate-700 text-sm">${s.name}</p>
+                  <p class="text-xs text-slate-500">${s.trade} • ${s.rank}</p>
+              </div>
+              <span class="text-lg font-bold ${getPerformanceTextColor(s.avgScore || 7.0)}">${(s.avgScore || 7.0).toFixed(1)}</span>
+          </div>
+      `,
+      )
+      .join("");
+  } // User Feedback Summary
   document.getElementById("userFeedbackSummary").innerHTML = `
         <div class="text-center mb-4">
             <p class="text-4xl font-bold text-purple-600">${avgFeedback.toFixed(1)}</p>
@@ -7469,6 +7584,168 @@ function renderDailyReport() {
               .join("")}
         </div>
     `;
+}
+
+function exportDailyStateBoardPdf() {
+  const dateVal = store.reportDate || store.dashboardDate || getLocalDateString();
+  const currentZoneObj = (store.zones || []).find((z) => z.id === store.currentZone);
+  const zoneName = currentZoneObj ? currentZoneObj.name.toUpperCase() : (store.currentZone || "ALL ZONES").toUpperCase();
+
+  showToast("Generating Daily State Board PDF...", "info");
+
+  const todayStr = getLocalDateString();
+  const assignedIds = new Set();
+  if (dateVal === todayStr) {
+    (store.workOrders || []).forEach((wo) => {
+      if ((wo.status === "Active" || wo.status === "Pending") && wo.assigned) {
+        const list = Array.isArray(wo.assigned) ? wo.assigned : Object.values(wo.assigned);
+        list.forEach((id) => assignedIds.add(String(id)));
+      }
+    });
+  } else {
+    (store.dailyAllocations || []).forEach((a) => {
+      if (a && a.date === dateVal && a.sailor_id) {
+        assignedIds.add(String(a.sailor_id));
+      }
+    });
+  }
+
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+  const dayAvail = (store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey]) || {};
+
+  const isLeaveState = (val) => {
+    if (!val) return false;
+    const s = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
+  };
+
+  const targetSailors = store.sailors || [];
+  const trades = ["MA", "CA", "PA", "PL", "WE", "RW", "AL", "SW", "BB"];
+  let totStrength = 0, totPresent = 0, totLeave = 0, totSick = 0, totDeployed = 0;
+
+  const rows = trades.map((trade) => {
+    const tradeSailors = targetSailors.filter((s) => {
+      const t = (s.trade || "MA").trim().toUpperCase();
+      return (t === "WEL" ? "WE" : t) === trade;
+    });
+
+    let sick = 0, leave = 0, deployed = 0;
+    tradeSailors.forEach((s) => {
+      const fbStatus = dayAvail[s._fbKey || s.id];
+      const isL = isLeaveState(s.status) || isLeaveState(s.attendance) || isLeaveState(fbStatus);
+      const isS = /sick|siq|m\/d|gilan/i.test(String(s.status || "")) || /sick|siq|m\/d|gilan/i.test(String(s.attendance || "")) || /sick|siq|m\/d|gilan/i.test(String(fbStatus || ""));
+      const isAssigned = assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey));
+
+      if (isS) sick++;
+      else if (isL) leave++;
+      else if (isAssigned) deployed++;
+    });
+
+    const strength = tradeSailors.length;
+    const present = Math.max(0, strength - leave - sick);
+
+    totStrength += strength;
+    totPresent += present;
+    totLeave += leave;
+    totSick += sick;
+    totDeployed += deployed;
+
+    return `
+      <tr style="border-bottom: 1px solid #e2e8f0; font-size: 13px;">
+        <td style="padding: 8px 12px; font-weight: bold; color: #1e293b;">${trade}</td>
+        <td style="padding: 8px 12px; text-align: center; color: #334155;">${strength}</td>
+        <td style="padding: 8px 12px; text-align: center; color: #059669; font-weight: bold;">${present}</td>
+        <td style="padding: 8px 12px; text-align: center; color: #d97706; font-weight: bold;">${leave}</td>
+        <td style="padding: 8px 12px; text-align: center; color: #dc2626; font-weight: bold;">${sick}</td>
+        <td style="padding: 8px 12px; text-align: center; color: #2563eb; font-weight: bold;">${deployed}</td>
+      </tr>
+    `;
+  }).join("");
+
+  const element = document.createElement("div");
+  element.style.padding = "24px";
+  element.style.fontFamily = "Arial, sans-serif";
+  element.style.backgroundColor = "#ffffff";
+  element.style.color = "#0f172a";
+  element.style.width = "750px";
+
+  element.innerHTML = `
+    <div style="border-bottom: 3px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+      <div>
+        <h1 style="font-size: 18px; font-weight: bold; margin: 0; color: #0f172a;">SRI LANKA NAVY — DOCKYARD TRINCOMALEE</h1>
+        <h2 style="font-size: 14px; font-weight: 600; margin: 4px 0 0 0; color: #475569;">CIVIL ENGINEERING DEPARTMENT — DAILY STATE BOARD REPORT</h2>
+      </div>
+      <div style="text-align: right;">
+        <span style="font-size: 12px; font-weight: bold; background: #0f172a; color: #ffffff; padding: 4px 8px; border-radius: 4px;">DATE: ${dateVal}</span>
+        <div style="font-size: 11px; color: #64748b; margin-top: 4px;">ZONE: ${zoneName}</div>
+      </div>
+    </div>
+
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+      <thead>
+        <tr style="background-color: #1e293b; color: #ffffff; font-size: 13px; text-transform: uppercase;">
+          <th style="padding: 10px 12px; text-align: left;">TRADE</th>
+          <th style="padding: 10px 12px; text-align: center;">STRENGTH</th>
+          <th style="padding: 10px 12px; text-align: center;">PRESENT</th>
+          <th style="padding: 10px 12px; text-align: center;">LEAVE</th>
+          <th style="padding: 10px 12px; text-align: center;">SICK</th>
+          <th style="padding: 10px 12px; text-align: center;">DEPLOYED</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+        <tr style="background-color: #0f172a; color: #ffffff; font-size: 14px; font-weight: bold;">
+          <td style="padding: 10px 12px;">TOTAL</td>
+          <td style="padding: 10px 12px; text-align: center;">${totStrength}</td>
+          <td style="padding: 10px 12px; text-align: center; color: #34d399;">${totPresent}</td>
+          <td style="padding: 10px 12px; text-align: center; color: #fbbf24;">${totLeave}</td>
+          <td style="padding: 10px 12px; text-align: center; color: #f87171;">${totSick}</td>
+          <td style="padding: 10px 12px; text-align: center; color: #60a5fa;">${totDeployed}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div style="margin-top: 50px; display: flex; justify-content: space-between; font-size: 11px; text-align: center; color: #334155;">
+      <div>
+        <div style="border-top: 1px solid #94a3b8; width: 160px; margin-bottom: 4px;"></div>
+        <div>PREPARED BY (OIC STAFF)</div>
+      </div>
+      <div>
+        <div style="border-top: 1px solid #94a3b8; width: 160px; margin-bottom: 4px;"></div>
+        <div>CHECKED BY (ARTIFICER)</div>
+      </div>
+      <div>
+        <div style="border-top: 1px solid #94a3b8; width: 160px; margin-bottom: 4px;"></div>
+        <div>APPROVED BY (OIC ZONE)</div>
+      </div>
+    </div>
+  `;
+
+  const opt = {
+    margin: [10, 10, 10, 10],
+    filename: `Daily_State_Board_${dateVal}.pdf`,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+  };
+
+  if (typeof html2pdf !== "undefined") {
+    html2pdf()
+      .set(opt)
+      .from(element)
+      .save()
+      .then(() => {
+        showToast("Daily State Board PDF downloaded successfully!", "success");
+      })
+      .catch((err) => {
+        console.error(err);
+        showToast("Failed to generate PDF.", "error");
+      });
+  } else {
+    window.print();
+  }
 }
 function renderMonthlyReport() {
   // Set current month/year
