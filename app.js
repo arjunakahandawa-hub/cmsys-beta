@@ -1213,7 +1213,7 @@ function updateDashboardButtons() {
   const today = getLocalDateString();
   const isToday = !store.dashboardDate || store.dashboardDate === today;
   if (newAssignBtn) {
-    newAssignBtn.classList.toggle("hidden", !isAdminStaff || !isToday);
+    newAssignBtn.classList.toggle("hidden", !isToday);
   }
   if (newWorkOrderBtn) {
     newWorkOrderBtn.classList.toggle("hidden", !isToday);
@@ -2889,8 +2889,27 @@ let _asCurrentTrade = "ALL";
 function openNewAssignModal() {
   _asSelectedSailors = new Set();
   _asCurrentTrade = "ALL"; // Reset form elements
-  document.getElementById("asType").value = "Admin Staff";
-  document.getElementById("asDescription").value = ""; // Populate In-Charge dropdown (Off No starts with 'EC')
+
+  const isAdminStaff = isAdminStaffDuties(store.currentZone);
+  const typeGroup = document.getElementById("asTypeGroup");
+  const inchargeGroup = document.getElementById("asInchargeGroup");
+  const descEl = document.getElementById("asDescription");
+
+  if (isAdminStaff) {
+    if (typeGroup) typeGroup.style.display = "block";
+    if (inchargeGroup) inchargeGroup.style.display = "block";
+    document.getElementById("asType").value = "Admin Staff";
+    descEl.value = "";
+    descEl.placeholder = "Describe the work...";
+  } else {
+    if (typeGroup) typeGroup.style.display = "none";
+    if (inchargeGroup) inchargeGroup.style.display = "none";
+    document.getElementById("asType").value = "In Charge";
+    descEl.value = "In Charge";
+    descEl.placeholder = "In Charge";
+  }
+
+  // Populate In-Charge dropdown (Off No starts with 'EC')
   const ecSailors = store.sailors.filter((s) => {
     const off = String(s.official_number || "")
       .trim()
@@ -3178,12 +3197,17 @@ function filterAsTrade(trade) {
 }
 function createAssignment(event) {
   event.preventDefault();
-  const assignType = document.getElementById("asType").value;
+  const isAdminStaff = isAdminStaffDuties(store.currentZone);
+  const assignType = isAdminStaff
+    ? document.getElementById("asType").value
+    : "In Charge";
+  const desc =
+    document.getElementById("asDescription").value.trim() || "In Charge";
   const newOrder = {
     type: "TASK", // Always save as TASK so it lists under Tasks board column
     assign_type: assignType, // Store specific assignment category
     reference_no: null,
-    description: document.getElementById("asDescription").value,
+    description: desc,
     status: "Pending",
     priority: "Medium",
     zone_id: store.currentZone,
@@ -3192,7 +3216,9 @@ function createAssignment(event) {
     progress: 0,
     assigned: [..._asSelectedSailors],
     location: "",
-    incharge: document.getElementById("asIncharge").value || null,
+    incharge: isAdminStaff
+      ? document.getElementById("asIncharge").value || null
+      : null,
     supervisor: null,
     estimate_id: null,
   }; // Mark selected sailors as Assigned in store (optimistic update)
@@ -7986,7 +8012,7 @@ function resetBulkUploadBtn() {
 // Default settings (used if Firebase has nothing)
 const defaultSettings = {
   systemTitle: "CMSys v2.2",
-  stationName: "CE Management System · Miss Garrison · Trincomalee",
+  stationName: "CE Management System · Trincomalee",
   oicName: "",
   oicRank: "",
   oicServiceNo: "",
@@ -8082,6 +8108,10 @@ function applySettings() {
         : "v2.2";
   }
   const brandTag = document.querySelector(".brand-tag");
+  if (s.stationName) {
+    s.stationName = s.stationName.replace(/·?\s*Miss Garrison\s*·?/gi, "·").replace(/•?\s*Miss Garrison\s*•?/gi, "•").trim();
+    s.stationName = s.stationName.replace(/^·\s*/, "").replace(/\s*·$/, "").trim();
+  }
   if (brandTag && s.stationName) brandTag.textContent = s.stationName;
   toggleViewsBasedOnZone();
 } // ── Save a single setting field to Firebase ──
@@ -10220,6 +10250,13 @@ function renderDailyDetailsSpecialView() {
     const wos = store.workOrders.filter(
       (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal)
     );
+    wos.sort((a, b) => {
+      const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
+      const bInCharge = (b.description || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
+      if (aInCharge && !bInCharge) return -1;
+      if (!aInCharge && bInCharge) return 1;
+      return 0;
+    });
     // Find if this zone has any active allocations and collect unique sailors
     const zoneSailorMap = new Map();
     wos.forEach((wo) => {
@@ -11066,7 +11103,14 @@ function exportLmdCSV(scope, selectedZone) {
   zones.forEach((z) => {
     const wos = store.workOrders.filter(
       (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
-    ); // Check if zone has active allocations
+    );
+    wos.sort((a, b) => {
+      const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
+      const bInCharge = (b.description || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
+      if (aInCharge && !bInCharge) return -1;
+      if (!aInCharge && bInCharge) return 1;
+      return 0;
+    }); // Check if zone has active allocations
     let zoneHasAllocations = false;
     wos.forEach((wo) => {
       let assignedCount = 0;
@@ -11153,7 +11197,14 @@ function printLmdDetails(scope, selectedZone) {
   zones.forEach((z) => {
     const wos = store.workOrders.filter(
       (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
-    ); // Check if zone has active allocations
+    );
+    wos.sort((a, b) => {
+      const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
+      const bInCharge = (b.description || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
+      if (aInCharge && !bInCharge) return -1;
+      if (!aInCharge && bInCharge) return 1;
+      return 0;
+    }); // Check if zone has active allocations
     let zoneHasAllocations = false;
     wos.forEach((wo) => {
       let assignedCount = 0;
@@ -12317,6 +12368,13 @@ function generateWorkOrdersPdfBlob(dateVal) {
     const wos = store.workOrders.filter(
       (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, targetDate),
     );
+    wos.sort((a, b) => {
+      const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
+      const bInCharge = (b.description || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
+      if (aInCharge && !bInCharge) return -1;
+      if (!aInCharge && bInCharge) return 1;
+      return 0;
+    });
     let zoneHasAllocations = false;
     wos.forEach((wo) => {
       let assignedCount = 0;
@@ -12406,7 +12464,7 @@ function generateWorkOrdersPdfBlob(dateVal) {
             <div style="display: flex; align-items: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px;">
                 <div style="text-align: left;">
                     <h1 style="font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">CMSys Daily Details Report</h1>
-                    <h2 style="font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">CE Management System • Miss Garrison</h2>
+                    <h2 style="font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">CE Management System • Trincomalee</h2>
                 </div>
             </div>
             

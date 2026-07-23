@@ -526,7 +526,7 @@
                         <div class="flex items-center gap-2">
                             <h1 class="text-[15px] font-bold text-white tracking-wide">CMSys <span class="text-teal-400 font-extrabold">v2.2</span></h1>
                         </div>
-                        <p class="brand-tag leading-none hidden sm:block">CE Management · Miss Garrison · Trincomalee</p>
+                        <p class="brand-tag leading-none hidden sm:block">CE Management · Trincomalee</p>
                     </div>
                 </div>
 
@@ -763,7 +763,7 @@
                         <div class="flex flex-col md:flex-row items-center justify-between gap-4">
                             <div class="text-center md:text-left">
                                 <h3 id="summaryTitle" class="font-bold text-[15px] text-teal-300">Today's Operational Summary</h3>
-                                <p class="text-xs md:text-sm text-slate-400 mt-0.5" id="workSummaryText">Miss Garrison Naval Dockyard — Click any work order to manage</p>
+                                <p class="text-xs md:text-sm text-slate-400 mt-0.5" id="workSummaryText">Naval Dockyard — Click any work order to manage</p>
                             </div>
                             <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-3 md:gap-6 mt-4 md:mt-0 w-full md:w-auto">
                                 <div class="flex items-center justify-center gap-4 md:gap-6">
@@ -1420,7 +1420,7 @@
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Station Name</label>
                                 <input type="text" id="cfg-stationName" placeholder="SLN Docyard" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('stationName',this.value)">
-                                <p class="text-xs text-slate-400 mt-1">Header sub-line text (e.g., Naval Civil Works · Miss Garrison · Trincomalee)</p>
+                                <p class="text-xs text-slate-400 mt-1">Header sub-line text (e.g., CE Management System · Trincomalee)</p>
                             </div>
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1">Google OAuth Client ID</label>
@@ -2428,22 +2428,23 @@
                 <button onclick="closeModal('assignModal')" class="text-indigo-300 hover:text-white">✕</button>
             </div>
             <form onsubmit="createAssignment(event)" class="p-6 space-y-4">
-                <div>
+                <div id="asTypeGroup">
                     <label class="block text-sm font-medium text-slate-700 mb-1">Assign Type *</label>
                     <select id="asType" required class="w-full px-3 py-2 border border-slate-300 rounded-lg" onchange="updateAsPreview()">
                         <option value="Admin Staff">Admin Staff</option>
                         <option value="Utility">Utility</option>
                         <option value="Stores">Stores</option>
+                        <option value="In Charge">In Charge</option>
                     </select>
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
-                    <textarea id="asDescription" required rows="4" placeholder="Describe the work..."
+                    <textarea id="asDescription" required rows="3" placeholder="Describe the work..."
                         class="w-full px-3 py-2 border border-slate-300 rounded-lg" oninput="updateAsPreview()"></textarea>
                 </div>
 
-                <div>
+                <div id="asInchargeGroup">
                     <label class="block text-sm font-medium text-slate-700 mb-1">In-Charge</label>
                     <select id="asIncharge" class="w-full px-3 py-2 border border-slate-300 rounded-lg" onchange="updateAsPreview()">
                         <option value="">Select...</option>
@@ -3298,10 +3299,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v4.66
+        App Version: v4.67
     </div>
 
-    <script src="app.js?v=4.66"></script>
+    <script src="app.js?v=4.67"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
