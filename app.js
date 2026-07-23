@@ -7211,13 +7211,15 @@ function renderZoneSelectors() {
       };
 
       let pendingEvalCount = 0;
-      let activeEvalCount = 0;
+      let activeCount = 0;
 
       if (assignedIds.size > 0 && store.sailors) {
         store.sailors.forEach((s) => {
           if (assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey))) {
             const isLeave = isLeaveCode(s.status) || isLeaveCode(s.attendance);
-            if (isLeave) return; // Leave sailors are excluded from evaluation
+            if (isLeave) return; // Leave sailors are excluded
+
+            activeCount++; // 🟢 Total active assigned works today
 
             const allocKey = `${dateVal}_${sanitizeFbKey(s.id)}`;
             const allocKeyFb = `${dateVal}_${sanitizeFbKey(s._fbKey)}`;
@@ -7227,22 +7229,23 @@ function renderZoneSelectors() {
                   (a) => a.date === dateVal && (String(a.sailor_id) === String(s.id) || String(a.sailor_id) === String(s._fbKey))
                 );
             const isEval = alloc ? alloc.evaluated === true : s.evaluated === true;
-            if (isEval) {
-              activeEvalCount++;
-            } else {
-              pendingEvalCount++;
+            if (!isEval) {
+              pendingEvalCount++; // 🔴 Pending evaluation
             }
           }
         });
       }
 
-      const totalActiveSailors = activeEvalCount + pendingEvalCount;
+      if (assignedIds.size > 0 && activeCount === 0) {
+        activeCount = assignedIds.size;
+        pendingEvalCount = assignedIds.size;
+      }
 
       let displayStr = z.name;
-      if (totalActiveSailors > 0) {
-        displayStr = `${z.name} (🟢 ${activeEvalCount} Done | 🔴 ${pendingEvalCount} Pending)`;
+      if (activeCount > 0) {
+        displayStr = `${z.name} (🟢 ${activeCount} | 🔴 ${pendingEvalCount})`;
       } else {
-        displayStr = `${z.name} (N/A)`;
+        displayStr = `${z.name} (🟢 0 | 🔴 0)`;
       }
       return `<option value="${z.id}">${displayStr}</option>`;
     })
