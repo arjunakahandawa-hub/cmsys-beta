@@ -10218,7 +10218,8 @@ function renderDailyDetailsSpecialView() {
   let hasAllocations = false;
   zones.forEach((z) => {
     const wos = store.workOrders.filter(
-      (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
+      (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal)
+    );
     // Find if this zone has any active allocations and collect unique sailors
     const zoneSailorMap = new Map();
     wos.forEach((wo) => {
