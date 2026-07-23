@@ -1222,11 +1222,31 @@ function updateDashboardButtons() {
     btnContinueYesterday.classList.toggle("hidden", !isToday);
   }
 }
+function navigateSummaryDate(offsetDays) {
+  const currentDateStr = store.dashboardDate || getLocalDateString();
+  const parts = currentDateStr.split("-");
+  if (parts.length !== 3) return;
+  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  d.setDate(d.getDate() + offsetDays);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  const newDateStr = `${year}-${month}-${day}`;
+  changeDashboardDate(newDateStr);
+}
+
 function changeDashboardDate(val) {
   if (!val) return;
   store.dashboardDate = val;
+  ["dashboardDatePicker", "summaryDatePicker"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el && el.value !== val) el.value = val;
+  });
   renderDashboard();
   renderZoneSelectors(); // Re-render dropdown to update zone progress percentages
+  if (typeof renderSummaryView === "function") {
+    renderSummaryView();
+  }
   const today = getLocalDateString();
   if (val !== today) {
     showToast(`Viewing historical data for ${val} (Read Only)`, "info");
@@ -10369,7 +10389,7 @@ function renderDailyDetailsSpecialView() {
           tableRows += `
                         <tr class="bg-slate-50 font-bold border-b border-slate-200">
                             <td colspan="6" class="px-4 py-2 text-[10px] text-slate-700 text-center underline uppercase tracking-wide">
-                                📋 DUTY: ${wo.description.toUpperCase()}
+                                📋 ${wo.description.toUpperCase()}
                             </td>
                         </tr>
                     `;
@@ -10534,6 +10554,10 @@ function renderSummaryView() {
   const dateVal = store.dashboardDate || today; // Update active date displays
   const dateDisplay = document.getElementById("summaryActiveDate");
   if (dateDisplay) dateDisplay.textContent = dateVal;
+  const summaryDatePicker = document.getElementById("summaryDatePicker");
+  if (summaryDatePicker && summaryDatePicker.value !== dateVal) {
+    summaryDatePicker.value = dateVal;
+  }
   const printDateDisplay = document.getElementById("printSummaryDate");
   if (printDateDisplay)
     printDateDisplay.textContent = dateVal.replace(/-/g, "."); // 1. Fetch allocations for the active date
@@ -10587,7 +10611,10 @@ function renderSummaryView() {
     };
   } // 2. Define the structure of our sections dynamically
   const sections = {
-    workshop: { title: "WORKSHOP", rows: {} },
+    workshop: {
+      title: "WORKSHOP",
+      subsections: {},
+    },
     zones: {
       title: "ZONE",
       subsections: {},
@@ -10597,47 +10624,77 @@ function renderSummaryView() {
     socialResponsible: { title: "SOCIAL RESPONSIBLE WORKS AT ENA", rows: {} },
     leaveSick: { title: "LEAVE, SICK & ATTENDANCE", rows: {} },
   };
-  
-  // Dynamically build zone subsections based on user's defined zones
+
+  const workshopZoneIds = [
+    "Carpentry-Shop",
+    "Paint-Workshop",
+    "Signwriter",
+    "Welding-Shop",
+    "Concrete-Precast",
+    "Aluminum-Work-Shop",
+    "Blacksmith",
+    "Pump-House",
+  ];
+
+  // Dynamically build workshop & zone subsections based on user's defined zones
   if (store.zones) {
-      store.zones.forEach(z => {
-          if ([
-              "Carpentry-Shop", "Paint-Workshop", "Signwriter", "Welding-Shop",
-              "Concrete-Precast", "Aluminum-Work-Shop", "Blacksmith",
-              "Admin-&-Staff-Duties", "Other-Base", "Out-Project", "Housing-Project"
-          ].includes(z.id)) return;
-          
-          sections.zones.subsections[z.id] = { title: z.name.toUpperCase(), rows: {} };
-      });
+    store.zones.forEach((z) => {
+      const isWorkshop =
+        workshopZoneIds.includes(z.id) ||
+        z.id.toLowerCase().includes("shop") ||
+        z.id.toLowerCase().includes("signwriter");
+      if (isWorkshop) {
+        sections.workshop.subsections[z.id] = {
+          title: z.name.toUpperCase(),
+          rows: {},
+        };
+      } else if (
+        ![
+          "Admin-&-Staff-Duties",
+          "Other-Base",
+          "Out-Project",
+          "Housing-Project",
+        ].includes(z.id)
+      ) {
+        sections.zones.subsections[z.id] = {
+          title: z.name.toUpperCase(),
+          rows: {},
+        };
+      }
+    });
   }
 
   // Helper to get the correct section based on zoneId
   function getSectionForZone(zoneId) {
-    if (
-      [
-        "Carpentry-Shop",
-        "Paint-Workshop",
-        "Signwriter",
-        "Welding-Shop",
-        "Concrete-Precast",
-        "Aluminum-Work-Shop",
-        "Blacksmith",
-      ].includes(zoneId)
-    ) {
-      return sections.workshop;
+    const isWorkshop =
+      workshopZoneIds.includes(zoneId) ||
+      (zoneId && zoneId.toLowerCase().includes("shop")) ||
+      (zoneId && zoneId.toLowerCase().includes("signwriter"));
+    if (isWorkshop) {
+      if (sections.workshop.subsections[zoneId]) {
+        return sections.workshop.subsections[zoneId];
+      }
+      sections.workshop.subsections[zoneId] = {
+        title: (zoneId || "WORKSHOP").replace(/-/g, " ").toUpperCase(),
+        rows: {},
+      };
+      return sections.workshop.subsections[zoneId];
     }
     if (zoneId === "Admin-&-Staff-Duties") return sections.othersDuty;
     if (zoneId === "Other-Base") return sections.otherBases;
     if (zoneId === "Out-Project" || zoneId === "Housing-Project")
       return sections.socialResponsible;
-      
+
     // Return dynamically defined zone subsection
     if (sections.zones.subsections[zoneId]) {
-        return sections.zones.subsections[zoneId];
+      return sections.zones.subsections[zoneId];
     }
-    
+
     // Fallback: create subsection on the fly if it doesn't exist
-    sections.zones.subsections[zoneId] = { title: zoneId.replace(/-/g, " ").toUpperCase(), rows: {} };
+    sections.zones.subsections[zoneId] = {
+      title: (zoneId || "ZONE").replace(/-/g, " ").toUpperCase(),
+      rows: {},
+    };
     return sections.zones.subsections[zoneId];
   }
   const zones = store.zones; // included Admin & Staff Duties
@@ -10949,8 +11006,62 @@ function renderSummaryView() {
     columnGrandTotals.vssSub += sums.vssSub;
     columnGrandTotals.regSub += sums.regSub;
     columnGrandTotals.fullTotal += sums.fullTotal;
-  } // 2. Workshop
-  appendSectionToTable(sections.workshop); // 3. Zones (A-G grouped under main ZONE header)
+  } // 2. Workshop (Grouped by individual workshop subsections)
+  tableHtml += `
+        <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
+            <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">WORKSHOP</td>
+        </tr>
+    `;
+  const workshopRowsList = [];
+  Object.values(sections.workshop.subsections).forEach((sub) => {
+    const subRows = Object.values(sub.rows);
+    if (subRows.length === 0) return; // Skip workshop subsections with 0 duties
+    const subSums = getColumnsSum(subRows);
+    tableHtml += `
+            <tr class="bg-slate-50 font-bold border-b border-slate-200 text-[10px] text-slate-600">
+                <td colspan="17" class="px-4 py-1.5 pl-6">${sub.title}</td>
+            </tr>
+        `;
+    subRows.forEach((r) => {
+      tableHtml += `
+                <tr class="hover:bg-slate-50 border-b border-slate-100 text-center">
+                    <td class="px-3 py-1.5 pl-8 text-left text-slate-700 font-medium">${r.description}</td>
+                    ${r.vss.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
+                    <td class="px-1 py-1.5 bg-slate-50/50 font-bold border-l-2 border-r-2 border-slate-200">${r.vssSub || ""}</td>
+                    ${r.reg.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
+                    <td class="px-1 py-1.5 bg-slate-50/50 font-bold border-l-2 border-r border-slate-200">${r.regSub || ""}</td>
+                    <td class="px-2 py-1.5 bg-teal-50/30 font-bold text-slate-800 border-l border-slate-300">${r.fullTotal || ""}</td>
+                </tr>
+            `;
+      workshopRowsList.push(r);
+    });
+    tableHtml += `
+            <tr class="bg-slate-50 font-semibold text-center border-b border-slate-200 text-slate-600">
+                <td class="px-3 py-1.5 pl-8 text-left uppercase text-[9px]">${sub.title} FULL TOTAL</td>
+                ${subSums.vss.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
+                <td class="px-1 py-1.5 bg-slate-100/50 border-l-2 border-r-2 border-slate-200">${subSums.vssSub || ""}</td>
+                ${subSums.reg.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
+                <td class="px-1 py-1.5 bg-slate-100/50 border-l-2 border-r border-slate-200">${subSums.regSub || ""}</td>
+                <td class="px-2 py-1.5 bg-teal-50/50 border-l border-slate-300">${subSums.fullTotal || ""}</td>
+            </tr>
+        `;
+  });
+  const workshopMainSums = getColumnsSum(workshopRowsList);
+  tableHtml += `
+        <tr class="bg-slate-100 font-bold text-center border-b-2 border-slate-300 text-slate-800">
+            <td class="px-3 py-2 text-left uppercase text-[10px] pl-6">WORKSHOP TOTAL SUB TOTAL</td>
+            ${workshopMainSums.vss.map((val) => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ""}</td>`).join("")}
+            <td class="px-1 py-2 bg-slate-200/50 border-l-2 border-r-2 border-slate-300">${workshopMainSums.vssSub || ""}</td>
+            ${workshopMainSums.reg.map((val) => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ""}</td>`).join("")}
+            <td class="px-1 py-2 bg-slate-200/50 border-l-2 border-r border-slate-300">${workshopMainSums.regSub || ""}</td>
+            <td class="px-2 py-2 bg-teal-100/40 text-teal-800 border-l border-slate-300">${workshopMainSums.fullTotal || ""}</td>
+        </tr>
+    `;
+  workshopMainSums.vss.forEach((val, idx) => (columnGrandTotals.vss[idx] += val));
+  workshopMainSums.reg.forEach((val, idx) => (columnGrandTotals.reg[idx] += val));
+  columnGrandTotals.vssSub += workshopMainSums.vssSub;
+  columnGrandTotals.regSub += workshopMainSums.regSub;
+  columnGrandTotals.fullTotal += workshopMainSums.fullTotal; // 3. Zones (A-G grouped under main ZONE header)
   tableHtml += `
         <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
             <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">ZONE</td>
@@ -11154,7 +11265,7 @@ function exportLmdCSV(scope, selectedZone) {
         }
         if (assignedSailors.length > 0) {
           // Add header row for the work order/duty
-          csvContent += `,,● DUTY: ${wo.description.toUpperCase()},,,\n`;
+          csvContent += `,,● ${wo.description.toUpperCase()},,,\n`;
           assignedSailors.forEach((s, idx) => {
             const serNo = String(idx + 1).padStart(2, "0");
             const parsedOffNo = parseOfficialNumber(
@@ -11257,7 +11368,7 @@ function printLmdDetails(scope, selectedZone) {
           rowsHtml += `
                         <tr style="background-color: #f1f5f9; font-weight: bold;">
                             <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
-                                📋 DUTY: ${wo.description.toUpperCase()}
+                                📋 ${wo.description.toUpperCase()}
                             </td>
                         </tr>
                     `;
@@ -11697,7 +11808,7 @@ function shareLmdWhatsApp(scope, selectedZone) {
       }
       if (assignedSailors.length > 0) {
         zoneHasAllocations = true;
-        zoneText += `*📋 Duty:* _${wo.description.toUpperCase()}_\n`;
+        zoneText += `*📋 ${wo.description.toUpperCase()}*\n`;
         assignedSailors.forEach((s, idx) => {
           totalAssigned++;
           const parsedOffNo = parseOfficialNumber(
@@ -12426,7 +12537,7 @@ function generateWorkOrdersPdfBlob(dateVal) {
           rowsHtml += `
                         <tr style="background-color: #f1f5f9; font-weight: bold;">
                             <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
-                                📋 DUTY: ${wo.description.toUpperCase()}
+                                📋 ${wo.description.toUpperCase()}
                             </td>
                         </tr>
                     `;
