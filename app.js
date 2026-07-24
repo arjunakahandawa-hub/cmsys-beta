@@ -3887,10 +3887,8 @@ function saveWorkOrderChanges() {
     if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
     renderDashboard();
     renderZoneSelectors(); // Update Zone dropdown percentages
-    showToast("Work order updated successfully!"); // Auto-close modal if no longer showing on the planning board
-    if (newStatus === "Hold" || newStatus === "Completed") {
-      closeModal("workOrderDetailModal");
-    }
+    showToast("Work order updated successfully!");
+    closeModal("workOrderDetailModal");
   }
   if (btn) {
     setTimeout(() => {
