@@ -150,6 +150,8 @@ const store = {
   sailors: [],
   availability: {},
   outProjects: {},
+  housingProjects: {},
+  otherBases: {},
   tempDrafts: {}, // ── Loaded from Firebase DB #2 (operations database) ──
   workOrders: [],
   jobCards: [],
@@ -535,9 +537,20 @@ function initAvailabilityListener() {
   );
 }
 function initLongTermDeploymentsListeners() {
-  sailorsDB.ref("out_projects").on("value", (snapshot) => {
+  opsDB.ref("out_projects").on("value", (snapshot) => {
     store.outProjects = snapshot.val() || {};
     renderDashboard();
+    renderProjectsList();
+  });
+  opsDB.ref("housing_projects").on("value", (snapshot) => {
+    store.housingProjects = snapshot.val() || {};
+    renderDashboard();
+    renderProjectsList();
+  });
+  opsDB.ref("other_bases").on("value", (snapshot) => {
+    store.otherBases = snapshot.val() || {};
+    renderDashboard();
+    renderProjectsList();
   });
   sailorsDB.ref("temp_drafts").on("value", (snapshot) => {
     store.tempDrafts = snapshot.val() || {};
@@ -963,6 +976,7 @@ function refreshCurrentViewImmediately() {
   updateCounters();
   const views = [
     "dashboard",
+    "projects",
     "jobcards",
     "inventory",
     "estimates",
@@ -979,6 +993,9 @@ function refreshCurrentViewImmediately() {
       switch (v) {
         case "dashboard":
           renderDashboard();
+          break;
+        case "projects":
+          renderProjectsList();
           break;
         case "jobcards":
           renderJobCardsView();
@@ -1114,6 +1131,9 @@ function switchView(view, preventPushState = false) {
   switch (view) {
     case "dashboard":
       renderDashboard();
+      break;
+    case "projects":
+      renderProjectsList();
       break;
     case "jobcards":
       renderJobCardsView();
@@ -2017,55 +2037,39 @@ function toggleZoneTeam(sailorId, addToTeam) {
 }
 function getLongTermAllocations() {
   let allocs = { housing: [], outProject: [], otherBase: [] };
-  if (store.outProjects) {
-    Object.keys(store.outProjects).forEach((pid) => {
-      const proj = store.outProjects[pid];
-      const name = (proj.name || "").trim();
-      const isHousing = name.toUpperCase().includes("HOUSING");
-      if (proj.assigned_sailors) {
-        Object.keys(proj.assigned_sailors).forEach((sailorFbKey) => {
-          const sailor = store.sailors.find(
-            (s) =>
-              String(s._fbKey) === String(sailorFbKey) ||
-              String(s.id) === String(sailorFbKey),
-          );
-          if (sailor) {
-            const rec = {
-              sailor,
-              projectName: name,
-              projectId: pid,
-              date: proj.assigned_sailors[sailorFbKey].assigned_date,
-            };
-            if (isHousing) allocs.housing.push(rec);
-            else allocs.outProject.push(rec);
-          }
-        });
-      }
-    });
-  }
-  if (store.tempDrafts) {
-    Object.keys(store.tempDrafts).forEach((did) => {
-      const draft = store.tempDrafts[did];
-      const name = (draft.draft_name || draft.name || "Unknown Base").trim();
-      if (draft.assigned_sailors) {
-        Object.keys(draft.assigned_sailors).forEach((sailorFbKey) => {
-          const sailor = store.sailors.find(
-            (s) =>
-              String(s._fbKey) === String(sailorFbKey) ||
-              String(s.id) === String(sailorFbKey),
-          );
-          if (sailor) {
-            allocs.otherBase.push({
-              sailor,
-              projectName: name,
-              projectId: did,
-              date: draft.assigned_sailors[sailorFbKey].assigned_date,
-            });
-          }
-        });
-      }
-    });
-  }
+
+  const processProjects = (projectsObj, allocArray, defaultName) => {
+    if (projectsObj) {
+      Object.keys(projectsObj).forEach((pid) => {
+        const proj = projectsObj[pid];
+        const name = (proj.name || defaultName).trim();
+        if (proj.assigned_sailors) {
+          Object.keys(proj.assigned_sailors).forEach((sailorFbKey) => {
+            const sailor = store.sailors.find(
+              (s) =>
+                String(s._fbKey) === String(sailorFbKey) ||
+                String(s.id) === String(sailorFbKey),
+            );
+            if (sailor) {
+              allocArray.push({
+                sailor,
+                projectName: name,
+                projectId: pid,
+                date: proj.assigned_sailors[sailorFbKey].assigned_date || Date.now(),
+              });
+            }
+          });
+        }
+      });
+    }
+  };
+
+  processProjects(store.outProjects, allocs.outProject, "Unknown Out Project");
+  processProjects(store.housingProjects, allocs.housing, "Unknown Housing Project");
+  processProjects(store.otherBases, allocs.otherBase, "Unknown Base");
+  
+
+
   return allocs;
 }
 function updateCounters() {
@@ -2211,7 +2215,7 @@ function updateCounters() {
   document.getElementById("netForce").textContent = store.sailors
     ? store.sailors.length
     : 0;
-  document.getElementById("assignedCount").textContent = assigned;
+  document.getElementById("assignedCount").textContent = assigned + longTermCount;
   document.getElementById("availableCount").textContent = available;
   const todayNaEl = document.getElementById("todayNaCount");
   if (todayNaEl) todayNaEl.textContent = naCount;
@@ -10705,7 +10709,7 @@ function toggleViewsBasedOnZone() {
     const el = document.getElementById(id);
     if (el) el.style.display = isSpecialZone ? "none" : "";
   }); // Admin & Staff Duties specific tabs
-  const adminTabs = ["tab-dailydetails", "tab-summary"];
+  const adminTabs = ["tab-dailydetails", "tab-summary", "tab-projects"];
   const mobileAdminTabs = ["mobile-tab-dailydetails", "mobile-tab-summary"];
   adminTabs.forEach((id) => {
     const el = document.getElementById(id);
@@ -10762,7 +10766,7 @@ function toggleViewsBasedOnZone() {
   ) {
     switchView("dashboard");
   }
-  if (!isSpecialZone && ["dailydetails", "summary"].includes(currentView)) {
+  if (!isSpecialZone && ["dailydetails", "summary", "projects"].includes(currentView)) {
     switchView("dashboard");
   }
 }
@@ -11135,8 +11139,9 @@ function renderSummaryView() {
       subsections: {},
     },
     othersDuty: { title: "OTHERS DUTY DOCK YARD", rows: {} },
-    otherBases: { title: "TEMPORARY DRAFT TO OTHER NAVAL AREA", rows: {} },
-    socialResponsible: { title: "SOCIAL RESPONSIBLE WORKS AT ENA", rows: {} },
+    outProjects: { title: "OUT PROJECTS", rows: {} },
+    housingProjects: { title: "HOUSING PROJECTS", rows: {} },
+    otherBases: { title: "OTHER BASES", rows: {} },
     leaveSick: { title: "LEAVE, SICK & ATTENDANCE", rows: {} },
   };
 
@@ -11196,9 +11201,24 @@ function renderSummaryView() {
       return sections.workshop.subsections[zoneId];
     }
     if (zoneId === "Admin-&-Staff-Duties") return sections.othersDuty;
-    if (zoneId === "Other-Base") return sections.otherBases;
-    if (zoneId === "Out-Project" || zoneId === "Housing-Project")
-      return sections.socialResponsible;
+    if (zoneId === "Other-Base") {
+      if (!sections.zones.subsections["Other-Base"]) {
+        sections.zones.subsections["Other-Base"] = { title: "OTHER BASE (UNASSIGNED FROM PHP DB)", rows: {} };
+      }
+      return sections.zones.subsections["Other-Base"];
+    }
+    if (zoneId === "Out-Project") {
+      if (!sections.zones.subsections["Out-Project"]) {
+        sections.zones.subsections["Out-Project"] = { title: "OUT PROJECT (UNASSIGNED FROM PHP DB)", rows: {} };
+      }
+      return sections.zones.subsections["Out-Project"];
+    }
+    if (zoneId === "Housing-Project") {
+      if (!sections.zones.subsections["Housing-Project"]) {
+        sections.zones.subsections["Housing-Project"] = { title: "HOUSING PROJECT (UNASSIGNED FROM PHP DB)", rows: {} };
+      }
+      return sections.zones.subsections["Housing-Project"];
+    }
 
     // Return dynamically defined zone subsection
     if (sections.zones.subsections[zoneId]) {
@@ -11269,7 +11289,7 @@ function renderSummaryView() {
             isLeaveCode(sailor.attendance) ||
             isLeaveCode(sailor.status) ||
             isLeaveCode(fbStatus);
-          // if (isLeave) return; // Track for Leave/Sick check (Removed to match dashboard totals)
+          if (isLeave) return; // Track for Leave/Sick check
           allAllocatedSailorIds.add(String(sailor.id));
           if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
           const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
@@ -11283,76 +11303,44 @@ function renderSummaryView() {
     });
   }); // Add long term deployments to summary
   const longTerm = getLongTermAllocations();
-  [...longTerm.housing, ...longTerm.outProject].forEach((alloc) => {
-    const [yyyy, mm, dd] = dateVal.split("-");
-    const monthKey = `${yyyy}-${mm}`;
-    const dayKey = parseInt(dd, 10).toString();
-    const fbStatus =
-      store.availability &&
-      store.availability[monthKey] &&
-      store.availability[monthKey][dayKey]
-        ? store.availability[monthKey][dayKey][alloc.sailor._fbKey]
-        : null;
-    const isLeaveCode = (val) => {
-      if (!val) return false;
-      const s = typeof val === "string" ? val.trim() : String(val).trim();
-      return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(
-        s,
-      );
-    };
-    const isLeave =
-      isLeaveCode(alloc.sailor.attendance) ||
-      isLeaveCode(alloc.sailor.status) ||
-      isLeaveCode(fbStatus);
-    if (isLeave) return;
-    allAllocatedSailorIds.add(String(alloc.sailor.id));
-    if (alloc.sailor._fbKey)
-      allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
-    const rowKey = (alloc.projectName || "UNNAMED PROJECT")
-      .toUpperCase()
-      .trim();
-    const section = sections.socialResponsible;
-    if (!section.rows[rowKey]) {
-      section.rows[rowKey] = createRowMatrix(rowKey);
-    }
-    const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(alloc.sailor);
-    if (isVss) section.rows[rowKey].vss[tradeIdx]++;
-    else section.rows[rowKey].reg[tradeIdx]++;
-  });
-  longTerm.otherBase.forEach((alloc) => {
-    const [yyyy, mm, dd] = dateVal.split("-");
-    const monthKey = `${yyyy}-${mm}`;
-    const dayKey = parseInt(dd, 10).toString();
-    const fbStatus =
-      store.availability &&
-      store.availability[monthKey] &&
-      store.availability[monthKey][dayKey]
-        ? store.availability[monthKey][dayKey][alloc.sailor._fbKey]
-        : null;
-    const isLeaveCode = (val) => {
-      if (!val) return false;
-      const s = typeof val === "string" ? val.trim() : String(val).trim();
-      return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(
-        s,
-      );
-    };
-    const isLeave =
-      isLeaveCode(alloc.sailor.attendance) ||
-      isLeaveCode(alloc.sailor.status) ||
-      isLeaveCode(fbStatus);
-    if (isLeave) return;
-    allAllocatedSailorIds.add(String(alloc.sailor.id));
-    if (alloc.sailor._fbKey)
-      allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
-    const rowKey = (alloc.projectName || "UNKNOWN BASE").toUpperCase().trim();
-    const section = sections.otherBases; // Matching 'Other-Base' logic
-    if (!section.rows[rowKey]) {
-      section.rows[rowKey] = createRowMatrix(rowKey);
-    }
-    const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(alloc.sailor);
-    if (isVss) section.rows[rowKey].vss[tradeIdx]++;
-    else section.rows[rowKey].reg[tradeIdx]++;
-  }); // 4. Process explicit leaves/sick statuses from sailorsDB
+  const processLongTermList = (list, section) => {
+    list.forEach((alloc) => {
+      const [yyyy, mm, dd] = dateVal.split("-");
+      const monthKey = `${yyyy}-${mm}`;
+      const dayKey = parseInt(dd, 10).toString();
+      const fbStatus =
+        store.availability &&
+        store.availability[monthKey] &&
+        store.availability[monthKey][dayKey]
+          ? store.availability[monthKey][dayKey][alloc.sailor._fbKey]
+          : null;
+      const isLeaveCode = (val) => {
+        if (!val) return false;
+        const s = typeof val === "string" ? val.trim() : String(val).trim();
+        return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
+      };
+      const isLeave =
+        isLeaveCode(alloc.sailor.attendance) ||
+        isLeaveCode(alloc.sailor.status) ||
+        isLeaveCode(fbStatus);
+      if (isLeave) return;
+      allAllocatedSailorIds.add(String(alloc.sailor.id));
+      if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
+      const rowKey = (alloc.projectName || "UNKNOWN").toUpperCase().trim();
+      if (!section.rows[rowKey]) {
+        section.rows[rowKey] = createRowMatrix(rowKey);
+      }
+      const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(alloc.sailor);
+      if (isVss) section.rows[rowKey].vss[tradeIdx]++;
+      else section.rows[rowKey].reg[tradeIdx]++;
+    });
+  };
+
+  processLongTermList(longTerm.housing, sections.housingProjects);
+  processLongTermList(longTerm.outProject, sections.outProjects);
+  processLongTermList(longTerm.otherBase, sections.otherBases);
+
+  // 4. Process explicit leaves/sick statuses from sailorsDB
   store.sailors.forEach((sailor) => {
     const isAllocated =
       allAllocatedSailorIds.has(String(sailor.id)) ||
@@ -11553,7 +11541,7 @@ function renderSummaryView() {
     });
     tableHtml += `
             <tr class="bg-slate-50 font-semibold text-center border-b border-slate-200 text-slate-600">
-                <td class="px-3 py-1.5 pl-8 text-left uppercase text-[9px]">${sub.title} FULL TOTAL</td>
+                <td class="px-3 py-1.5 pl-8 text-left uppercase text-[9px]">${sub.title} SUB TOTAL</td>
                 ${subSums.vss.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
                 <td class="px-1 py-1.5 bg-slate-100/50 border-l-2 border-r-2 border-slate-200">${subSums.vssSub || ""}</td>
                 ${subSums.reg.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
@@ -11565,7 +11553,7 @@ function renderSummaryView() {
   const workshopMainSums = getColumnsSum(workshopRowsList);
   tableHtml += `
         <tr class="bg-slate-100 font-bold text-center border-b-2 border-slate-300 text-slate-800">
-            <td class="px-3 py-2 text-left uppercase text-[10px] pl-6">WORKSHOP TOTAL SUB TOTAL</td>
+            <td class="px-3 py-2 text-left uppercase text-[10px] pl-6">WORKSHOP SUB TOTAL</td>
             ${workshopMainSums.vss.map((val) => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ""}</td>`).join("")}
             <td class="px-1 py-2 bg-slate-200/50 border-l-2 border-r-2 border-slate-300">${workshopMainSums.vssSub || ""}</td>
             ${workshopMainSums.reg.map((val) => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ""}</td>`).join("")}
@@ -11608,7 +11596,7 @@ function renderSummaryView() {
     });
     tableHtml += `
             <tr class="bg-slate-50 font-semibold text-center border-b border-slate-200 text-slate-600">
-                <td class="px-3 py-1.5 pl-8 text-left uppercase text-[9px]">${sub.title} FULL TOTAL</td>
+                <td class="px-3 py-1.5 pl-8 text-left uppercase text-[9px]">${sub.title} SUB TOTAL</td>
                 ${subSums.vss.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
                 <td class="px-1 py-1.5 bg-slate-100/50 border-l-2 border-r-2 border-slate-200">${subSums.vssSub || ""}</td>
                 ${subSums.reg.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
@@ -11620,7 +11608,7 @@ function renderSummaryView() {
   const zoneMainSums = getColumnsSum(zoneRowsList);
   tableHtml += `
         <tr class="bg-slate-100 font-bold text-center border-b-2 border-slate-300 text-slate-800">
-            <td class="px-3 py-2 text-left uppercase text-[10px] pl-6">ZONE TOTAL SUB TOTAL</td>
+            <td class="px-3 py-2 text-left uppercase text-[10px] pl-6">ZONE SUB TOTAL</td>
             ${zoneMainSums.vss.map((val) => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ""}</td>`).join("")}
             <td class="px-1 py-2 bg-slate-200/50 border-l-2 border-r-2 border-slate-300">${zoneMainSums.vssSub || ""}</td>
             ${zoneMainSums.reg.map((val) => `<td class="px-0.5 py-2 border-l border-slate-200">${val || ""}</td>`).join("")}
@@ -11632,10 +11620,11 @@ function renderSummaryView() {
   zoneMainSums.reg.forEach((val, idx) => (columnGrandTotals.reg[idx] += val));
   columnGrandTotals.vssSub += zoneMainSums.vssSub;
   columnGrandTotals.regSub += zoneMainSums.regSub;
-  columnGrandTotals.fullTotal += zoneMainSums.fullTotal; // 4. Others Duty
-  appendSectionToTable(sections.othersDuty); // 5. Other Bases
-  appendSectionToTable(sections.otherBases); // 6. Social Responsible Works
-  appendSectionToTable(sections.socialResponsible); // 7. Leave & Attendance
+  columnGrandTotals.fullTotal += zoneMainSums.fullTotal;
+  appendSectionToTable(sections.othersDuty);
+  appendSectionToTable(sections.outProjects);
+  appendSectionToTable(sections.housingProjects);
+  appendSectionToTable(sections.otherBases);
   appendSectionToTable(sections.leaveSick); // Render Grand Total Row at the absolute bottom
   tableHtml += `
         <tr class="bg-slate-900 text-white font-extrabold text-center text-sm border-t-4 border-slate-800">
@@ -13299,3 +13288,210 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 });
+
+// ==========================================
+// EXTERNAL PROJECTS MANAGEMENT (Ops DB)
+// ==========================================
+
+let currentPtmType = null;
+let currentPtmProjectId = null;
+
+function renderProjectsList() {
+    const renderCards = (projectsObj, containerId, type) => {
+        const container = document.getElementById(containerId);
+        if(!container) return;
+        container.innerHTML = "";
+        const projects = Object.entries(projectsObj || {});
+        if(projects.length === 0) {
+            container.innerHTML = `<div class="col-span-full py-8 text-center text-slate-400 bg-slate-50 rounded-xl border border-slate-200 border-dashed">No active ${type}s</div>`;
+            return;
+        }
+        projects.forEach(([id, proj]) => {
+            const assignedCount = proj.assigned_sailors ? Object.keys(proj.assigned_sailors).length : 0;
+            const card = document.createElement("div");
+            card.className = "bg-slate-50 rounded-xl border border-slate-200 p-4 hover:border-teal-400 hover:shadow-md cursor-pointer transition-all";
+            card.onclick = () => openProjectManagerModal(type, id, proj.name);
+            card.innerHTML = `
+                <div class="flex justify-between items-start mb-2">
+                    <h4 class="font-bold text-slate-800 text-md truncate pr-2">${proj.name}</h4>
+                    <button onclick="deleteProject(event, '${type}', '${id}')" class="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 rounded-md p-1 transition-colors flex-shrink-0" title="Delete Project">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                </div>
+                <div class="flex justify-between items-end mt-2">
+                    <span class="bg-teal-100 text-teal-800 text-[10px] font-bold px-2 py-0.5 rounded-full">${assignedCount} Assigned</span>
+                    <div class="text-xs text-teal-600 font-semibold uppercase tracking-wider">Manage Team ➔</div>
+                </div>
+            `;
+            container.appendChild(card);
+        });
+    };
+
+    renderCards(store.outProjects, "outProjectsList", "Out Project");
+    renderCards(store.housingProjects, "housingProjectsList", "Housing Project");
+    renderCards(store.otherBases, "otherBasesList", "Other Base");
+}
+
+function createNewProject(type) {
+    document.getElementById("createProjectTitle").textContent = `New ${type}`;
+    document.getElementById("newProjectName").value = "";
+    document.getElementById("newProjectType").value = type;
+    document.getElementById("createProjectModal").classList.remove("hidden");
+}
+
+function submitNewProject() {
+    const name = document.getElementById("newProjectName").value.trim();
+    const type = document.getElementById("newProjectType").value;
+    if(!name) {
+        if(typeof showToast === 'function') showToast("Project name is required", "error");
+        return;
+    }
+
+    let node = "";
+    if(type === "Out Project") node = "out_projects";
+    else if(type === "Housing Project") node = "housing_projects";
+    else if(type === "Other Base") node = "other_bases";
+    
+    if(node) {
+        opsDB.ref(node).push({
+            name: name,
+            created_at: Date.now()
+        }).then(() => {
+            if(typeof showToast === 'function') showToast(`${type} created successfully`);
+            closeModal("createProjectModal");
+        }).catch(err => {
+            if(typeof showToast === 'function') showToast("Error creating project", "error");
+            console.error(err);
+        });
+    }
+}
+
+window.deleteProject = function(event, type, id) {
+    event.stopPropagation();
+    if(!confirm(`Are you sure you want to delete this ${type}? This action cannot be undone.`)) {
+        return;
+    }
+    
+    let node = "";
+    if(type === "Out Project") node = "out_projects";
+    else if(type === "Housing Project") node = "housing_projects";
+    else if(type === "Other Base") node = "other_bases";
+    
+    if(node) {
+        opsDB.ref(`${node}/${id}`).remove().then(() => {
+            if(typeof showToast === 'function') showToast(`${type} deleted successfully`);
+        }).catch(err => {
+            if(typeof showToast === 'function') showToast("Error deleting project", "error");
+            console.error(err);
+        });
+    }
+}
+
+function openProjectManagerModal(type, id, name) {
+    currentPtmType = type;
+    currentPtmProjectId = id;
+    
+    document.getElementById("ptmTitle").textContent = `Manage ${type} Team`;
+    document.getElementById("ptmProjectName").textContent = name;
+    document.getElementById("ptmSearch").value = "";
+    
+    renderPtmLists();
+    document.getElementById("projectTeamModal").classList.remove("hidden");
+}
+
+function filterPtmAvailableList() {
+    renderPtmLists(document.getElementById("ptmSearch").value);
+}
+
+function renderPtmLists(filter = "") {
+    if(!currentPtmType || !currentPtmProjectId) return;
+    
+    let projectsObj = {};
+    if(currentPtmType === "Out Project") projectsObj = store.outProjects;
+    else if(currentPtmType === "Housing Project") projectsObj = store.housingProjects;
+    else if(currentPtmType === "Other Base") projectsObj = store.otherBases;
+    
+    const proj = projectsObj[currentPtmProjectId];
+    const assignedIds = proj && proj.assigned_sailors ? Object.keys(proj.assigned_sailors) : [];
+    
+    const currentTeam = store.sailors.filter(s => assignedIds.includes(String(s._fbKey || s.id)));
+    
+    let eligible = store.sailors.filter(s => !assignedIds.includes(String(s._fbKey || s.id)));
+    
+    if (filter) {
+        const q = filter.toLowerCase().trim();
+        eligible = eligible.filter(
+            (s) => {
+                const offNoStr = String(s.official_number || s.official_no || "");
+                return (s.name && s.name.toLowerCase().includes(q)) ||
+                       (offNoStr.toLowerCase().includes(q)) ||
+                       (s.rank && s.rank.toLowerCase().includes(q));
+            }
+        );
+    }
+    
+    const currContainer = document.getElementById("ptmCurrentList");
+    const availContainer = document.getElementById("ptmAvailableList");
+    currContainer.innerHTML = "";
+    availContainer.innerHTML = "";
+    
+    if (currentTeam.length === 0) {
+        currContainer.innerHTML = `<div class="text-xs text-slate-400 italic p-2 bg-slate-50 rounded-lg text-center">No one assigned yet.</div>`;
+    } else {
+        currentTeam.forEach(s => {
+            const div = document.createElement("div");
+            div.className = "flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-200 mb-1";
+            div.innerHTML = `
+                <div>
+                    <p class="text-xs font-bold text-slate-800">${s.rank || ""} ${s.name || ""}</p>
+                    <p class="text-[10px] text-slate-500">${s.official_no || ""} • ${s.trade || ""}</p>
+                </div>
+                <button onclick="removePtmSailor('${s._fbKey || s.id}')" class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200">Remove</button>
+            `;
+            currContainer.appendChild(div);
+        });
+    }
+    
+    eligible.forEach(s => {
+        const div = document.createElement("div");
+        div.className = "flex justify-between items-center p-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg";
+        div.innerHTML = `
+            <div>
+                <p class="text-xs font-bold text-slate-800">${s.rank || ""} ${s.name || ""}</p>
+                <p class="text-[10px] text-slate-500">${s.official_no || ""} • ${s.trade || ""}</p>
+            </div>
+            <button onclick="addPtmSailor('${s._fbKey || s.id}')" class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200">+ Add</button>
+        `;
+        availContainer.appendChild(div);
+    });
+}
+
+function addPtmSailor(sailorId) {
+    if(!currentPtmType || !currentPtmProjectId) return;
+    let node = "";
+    if(currentPtmType === "Out Project") node = "out_projects";
+    else if(currentPtmType === "Housing Project") node = "housing_projects";
+    else if(currentPtmType === "Other Base") node = "other_bases";
+    
+    opsDB.ref(`${node}/${currentPtmProjectId}/assigned_sailors/${sailorId}`).set(true)
+        .then(() => {
+            renderPtmLists(document.getElementById("ptmSearch").value);
+        })
+        .catch(err => console.error(err));
+}
+
+function removePtmSailor(sailorId) {
+    if(!currentPtmType || !currentPtmProjectId) return;
+    let node = "";
+    if(currentPtmType === "Out Project") node = "out_projects";
+    else if(currentPtmType === "Housing Project") node = "housing_projects";
+    else if(currentPtmType === "Other Base") node = "other_bases";
+    
+    opsDB.ref(`${node}/${currentPtmProjectId}/assigned_sailors/${sailorId}`).remove()
+        .then(() => {
+            renderPtmLists(document.getElementById("ptmSearch").value);
+        })
+        .catch(err => console.error(err));
+}

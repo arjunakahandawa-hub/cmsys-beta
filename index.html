@@ -562,6 +562,9 @@
                     <button onclick="switchView('settings')" id="tab-settings" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">⚙️ </span>Settings
                     </button>
+                    <button onclick="switchView('projects')" id="tab-projects" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">🏗️ </span>Projects
+                    </button>
                 </nav>
 
                 <!-- Right Controls -->
@@ -2093,6 +2096,45 @@
                     </div>
                 </div>
             </div>
+        </div>        <!-- ==================== PROJECTS VIEW ==================== -->
+        <div id="view-projects" class="view-content hidden">
+            <div class="flex justify-between items-center mb-6">
+                <div>
+                    <h2 class="text-2xl font-bold text-slate-800">External Projects & Bases</h2>
+                    <p class="text-sm text-slate-500">Manage Out Projects, Housing Projects, and Other Bases</p>
+                </div>
+            </div>
+
+            <!-- Out Projects -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-slate-800">Out Projects</h3>
+                    <button onclick="createNewProject('Out Project')" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all">+ New Project</button>
+                </div>
+                <div id="outProjectsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Cards will be populated here -->
+                </div>
+            </div>
+
+            <!-- Housing Projects -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-slate-800">Housing Projects</h3>
+                    <button onclick="createNewProject('Housing Project')" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all">+ New Project</button>
+                </div>
+                <div id="housingProjectsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                </div>
+            </div>
+
+            <!-- Other Bases -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold text-slate-800">Other Bases</h3>
+                    <button onclick="createNewProject('Other Base')" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm transition-all">+ New Base</button>
+                </div>
+                <div id="otherBasesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                </div>
+            </div>
         </div>
     </main>
 
@@ -3128,6 +3170,52 @@
         </div>
     </div>
 
+    <!-- ==================== PROJECT TEAM MANAGER MODAL ==================== -->
+    <div id="projectTeamModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-blue-600 to-cyan-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
+                <div>
+                    <h2 class="font-bold text-lg" id="ptmTitle">Manage Project Team</h2>
+                    <p class="text-sm text-blue-100"><span id="ptmProjectName">Project Name</span></p>
+                </div>
+                <button onclick="closeModal('projectTeamModal')" class="text-blue-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 grid grid-cols-2 gap-6">
+                <div>
+                    <h3 class="font-semibold text-slate-700 mb-2 flex items-center gap-2">✅ Current Team</h3>
+                    <div id="ptmCurrentList" class="space-y-2 max-h-[350px] overflow-y-auto pr-1"></div>
+                </div>
+                <div>
+                    <h3 class="font-semibold text-slate-700 mb-2 flex items-center gap-2">➕ Add Sailor</h3>
+                    <input type="text" id="ptmSearch" oninput="filterPtmAvailableList()" placeholder="Search by name, rank or service no..." class="w-full text-xs border rounded-lg px-2.5 py-1.5 mb-2 focus:ring-1 focus:ring-blue-500 outline-none">
+                    <div id="ptmAvailableList" class="space-y-2 max-h-[300px] overflow-y-auto pr-1"></div>
+                </div>
+            </div>
+            <div class="px-6 pb-6">
+                <button onclick="closeModal('projectTeamModal')" class="w-full px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== CREATE PROJECT MODAL ==================== -->
+    <div id="createProjectModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div class="bg-gradient-to-r from-teal-600 to-cyan-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <h2 class="font-bold text-lg" id="createProjectTitle">New Project</h2>
+                <button onclick="closeModal('createProjectModal')" class="text-teal-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6">
+                <label class="block text-sm font-medium text-slate-700 mb-1">Name / Location</label>
+                <input type="text" id="newProjectName" placeholder="e.g. Polonnaruwa Site" class="w-full px-3 py-2 border border-slate-300 rounded-lg mb-4 focus:ring-2 focus:ring-teal-500 outline-none">
+                <input type="hidden" id="newProjectType">
+                <div class="flex gap-3">
+                    <button type="button" onclick="closeModal('createProjectModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50">Cancel</button>
+                    <button type="button" onclick="submitNewProject()" class="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium">Create</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== ZONE TEAM MANAGER MODAL (req 3) ==================== -->
     <div id="zoneTeamModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -3328,10 +3416,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v4.84
+        App Version: v4.85
     </div>
 
-    <script src="app.js?v=4.84"></script>
+    <script src="app.js?v=4.85"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
