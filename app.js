@@ -8304,7 +8304,7 @@ function resetBulkUploadBtn() {
 // =============================================
 // Default settings (used if Firebase has nothing)
 const defaultSettings = {
-  systemTitle: "CMSys v2.2",
+  systemTitle: "CMSys v2.6",
   stationName: "CE Management System · Trincomalee",
   oicName: "",
   oicRank: "",
@@ -8398,7 +8398,7 @@ function applySettings() {
     if (vSpan)
       vSpan.textContent = s.systemTitle.match(/v[\d.]+/)
         ? s.systemTitle.match(/v[\d.]+/)[0]
-        : "v2.2";
+        : "v2.6";
   }
   const brandTag = document.querySelector(".brand-tag");
   if (s.stationName) {
@@ -9707,7 +9707,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initLongTermDeploymentsListeners(); // DB#2: Load & sync all CE Management System operational data from ncw-ps-operations (realtime, read-write)
   initOpsListeners(); // DB#3: Load Settings from Firebase DB2
   initSettingsListener();
-  console.log("🚀 CMSys v2.2 initialized with dual Firebase");
+  console.log("🚀 CMSys v2.6 initialized with dual Firebase");
 }); // Global event listeners
 document.addEventListener("dragleave", (e) => {
   if (e.target.classList) {
