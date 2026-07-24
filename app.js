@@ -86,7 +86,7 @@ window.addEventListener("error", function (e) {
     "System Error: " + e.message + " at " + e.filename + ":" + e.lineno;
   document.body.appendChild(errDiv);
 }); // =============================================
-// CMSys v2.2 - CE Management System
+// CMSys v2.6 - CE Management System
 // Main Application JavaScript
 // =============================================
 // =============================================
