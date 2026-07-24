@@ -11244,6 +11244,7 @@ function renderSummaryView() {
   };
   function appendSectionToTable(sectionObj) {
     const rowsList = Object.values(sectionObj.rows);
+    if (rowsList.length === 0) return; // Skip empty sections
     const sums = getColumnsSum(rowsList);
     tableHtml += `
             <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
@@ -11341,6 +11342,7 @@ function renderSummaryView() {
   const zoneRowsList = [];
   Object.values(sections.zones.subsections).forEach((sub) => {
     const subRows = Object.values(sub.rows);
+    if (subRows.length === 0) return; // Skip empty zone subsections with 0 duties
     const subSums = getColumnsSum(subRows);
     tableHtml += `
             <tr class="bg-slate-50 font-bold border-b border-slate-200 text-[10px] text-slate-600">
