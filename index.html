@@ -2268,9 +2268,12 @@
             </div>
 
             <!-- Sticky footer: Save + Proceed -->
-            <div class="px-6 py-4 border-t border-slate-200 bg-white sticky bottom-0 flex gap-3">
-                <button id="btnDeleteWo" onclick="deleteWorkOrder()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">
+            <div class="px-6 py-4 border-t border-slate-200 bg-white sticky bottom-0 flex gap-2 overflow-x-auto">
+                <button id="btnDeleteWo" onclick="deleteWorkOrder()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2.5 rounded-lg text-sm font-medium">
                     🗑️ Delete
+                </button>
+                <button id="btnUndoWoChanges" onclick="undoWorkOrderEdits()" class="bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 px-3 py-2.5 rounded-lg text-sm font-medium transition-all" title="Revert changes made to this Work Order">
+                    ↩️ Undo
                 </button>
                 <button id="btnSaveWoChanges" onclick="saveWorkOrderChanges()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium">
                     💾 Save Changes
@@ -3325,10 +3328,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v4.82
+        App Version: v4.83
     </div>
 
-    <script src="app.js?v=4.82"></script>
+    <script src="app.js?v=4.83"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

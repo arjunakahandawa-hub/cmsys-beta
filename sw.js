@@ -1,9 +1,9 @@
-const CACHE_NAME = 'ncw-ps-cache-v4.82';
+const CACHE_NAME = 'ncw-ps-cache-v4.83';
 const ASSETS = [
-  './?v=4.82',
-  './index.html?v=4.82',
-  './app.js?v=4.82',
-  './style.css?v=4.82',
+  './?v=4.83',
+  './index.html?v=4.83',
+  './app.js?v=4.83',
+  './style.css?v=4.83',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
@@ -11,10 +11,11 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
+  self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       return cache.addAll(ASSETS);
-    }).then(() => self.skipWaiting())
+    })
   );
 });
 
@@ -33,7 +34,6 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  // Only cache GET requests and bypass Firebase/Chrome Extension requests
   if (
     e.request.method !== 'GET' ||
     e.request.url.includes('chrome-extension') ||
@@ -44,23 +44,20 @@ self.addEventListener('fetch', e => {
     return;
   }
 
+  // Network First for HTML and JS to ensure latest updates are served immediately
   e.respondWith(
-    caches.match(e.request, { ignoreSearch: true }).then(cachedResponse => {
-      const fetchPromise = fetch(e.request)
-        .then(networkResponse => {
-          if (networkResponse && networkResponse.status === 200) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then(cache => {
-              cache.put(e.request, responseToCache);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          // Ignore network errors since we have cache fallback
-        });
-
-      return cachedResponse || fetchPromise;
-    })
+    fetch(e.request)
+      .then(networkResponse => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(e.request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        return caches.match(e.request, { ignoreSearch: true });
+      })
   );
 });

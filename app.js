@@ -1038,12 +1038,16 @@ function updateDateTime() {
     store.isEveningMode = false;
   }
 }
-function showToast(message, type = "success") {
+let _toastTimeout = null;
+function showToast(message, type = "success", duration = 4000) {
   const toast = document.getElementById("toast");
-  toast.className = `fixed bottom-4 right-4 ${type === "success" ? "bg-green-600" : type === "error" ? "bg-red-600" : "bg-blue-600"} text-white px-6 py-3 rounded-lg shadow-lg transform transition-all z-50`;
-  document.getElementById("toastMessage").textContent = message;
+  if (!toast) return;
+  toast.className = `fixed bottom-4 right-4 ${type === "success" ? "bg-slate-900 border border-slate-700" : type === "error" ? "bg-red-700" : "bg-blue-700"} text-white px-5 py-3 rounded-xl shadow-2xl flex items-center gap-3 transform transition-all z-[9999]`;
+  const msgEl = document.getElementById("toastMessage");
+  if (msgEl) msgEl.innerHTML = message;
   toast.classList.remove("hidden");
-  setTimeout(() => toast.classList.add("hidden"), 3000);
+  if (_toastTimeout) clearTimeout(_toastTimeout);
+  _toastTimeout = setTimeout(() => toast.classList.add("hidden"), duration);
 }
 let _justClosedModal = false;
 function closeModal(modalId) {
@@ -2867,7 +2871,14 @@ function createWorkOrder(event) {
         feedbackReceived: false,
         estimate_id: estimateId,
       };
-      fbSaveJobCard(newJobCard);
+      fbSaveJobCard(newJobCard).then((jcRef) => {
+        const jcKey = jcRef ? jcRef.key : null;
+        _lastCreatedWorkOrder = {
+          fbKey: fbKey,
+          jobCardFbKey: jcKey,
+          assignedSailors: newOrder.assigned
+        };
+      });
       if (estimateId) {
         const est = store.estimates.find(
           (e) => String(e.id) === String(estimateId),
@@ -2879,7 +2890,11 @@ function createWorkOrder(event) {
         }
       }
       closeModal("workOrderModal");
-      showToast(`Work order and Job Card ${jobNumber} created! 🔥`);
+      showToast(
+        `Work order & Job Card ${jobNumber} created! <button onclick="undoCreateWorkOrder()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+        "success",
+        6000
+      );
       event.target.reset();
       if (submitBtn) {
         submitBtn.disabled = false;
@@ -3326,7 +3341,24 @@ function openWorkOrderDetail(workOrderId) {
   }
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
-  const isToday = dateVal === today; // Reset to details tab each open
+  const isToday = dateVal === today;
+
+  // Save initial snapshot for Undo feature
+  if (!_isRestoringUndo) {
+    _lastEditedWorkOrderState = {
+      woKey: wo._fbKey || wo.id,
+      woSnapshot: JSON.parse(JSON.stringify(wo)),
+      dailyAllocationsSnapshot: JSON.parse(
+        JSON.stringify(
+          (store.dailyAllocations || []).filter(
+            (a) => a.date === today && String(a.work_order_id) === String(wo.id)
+          )
+        )
+      )
+    };
+  }
+
+  // Reset to details tab each open
   switchWoTab("details"); // Toggle Evaluation tab button
   const evalTabBtn = document.getElementById("woTab-evaluation-btn");
   if (evalTabBtn) {
@@ -3344,11 +3376,13 @@ function openWorkOrderDetail(workOrderId) {
   const btnProceedWo = document.getElementById("btnProceedWo");
   const btnForwardComplete = document.getElementById("btnForwardComplete");
   const btnDeleteWo = document.getElementById("btnDeleteWo");
+  const btnUndoWoChanges = document.getElementById("btnUndoWoChanges");
   if (btnSaveWoChanges) btnSaveWoChanges.classList.toggle("hidden", !isToday);
   if (btnProceedWo) btnProceedWo.classList.toggle("hidden", !isToday);
   if (btnForwardComplete)
     btnForwardComplete.classList.toggle("hidden", !isToday);
-  if (btnDeleteWo) btnDeleteWo.classList.toggle("hidden", !isToday); // Disable/enable fields
+  if (btnDeleteWo) btnDeleteWo.classList.toggle("hidden", !isToday);
+  if (btnUndoWoChanges) btnUndoWoChanges.classList.toggle("hidden", !isToday); // Disable/enable fields
   const inputs = [
     "woDetailStatus",
     "woDetailPriority",
@@ -3825,6 +3859,82 @@ function updateWorkOrderStatus() {
     renderDashboard();
   }
 }
+let _lastCreatedWorkOrder = null;
+let _lastEditedWorkOrderState = null;
+let _isRestoringUndo = false;
+
+function undoCreateWorkOrder() {
+  if (!_lastCreatedWorkOrder || !_lastCreatedWorkOrder.fbKey) {
+    showToast("No recent creation to undo.", "error");
+    return;
+  }
+  const { fbKey, jobCardFbKey, assignedSailors } = _lastCreatedWorkOrder;
+  if (fbKey) {
+    opsDB.ref(`work_orders/${fbKey}`).remove();
+  }
+  if (jobCardFbKey) {
+    opsDB.ref(`job_cards/${jobCardFbKey}`).remove();
+  }
+  if (assignedSailors && assignedSailors.length > 0 && store.sailors) {
+    assignedSailors.forEach((sid) => {
+      const s = store.sailors.find(
+        (x) => String(x.id) === String(sid) || String(x._fbKey) === String(sid),
+      );
+      if (s && s.status === "Assigned") {
+        s.status = "Available";
+      }
+    });
+  }
+  _lastCreatedWorkOrder = null;
+  renderDashboard();
+  showToast("↩️ Work Order creation successfully undone!", "success");
+}
+
+function undoWorkOrderEdits() {
+  if (!_lastEditedWorkOrderState || !_lastEditedWorkOrderState.woKey) {
+    showToast("No recent edits to undo.", "error");
+    return;
+  }
+  const { woKey, woSnapshot, dailyAllocationsSnapshot } = _lastEditedWorkOrderState;
+  const wo = store.workOrders.find(
+    (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey),
+  );
+  if (wo && woSnapshot) {
+    _isRestoringUndo = true;
+    Object.assign(wo, JSON.parse(JSON.stringify(woSnapshot)));
+    if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+
+    if (dailyAllocationsSnapshot !== undefined) {
+      const today = getLocalDateString();
+      const currentTodayAllocs = (store.dailyAllocations || []).filter(
+        (a) => a.date === today && String(a.work_order_id) === String(wo.id),
+      );
+      currentTodayAllocs.forEach((a) => {
+        opsDB
+          .ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`)
+          .remove()
+          .catch((e) => console.warn(e));
+      });
+      (dailyAllocationsSnapshot || []).forEach((a) => {
+        opsDB
+          .ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`)
+          .set(a)
+          .catch((e) => console.warn(e));
+      });
+    }
+
+    _lastEditedWorkOrderState = null;
+    const modal = document.getElementById("workOrderDetailModal");
+    if (modal && !modal.classList.contains("hidden")) {
+      openWorkOrderDetail(woKey);
+    }
+    _isRestoringUndo = false;
+    renderDashboard();
+    renderZoneSelectors();
+    showToast("↩️ Work Order changes successfully undone!", "success");
+  }
+}
+
 function saveWorkOrderChanges(autoClose = true) {
   const shouldClose = typeof autoClose === "boolean" ? autoClose : true;
   const btn = document.getElementById("btnSaveWoChanges");
@@ -3889,7 +3999,11 @@ function saveWorkOrderChanges(autoClose = true) {
     renderDashboard();
     renderZoneSelectors(); // Update Zone dropdown percentages
     if (shouldClose) {
-      showToast("Work order updated successfully!");
+      showToast(
+        `Work order updated successfully! <button onclick="undoWorkOrderEdits()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+        "success",
+        6000
+      );
       closeModal("workOrderDetailModal");
     }
   }
@@ -4129,7 +4243,9 @@ function proceedWorkOrder() {
   closeModal("workOrderDetailModal");
   renderDashboard();
   showToast(
-    `✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 28)}…" for ${today}`,
+    `✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 24)}…" <button onclick="undoWorkOrderEdits()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+    "success",
+    6000
   );
   if (btn) {
     setTimeout(() => {
@@ -11899,9 +12015,10 @@ function initPwaHistoryManagement() {
         .querySelectorAll('.modal-overlay, [id$="Modal"], [id$="modal"]')
         .forEach((m) => {
           m.classList.add("hidden");
-        }); // Handle view switching
-      if (event.state && event.state.view) {
-        switchView(event.state.view, true);
+        }); // Handle view switching: maintain current view when returning from modal
+      const targetView = (event.state && event.state.view) ? event.state.view : store.currentView;
+      if (targetView && targetView !== store.currentView) {
+        switchView(targetView, true);
       }
     }
     setTimeout(() => {
