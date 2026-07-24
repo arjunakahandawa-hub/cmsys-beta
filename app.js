@@ -3825,7 +3825,8 @@ function updateWorkOrderStatus() {
     renderDashboard();
   }
 }
-function saveWorkOrderChanges() {
+function saveWorkOrderChanges(autoClose = true) {
+  const shouldClose = typeof autoClose === "boolean" ? autoClose : true;
   const btn = document.getElementById("btnSaveWoChanges");
   if (btn) {
     if (btn.disabled) return;
@@ -3887,8 +3888,10 @@ function saveWorkOrderChanges() {
     if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
     renderDashboard();
     renderZoneSelectors(); // Update Zone dropdown percentages
-    showToast("Work order updated successfully!");
-    closeModal("workOrderDetailModal");
+    if (shouldClose) {
+      showToast("Work order updated successfully!");
+      closeModal("workOrderDetailModal");
+    }
   }
   if (btn) {
     setTimeout(() => {
@@ -11917,13 +11920,16 @@ function initPwaHistoryManagement() {
         if (!isModal) return;
         const isHidden = target.classList.contains("hidden");
         if (!isHidden) {
-          // Modal was opened
+          // Modal was opened - only push state if this modal is not already the top history state
           if (!_isHistoryBackAction) {
-            window.history.pushState(
-              { modalOpen: true, modalId: target.id, view: store.currentView },
-              "",
-              window.location.hash,
-            );
+            const currentState = window.history.state;
+            if (!currentState || !currentState.modalOpen || currentState.modalId !== target.id) {
+              window.history.pushState(
+                { modalOpen: true, modalId: target.id, view: store.currentView },
+                "",
+                window.location.hash,
+              );
+            }
           }
         } else {
           // Modal was closed
