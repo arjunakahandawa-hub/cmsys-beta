@@ -1350,7 +1350,15 @@ function renderAvailableSailors() {
         assignedIds.add(String(alloc.sailor_id));
       }
     });
-  } // Support search query
+  }
+  
+  // Add long term project assignments so they are marked as assigned
+  const longTerm = getLongTermAllocations();
+  [...longTerm.housing, ...longTerm.outProject, ...longTerm.otherBase].forEach(a => {
+      assignedIds.add(String(a.sailor.id || a.sailor._fbKey));
+  });
+
+  // Support search query
   const searchInput = document.getElementById("sailorSearch");
   const query = searchInput ? searchInput.value.toLowerCase().trim() : ""; // Reset pagination limit when search query changes
   const lastQuery = container.getAttribute("data-last-query") || "";
