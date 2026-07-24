@@ -2255,32 +2255,51 @@ function handleDropOnCard(event, workOrderId) {
     .forEach((el) => el.classList.remove("drag-over"));
   if (!draggedSailorId) return;
   const assignment = getSailorCurrentAssignment(draggedSailorId);
-  const sailor = store.sailors.find((s) => s.id === draggedSailorId);
-  const workOrder = store.workOrders.find((wo) => wo.id === workOrderId);
+  const sailor = store.sailors.find(
+    (s) => String(s.id) === String(draggedSailorId) || String(s._fbKey) === String(draggedSailorId),
+  );
+  const workOrder = store.workOrders.find(
+    (wo) => String(wo.id) === String(workOrderId) || String(wo._fbKey) === String(workOrderId),
+  );
   if (!sailor || !workOrder) {
     draggedSailorId = null;
     return;
   }
-  if (assignment) {
-    // Automatically remove from previous assignment
-    const prevWo = store.workOrders.find((w) => {
-      if (w.status !== "Active" && w.status !== "Pending") return false;
-      const assignedIds = (w.assigned || []).map(String);
-      return assignedIds.includes(String(draggedSailorId));
-    });
-    if (prevWo) {
-      prevWo.assigned = (prevWo.assigned || []).filter(
-        (id) => String(id) !== String(draggedSailorId),
-      );
-      const today = getLocalDateString();
-      prevWo.last_assigned_date = today;
-      if (window.fbSaveWorkOrder) {
-        fbSaveWorkOrder(prevWo);
-      }
-      opsDB
-        .ref(`daily_allocations/${today}_${sanitizeFbKey(draggedSailorId)}`)
-        .remove();
+
+  const today = getLocalDateString();
+  const prevWo = store.workOrders.find((w) => {
+    if (w.status !== "Active" && w.status !== "Pending") return false;
+    const assignedIds = (w.assigned || []).map(String);
+    return assignedIds.includes(String(draggedSailorId));
+  });
+
+  const allocSnapshot = (store.dailyAllocations || []).find(
+    (a) => a.date === today && String(a.sailor_id) === String(draggedSailorId)
+  );
+
+  _lastActionUndo = {
+    type: "ASSIGN_SAILOR",
+    sailorId: draggedSailorId,
+    targetWoId: workOrder.id || workOrder._fbKey,
+    targetWoPrevAssigned: [...(workOrder.assigned || [])],
+    prevWoId: prevWo ? (prevWo.id || prevWo._fbKey) : null,
+    prevWoAssigned: prevWo ? [...(prevWo.assigned || [])] : null,
+    sailorPrevStatus: sailor.status,
+    sailorPrevZone: sailor.zone_id || store.currentZone,
+    dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
+  };
+
+  if (assignment && prevWo) {
+    prevWo.assigned = (prevWo.assigned || []).filter(
+      (id) => String(id) !== String(draggedSailorId),
+    );
+    prevWo.last_assigned_date = today;
+    if (window.fbSaveWorkOrder) {
+      fbSaveWorkOrder(prevWo);
     }
+    opsDB
+      .ref(`daily_allocations/${today}_${sanitizeFbKey(draggedSailorId)}`)
+      .remove();
   }
   if (!workOrder.assigned) workOrder.assigned = [];
   const alreadyAssigned = workOrder.assigned.some(id => String(id) === String(draggedSailorId));
@@ -2288,7 +2307,6 @@ function handleDropOnCard(event, workOrderId) {
     workOrder.assigned.push(draggedSailorId);
     sailor.status = "Assigned";
     sailor.evaluated = false;
-    const today = getLocalDateString();
     workOrder.last_assigned_date = today;
     if (window.fbSaveWorkOrder) {
       fbSaveWorkOrder(workOrder);
@@ -2296,14 +2314,18 @@ function handleDropOnCard(event, workOrderId) {
     renderDashboard();
     showToast(
       assignment
-        ? `Reassigned ${sailor.name} from ${assignment.zone}!`
-        : `${sailor.name} assigned to ${workOrder.description.substring(0, 30)}...`,
+        ? `Reassigned ${sailor.name} from ${assignment.zone}! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`
+        : `${sailor.name} assigned to ${workOrder.description.substring(0, 24)}... <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+      "success",
+      6000
     );
   }
   draggedSailorId = null;
 }
 function removeSailorFromOrder(sailorId, workOrderId) {
-  const sailor = store.sailors.find((s) => String(s.id) === String(sailorId));
+  const sailor = store.sailors.find(
+    (s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId),
+  );
   const workOrder = store.workOrders.find(
     (wo) =>
       String(wo.id) === String(workOrderId) ||
@@ -2316,21 +2338,42 @@ function removeSailorFromOrder(sailorId, workOrderId) {
     return;
   }
   if (sailor && workOrder) {
+    const allocSnapshot = (store.dailyAllocations || []).find(
+      (a) => a.date === today && String(a.sailor_id) === String(sailorId)
+    );
+
+    _lastActionUndo = {
+      type: "REMOVE_SAILOR",
+      sailorId: sailorId,
+      workOrderId: workOrder.id || workOrder._fbKey,
+      prevWoAssigned: [...(workOrder.assigned || [])],
+      sailorPrevStatus: sailor.status,
+      sailorPrevZone: sailor.zone_id || store.currentZone,
+      dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
+    };
+
     workOrder.assigned = (workOrder.assigned || []).filter(
       (id) => String(id) !== String(sailorId),
     );
     sailor.status = "Available";
-    const today = getLocalDateString();
     workOrder.last_assigned_date = today;
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).remove();
     if (window.fbSaveWorkOrder) {
       fbSaveWorkOrder(workOrder).then(() => {
         renderDashboard();
-        showToast(`${sailor.name} removed from assignment`);
+        showToast(
+          `${sailor.name} removed from assignment <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+          "warning",
+          6000
+        );
       });
     } else {
       renderDashboard();
-      showToast(`${sailor.name} removed from assignment`);
+      showToast(
+        `${sailor.name} removed from assignment <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+        "warning",
+        6000
+      );
     }
   }
 } // =============================================
@@ -3784,26 +3827,41 @@ function assignSingleLabor(sailorId) {
       String(s._fbKey) === String(sailorId),
   );
   if (!wo || !sailor) return;
-  if (assignment) {
-    // Automatically remove from previous assignment
-    const prevWo = store.workOrders.find((w) => {
-      if (w.status !== "Active" && w.status !== "Pending") return false;
-      const assignedIds = (w.assigned || []).map(String);
-      return assignedIds.includes(String(sailorId));
-    });
-    if (prevWo) {
-      prevWo.assigned = (prevWo.assigned || []).filter(
-        (id) => String(id) !== String(sailorId),
-      );
-      const today = getLocalDateString();
-      prevWo.last_assigned_date = today;
-      if (window.fbSaveWorkOrder) {
-        fbSaveWorkOrder(prevWo);
-      }
-      opsDB
-        .ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`)
-        .remove();
+
+  const today = getLocalDateString();
+  const prevWo = store.workOrders.find((w) => {
+    if (w.status !== "Active" && w.status !== "Pending") return false;
+    const assignedIds = (w.assigned || []).map(String);
+    return assignedIds.includes(String(sailorId));
+  });
+
+  const allocSnapshot = (store.dailyAllocations || []).find(
+    (a) => a.date === today && String(a.sailor_id) === String(sailorId)
+  );
+
+  _lastActionUndo = {
+    type: "ASSIGN_SAILOR",
+    sailorId: sailorId,
+    targetWoId: wo.id || wo._fbKey,
+    targetWoPrevAssigned: [...(wo.assigned || [])],
+    prevWoId: prevWo ? (prevWo.id || prevWo._fbKey) : null,
+    prevWoAssigned: prevWo ? [...(prevWo.assigned || [])] : null,
+    sailorPrevStatus: sailor.status,
+    sailorPrevZone: sailor.zone_id || store.currentZone,
+    dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
+  };
+
+  if (assignment && prevWo) {
+    prevWo.assigned = (prevWo.assigned || []).filter(
+      (id) => String(id) !== String(sailorId),
+    );
+    prevWo.last_assigned_date = today;
+    if (window.fbSaveWorkOrder) {
+      fbSaveWorkOrder(prevWo);
     }
+    opsDB
+      .ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`)
+      .remove();
   }
   if (!wo.assigned) wo.assigned = [];
   const alreadyAssigned = wo.assigned.some(
@@ -3813,15 +3871,16 @@ function assignSingleLabor(sailorId) {
     wo.assigned.push(sailorId);
     sailor.status = "Assigned";
     sailor.evaluated = false;
-    const today = getLocalDateString();
     wo.last_assigned_date = today;
     if (typeof fbSaveWorkOrder === "function") {
       fbSaveWorkOrder(wo);
     }
     showToast(
       assignment
-        ? `Reassigned ${sailor.name} from ${assignment.zone}!`
-        : `${sailor.name} assigned successfully`,
+        ? `Reassigned ${sailor.name} from ${assignment.zone}! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`
+        : `${sailor.name} assigned! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+      "success",
+      6000
     );
     openWorkOrderDetail(wo._fbKey || wo.id);
   }
@@ -3859,79 +3918,148 @@ function updateWorkOrderStatus() {
     renderDashboard();
   }
 }
-let _lastCreatedWorkOrder = null;
-let _lastEditedWorkOrderState = null;
+let _lastActionUndo = null;
 let _isRestoringUndo = false;
 
-function undoCreateWorkOrder() {
-  if (!_lastCreatedWorkOrder || !_lastCreatedWorkOrder.fbKey) {
-    showToast("No recent creation to undo.", "error");
-    return;
-  }
-  const { fbKey, jobCardFbKey, assignedSailors } = _lastCreatedWorkOrder;
-  if (fbKey) {
-    opsDB.ref(`work_orders/${fbKey}`).remove();
-  }
-  if (jobCardFbKey) {
-    opsDB.ref(`job_cards/${jobCardFbKey}`).remove();
-  }
-  if (assignedSailors && assignedSailors.length > 0 && store.sailors) {
-    assignedSailors.forEach((sid) => {
-      const s = store.sailors.find(
-        (x) => String(x.id) === String(sid) || String(x._fbKey) === String(sid),
-      );
-      if (s && s.status === "Assigned") {
-        s.status = "Available";
-      }
-    });
-  }
-  _lastCreatedWorkOrder = null;
-  renderDashboard();
-  showToast("↩️ Work Order creation successfully undone!", "success");
+function undoWorkOrderEdits() {
+  executeGlobalUndo();
 }
 
-function undoWorkOrderEdits() {
-  if (!_lastEditedWorkOrderState || !_lastEditedWorkOrderState.woKey) {
-    showToast("No recent edits to undo.", "error");
+function undoCreateWorkOrder() {
+  executeGlobalUndo();
+}
+
+function executeGlobalUndo() {
+  if (!_lastActionUndo) {
+    showToast("No recent action to undo.", "error");
     return;
   }
-  const { woKey, woSnapshot, dailyAllocationsSnapshot } = _lastEditedWorkOrderState;
-  const wo = store.workOrders.find(
-    (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey),
-  );
-  if (wo && woSnapshot) {
-    _isRestoringUndo = true;
-    Object.assign(wo, JSON.parse(JSON.stringify(woSnapshot)));
-    if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
 
-    if (dailyAllocationsSnapshot !== undefined) {
-      const today = getLocalDateString();
-      const currentTodayAllocs = (store.dailyAllocations || []).filter(
-        (a) => a.date === today && String(a.work_order_id) === String(wo.id),
+  const undo = _lastActionUndo;
+  _lastActionUndo = null;
+  const today = getLocalDateString();
+
+  if (undo.type === "REMOVE_SAILOR") {
+    const { sailorId, workOrderId, prevWoAssigned, sailorPrevStatus, dailyAllocSnapshot } = undo;
+    const wo = store.workOrders.find((w) => String(w.id) === String(workOrderId) || String(w._fbKey) === String(workOrderId));
+    const sailor = store.sailors.find((s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
+
+    if (wo) {
+      wo.assigned = prevWoAssigned || [];
+      if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+    }
+    if (sailor && sailorPrevStatus) {
+      sailor.status = sailorPrevStatus;
+    }
+    if (dailyAllocSnapshot) {
+      opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).set(dailyAllocSnapshot);
+      if (!store.dailyAllocations) store.dailyAllocations = [];
+      store.dailyAllocations = store.dailyAllocations.filter(
+        (a) => !(a.date === today && String(a.sailor_id) === String(sailorId))
       );
-      currentTodayAllocs.forEach((a) => {
-        opsDB
-          .ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`)
-          .remove()
-          .catch((e) => console.warn(e));
-      });
-      (dailyAllocationsSnapshot || []).forEach((a) => {
-        opsDB
-          .ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`)
-          .set(a)
-          .catch((e) => console.warn(e));
-      });
+      store.dailyAllocations.push(dailyAllocSnapshot);
+    }
+    renderDashboard();
+    const modal = document.getElementById("workOrderDetailModal");
+    if (modal && !modal.classList.contains("hidden") && store.selectedWorkOrder) {
+      openWorkOrderDetail(store.selectedWorkOrder);
+    }
+    showToast("↩️ Sailor removal successfully undone!", "success");
+
+  } else if (undo.type === "ASSIGN_SAILOR") {
+    const { sailorId, targetWoId, targetWoPrevAssigned, prevWoId, prevWoAssigned, sailorPrevStatus, sailorPrevZone, dailyAllocSnapshot } = undo;
+    const targetWo = store.workOrders.find((w) => String(w.id) === String(targetWoId) || String(w._fbKey) === String(targetWoId));
+    const prevWo = prevWoId ? store.workOrders.find((w) => String(w.id) === String(prevWoId) || String(w._fbKey) === String(prevWoId)) : null;
+    const sailor = store.sailors.find((s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
+
+    if (targetWo) {
+      targetWo.assigned = targetWoPrevAssigned || [];
+      if (window.fbSaveWorkOrder) fbSaveWorkOrder(targetWo);
+    }
+    if (prevWo && prevWoAssigned) {
+      prevWo.assigned = prevWoAssigned;
+      if (window.fbSaveWorkOrder) fbSaveWorkOrder(prevWo);
+    }
+    if (sailor) {
+      if (sailorPrevStatus) sailor.status = sailorPrevStatus;
+      if (sailorPrevZone) sailor.zone_id = sailorPrevZone;
     }
 
-    _lastEditedWorkOrderState = null;
-    const modal = document.getElementById("workOrderDetailModal");
-    if (modal && !modal.classList.contains("hidden")) {
-      openWorkOrderDetail(woKey);
+    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).remove();
+    if (!store.dailyAllocations) store.dailyAllocations = [];
+    store.dailyAllocations = store.dailyAllocations.filter(
+      (a) => !(a.date === today && String(a.sailor_id) === String(sailorId))
+    );
+
+    if (dailyAllocSnapshot) {
+      opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).set(dailyAllocSnapshot);
+      store.dailyAllocations.push(dailyAllocSnapshot);
     }
-    _isRestoringUndo = false;
+
     renderDashboard();
-    renderZoneSelectors();
-    showToast("↩️ Work Order changes successfully undone!", "success");
+    const modal = document.getElementById("workOrderDetailModal");
+    if (modal && !modal.classList.contains("hidden") && store.selectedWorkOrder) {
+      openWorkOrderDetail(store.selectedWorkOrder);
+    }
+    showToast("↩️ Sailor assignment/reassignment successfully undone!", "success");
+
+  } else if (undo.type === "EDIT_WORK_ORDER") {
+    const { woKey, woSnapshot, dailyAllocationsSnapshot } = undo;
+    const wo = store.workOrders.find(
+      (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey),
+    );
+    if (wo && woSnapshot) {
+      _isRestoringUndo = true;
+      Object.assign(wo, JSON.parse(JSON.stringify(woSnapshot)));
+      if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+
+      if (dailyAllocationsSnapshot !== undefined) {
+        const currentTodayAllocs = (store.dailyAllocations || []).filter(
+          (a) => a.date === today && String(a.work_order_id) === String(wo.id),
+        );
+        currentTodayAllocs.forEach((a) => {
+          opsDB
+            .ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`)
+            .remove()
+            .catch((e) => console.warn(e));
+        });
+        (dailyAllocationsSnapshot || []).forEach((a) => {
+          opsDB
+            .ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`)
+            .set(a)
+            .catch((e) => console.warn(e));
+        });
+      }
+
+      const modal = document.getElementById("workOrderDetailModal");
+      if (modal && !modal.classList.contains("hidden")) {
+        openWorkOrderDetail(woKey);
+      }
+      _isRestoringUndo = false;
+      renderDashboard();
+      renderZoneSelectors();
+      showToast("↩️ Work Order changes successfully undone!", "success");
+    }
+  } else if (undo.type === "CREATE_WORK_ORDER") {
+    const { fbKey, jobCardFbKey, assignedSailors } = undo;
+    if (fbKey) {
+      opsDB.ref(`work_orders/${fbKey}`).remove();
+    }
+    if (jobCardFbKey) {
+      opsDB.ref(`job_cards/${jobCardFbKey}`).remove();
+    }
+    if (assignedSailors && assignedSailors.length > 0 && store.sailors) {
+      assignedSailors.forEach((sid) => {
+        const s = store.sailors.find(
+          (x) => String(x.id) === String(sid) || String(x._fbKey) === String(sid),
+        );
+        if (s && s.status === "Assigned") {
+          s.status = "Available";
+        }
+      });
+    }
+    renderDashboard();
+    showToast("↩️ Work Order creation successfully undone!", "success");
   }
 }
 
@@ -4000,7 +4128,7 @@ function saveWorkOrderChanges(autoClose = true) {
     renderZoneSelectors(); // Update Zone dropdown percentages
     if (shouldClose) {
       showToast(
-        `Work order updated successfully! <button onclick="undoWorkOrderEdits()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+        `Work order updated successfully! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
         "success",
         6000
       );
@@ -4243,7 +4371,7 @@ function proceedWorkOrder() {
   closeModal("workOrderDetailModal");
   renderDashboard();
   showToast(
-    `✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 24)}…" <button onclick="undoWorkOrderEdits()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+    `✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 24)}…" <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
     "success",
     6000
   );
