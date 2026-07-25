@@ -4130,16 +4130,20 @@ function saveWorkOrderChanges(autoClose = true) {
       });
     }
     if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
-    refreshCurrentViewImmediately();
-    renderZoneSelectors(); // Update Zone dropdown percentages
-    if (shouldClose) {
-      showToast(
-        `Work order updated successfully! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
-        "success",
-        6000
-      );
-      closeModal("workOrderDetailModal");
-    }
+    
+    // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
+    setTimeout(() => {
+      refreshCurrentViewImmediately();
+      renderZoneSelectors(); // Update Zone dropdown percentages
+      if (shouldClose) {
+        showToast(
+          `Work order updated successfully! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+          "success",
+          6000
+        );
+        closeModal("workOrderDetailModal");
+      }
+    }, 300);
   }
   if (btn) {
     setTimeout(() => {
@@ -4279,11 +4283,15 @@ function forwardToComplete() {
       if (window.fbSaveJobCard) fbSaveJobCard(jc);
     }
     if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
-    closeModal("workOrderDetailModal");
-    showToast("Moved to Recently Completed!"); // Update dashboard UI to hide it
-    renderDashboard(); // Switch to Job Cards view and Completed tab
-    switchView("jobcards");
-    switchJobCardsTab("completed");
+    
+    // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
+    setTimeout(() => {
+      closeModal("workOrderDetailModal");
+      showToast("Moved to Recently Completed!"); // Update dashboard UI to hide it
+      renderDashboard(); // Switch to Job Cards view and Completed tab
+      switchView("jobcards");
+      switchJobCardsTab("completed");
+    }, 300);
   }
 } // Proceed button (req 2): commit daily labour allocation -> dashboard + DB
 function proceedWorkOrder() {
@@ -4374,13 +4382,16 @@ function proceedWorkOrder() {
     }
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
   });
-  closeModal("workOrderDetailModal");
-  refreshCurrentViewImmediately();
-  showToast(
-    `✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 24)}…" <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
-    "success",
-    6000
-  );
+  // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
+  setTimeout(() => {
+    closeModal("workOrderDetailModal");
+    refreshCurrentViewImmediately();
+    showToast(
+      `✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 24)}…" <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+      "success",
+      6000
+    );
+  }, 300);
   if (btn) {
     setTimeout(() => {
       btn.disabled = false;
