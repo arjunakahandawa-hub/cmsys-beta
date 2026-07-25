@@ -974,63 +974,42 @@ function refreshCurrentView() {
 function refreshCurrentViewImmediately() {
   computeYesterdayJobs();
   updateCounters();
-  const views = [
-    "dashboard",
-    "projects",
-    "jobcards",
-    "inventory",
-    "estimates",
-    "maintenance",
-    "reports",
-    "dailydetails",
-    "summary",
-    "sailors",
-    "sailordashboard",
-    "settings"
-  ];
-  for (const v of views) {
-    const el = document.getElementById(`view-${v}`);
-    if (el && !el.classList.contains("hidden")) {
-      switch (v) {
-        case "dashboard":
-          renderDashboard();
-          break;
-        case "projects":
-          renderProjectsList();
-          break;
-        case "jobcards":
-          renderJobCardsView();
-          break;
-        case "inventory":
-          renderInventory();
-          break;
-        case "estimates":
-          renderEstimates();
-          break;
-        case "maintenance":
-          renderMaintenance();
-          break;
-        case "reports":
-          renderReports();
-          break;
-        case "dailydetails":
-          renderDailyDetailsSpecialView();
-          break;
-        case "summary":
-          renderSummaryView();
-          break;
-        case "sailors":
-          renderSailorsView();
-          break;
-        case "sailordashboard":
-          renderSailorDashboardView();
-          break;
-        case "settings":
-          if (typeof renderSettings === 'function') renderSettings();
-          break;
-      }
+  
+  const view = store.currentView || "dashboard";
+  switch (view) {
+    case "dashboard":
+      renderDashboard();
       break;
-    }
+    case "projects":
+      renderProjectsList();
+      break;
+    case "jobcards":
+      renderJobCardsView();
+      break;
+    case "inventory":
+      renderInventory();
+      break;
+    case "estimates":
+      renderEstimates();
+      break;
+    case "maintenance":
+      renderMaintenance();
+      break;
+    case "reports":
+      renderReports();
+      break;
+    case "dailydetails":
+      renderDailyDetailsSpecialView();
+      break;
+    case "summary":
+      renderSummaryView();
+      break;
+    case "sailors":
+      renderSailorsView();
+      break;
+    case "sailordashboard":
+      renderSailorDashboardView();
+      break;
   }
 } // =============================================
 // UTILITY FUNCTIONS
@@ -1804,12 +1783,23 @@ function renderWorkOrderCard(wo) {
                         ? assignedSailors
                             .slice(0, 4)
                             .map(
-                              (s) => `
-                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium
-                                ${s.evaluated ? "bg-teal-100 text-teal-700" : "bg-blue-100 text-blue-700"}">
-                                ${s.name.split(" ").slice(1, 2).join("")}
+                              (s) => {
+                                const isLeaveCode = (val) => {
+                                  if (!val) return false;
+                                  const str = typeof val === "string" ? val.trim() : String(val).trim();
+                                  return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
+                                };
+                                const isLeave = isLeaveCode(s.status) || isLeaveCode(s.attendance);
+                                const colorClasses = isLeave 
+                                  ? "bg-red-100 text-red-700 opacity-75" 
+                                  : (s.evaluated ? "bg-teal-100 text-teal-700" : "bg-blue-100 text-blue-700");
+                                const leaveIcon = isLeave ? "🛌 " : "";
+                                return `
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${colorClasses}" title="${isLeave ? 'On Leave/Sick' : ''}">
+                                ${leaveIcon}${s.name.split(" ").slice(1, 2).join("")}
                                 <span class="${getPerformanceColor(s.avgScore)} px-1 rounded-full text-[9px]">${s.avgScore.toFixed(1)}</span>
-                            </span>`,
+                            </span>`;
+                              }
                             )
                             .join("") +
                           (assignedSailors.length > 4
@@ -11285,7 +11275,11 @@ function renderSummaryView() {
     const wos = store.workOrders.filter(
       (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
     );
-    wos.forEach((wo) => {
+    const jcs = (store.jobCards || []).filter(
+      (jc) => jc.zone_id === z.id && isWorkOrderActiveOnDate(jc, dateVal),
+    );
+    const allTasks = [...wos, ...jcs];
+    allTasks.forEach((wo) => {
       let assignedSailors = [];
       if (dateVal === today) {
         const assignedIds = (wo.assigned || []).map(String);
@@ -11412,6 +11406,22 @@ function renderSummaryView() {
       isLeaveCode(sailor.attendance) ||
       isLeaveCode(sailor.status) ||
       isLeaveCode(fbStatus);
+
+    if (!isAllocated && !isLeave) {
+      const zoneId = sailor.zone_assigned || "Admin-&-Staff-Duties";
+      const section = getSectionForZone(zoneId);
+      const standbyRowKey = "UNASSIGNED / STANDBY";
+      if (!section.rows[standbyRowKey]) {
+        section.rows[standbyRowKey] = createRowMatrix(standbyRowKey);
+      }
+      const { isVss: stVss, tradeIdx: stTradeIdx } = getSailorBranchAndTradeIdx(sailor);
+      if (stVss) {
+        section.rows[standbyRowKey].vss[stTradeIdx]++;
+      } else {
+        section.rows[standbyRowKey].reg[stTradeIdx]++;
+      }
+    }
+
     if (isLeave) {
       const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
       let rowKey = "LEAVE & WEEKEND DOKYARD";
