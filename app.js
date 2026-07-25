@@ -986,6 +986,7 @@ function refreshCurrentViewImmediately() {
     "summary",
     "sailors",
     "sailordashboard",
+    "settings"
   ];
   for (const v of views) {
     const el = document.getElementById(`view-${v}`);
@@ -1023,6 +1024,9 @@ function refreshCurrentViewImmediately() {
           break;
         case "sailordashboard":
           renderSailorDashboardView();
+          break;
+        case "settings":
+          if (typeof renderSettings === 'function') renderSettings();
           break;
       }
       break;
@@ -3927,7 +3931,7 @@ function updateWorkOrderStatus() {
       });
     }
     if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
-    renderDashboard();
+    refreshCurrentViewImmediately();
   }
 }
 let _lastActionUndo = null;
@@ -3971,7 +3975,7 @@ function executeGlobalUndo() {
       );
       store.dailyAllocations.push(dailyAllocSnapshot);
     }
-    renderDashboard();
+    refreshCurrentViewImmediately();
     const modal = document.getElementById("workOrderDetailModal");
     if (modal && !modal.classList.contains("hidden") && store.selectedWorkOrder) {
       openWorkOrderDetail(store.selectedWorkOrder);
@@ -4008,7 +4012,7 @@ function executeGlobalUndo() {
       store.dailyAllocations.push(dailyAllocSnapshot);
     }
 
-    renderDashboard();
+    refreshCurrentViewImmediately();
     const modal = document.getElementById("workOrderDetailModal");
     if (modal && !modal.classList.contains("hidden") && store.selectedWorkOrder) {
       openWorkOrderDetail(store.selectedWorkOrder);
@@ -4048,7 +4052,7 @@ function executeGlobalUndo() {
         openWorkOrderDetail(woKey);
       }
       _isRestoringUndo = false;
-      renderDashboard();
+      refreshCurrentViewImmediately();
       renderZoneSelectors();
       showToast("↩️ Work Order changes successfully undone!", "success");
     }
@@ -4070,7 +4074,7 @@ function executeGlobalUndo() {
         }
       });
     }
-    renderDashboard();
+    refreshCurrentViewImmediately();
     showToast("↩️ Work Order creation successfully undone!", "success");
   }
 }
@@ -4136,7 +4140,7 @@ function saveWorkOrderChanges(autoClose = true) {
       });
     }
     if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
-    renderDashboard();
+    refreshCurrentViewImmediately();
     renderZoneSelectors(); // Update Zone dropdown percentages
     if (shouldClose) {
       showToast(
@@ -4191,7 +4195,7 @@ function deleteWorkOrder() {
       .then(() => {
         closeModal("workOrderDetailModal");
         showToast(`Deleted work order successfully!`);
-        renderDashboard();
+        refreshCurrentViewImmediately();
       })
       .catch((err) => {
         console.error("Error deleting work order:", err);
@@ -4381,7 +4385,7 @@ function proceedWorkOrder() {
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
   });
   closeModal("workOrderDetailModal");
-  renderDashboard();
+  refreshCurrentViewImmediately();
   showToast(
     `✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 24)}…" <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
     "success",
