@@ -5544,41 +5544,36 @@ function submitPasswordVerification() {
 }
 function triggerClearAllDailyDetails() {
   showPasswordModal(() => {
-    if (confirm("⚠️ WARNING: Are you sure you want to completely wipe all daily allocations? This will unassign everyone from all active work orders and clear today's attendance details. This action cannot be undone.")) {
-      // 1. Wipe all daily_allocations
-      opsDB.ref("daily_allocations").remove()
-        .then(() => {
-          // 2. Remove "assigned" array from all active work orders
-          const activeWOs = store.workOrders.filter(w => w.status === "Active" || w.status === "Pending");
-          let updates = {};
-          activeWOs.forEach(wo => {
-             if (wo.assigned && wo.assigned.length > 0) {
-                 const key = wo._fbKey || wo.id;
-                 if (key) {
-                     updates[`work_orders/${key}/assigned`] = null;
-                 }
+    if (confirm("⚠️ WARNING: Are you sure you want to clear the daily Details? This will unassign everyone from all Daily Details (Working Tasks). Projects and Job Cards will NOT be affected. This action cannot be undone.")) {
+      // Find active Work Orders that are considered "Details" / "Tasks"
+      const detailWOs = store.workOrders.filter(w => 
+          (w.status === "Active" || w.status === "Pending") && 
+          (w.type === "TASK" || w.assign_type === "TASK")
+      );
+      
+      let updates = {};
+      detailWOs.forEach(wo => {
+         if (wo.assigned && wo.assigned.length > 0) {
+             const key = wo._fbKey || wo.id;
+             if (key) {
+                 updates[`work_orders/${key}/assigned`] = null;
              }
-          });
-          
-          if (Object.keys(updates).length > 0) {
-              opsDB.ref().update(updates)
-                .then(() => {
-                   showToast("Successfully cleared all daily details and allocations!");
-                   refreshCurrentView();
-                })
-                .catch(err => {
-                   console.error("Error updating work orders:", err);
-                   showToast("Error clearing work orders", "error");
-                });
-          } else {
-              showToast("Successfully cleared all daily details and allocations!");
-              refreshCurrentView();
-          }
-        })
-        .catch(err => {
-          console.error("Error clearing daily allocations:", err);
-          showToast("Error clearing daily allocations", "error");
-        });
+         }
+      });
+      
+      if (Object.keys(updates).length > 0) {
+          opsDB.ref().update(updates)
+            .then(() => {
+               showToast("Successfully cleared all Daily Details!");
+               refreshCurrentView();
+            })
+            .catch(err => {
+               console.error("Error updating details:", err);
+               showToast("Error clearing details", "error");
+            });
+      } else {
+          showToast("No active details found to clear.");
+      }
     }
   });
 }

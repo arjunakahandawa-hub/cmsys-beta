@@ -1631,7 +1631,22 @@
                     </div>
                 </div>
 
-                
+                <!-- ── Tab: Data Management ── -->
+                <div id="stab-content-data" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="font-bold text-rose-600 text-lg mb-1">🧹 Data Management</h3>
+                        <p class="text-sm text-slate-500 mb-6">Careful! These actions cannot be undone.</p>
+                        <div class="grid grid-cols-1 gap-6 max-w-md">
+                            <div class="p-4 bg-rose-50 rounded-xl border border-rose-200">
+                                <h4 class="font-bold text-rose-700 mb-1">Clear Daily Details</h4>
+                                <p class="text-xs text-rose-600/80 mb-3">This will unassign everyone from Daily Details (Working Tasks) for a fresh start. Projects and Job Cards will remain assigned.</p>
+                                <button onclick="triggerClearAllDailyDetails()" class="w-full py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-semibold shadow-sm transition-colors">
+                                    Clear Details
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 </div>
 
             </div>
@@ -3417,10 +3432,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v4.87
+        App Version: v4.88
     </div>
 
-    <script src="app.js?v=4.87"></script>
+    <script src="app.js?v=4.88"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
