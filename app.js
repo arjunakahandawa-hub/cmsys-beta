@@ -5542,6 +5542,46 @@ function submitPasswordVerification() {
     pwdInput.focus();
   }
 }
+function triggerClearAllDailyDetails() {
+  showPasswordModal(() => {
+    if (confirm("⚠️ WARNING: Are you sure you want to completely wipe all daily allocations? This will unassign everyone from all active work orders and clear today's attendance details. This action cannot be undone.")) {
+      // 1. Wipe all daily_allocations
+      opsDB.ref("daily_allocations").remove()
+        .then(() => {
+          // 2. Remove "assigned" array from all active work orders
+          const activeWOs = store.workOrders.filter(w => w.status === "Active" || w.status === "Pending");
+          let updates = {};
+          activeWOs.forEach(wo => {
+             if (wo.assigned && wo.assigned.length > 0) {
+                 const key = wo._fbKey || wo.id;
+                 if (key) {
+                     updates[`work_orders/${key}/assigned`] = null;
+                 }
+             }
+          });
+          
+          if (Object.keys(updates).length > 0) {
+              opsDB.ref().update(updates)
+                .then(() => {
+                   showToast("Successfully cleared all daily details and allocations!");
+                   refreshCurrentView();
+                })
+                .catch(err => {
+                   console.error("Error updating work orders:", err);
+                   showToast("Error clearing work orders", "error");
+                });
+          } else {
+              showToast("Successfully cleared all daily details and allocations!");
+              refreshCurrentView();
+          }
+        })
+        .catch(err => {
+          console.error("Error clearing daily allocations:", err);
+          showToast("Error clearing daily allocations", "error");
+        });
+    }
+  });
+}
 function clearCurrentZoneInventory() {
   // Filter items belonging to the current active zone
   const zoneItems = store.inventory.filter(
