@@ -947,17 +947,34 @@ function fbUpdateSailorZoneTeam(fbKey, isZoneTeam) {
 function computeYesterdayJobs() {
   if (!store.dailyAllocations || !store.sailors) return;
   const today = getLocalDateString();
-  const dateVal = store.dashboardDate || today; // Find the most recent date in dailyAllocations that is strictly before dateVal
-  const pastDates = [...new Set(store.dailyAllocations.map((a) => a.date))]
+  const dateVal = store.dashboardDate || today; 
+  
+  // 1. Get all work orders and job cards belonging to the current zone
+  const currentZoneWOIds = new Set([
+      ...(store.workOrders || []).filter(w => String(w.zone_id) === String(store.currentZone)).map(w => String(w.id || w._fbKey)),
+      ...(store.jobCards || []).filter(j => String(j.zone_id) === String(store.currentZone)).map(j => String(j.id || j._fbKey))
+  ]);
+
+  // 2. Find all past allocations for these current zone work orders
+  const zoneAllocations = (store.dailyAllocations || []).filter(a => 
+      currentZoneWOIds.has(String(a.work_order_id))
+  );
+
+  // 3. Find the most recent date
+  const pastDates = [...new Set(zoneAllocations.map((a) => a.date))]
     .filter((d) => d < dateVal)
     .sort((a, b) => b.localeCompare(a));
   const lastActiveDate = pastDates[0];
+
+  let assignedCount = 0;
+  // 4. Populate yesterdayJob ONLY for sailors who worked on current zone WOs on that date
   store.sailors.forEach((s) => {
     s.yesterdayJob = null;
     if (lastActiveDate && store.dailyAllocationsMap) {
-      const alloc = store.dailyAllocationsMap[`${lastActiveDate}_${s.id}`];
-      if (alloc) {
+      const alloc = store.dailyAllocationsMap[`${lastActiveDate}_${sanitizeFbKey(s.id)}`] || store.dailyAllocationsMap[`${lastActiveDate}_${s.id}`];
+      if (alloc && currentZoneWOIds.has(String(alloc.work_order_id))) {
         s.yesterdayJob = alloc.work_order_id;
+        assignedCount++;
       }
     }
   });
@@ -1052,12 +1069,20 @@ function showToast(message, type = "success", duration = 4000) {
 let _justClosedModal = false;
 function closeModal(modalId) {
   const m = document.getElementById(modalId);
+  if (!m) return;
   m.classList.add("hidden");
   m.style.removeProperty("display");
   m.style.removeProperty("opacity");
   m.style.removeProperty("visibility");
   m.style.removeProperty("z-index");
   _justClosedModal = true;
+  
+  // Prevent ghost clicks hitting underlying elements (like the Settings tab) immediately after closing
+  document.body.style.pointerEvents = "none";
+  setTimeout(() => {
+    document.body.style.pointerEvents = "";
+  }, 500);
+
   setTimeout(() => {
     _justClosedModal = false;
   }, 1000);
@@ -2094,45 +2119,47 @@ function updateCounters() {
       s,
     );
   };
-  if (isToday) {
-    activeWo.forEach((wo) => {
-      if ((wo.status === "Active" || wo.status === "Pending") && wo.assigned) {
-        if (isNA(wo.description) || isNA(wo.reference_no)) {
-          wo.assigned.forEach((id) => naIds.add(String(id)));
-        } else {
-          wo.assigned.forEach((id) => assignedIds.add(String(id)));
-        }
+  (store.dailyAllocations || []).forEach((alloc) => {
+    if (alloc.date === dateVal) {
+      const wo = activeWo.find(
+        (w) => String(w.id) === String(alloc.work_order_id),
+      );
+      const jc = activeJc.find(
+        (j) => String(j.id) === String(alloc.work_order_id),
+      );
+      if (
+        (wo && (isNA(wo.description) || isNA(wo.reference_no))) ||
+        (jc && (isNA(jc.description) || isNA(jc.title)))
+      ) {
+        naIds.add(String(alloc.sailor_id));
+      } else {
+        assignedIds.add(String(alloc.sailor_id));
       }
-    });
-    activeJc.forEach((jc) => {
-      if ((jc.status === "Active" || jc.status === "Pending") && jc.assigned) {
-        if (isNA(jc.description) || isNA(jc.title)) {
-          jc.assigned.forEach((id) => naIds.add(String(id)));
-        } else {
-          jc.assigned.forEach((id) => assignedIds.add(String(id)));
-        }
+    }
+  });
+
+  // Also include any assignments that haven't been committed to daily allocations yet
+  const activeWos = activeWo.filter(wo => isWorkOrderActiveOnDate(wo, dateVal));
+  activeWos.forEach((wo) => {
+      if (wo.assigned && Array.isArray(wo.assigned)) {
+          if (isNA(wo.description) || isNA(wo.reference_no)) {
+              wo.assigned.forEach((id) => naIds.add(String(id)));
+          } else {
+              wo.assigned.forEach((id) => assignedIds.add(String(id)));
+          }
       }
-    });
-  } else {
-    (store.dailyAllocations || []).forEach((alloc) => {
-      if (alloc.date === dateVal) {
-        const wo = activeWo.find(
-          (w) => String(w.id) === String(alloc.work_order_id),
-        );
-        const jc = activeJc.find(
-          (j) => String(j.id) === String(alloc.work_order_id),
-        );
-        if (
-          (wo && (isNA(wo.description) || isNA(wo.reference_no))) ||
-          (jc && (isNA(jc.description) || isNA(jc.title)))
-        ) {
-          naIds.add(String(alloc.sailor_id));
-        } else {
-          assignedIds.add(String(alloc.sailor_id));
-        }
+  });
+
+  const activeJcs = activeJc.filter(jc => isWorkOrderActiveOnDate(jc, dateVal));
+  activeJcs.forEach((jc) => {
+      if (jc.assigned && Array.isArray(jc.assigned)) {
+          if (isNA(jc.description) || isNA(jc.title)) {
+              jc.assigned.forEach((id) => naIds.add(String(id)));
+          } else {
+              jc.assigned.forEach((id) => assignedIds.add(String(id)));
+          }
       }
-    });
-  }
+  });
   const longTerm = getLongTermAllocations();
   const longTermIds = new Set();
   [...longTerm.housing, ...longTerm.outProject, ...longTerm.otherBase].forEach(
@@ -2214,6 +2241,7 @@ function updateCounters() {
   const longTermCount = store.sailors
     ? store.sailors.filter((s) => s.status === "LongTermDeployed").length
     : 0;
+  
   document.getElementById("netForce").textContent = store.sailors
     ? store.sailors.length
     : 0;
@@ -2223,12 +2251,12 @@ function updateCounters() {
   if (todayNaEl) todayNaEl.textContent = naCount;
 }
 function updatePendingEvals() {
-  const evaluated = store.sailors.filter(
+  const evaluated = store.sailors ? store.sailors.filter(
     (s) => s.status === "Assigned" && s.evaluated,
-  ).length;
-  const pending = store.sailors.filter(
+  ).length : 0;
+  const pending = store.sailors ? store.sailors.filter(
     (s) => s.status === "Assigned" && !s.evaluated,
-  ).length;
+  ).length : 0;
   const evalEl = document.getElementById("evaluatedToday");
   if (evalEl) evalEl.textContent = evaluated;
   const pendingEl = document.getElementById("pendingEvals");
@@ -2314,6 +2342,20 @@ function handleDropOnCard(event, workOrderId) {
     sailor.status = "Assigned";
     sailor.evaluated = false;
     workOrder.last_assigned_date = today;
+    
+    // Create daily allocation for the newly assigned sailor
+    const alloc = {
+      id: Date.now(),
+      date: today,
+      sailor_id: draggedSailorId,
+      work_order_id: workOrder.id || workOrder._fbKey,
+      role_today: "Worker",
+      assigned_by: store.currentUser && store.currentUser.name ? store.currentUser.name : "Officer",
+      status: "Active"
+    };
+    if (!store.dailyAllocations) store.dailyAllocations = [];
+    store.dailyAllocations.push(alloc);
+    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(draggedSailorId)}`).set(alloc);
     if (window.fbSaveWorkOrder) {
       fbSaveWorkOrder(workOrder);
     }
@@ -2411,18 +2453,55 @@ function searchSailors() {
   renderAvailableSailors();
 }
 function continueYesterdayJobs() {
+  if (!store.dailyAllocations || store.dailyAllocations.length === 0) {
+      alert("Please wait a few seconds for yesterday's data to load from the server, and try again.");
+      return;
+  }
+
+  computeYesterdayJobs();
+
   const continuations = store.sailors.filter(
-    (s) => s.yesterdayJob !== null && s.status === "Available",
+    (s) => s.yesterdayJob !== null && s.status === "Available"
   );
+  
+  if (continuations.length === 0) {
+      alert(`No Available sailors found who worked in this zone's Work Orders yesterday.\nIf you are sure they worked yesterday, they might be marked as 'Assigned', 'NA', or 'Leave' today.`);
+      return;
+  }
+
+  const today = getLocalDateString();
+
   continuations.forEach((sailor) => {
-    const wo = store.workOrders.find((w) => w.id === sailor.yesterdayJob);
-    if (wo) {
-      if (!wo.assigned) wo.assigned = [];
-      const alreadyAssigned = wo.assigned.some(id => String(id) === String(sailor.id));
+    let wo = store.workOrders.find((w) => String(w.id) === String(sailor.yesterdayJob) || String(w._fbKey) === String(sailor.yesterdayJob));
+    let jc = store.jobCards.find((j) => String(j.id) === String(sailor.yesterdayJob) || String(j._fbKey) === String(sailor.yesterdayJob));
+    
+    const targetObj = wo || jc;
+    
+    if (targetObj) {
+      if (!targetObj.assigned) targetObj.assigned = [];
+      const alreadyAssigned = targetObj.assigned.some(id => String(id) === String(sailor.id));
       if (!alreadyAssigned) {
-        wo.assigned.push(sailor.id);
+        targetObj.assigned.push(sailor.id);
         sailor.status = "Assigned";
         sailor.evaluated = false;
+        targetObj.last_assigned_date = today;
+        
+        // Create daily allocation
+        const alloc = {
+          id: Date.now() + Math.random(),
+          date: today,
+          sailor_id: sailor.id,
+          work_order_id: targetObj.id || targetObj._fbKey,
+          role_today: "Worker",
+          assigned_by: store.currentUser && store.currentUser.name ? store.currentUser.name : "Officer",
+          status: "Active"
+        };
+        if (!store.dailyAllocations) store.dailyAllocations = [];
+        store.dailyAllocations.push(alloc);
+        opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailor.id)}`).set(alloc);
+        
+        if (wo && window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+        if (jc && window.fbSaveJobCard) fbSaveJobCard(jc);
       }
     }
   });
@@ -4097,12 +4176,11 @@ function saveWorkOrderChanges(autoClose = true) {
     wo.description =
       document.getElementById("woDetailDescription").value || wo.description;
     wo.authority_approval = document.getElementById("woDetailAuthority").value;
-    wo.budget_allocation =
-      parseFloat(document.getElementById("woDetailBudget").value) ||
-      wo.budget_allocation;
-    wo.estimated_duration =
-      parseInt(document.getElementById("woDetailDuration").value) ||
-      wo.estimated_duration;
+    const parsedBudget = parseFloat(document.getElementById("woDetailBudget").value);
+    wo.budget_allocation = !isNaN(parsedBudget) ? parsedBudget : (wo.budget_allocation || null);
+    
+    const parsedDuration = parseInt(document.getElementById("woDetailDuration").value);
+    wo.estimated_duration = !isNaN(parsedDuration) ? parsedDuration : (wo.estimated_duration || null);
     wo.progress = parseInt(document.getElementById("woDetailProgress").value);
     wo.incharge = document.getElementById("woDetailIncharge").value || null;
     wo.supervisor = document.getElementById("woDetailSupervisor").value || null;
@@ -4314,7 +4392,7 @@ function proceedWorkOrder() {
     }
     return;
   } // Save any pending field edits first
-  saveWorkOrderChanges();
+  saveWorkOrderChanges(false);
   const today = getLocalDateString(); // Auto-restore previous crew if current assigned is empty
   if (
     (!wo.assigned || wo.assigned.length === 0) &&
@@ -5549,14 +5627,13 @@ function submitPasswordVerification() {
 }
 function triggerClearAllDailyDetails() {
   showPasswordModal(() => {
-    if (confirm("⚠️ WARNING: Are you sure you want to clear the daily Details? This will unassign everyone from all Daily Details (Working Tasks). Projects and Job Cards will NOT be affected. This action cannot be undone.")) {
-      // Find active Work Orders that are considered "Details" / "Tasks"
-      const detailWOs = store.workOrders.filter(w => 
-          (w.status === "Active" || w.status === "Pending") && 
-          (w.type === "TASK" || w.assign_type === "TASK")
-      );
+    if (confirm("⚠️ WARNING: Are you sure you want to clear ALL Daily Details? This will unassign everyone from ALL Work Orders (Projects, Jobs, Tasks) and Job Cards. Long term deployments (Out Projects, Housing, Other Base) will not be affected. This action cannot be undone.")) {
+      
+      const detailWOs = store.workOrders.filter(w => w.status === "Active" || w.status === "Pending");
+      const detailJCs = store.jobCards.filter(j => j.status === "Active" || j.status === "Pending" || j.status === "Started");
       
       let updates = {};
+      
       detailWOs.forEach(wo => {
          if (wo.assigned && wo.assigned.length > 0) {
              const key = wo._fbKey || wo.id;
@@ -5564,6 +5641,26 @@ function triggerClearAllDailyDetails() {
                  updates[`work_orders/${key}/assigned`] = null;
              }
          }
+      });
+      
+      detailJCs.forEach(jc => {
+         if (jc.assigned && jc.assigned.length > 0) {
+             const key = jc._fbKey || jc.id;
+             if (key) {
+                 updates[`job_cards/${key}/assigned`] = null;
+             }
+         }
+      });
+      
+      const today = getLocalDateString();
+      (store.dailyAllocations || []).forEach(alloc => {
+          if (alloc.date === today) {
+              const isFromWO = detailWOs.some(wo => String(wo.id) === String(alloc.work_order_id));
+              const isFromJC = detailJCs.some(jc => String(jc.id) === String(alloc.work_order_id));
+              if ((isFromWO || isFromJC) && alloc._fbKey) {
+                  updates[`daily_allocations/${alloc._fbKey}`] = null;
+              }
+          }
       });
       
       if (Object.keys(updates).length > 0) {
@@ -7490,66 +7587,74 @@ function renderZoneSelectors() {
   const dateVal = store.dashboardDate || today;
   let optionsHtml = visibleZones
     .map((z) => {
-      const zoneOrders = (store.workOrders || []).filter(
-        (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
-      );
+      let pendingEvalCount = 0;
+      let activeCount = 0;
 
-      const assignedIds = new Set();
       if (dateVal === today) {
-        zoneOrders.forEach((wo) => {
+        const assignedIds = new Set();
+        
+        const activeWos = (store.workOrders || []).filter(
+          (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, today),
+        );
+        activeWos.forEach((wo) => {
           if (wo.assigned && Array.isArray(wo.assigned)) {
             wo.assigned.forEach((id) => assignedIds.add(String(id)));
           }
         });
-      } else {
+        
+        const activeJcs = (store.jobCards || []).filter(
+          (jc) => jc.zone_id === z.id && isWorkOrderActiveOnDate(jc, today),
+        );
+        activeJcs.forEach((jc) => {
+          if (jc.assigned && Array.isArray(jc.assigned)) {
+            jc.assigned.forEach((id) => assignedIds.add(String(id)));
+          }
+        }); 
+        
+        const evaluatedIds = new Set();
         (store.dailyAllocations || []).forEach((alloc) => {
-          if (alloc.date === dateVal) {
-            const woMatch = zoneOrders.some(
-              (wo) => String(wo.id) === String(alloc.work_order_id) || String(wo._fbKey) === String(alloc.work_order_id)
-            );
-            if (woMatch) {
-              assignedIds.add(String(alloc.sailor_id));
+          if (alloc.date === today && alloc.zone_id === z.id) {
+            assignedIds.add(String(alloc.sailor_id)); 
+            if (alloc.evaluated === true) {
+              evaluatedIds.add(String(alloc.sailor_id));
             }
           }
         });
-      }
-
-      const isLeaveCode = (val) => {
-        if (!val) return false;
-        const s = typeof val === "string" ? val.trim() : String(val).trim();
-        return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
-      };
-
-      let pendingEvalCount = 0;
-      let activeCount = 0;
-
-      if (assignedIds.size > 0 && store.sailors) {
-        store.sailors.forEach((s) => {
-          if (assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey))) {
-            const isLeave = isLeaveCode(s.status) || isLeaveCode(s.attendance);
-            if (isLeave) return; // Leave sailors are excluded
-
-            activeCount++; // 🟢 Total active assigned works today
-
-            const allocKey = `${dateVal}_${sanitizeFbKey(s.id)}`;
-            const allocKeyFb = `${dateVal}_${sanitizeFbKey(s._fbKey)}`;
-            const alloc = store.dailyAllocationsMap
-              ? store.dailyAllocationsMap[allocKey] || store.dailyAllocationsMap[allocKeyFb]
-              : (store.dailyAllocations || []).find(
-                  (a) => a.date === dateVal && (String(a.sailor_id) === String(s.id) || String(a.sailor_id) === String(s._fbKey))
-                );
-            const isEval = alloc ? alloc.evaluated === true : s.evaluated === true;
-            if (!isEval) {
-              pendingEvalCount++; // 🔴 Pending evaluation
-            }
-          }
-        });
-      }
-
-      if (assignedIds.size > 0 && activeCount === 0) {
+        
         activeCount = assignedIds.size;
-        pendingEvalCount = assignedIds.size;
+        
+        let evalCount = 0;
+        assignedIds.forEach((id) => {
+          if (evaluatedIds.has(String(id))) {
+            evalCount++;
+          }
+        });
+        pendingEvalCount = activeCount - evalCount;
+        
+      } else {
+        const assignedIds = new Set();
+        const evaluatedIds = new Set();
+        
+        (store.dailyAllocations || []).forEach((alloc) => {
+          if (alloc.date === dateVal && alloc.zone_id === z.id) {
+            assignedIds.add(String(alloc.sailor_id));
+            if (alloc.evaluated === true) {
+              evaluatedIds.add(String(alloc.sailor_id));
+            }
+          }
+        });
+        
+        activeCount = assignedIds.size;
+        let evalCount = 0;
+        assignedIds.forEach((id) => {
+          if (evaluatedIds.has(String(id))) {
+            evalCount++;
+          }
+        });
+        pendingEvalCount = activeCount - evalCount;
       }
+
+
 
       let displayStr = z.name;
       if (activeCount > 0) {
