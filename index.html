@@ -611,6 +611,10 @@
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span>Online</span>
                 </span>
+                <span id="currentRootingBadge" class="flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border transition-all duration-300 hidden">
+                    <span id="currentRootingDot" class="w-1.5 h-1.5 rounded-full"></span>
+                    <span id="currentRootingText"></span>
+                </span>
             </div>
             <div class="flex flex-wrap items-center justify-center gap-1.5 md:gap-2">
                 <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.35)">
@@ -732,7 +736,10 @@
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                                 </svg>
-                                Continue Yesterday
+                                Continue Previous Jobs
+                            </button>
+                            <button id="btnUndoContinue" onclick="undoContinueYesterdayJobs()" class="hidden bg-rose-500 hover:bg-rose-600 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
+                                ↩️ Undo
                             </button>
                             <button id="dashboardExportCsvBtn" onclick="isAdminStaffDuties(store.currentZone) ? openLmdExportModal('csv') : exportLmdCSV('selected', store.currentZone)" class="bg-slate-700 hover:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
                                 📥 Export CSV
@@ -1424,6 +1431,7 @@
                     <button onclick="switchSettingsTab('offcharge')" id="stab-offcharge" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🚢 Off-Charge</button>
                     <button onclick="switchSettingsTab('workorder')" id="stab-workorder" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📋 Work Orders</button>
                     <button onclick="switchSettingsTab('display')" id="stab-display" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🎨 Display</button>
+                    <button onclick="switchSettingsTab('dateschedule')" id="stab-dateschedule" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📅 Date Schedule</button>
                     <button onclick="switchSettingsTab('data')" id="stab-data" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-rose-600 bg-rose-50">🧹 Data Management</button>
                     
                 </div>
@@ -1625,6 +1633,56 @@
                                 <div class="flex items-center gap-3">
                                     <input type="number" id="cfg-lowStockLevel" min="1" max="100" value="10" class="w-24 px-3 py-2 border border-slate-300 rounded-lg text-sm" oninput="saveSettingField('lowStockLevel',parseInt(this.value))">
                                     <span class="text-sm text-slate-500">Qty ට වඩා අඩු නම් "⚠️ Low" පෙන්වයි</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Date Schedule ── -->
+                <div id="stab-content-dateschedule" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                        <h3 class="font-bold text-slate-800 text-lg mb-1">📅 Date Schedule</h3>
+                        <p class="text-sm text-slate-500 mb-6">Manage Rooting schedule (Normal vs Sunday/Poya)</p>
+                        
+                        <div class="flex flex-col lg:flex-row gap-6">
+                            <!-- Calendar Container -->
+                            <div class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4">
+                                <div class="flex justify-between items-center mb-4">
+                                    <button onclick="changeCalendarMonth(-1)" class="px-3 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 text-slate-600 font-bold">&lt;</button>
+                                    <h4 id="calendarMonthYear" class="font-bold text-slate-700 text-base"></h4>
+                                    <button onclick="changeCalendarMonth(1)" class="px-3 py-1 bg-white border border-slate-300 rounded hover:bg-slate-100 text-slate-600 font-bold">&gt;</button>
+                                </div>
+                                <div class="grid grid-cols-7 gap-1 mb-2">
+                                    <div class="text-center text-xs font-bold text-slate-500">Sun</div>
+                                    <div class="text-center text-xs font-bold text-slate-500">Mon</div>
+                                    <div class="text-center text-xs font-bold text-slate-500">Tue</div>
+                                    <div class="text-center text-xs font-bold text-slate-500">Wed</div>
+                                    <div class="text-center text-xs font-bold text-slate-500">Thu</div>
+                                    <div class="text-center text-xs font-bold text-slate-500">Fri</div>
+                                    <div class="text-center text-xs font-bold text-slate-500">Sat</div>
+                                </div>
+                                <div id="calendarGrid" class="grid grid-cols-7 gap-1">
+                                    <!-- Days injected here -->
+                                </div>
+                            </div>
+                            <!-- Legend and Info -->
+                            <div class="w-full lg:w-64 flex flex-col gap-4">
+                                <div class="bg-white border border-slate-200 rounded-xl p-4">
+                                    <h5 class="font-bold text-slate-700 text-sm mb-3">Legend</h5>
+                                    <div class="flex items-center gap-2 mb-2">
+                                        <div class="w-4 h-4 rounded bg-slate-100 border border-slate-300"></div>
+                                        <span class="text-xs text-slate-600">Normal Rooting</span>
+                                    </div>
+                                    <div class="flex items-center gap-2">
+                                        <div class="w-4 h-4 rounded bg-rose-100 border border-rose-300"></div>
+                                        <span class="text-xs text-slate-600">Sunday Rooting (Holiday/Poya)</span>
+                                    </div>
+                                </div>
+                                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                                    <p class="text-xs text-blue-700">
+                                        <strong>Tip:</strong> Sundays are automatically set to Sunday Rooting. Click on any other day to mark it as a Poya or Public Holiday.
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -3432,10 +3490,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v4.88
+        App Version: v4.89
     </div>
 
-    <script src="app.js?v=4.88"></script>
+    <script src="app.js?v=4.89"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

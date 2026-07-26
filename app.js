@@ -960,9 +960,21 @@ function computeYesterdayJobs() {
       currentZoneWOIds.has(String(a.work_order_id))
   );
 
-  // 3. Find the most recent date
+  // 3. Find the most recent date with the SAME Rooting Type
+  let targetRootingType = "Normal Rooting";
+  if (typeof getCurrentRootingType === 'function') {
+      targetRootingType = getCurrentRootingType(new Date(dateVal + "T12:00:00"));
+  }
+
   const pastDates = [...new Set(zoneAllocations.map((a) => a.date))]
-    .filter((d) => d < dateVal)
+    .filter((d) => {
+        if (d >= dateVal) return false;
+        let dRootingType = "Normal Rooting";
+        if (typeof getCurrentRootingType === 'function') {
+            dRootingType = getCurrentRootingType(new Date(d + "T12:00:00"));
+        }
+        return dRootingType === targetRootingType;
+    })
     .sort((a, b) => b.localeCompare(a));
   const lastActiveDate = pastDates[0];
 
@@ -1041,6 +1053,28 @@ function updateDateTime() {
     "en-GB",
     { hour: "2-digit", minute: "2-digit", second: "2-digit" },
   );
+  
+  // Update Rooting Banner
+  const rootingBadge = document.getElementById("currentRootingBadge");
+  const rootingText = document.getElementById("currentRootingText");
+  const rootingDot = document.getElementById("currentRootingDot");
+  if (rootingBadge && rootingText && rootingDot && typeof getCurrentRootingType === 'function') {
+      const activeDateStr = store.dashboardDate || getLocalDateString();
+      const activeDateObj = new Date(activeDateStr + "T12:00:00");
+      const rootingStr = getCurrentRootingType(activeDateObj);
+      rootingText.textContent = rootingStr;
+      rootingBadge.classList.remove("hidden");
+      
+      // Styling based on normal vs holiday
+      if (rootingStr.includes("Sunday Rooting")) {
+          rootingBadge.className = "flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border transition-all duration-300 border-rose-500/30 bg-rose-500/10 text-rose-400";
+          rootingDot.className = "w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse";
+      } else {
+          rootingBadge.className = "flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border transition-all duration-300 border-blue-500/30 bg-blue-500/10 text-blue-400";
+          rootingDot.className = "w-1.5 h-1.5 rounded-full bg-blue-500";
+      }
+  }
+
   if (document.getElementById("reportDate")) {
     document.getElementById("reportDate").textContent =
       now.toLocaleDateString("en-GB");
@@ -2452,9 +2486,12 @@ function filterTrade(trade) {
 function searchSailors() {
   renderAvailableSailors();
 }
+
+let _lastContinuedUndoData = null;
+
 function continueYesterdayJobs() {
   if (!store.dailyAllocations || store.dailyAllocations.length === 0) {
-      alert("Please wait a few seconds for yesterday's data to load from the server, and try again.");
+      alert("Please wait a few seconds for the previous data to load from the server, and try again.");
       return;
   }
 
@@ -2465,11 +2502,16 @@ function continueYesterdayJobs() {
   );
   
   if (continuations.length === 0) {
-      alert(`No Available sailors found who worked in this zone's Work Orders yesterday.\nIf you are sure they worked yesterday, they might be marked as 'Assigned', 'NA', or 'Leave' today.`);
+      alert(`No Available sailors found who worked in this zone's Work Orders on the previous matching day.\nIf you are sure they worked, they might be marked as 'Assigned', 'NA', or 'Leave' today.`);
       return;
   }
 
   const today = getLocalDateString();
+  
+  let undoData = {
+      date: today,
+      allocations: []
+  };
 
   continuations.forEach((sailor) => {
     let wo = store.workOrders.find((w) => String(w.id) === String(sailor.yesterdayJob) || String(w._fbKey) === String(sailor.yesterdayJob));
@@ -2487,8 +2529,9 @@ function continueYesterdayJobs() {
         targetObj.last_assigned_date = today;
         
         // Create daily allocation
+        const allocId = Date.now() + Math.random();
         const alloc = {
-          id: Date.now() + Math.random(),
+          id: allocId,
           date: today,
           sailor_id: sailor.id,
           work_order_id: targetObj.id || targetObj._fbKey,
@@ -2502,11 +2545,65 @@ function continueYesterdayJobs() {
         
         if (wo && window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
         if (jc && window.fbSaveJobCard) fbSaveJobCard(jc);
+        
+        undoData.allocations.push({
+          allocId: allocId,
+          sailorId: sailor.id,
+          workOrderId: targetObj.id || targetObj._fbKey,
+          targetType: wo ? 'wo' : 'jc'
+        });
       }
     }
   });
+  
+  if (undoData.allocations.length > 0) {
+      _lastContinuedUndoData = undoData;
+      const undoBtn = document.getElementById("btnUndoContinue");
+      if (undoBtn) undoBtn.classList.remove("hidden");
+  }
+
   renderDashboard();
-  showToast(`${continuations.length} sailors continued from yesterday's jobs`);
+  showToast(`${continuations.length} sailors continued from previous jobs`);
+}
+
+function undoContinueYesterdayJobs() {
+  if (!_lastContinuedUndoData) return;
+  
+  const { date, allocations } = _lastContinuedUndoData;
+  let count = 0;
+  
+  allocations.forEach(action => {
+      // 1. Remove from daily_allocations in FB
+      opsDB.ref(`daily_allocations/${date}_${sanitizeFbKey(action.sailorId)}`).remove();
+      
+      // 2. Remove from store.dailyAllocations
+      if (store.dailyAllocations) {
+        store.dailyAllocations = store.dailyAllocations.filter(a => a.id !== action.allocId);
+      }
+      
+      // 3. Revert sailor status in memory
+      const sailor = store.sailors.find(s => String(s.id) === String(action.sailorId));
+      if (sailor) sailor.status = "Available";
+      
+      // 4. Remove from WO/JC assigned array and save
+      let targetObj = action.targetType === 'wo' 
+          ? store.workOrders.find(w => String(w.id) === String(action.workOrderId) || String(w._fbKey) === String(action.workOrderId))
+          : store.jobCards.find(j => String(j.id) === String(action.workOrderId) || String(j._fbKey) === String(action.workOrderId));
+          
+      if (targetObj && targetObj.assigned) {
+          targetObj.assigned = targetObj.assigned.filter(id => String(id) !== String(action.sailorId));
+          if (action.targetType === 'wo' && window.fbSaveWorkOrder) fbSaveWorkOrder(targetObj);
+          if (action.targetType === 'jc' && window.fbSaveJobCard) fbSaveJobCard(targetObj);
+      }
+      count++;
+  });
+  
+  _lastContinuedUndoData = null;
+  const undoBtn = document.getElementById("btnUndoContinue");
+  if (undoBtn) undoBtn.classList.add("hidden");
+  
+  renderDashboard();
+  showToast(`Undo successful. Reversed ${count} assignments.`);
 } // =============================================
 // WORK ORDER MANAGEMENT
 // =============================================
@@ -8738,6 +8835,7 @@ const defaultSettings = {
   approvalAuthorities: ["CCED(E)", "CENA", "DAC(E)", "DGCE", "CCEO(E)"],
   workOrderTypes: ["PROJECT", "ROUTINE", "EMERGENCY", "REPAIR"],
   priorityLevels: ["Low", "Medium", "High", "Critical"],
+  holidays: {},
 }; // Live settings object (merged from Firebase)
 store.settings = { ...defaultSettings }; // ── Load settings from Firebase DB2 ──
 function ensureArray(val) {
@@ -8772,6 +8870,7 @@ function initSettingsListener() {
       store.settings.zoneInCharges = saved.zoneInCharges || {};
       store.settings.selectedSettingsZone = saved.selectedSettingsZone || "";
       store.settings.oicProfiles = saved.oicProfiles || {};
+      store.settings.holidays = saved.holidays || {};
     }
     applySettings();
     renderZoneSelectors();
@@ -8907,6 +9006,8 @@ function switchSettingsTab(tab) {
     setValue("cfg-currency", s.currency);
     setValue("cfg-dateFormat", s.dateFormat);
     setValue("cfg-lowStockLevel", s.lowStockLevel || 10);
+  } else if (tab === "dateschedule") {
+    renderDateScheduleCalendar();
   }
 }
 function setValue(id, val) {
@@ -11527,18 +11628,29 @@ function renderSummaryView() {
 
     if (isLeave) {
       const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
-      let rowKey = "LEAVE & WEEKEND DOKYARD";
+      let rowKey = "LEAVE";
       const isSickCode = (val) => {
         if (!val) return false;
         const s = typeof val === "string" ? val.trim() : String(val).trim();
         return /^(Sick|M\/D|SIQ|S\/R|SL|ADM)$/i.test(s);
       };
+      const isWeekendCode = (val) => {
+        if (!val) return false;
+        const s = typeof val === "string" ? val.trim() : String(val).trim();
+        return /^(WE|Weekend|WEEKEND)$/i.test(s);
+      };
       const isSick =
         isSickCode(sailor.attendance) ||
         isSickCode(sailor.status) ||
         isSickCode(fbStatus);
+      const isWeekend =
+        isWeekendCode(sailor.attendance) ||
+        isWeekendCode(sailor.status) ||
+        isWeekendCode(fbStatus);
       if (isSick) {
-        rowKey = "SICK REPORT";
+        rowKey = "SICK";
+      } else if (isWeekend) {
+        rowKey = "WEEKEND";
       } else if (
         sailor.status === "NA" &&
         (!sailor.attendance ||
@@ -11588,7 +11700,7 @@ function renderSummaryView() {
             assignedWo.description || assignedWo.title || "",
           )
         ) {
-          rowKey = "SICK REPORT";
+          rowKey = "SICK";
         }
       }
       if (!sections.leaveSick.rows[rowKey]) {
@@ -13654,4 +13766,147 @@ function removePtmSailor(sailorId) {
             renderPtmLists(document.getElementById("ptmSearch").value);
         })
         .catch(err => console.error(err));
+}
+
+// =============================================
+// DATE SCHEDULE CALENDAR
+// =============================================
+let currentCalendarDate = new Date();
+
+function renderDateScheduleCalendar() {
+    const s = store.settings;
+    if (!s.holidays) s.holidays = {};
+
+    const monthYearEl = document.getElementById("calendarMonthYear");
+    const gridEl = document.getElementById("calendarGrid");
+    if (!monthYearEl || !gridEl) return;
+
+    const year = currentCalendarDate.getFullYear();
+    const month = currentCalendarDate.getMonth();
+
+    const monthNames = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"];
+    monthYearEl.textContent = `${monthNames[month]} ${year}`;
+
+    // Clear grid
+    gridEl.innerHTML = "";
+
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+    // Empty cells before first day
+    for (let i = 0; i < firstDay; i++) {
+        const emptyCell = document.createElement("div");
+        emptyCell.className = "p-2 bg-slate-50/50 rounded-lg";
+        gridEl.appendChild(emptyCell);
+    }
+
+    // Days of the month
+    for (let i = 1; i <= daysInMonth; i++) {
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+        const dateObj = new Date(year, month, i);
+        const dayOfWeek = dateObj.getDay();
+
+        // Default: Sunday is Holiday, others Normal
+        const isSunday = (dayOfWeek === 0);
+        // Is marked explicitly?
+        const explicitMark = s.holidays[dateStr]; 
+        
+        let isHoliday = false;
+        if (explicitMark === true) isHoliday = true; // explicitly marked as holiday (Poya/Public)
+        else if (explicitMark === false) isHoliday = false; // explicitly marked as normal (e.g. working Sunday)
+        else isHoliday = isSunday; // default behavior
+
+        const cell = document.createElement("div");
+        cell.className = `p-2 min-h-[60px] flex flex-col justify-between rounded-lg cursor-pointer border hover:shadow-sm transition-all`;
+        
+        if (isHoliday) {
+            cell.classList.add("bg-rose-50", "border-rose-200", "hover:border-rose-400");
+        } else {
+            cell.classList.add("bg-white", "border-slate-200", "hover:border-blue-400");
+        }
+
+        cell.innerHTML = `
+            <div class="text-right font-bold ${isHoliday ? 'text-rose-700' : 'text-slate-700'}">${i}</div>
+            <div class="text-[10px] uppercase font-bold text-center mt-1 ${isHoliday ? 'text-rose-500' : 'text-slate-400'}">
+                ${isHoliday ? 'Sunday Rooting' : 'Normal'}
+            </div>
+        `;
+
+        cell.onclick = () => toggleHoliday(dateStr, isHoliday, isSunday);
+
+        gridEl.appendChild(cell);
+    }
+}
+
+function changeCalendarMonth(offset) {
+    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + offset);
+    renderDateScheduleCalendar();
+}
+
+function toggleHoliday(dateStr, currentlyHoliday, isSunday) {
+    const s = store.settings;
+    if (!s.holidays) s.holidays = {};
+
+    // Toggle logic:
+    // If it's a Sunday (default holiday) -> toggle to normal -> explicitMark = false
+    // If it's a Sunday explicitly normal -> toggle to holiday -> explicitMark = true or remove explicitMark
+    // If it's a weekday (default normal) -> toggle to holiday -> explicitMark = true
+    // If it's a weekday explicitly holiday -> toggle to normal -> explicitMark = false or remove explicitMark
+
+    if (currentlyHoliday) {
+        // Toggle to normal
+        if (isSunday) {
+            s.holidays[dateStr] = false; 
+        } else {
+            delete s.holidays[dateStr]; // Revert to default normal
+        }
+    } else {
+        // Toggle to holiday
+        if (!isSunday) {
+            s.holidays[dateStr] = true;
+        } else {
+            delete s.holidays[dateStr]; // Revert to default holiday
+        }
+    }
+
+    // Save to Firebase immediately
+    saveSettingField("holidays", s.holidays);
+    renderDateScheduleCalendar();
+}
+
+// Function to get current rooting type to display in banner
+function getCurrentRootingType(dateObj = new Date()) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const dayOfWeek = dateObj.getDay();
+    const isSunday = (dayOfWeek === 0);
+
+    const s = store.settings;
+    if (s && s.holidays) {
+        const explicitMark = s.holidays[dateStr];
+        if (explicitMark === true) return "Sunday Rooting (Holiday / Poya)";
+        if (explicitMark === false) return "Normal Rooting";
+    }
+    
+    return isSunday ? "Sunday Rooting" : "Normal Rooting";
+}
+
+function isCurrentDayHoliday(dateObj = new Date()) {
+    const year = dateObj.getFullYear();
+    const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+    const day = String(dateObj.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+    const dayOfWeek = dateObj.getDay();
+    const isSunday = (dayOfWeek === 0);
+
+    const s = store.settings;
+    if (s && s.holidays) {
+        const explicitMark = s.holidays[dateStr];
+        if (explicitMark === true) return true;
+        if (explicitMark === false) return false;
+    }
+    return isSunday;
 }
