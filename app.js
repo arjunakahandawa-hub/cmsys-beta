@@ -11523,20 +11523,7 @@ function renderSummaryView() {
       isLeaveCode(sailor.status) ||
       isLeaveCode(fbStatus);
 
-    if (!isAllocated && !isLeave) {
-      const zoneId = sailor.zone_assigned || "Admin-&-Staff-Duties";
-      const section = getSectionForZone(zoneId);
-      const standbyRowKey = "UNASSIGNED / STANDBY";
-      if (!section.rows[standbyRowKey]) {
-        section.rows[standbyRowKey] = createRowMatrix(standbyRowKey);
-      }
-      const { isVss: stVss, tradeIdx: stTradeIdx } = getSailorBranchAndTradeIdx(sailor);
-      if (stVss) {
-        section.rows[standbyRowKey].vss[stTradeIdx]++;
-      } else {
-        section.rows[standbyRowKey].reg[stTradeIdx]++;
-      }
-    }
+
 
     if (isLeave) {
       const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
