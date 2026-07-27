@@ -7688,98 +7688,66 @@ function renderZoneSelectors() {
   const visibleZones = store.zones.filter((z) => allowedZones.includes(z.id));
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
-  let optionsHtml = visibleZones
+  let zonesToRender = [...visibleZones];
+  if (hasAllZoneAccess) {
+    const hasAdminZone = visibleZones.some((z) => isAdminStaffDuties(z.id));
+    if (!hasAdminZone) {
+      zonesToRender.push({
+        id: "Admin-&-Staff-Duties",
+        name: "Admin & Staff Duties"
+      });
+    }
+  }
+
+  let optionsHtml = zonesToRender
     .map((z) => {
       let pendingEvalCount = 0;
       let activeCount = 0;
+      
+      const isThisZoneAdmin = isAdminStaffDuties(z.id);
+      const isZoneMatch = (zoneId) => {
+          if (isThisZoneAdmin) {
+              return isAdminStaffDuties(zoneId) || !zoneId; // Include empty zone_id for Admin
+          }
+          return String(zoneId) === String(z.id);
+      };
 
-      if (dateVal === today) {
-        const assignedIds = new Set();
-        
-        const activeWos = (store.workOrders || []).filter(
-          (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, today),
-        );
-        activeWos.forEach((wo) => {
-          if (wo.assigned && Array.isArray(wo.assigned)) {
-            wo.assigned.forEach((id) => assignedIds.add(String(id)));
-          }
-        });
-        
-        const activeJcs = (store.jobCards || []).filter(
-          (jc) => jc.zone_id === z.id && isWorkOrderActiveOnDate(jc, today),
-        );
-        activeJcs.forEach((jc) => {
-          if (jc.assigned && Array.isArray(jc.assigned)) {
-            jc.assigned.forEach((id) => assignedIds.add(String(id)));
-          }
-        }); 
-        
-        const evaluatedIds = new Set();
-        (store.dailyAllocations || []).forEach((alloc) => {
-          if (alloc.date === today) {
-            let allocZoneId = alloc.zone_id;
-            if (!allocZoneId) {
-                const wo = (store.workOrders || []).find(w => String(w.id) === String(alloc.work_order_id));
-                if (wo) allocZoneId = wo.zone_id;
-                else {
-                    const jc = (store.jobCards || []).find(j => String(j.id) === String(alloc.work_order_id));
-                    if (jc) allocZoneId = jc.zone_id;
-                }
-            }
-            if (String(allocZoneId) === String(z.id)) {
-              assignedIds.add(String(alloc.sailor_id)); 
-              if (alloc.evaluated === true) {
-                evaluatedIds.add(String(alloc.sailor_id));
+      const assignedIds = new Set();
+      
+      const activeWos = (store.workOrders || []).filter(
+        (wo) => isZoneMatch(wo.zone_id) && isWorkOrderActiveOnDate(wo, dateVal),
+      );
+      activeWos.forEach((wo) => {
+        if (wo.assigned && Array.isArray(wo.assigned)) {
+          wo.assigned.forEach((id) => assignedIds.add(String(id)));
+        }
+      });
+      
+      const activeJcs = (store.jobCards || []).filter(
+        (jc) => isZoneMatch(jc.zone_id) && isWorkOrderActiveOnDate(jc, dateVal),
+      );
+      activeJcs.forEach((jc) => {
+        if (jc.assigned && Array.isArray(jc.assigned)) {
+          jc.assigned.forEach((id) => assignedIds.add(String(id)));
+        }
+      }); 
+      
+      // Match the exact same filtering used by updateCounters() / updatePendingEvals()
+      // We only count sailors if they are "Assigned" globally (not NA, not on leave, not long term)
+      activeCount = 0;
+      let evalCount = 0;
+      
+      assignedIds.forEach((id) => {
+          const s = (store.sailors || []).find(sailor => String(sailor.id) === String(id) || String(sailor._fbKey) === String(id));
+          if (s && s.status === "Assigned") {
+              activeCount++;
+              if (s.evaluated === true) {
+                  evalCount++;
               }
-            }
           }
-        });
-        
-        activeCount = assignedIds.size;
-        
-        let evalCount = 0;
-        assignedIds.forEach((id) => {
-          if (evaluatedIds.has(String(id))) {
-            evalCount++;
-          }
-        });
-        pendingEvalCount = activeCount - evalCount;
-        
-      } else {
-        const assignedIds = new Set();
-        const evaluatedIds = new Set();
-        
-        (store.dailyAllocations || []).forEach((alloc) => {
-          if (alloc.date === dateVal) {
-            let allocZoneId = alloc.zone_id;
-            if (!allocZoneId) {
-                const wo = (store.workOrders || []).find(w => String(w.id) === String(alloc.work_order_id));
-                if (wo) allocZoneId = wo.zone_id;
-                else {
-                    const jc = (store.jobCards || []).find(j => String(j.id) === String(alloc.work_order_id));
-                    if (jc) allocZoneId = jc.zone_id;
-                }
-            }
-            if (String(allocZoneId) === String(z.id)) {
-              assignedIds.add(String(alloc.sailor_id));
-              if (alloc.evaluated === true) {
-                evaluatedIds.add(String(alloc.sailor_id));
-              }
-            }
-          }
-        });
-        
-        activeCount = assignedIds.size;
-        let evalCount = 0;
-        assignedIds.forEach((id) => {
-          if (evaluatedIds.has(String(id))) {
-            evalCount++;
-          }
-        });
-        pendingEvalCount = activeCount - evalCount;
-      }
-
-
+      });
+      
+      pendingEvalCount = activeCount - evalCount;
 
       let displayStr = z.name;
       if (activeCount > 0) {
@@ -7789,13 +7757,7 @@ function renderZoneSelectors() {
       }
       return `<option value="${z.id}">${displayStr}</option>`;
     })
-    .join(""); // Add Admin & Staff Duties special option
-  if (hasAllZoneAccess) {
-    const hasAdminZone = visibleZones.some((z) => isAdminStaffDuties(z.id));
-    if (!hasAdminZone) {
-      optionsHtml += `<option value="Admin-&-Staff-Duties">Admin & Staff Duties</option>`;
-    }
-  }
+    .join("");
   ["zoneSelector", "locZone"].forEach((selId) => {
     const sel = document.getElementById(selId);
     if (!sel) return;
