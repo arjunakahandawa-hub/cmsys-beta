@@ -2301,8 +2301,6 @@ function updatePendingEvals() {
   const evaluated = store.sailors ? store.sailors.filter((s) => {
     return (
       (s.status === "Assigned" || s.status === "NA" || s.status === "N/A") &&
-      !isAssignedAsSubTeamLeader(s) &&
-      !isAssignedAsOtherRole(s) &&
       s.evaluated
     );
   }).length : 0;
@@ -2310,8 +2308,6 @@ function updatePendingEvals() {
   const pending = store.sailors ? store.sailors.filter((s) => {
     return (
       (s.status === "Assigned" || s.status === "NA" || s.status === "N/A") &&
-      !isAssignedAsSubTeamLeader(s) &&
-      !isAssignedAsOtherRole(s) &&
       !s.evaluated
     );
   }).length : 0;
@@ -7759,11 +7755,9 @@ function renderZoneSelectors() {
       assignedIds.forEach((id) => {
           const s = (store.sailors || []).find(sailor => String(sailor.id) === String(id) || String(sailor._fbKey) === String(id));
           if (s && (s.status === "Assigned" || s.status === "NA" || s.status === "N/A")) {
-              if (!isAssignedAsSubTeamLeader(s) && !isAssignedAsOtherRole(s)) {
-                  activeCount++;
-                  if (s.evaluated === true) {
-                      evalCount++;
-                  }
+              activeCount++;
+              if (s.evaluated === true) {
+                  evalCount++;
               }
           }
       });
