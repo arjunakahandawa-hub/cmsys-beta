@@ -4765,16 +4765,13 @@ function renderJobCardsView() {
 function switchJobCardsTab(tab) {
   store.currentJobCardsTab = tab;
   document.querySelectorAll(".jc-main-tab").forEach((t) => {
-    t.classList.remove("border-green-600", "text-green-600", "bg-green-50");
+    t.classList.remove("border-green-600", "text-green-600", "bg-green-50", "border-b-2");
     t.classList.add("text-slate-500");
+    if (t.getAttribute("onclick") && t.getAttribute("onclick").includes(tab)) {
+      t.classList.remove("text-slate-500");
+      t.classList.add("border-green-600", "text-green-600", "bg-green-50", "border-b-2");
+    }
   });
-  event.target.classList.remove("text-slate-500");
-  event.target.classList.add(
-    "border-green-600",
-    "text-green-600",
-    "bg-green-50",
-    "border-b-2",
-  );
   renderJobCardsList();
 }
 function renderJobCardsList() {
