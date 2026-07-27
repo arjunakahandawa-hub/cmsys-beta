@@ -1305,47 +1305,45 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
   if (!wo) return false;
   const today = getLocalDateString();
   if (!dateStr) dateStr = today;
-  if (dateStr === today) {
-    const hasAllocationsToday = (store.dailyAllocations || []).some(
-      (a) => a.date === today && String(a.work_order_id) === String(wo.id),
-    );
-    if (hasAllocationsToday) return true;
-    if (wo.last_commit_date === today) return true;
-    if (wo.created_at) {
-      try {
-        const d = new Date(wo.created_at);
-        if (!isNaN(d.getTime()) && d.toISOString().split("T")[0] === today) return true;
-      } catch (e) {}
-    }
-    return false;
-  }
+
   const hasAllocations = (store.dailyAllocations || []).some(
     (a) => a.date === dateStr && String(a.work_order_id) === String(wo.id),
   );
-  if (hasAllocations) return true; // Check if it was created before or on this date and is not completed/held
+  if (hasAllocations) return true;
+
   if (wo.created_at) {
     try {
       const d = new Date(wo.created_at);
       if (!isNaN(d.getTime())) {
         const createdDate = d.toISOString().split("T")[0];
         if (createdDate <= dateStr) {
-          if (wo.status === "Completed" || wo.status === "Hold") {
-            const compDate =
-              wo.completed_date ||
-              wo.last_commit_date ||
-              wo.last_assigned_date ||
-              today;
-            if (compDate < dateStr) {
-              return false;
+          if (dateStr === today) {
+            if (wo.status === "Completed" || wo.status === "Hold") {
+                return false;
             }
+            return true;
+          } else {
+            if (wo.status === "Completed" || wo.status === "Hold") {
+              const compDate =
+                wo.completed_date ||
+                wo.last_commit_date ||
+                wo.last_assigned_date ||
+                today;
+              if (compDate < dateStr) {
+                return false;
+              }
+            }
+            return true;
           }
-          return true;
         }
       }
-    } catch (e) {
-      console.warn("Invalid date in work order created_at:", wo.created_at);
-    }
+    } catch (e) {}
   }
+  
+  if (dateStr === today) {
+    if (wo.status !== "Completed" && wo.status !== "Hold") return true;
+  }
+
   return false;
 }
 function getSailorAssignmentOnDate(sailorId, dateVal) {
