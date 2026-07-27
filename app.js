@@ -7721,10 +7721,21 @@ function renderZoneSelectors() {
         
         const evaluatedIds = new Set();
         (store.dailyAllocations || []).forEach((alloc) => {
-          if (alloc.date === today && alloc.zone_id === z.id) {
-            assignedIds.add(String(alloc.sailor_id)); 
-            if (alloc.evaluated === true) {
-              evaluatedIds.add(String(alloc.sailor_id));
+          if (alloc.date === today) {
+            let allocZoneId = alloc.zone_id;
+            if (!allocZoneId) {
+                const wo = (store.workOrders || []).find(w => String(w.id) === String(alloc.work_order_id));
+                if (wo) allocZoneId = wo.zone_id;
+                else {
+                    const jc = (store.jobCards || []).find(j => String(j.id) === String(alloc.work_order_id));
+                    if (jc) allocZoneId = jc.zone_id;
+                }
+            }
+            if (String(allocZoneId) === String(z.id)) {
+              assignedIds.add(String(alloc.sailor_id)); 
+              if (alloc.evaluated === true) {
+                evaluatedIds.add(String(alloc.sailor_id));
+              }
             }
           }
         });
@@ -7744,10 +7755,21 @@ function renderZoneSelectors() {
         const evaluatedIds = new Set();
         
         (store.dailyAllocations || []).forEach((alloc) => {
-          if (alloc.date === dateVal && alloc.zone_id === z.id) {
-            assignedIds.add(String(alloc.sailor_id));
-            if (alloc.evaluated === true) {
-              evaluatedIds.add(String(alloc.sailor_id));
+          if (alloc.date === dateVal) {
+            let allocZoneId = alloc.zone_id;
+            if (!allocZoneId) {
+                const wo = (store.workOrders || []).find(w => String(w.id) === String(alloc.work_order_id));
+                if (wo) allocZoneId = wo.zone_id;
+                else {
+                    const jc = (store.jobCards || []).find(j => String(j.id) === String(alloc.work_order_id));
+                    if (jc) allocZoneId = jc.zone_id;
+                }
+            }
+            if (String(allocZoneId) === String(z.id)) {
+              assignedIds.add(String(alloc.sailor_id));
+              if (alloc.evaluated === true) {
+                evaluatedIds.add(String(alloc.sailor_id));
+              }
             }
           }
         });
