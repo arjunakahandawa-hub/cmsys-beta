@@ -2170,13 +2170,17 @@ function updateCounters() {
       const jc = activeJc.find(
         (j) => String(j.id) === String(alloc.work_order_id),
       );
-      if (
-        (wo && (isNA(wo.description) || isNA(wo.reference_no))) ||
-        (jc && (isNA(jc.description) || isNA(jc.title)))
-      ) {
-        naIds.add(String(alloc.sailor_id));
-      } else {
-        assignedIds.add(String(alloc.sailor_id));
+      if (wo || jc) {
+          if (
+            (wo && (isNA(wo.description) || isNA(wo.reference_no))) ||
+            (jc && (isNA(jc.description) || isNA(jc.title)))
+          ) {
+            naIds.add(String(alloc.sailor_id));
+          } else {
+            if ((wo && isWorkOrderActiveOnDate(wo, dateVal)) || (jc && isWorkOrderActiveOnDate(jc, dateVal))) {
+                assignedIds.add(String(alloc.sailor_id));
+            }
+          }
       }
     }
   });
@@ -2294,12 +2298,23 @@ function updateCounters() {
   if (todayNaEl) todayNaEl.textContent = naCount;
 }
 function updatePendingEvals() {
-  const evaluated = store.sailors ? store.sailors.filter(
-    (s) => s.status === "Assigned" && s.evaluated,
-  ).length : 0;
-  const pending = store.sailors ? store.sailors.filter(
-    (s) => s.status === "Assigned" && !s.evaluated,
-  ).length : 0;
+  const evaluated = store.sailors ? store.sailors.filter((s) => {
+    return (
+      (s.status === "Assigned" || s.status === "NA" || s.status === "N/A") &&
+      !isAssignedAsSubTeamLeader(s) &&
+      !isAssignedAsOtherRole(s) &&
+      s.evaluated
+    );
+  }).length : 0;
+  
+  const pending = store.sailors ? store.sailors.filter((s) => {
+    return (
+      (s.status === "Assigned" || s.status === "NA" || s.status === "N/A") &&
+      !isAssignedAsSubTeamLeader(s) &&
+      !isAssignedAsOtherRole(s) &&
+      !s.evaluated
+    );
+  }).length : 0;
   const evalEl = document.getElementById("evaluatedToday");
   if (evalEl) evalEl.textContent = evaluated;
   const pendingEl = document.getElementById("pendingEvals");
@@ -7707,7 +7722,11 @@ function renderZoneSelectors() {
       const isThisZoneAdmin = isAdminStaffDuties(z.id);
       const isZoneMatch = (zoneId) => {
           if (isThisZoneAdmin) {
-              return isAdminStaffDuties(zoneId) || !zoneId; // Include empty zone_id for Admin
+              const matchedByOther = zonesToRender.some(otherZ => {
+                  if (isAdminStaffDuties(otherZ.id)) return false;
+                  return String(zoneId) === String(otherZ.id);
+              });
+              return !matchedByOther;
           }
           return String(zoneId) === String(z.id);
       };
@@ -7739,10 +7758,12 @@ function renderZoneSelectors() {
       
       assignedIds.forEach((id) => {
           const s = (store.sailors || []).find(sailor => String(sailor.id) === String(id) || String(sailor._fbKey) === String(id));
-          if (s && s.status === "Assigned") {
-              activeCount++;
-              if (s.evaluated === true) {
-                  evalCount++;
+          if (s && (s.status === "Assigned" || s.status === "NA" || s.status === "N/A")) {
+              if (!isAssignedAsSubTeamLeader(s) && !isAssignedAsOtherRole(s)) {
+                  activeCount++;
+                  if (s.evaluated === true) {
+                      evalCount++;
+                  }
               }
           }
       });
