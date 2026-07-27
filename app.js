@@ -7747,6 +7747,23 @@ function renderZoneSelectors() {
         }
       }); 
       
+      (store.dailyAllocations || []).forEach((alloc) => {
+          if (alloc.date === dateVal) {
+              let allocZoneId = alloc.zone_id;
+              if (!allocZoneId) {
+                  const wo = (store.workOrders || []).find(w => String(w.id) === String(alloc.work_order_id));
+                  if (wo) allocZoneId = wo.zone_id;
+                  else {
+                      const jc = (store.jobCards || []).find(j => String(j.id) === String(alloc.work_order_id));
+                      if (jc) allocZoneId = jc.zone_id;
+                  }
+              }
+              if (isZoneMatch(allocZoneId)) {
+                  assignedIds.add(String(alloc.sailor_id));
+              }
+          }
+      }); 
+      
       // Match the exact same filtering used by updateCounters() / updatePendingEvals()
       // We only count sailors if they are "Assigned" globally (not NA, not on leave, not long term)
       activeCount = 0;
