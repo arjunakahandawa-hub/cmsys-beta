@@ -1306,8 +1306,19 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
   const today = getLocalDateString();
   if (!dateStr) dateStr = today;
   if (dateStr === today) {
-    return wo.status !== "Completed" && wo.status !== "Hold";
-  } // Check if there are daily allocations for this work order on this date
+    const hasAllocationsToday = (store.dailyAllocations || []).some(
+      (a) => a.date === today && String(a.work_order_id) === String(wo.id),
+    );
+    if (hasAllocationsToday) return true;
+    if (wo.last_commit_date === today) return true;
+    if (wo.created_at) {
+      try {
+        const d = new Date(wo.created_at);
+        if (!isNaN(d.getTime()) && d.toISOString().split("T")[0] === today) return true;
+      } catch (e) {}
+    }
+    return false;
+  }
   const hasAllocations = (store.dailyAllocations || []).some(
     (a) => a.date === dateStr && String(a.work_order_id) === String(wo.id),
   );
