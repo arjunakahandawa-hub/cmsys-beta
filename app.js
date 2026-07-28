@@ -1368,6 +1368,7 @@ function getSailorAssignmentOnDate(sailorId, dateVal) {
 }
 function getSailorCurrentAssignment(sailorId) {
   if (!store.workOrders) return null;
+  // Check Work Orders
   const activeWo = store.workOrders.find((wo) => {
     if (wo.status !== "Active" && wo.status !== "Pending") return false;
     const assignedIds = (wo.assigned || []).map(String);
@@ -1378,6 +1379,19 @@ function getSailorCurrentAssignment(sailorId) {
       ref: activeWo.reference_no || "Active WO",
       title: activeWo.description || "",
       zone: activeWo.zone_id || "",
+    };
+  }
+  // Also check Job Cards
+  const activeJc = (store.jobCards || []).find((jc) => {
+    if (jc.status !== "Active" && jc.status !== "Pending") return false;
+    const assignedIds = (jc.assigned || []).map(String);
+    return assignedIds.includes(String(sailorId));
+  });
+  if (activeJc) {
+    return {
+      ref: activeJc.job_number || activeJc.reference_no || "Job Card",
+      title: activeJc.title || activeJc.description || "",
+      zone: activeJc.zone_id || "",
     };
   }
   return null;
@@ -1492,55 +1506,56 @@ function renderAvailableSailors() {
           );
       if (assignment) {
         return `
-            <div class="sailor-card rounded-xl p-2.5 border bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed select-none relative group"
+            <div class="sailor-card rounded-xl p-3 border bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed select-none relative group"
                 title="Already assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}">
-                <div class="flex items-center gap-2.5">
+                <div class="flex items-center gap-3">
                     <div class="relative flex-shrink-0">
-                        <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold text-white shadow-sm bg-slate-400">${sailor.trade}</div>
-                        ${sailor.isZoneTeam ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 rounded-full flex items-center justify-center text-white text-[8px] shadow">★</span>' : ""}
+                        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-sm bg-slate-400">${sailor.trade}</div>
+                        ${sailor.isZoneTeam ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 rounded-full flex items-center justify-center text-white text-[9px] shadow">★</span>' : ""}
                     </div>
                     <div class="flex-1 min-w-0">
-                        <p class="font-semibold text-slate-500 text-xs truncate leading-tight">${sailor.name}</p>
-                        <div class="flex items-center gap-1.5 mt-0.5">
-                            <span class="text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded-full font-bold">⚠️ Busy: ${assignment.zone}</span>
+                        <p class="font-semibold text-slate-600 text-sm truncate leading-tight">${sailor.name}</p>
+                        <div class="flex items-center gap-1.5 mt-1">
+                            <span class="text-[11px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">⚠️ Busy: ${assignment.zone}</span>
                         </div>
+                        <div class="text-[11px] text-slate-500 mt-0.5 truncate">${assignment.ref}${assignment.title ? ' · ' + assignment.title : ''}</div>
                     </div>
                     <div class="text-right flex-shrink-0">
-                        <div class="text-sm font-extrabold text-slate-400">${sailor.avgScore.toFixed(1)}</div>
-                        <div class="text-[9px] text-slate-400 mt-0.5">${sailor.category}</div>
+                        <div class="text-base font-extrabold text-slate-400">${sailor.avgScore.toFixed(1)}</div>
+                        <div class="text-[10px] text-slate-400 mt-0.5">${sailor.category}</div>
                     </div>
                 </div>
             </div>
             `;
       }
       return `
-        <div class="sailor-card rounded-xl p-2.5 hover:shadow-md transition-all border"
+        <div class="sailor-card rounded-xl p-3 hover:shadow-md transition-all border"
             style="background:rgba(255,255,255,0.88);border-color:rgba(255,255,255,0.7);backdrop-filter:blur(6px)"
             draggable="${isToday ? "true" : "false"}"
             ondragstart="handleDragStart(event, ${sailor.id})"
             ondragend="handleDragEnd(event)">
-            <div class="flex items-center gap-2.5">
+            <div class="flex items-center gap-3">
                 <div class="relative flex-shrink-0">
-                    <div class="w-10 h-10 rounded-xl flex items-center justify-center text-xs font-bold text-white shadow-sm"
+                    <div class="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-sm"
                         style="background:${tradeBg}">${sailor.trade}</div>
-                    ${sailor.isZoneTeam ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 rounded-full flex items-center justify-center text-white text-[8px] shadow">★</span>' : ""}
+                    ${sailor.isZoneTeam ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 rounded-full flex items-center justify-center text-white text-[9px] shadow">★</span>' : ""}
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-slate-800 text-xs truncate leading-tight flex items-center justify-between gap-1">
+                    <p class="font-semibold text-slate-800 text-sm truncate leading-tight flex items-center justify-between gap-1">
                         <span>${sailor.name}</span>
-                        <button onclick="event.stopPropagation(); openSailorProfile('${(_sailor$id3 = sailor.id) !== null && _sailor$id3 !== void 0 ? _sailor$id3 : sailor._fbKey}')" class="text-teal-600 hover:text-teal-800 text-[11px] p-0.5 cursor-pointer font-bold transition-transform hover:scale-115" title="View Profile">
+                        <button onclick="event.stopPropagation(); openSailorProfile('${(_sailor$id3 = sailor.id) !== null && _sailor$id3 !== void 0 ? _sailor$id3 : sailor._fbKey}')" class="text-teal-600 hover:text-teal-800 text-xs p-0.5 cursor-pointer font-bold transition-transform hover:scale-115" title="View Profile">
                             👤
                         </button>
                     </p>
-                    <div class="flex items-center gap-1.5 mt-0.5">
-                        <span class="text-[10px] text-slate-400 mono">${sailor.official_number}</span>
-                        <span class="text-[10px] text-slate-400">${sailor.rank}</span>
-                        ${sailor.yesterdayJob ? '<span class="text-[9px] bg-purple-100 text-purple-600 px-1 rounded font-medium">↻ Cont</span>' : ""}
+                    <div class="flex items-center gap-1.5 mt-1">
+                        <span class="text-[11px] text-slate-500 mono">${sailor.official_number}</span>
+                        <span class="text-[11px] text-slate-400">${sailor.rank}</span>
+                        ${sailor.yesterdayJob ? '<span class="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-medium">↻ Cont</span>' : ""}
                     </div>
                 </div>
                 <div class="text-right flex-shrink-0">
-                    <div class="text-sm font-extrabold" style="color:${scoreColor}">${sailor.avgScore.toFixed(1)}</div>
-                    <div class="text-[9px] text-slate-400 mt-0.5">${sailor.category}</div>
+                    <div class="text-base font-extrabold" style="color:${scoreColor}">${sailor.avgScore.toFixed(1)}</div>
+                    <div class="text-[10px] text-slate-400 mt-0.5">${sailor.category}</div>
                 </div>
             </div>
         </div>
@@ -3962,30 +3977,44 @@ function renderDetailSailorChips(filter = "") {
         (_s$id26 = s.id) !== null && _s$id26 !== void 0 ? _s$id26 : s._fbKey,
       );
       if (assignment) {
-        var _s$id27;
+        // ── LOCKED CHIP: නාවිකයා වෙනත් Zone/WO එකක assign වෙලා ──
+        // Click කරන්නේ block. Zone + WO info tooltip හා badge ලෙස පෙන්වයි.
+        const zoneDisplay = assignment.zone || "Unknown Zone";
+        const woRefDisplay = assignment.ref || "";
+        const woTitleDisplay = assignment.title
+          ? assignment.title.substring(0, 40) + (assignment.title.length > 40 ? "…" : "")
+          : "";
+        const tooltipText = `🔒 මෙම නාවිකයා දැනටමත් ${zoneDisplay} හි ${woRefDisplay} රාජකාරිය සඳහා Assign කරලා ඉන්නවා. වෙනත් Zone In-Charge සම්බන්ධ කරගෙන ඉවත් කරගන්න.`;
         return `
-            <button type="button"
-                onclick="assignSingleLabor('${(_s$id27 = s.id) !== null && _s$id27 !== void 0 ? _s$id27 : s._fbKey}')"
-                title="Currently assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}. Click to automatically reassign here."
-                class="sailor-chip-card hover:border-amber-500 hover:shadow-md transition-all duration-200"
+            <div
+                title="${tooltipText}"
                 style="
                     display:flex; align-items:center; gap:8px;
-                    padding:7px 10px; border-radius:10px; cursor:pointer;
-                    border:2px dashed #f59e0b;
-                    background:#fffbeb;
+                    padding:7px 10px; border-radius:10px;
+                    cursor:not-allowed;
+                    border:2px solid #cbd5e1;
+                    background:#f1f5f9;
+                    opacity:0.72;
                     min-width:140px; position:relative;
                     text-align:left;
+                    user-select:none;
                 ">
-                <div style="background:#d97706; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:0.5px; flex-shrink:0;">
+                <!-- Trade badge – greyed out -->
+                <div style="background:#94a3b8; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:0.5px; flex-shrink:0;">
                     ${s.trade}
                 </div>
                 <div style="flex:1; overflow:hidden;">
-                    <div style="font-size:11px; font-weight:700; color:#b45309; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;">
+                    <div style="font-size:11px; font-weight:700; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:145px;">
                         ${rank} ${fullName}
                     </div>
-                    <div style="font-size:8px; color:#d97706; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🔁 Reassign from ${assignment.zone}</div>
+                    <!-- Zone + WO info badge -->
+                    <div style="display:flex; align-items:center; gap:4px; margin-top:2px; flex-wrap:wrap;">
+                        <span style="font-size:8px; background:#e2e8f0; color:#475569; border-radius:4px; padding:1px 5px; font-weight:700; white-space:nowrap;">🔒 ${zoneDisplay}</span>
+                        ${woRefDisplay ? `<span style="font-size:8px; background:#e0f2fe; color:#0369a1; border-radius:4px; padding:1px 5px; font-weight:700; white-space:nowrap;">${woRefDisplay}</span>` : ""}
+                    </div>
+                    ${woTitleDisplay ? `<div style="font-size:8px; color:#94a3b8; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:145px;">${woTitleDisplay}</div>` : ""}
                 </div>
-            </button>
+            </div>
             `;
       }
       return `
