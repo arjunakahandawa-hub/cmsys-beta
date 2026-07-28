@@ -110,8 +110,8 @@ function formatZoneDisplayName(zoneId) {
 }
 function parseOfficialNumber(offNo) {
   if (!offNo) return { type: "•", num: "-" };
-  const clean = offNo.trim();
-  const match = clean.match(/^([A-Za-z\/&]+)\s*(\d+[A-Za-z]*)$/);
+  const clean = offNo.trim().replace(/^[^a-zA-Z0-9]+/, '');
+  const match = clean.match(/^([A-Za-z\/&]+)[\s\.\-]*(\d+[A-Za-z]*)$/);
   if (match) {
     return { type: match[1], num: match[2] };
   }
@@ -876,7 +876,33 @@ function fbSaveWorkOrder(data) {
     return opsDB.ref(`work_orders/${_fbKey}`).update(clean);
   }
   return opsDB.ref("work_orders").push({ ...clean, created_at: Date.now() });
-} // Save / update a job card
+}
+
+// Safe concurrent helpers for assigned array to prevent race conditions
+function safeFbAssignSailor(woKey, sailorId, dateStr) {
+  if (!woKey || !sailorId) return;
+  const woRef = opsDB.ref('work_orders/' + woKey);
+  woRef.child('assigned').transaction((curr) => {
+    let arr = Array.isArray(curr) ? curr : (curr ? Object.values(curr) : []);
+    if (!arr.includes(sailorId)) arr.push(sailorId);
+    return arr;
+  });
+  if (dateStr) woRef.update({ last_assigned_date: dateStr });
+}
+
+function safeFbRemoveSailor(woKey, sailorId, dateStr) {
+  if (!woKey || !sailorId) return;
+  const woRef = opsDB.ref('work_orders/' + woKey);
+  woRef.child('assigned').transaction((curr) => {
+    if (!curr) return null;
+    let arr = Array.isArray(curr) ? curr : Object.values(curr);
+    const filtered = arr.filter(id => String(id) !== String(sailorId));
+    return filtered.length > 0 ? filtered : null;
+  });
+  if (dateStr) woRef.update({ last_assigned_date: dateStr });
+}
+
+// Save / update a job card
 function fbSaveJobCard(data) {
   const { _fbKey, ...clean } = data;
   if (clean.assigned && clean.assigned.length === 0) {
@@ -2406,8 +2432,8 @@ function handleDropOnCard(event, workOrderId) {
       (id) => String(id) !== String(draggedSailorId),
     );
     prevWo.last_assigned_date = today;
-    if (window.fbSaveWorkOrder) {
-      fbSaveWorkOrder(prevWo);
+    if (window.safeFbRemoveSailor) {
+      safeFbRemoveSailor(prevWo._fbKey || prevWo.id, draggedSailorId, today);
     }
     opsDB
       .ref(`daily_allocations/${today}_${sanitizeFbKey(draggedSailorId)}`)
@@ -2434,8 +2460,8 @@ function handleDropOnCard(event, workOrderId) {
     if (!store.dailyAllocations) store.dailyAllocations = [];
     store.dailyAllocations.push(alloc);
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(draggedSailorId)}`).set(alloc);
-    if (window.fbSaveWorkOrder) {
-      fbSaveWorkOrder(workOrder);
+    if (window.safeFbAssignSailor) {
+      safeFbAssignSailor(workOrder._fbKey || workOrder.id, draggedSailorId, today);
     }
     renderDashboard();
     showToast(
@@ -2484,15 +2510,16 @@ function removeSailorFromOrder(sailorId, workOrderId) {
     sailor.status = "Available";
     workOrder.last_assigned_date = today;
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).remove();
-    if (window.fbSaveWorkOrder) {
-      fbSaveWorkOrder(workOrder).then(() => {
+    if (window.safeFbRemoveSailor) {
+      safeFbRemoveSailor(workOrder._fbKey || workOrder.id, sailorId, today);
+      setTimeout(() => {
         renderDashboard();
         showToast(
           `${sailor.name} removed from assignment <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
           "warning",
           6000
         );
-      });
+      }, 50);
     } else {
       renderDashboard();
       showToast(
@@ -4141,8 +4168,8 @@ function assignSingleLabor(sailorId) {
       (id) => String(id) !== String(sailorId),
     );
     prevWo.last_assigned_date = today;
-    if (window.fbSaveWorkOrder) {
-      fbSaveWorkOrder(prevWo);
+    if (window.safeFbRemoveSailor) {
+      safeFbRemoveSailor(prevWo._fbKey || prevWo.id, sailorId, today);
     }
     opsDB
       .ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`)
@@ -4157,8 +4184,8 @@ function assignSingleLabor(sailorId) {
     sailor.status = "Assigned";
     sailor.evaluated = false;
     wo.last_assigned_date = today;
-    if (typeof fbSaveWorkOrder === "function") {
-      fbSaveWorkOrder(wo);
+    if (window.safeFbAssignSailor) {
+      safeFbAssignSailor(wo._fbKey || wo.id, sailorId, today);
     }
     showToast(
       assignment
@@ -11242,26 +11269,23 @@ function renderDailyDetailsSpecialView() {
             `;
       wos.forEach((wo) => {
         let assignedSailors = [];
+        let assignedIds = [];
         if (dateVal === today) {
-          const assignedIds = (wo.assigned || []).map(String);
-          assignedSailors = store.sailors.filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)),
-          );
-        } else {
-          const assignedIds = (store.dailyAllocations || [])
-            .filter(
-              (a) =>
-                a.date === dateVal && String(a.work_order_id) === String(wo.id),
-            )
+          const activeAssignedIds = (wo.assigned || []).map(String);
+          const committedIds = (store.dailyAllocations || [])
+            .filter((a) => a.date === dateVal && String(a.work_order_id) === String(wo.id))
             .map((a) => String(a.sailor_id));
-          assignedSailors = store.sailors.filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)),
-          );
+          assignedIds = [...new Set([...activeAssignedIds, ...committedIds])];
+        } else {
+          assignedIds = (store.dailyAllocations || [])
+            .filter((a) => a.date === dateVal && String(a.work_order_id) === String(wo.id))
+            .map((a) => String(a.sailor_id));
         }
+        assignedSailors = store.sailors.filter(
+          (s) =>
+            assignedIds.includes(String(s.id)) ||
+            assignedIds.includes(String(s._fbKey)),
+        );
         if (assignedSailors.length > 0) {
           // Add Work Order separator row
           tableRows += `
@@ -13654,7 +13678,8 @@ document.addEventListener('DOMContentLoaded', () => {
       textToCopy += 'RANK\tNAME\tOFF NO\tTRADE\n';
       textToCopy += '--------------------------------------------------\n';
       availableSailors.forEach(s => {
-        textToCopy += `${s.rank || '-'} \t${s.name || '-'} \t${s.official_no || '-'} \t${s.trade || '-'}\n`;
+        const offNoStr = s.official_number || s.service_no || '-';
+        textToCopy += `${s.rank || '-'} \t${s.name || '-'} \t${offNoStr} \t${s.trade || '-'}\n`;
       });
       navigator.clipboard.writeText(textToCopy).then(() => {
         if (typeof showToast === 'function') showToast(`Successfully copied ${availableSailors.length} Available Sailors to clipboard!`);
