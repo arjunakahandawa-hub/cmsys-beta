@@ -99,6 +99,15 @@ function isAdminStaffDuties(zoneIdOrName) {
   const normalized = zoneIdOrName.toLowerCase().replace(/[-&\s]+/g, "");
   return normalized === "adminstaffduties";
 }
+function formatZoneDisplayName(zoneId) {
+  if (!zoneId) return "";
+  if (isAdminStaffDuties(zoneId)) return "Admin & Staff Duties";
+  const zObj = (store.zones || []).find(
+    (z) => z.id === zoneId || z.name === zoneId,
+  );
+  if (zObj && zObj.name) return zObj.name;
+  return zoneId;
+}
 function parseOfficialNumber(offNo) {
   if (!offNo) return { type: "•", num: "-" };
   const clean = offNo.trim();
@@ -2839,9 +2848,14 @@ function renderWoSailorChips(filter = "") {
     SW: "#065f46",
     BB: "#1d4ed8",
     AL: "#ec4899",
-  }; // When searching, show ALL sailors (651) so any sailor can be found and assigned
+  }; // Zone restriction helper — only allow sailors from current zone (or unassigned)
+  const isFromAnotherZone = (s) => {
+    if (!s.zone_assigned || s.zone_assigned === "") return false; // unassigned → accessible
+    return s.zone_assigned !== store.currentZone;
+  };
   let sailors;
   if (filter) {
+    // When searching by name/number, show all sailors but mark other-zone ones as blocked
     const q = filter.toLowerCase().trim();
     sailors = store.sailors.filter(
       (s) =>
@@ -2855,10 +2869,12 @@ function renderWoSailorChips(filter = "") {
       sailors = sailors.filter((s) => s.trade === _woCurrentTrade);
     }
   } else {
+    // Default (no search): only show sailors of current zone (or unassigned)
     sailors = store.sailors.filter(
       (s) =>
         (s.attendance === "Present" || !s.attendance) &&
-        (_woCurrentTrade === "ALL" || s.trade === _woCurrentTrade),
+        (_woCurrentTrade === "ALL" || s.trade === _woCurrentTrade) &&
+        !isFromAnotherZone(s),
     );
   }
   const container = document.getElementById("woSailorChips");
@@ -2883,6 +2899,44 @@ function renderWoSailorChips(filter = "") {
         s.official_number || s.officialNumber || s.service_no || "—";
       const fullName = s.name || "Unknown";
       const rank = s.rank || "";
+      // Block sailors from other zones — show as locked chip
+      if (isFromAnotherZone(s)) {
+        const lockedAssignment = getSailorCurrentAssignment(s.id ?? s._fbKey);
+        const lockedZone = lockedAssignment?.zone || s.zone_assigned || "Unknown Zone";
+        const lockedRef  = lockedAssignment?.ref   || "";
+        const lockedTitle= lockedAssignment?.title
+          ? lockedAssignment.title.substring(0, 38) + (lockedAssignment.title.length > 38 ? "…" : "")
+          : "";
+        const tooltipLocked = `🔒 ${rank} ${fullName} දැනට ${lockedZone} හි ${lockedRef} රාජකාරිය සඳහා Assign කරලා ඉන්නවා.`;
+        return `
+            <button type="button" disabled
+                title="${tooltipLocked}"
+                style="
+                    display:flex; align-items:center; gap:8px;
+                    padding:7px 10px; border-radius:10px; cursor:not-allowed;
+                    border:2px solid #e2e8f0;
+                    background:#f8fafc;
+                    min-width:140px; position:relative;
+                    text-align:left; opacity:0.55;
+                ">
+                <span style="
+                    width:32px; height:32px; border-radius:8px;
+                    background:#94a3b8;
+                    color:white; display:flex; align-items:center; justify-content:center;
+                    font-size:9px; font-weight:800; flex-shrink:0;
+                ">${s.trade}</span>
+                <div style="min-width:0; flex:1">
+                    <div style="font-size:11px; font-weight:700; line-height:1.2; color:#64748b;
+                        white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;"
+                    >${rank} ${fullName}</div>
+                    <div style="display:flex; align-items:center; gap:3px; margin-top:2px; flex-wrap:wrap;">
+                        <span style="font-size:8px; background:#e2e8f0; color:#475569; border-radius:4px; padding:1px 5px; font-weight:700; white-space:nowrap;">🔒 ${lockedZone}</span>
+                        ${lockedRef ? `<span style="font-size:8px; background:#e0f2fe; color:#0369a1; border-radius:4px; padding:1px 5px; font-weight:700; white-space:nowrap;">${lockedRef}</span>` : ""}
+                    </div>
+                    ${lockedTitle ? `<div style="font-size:8px; color:#94a3b8; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:130px;">${lockedTitle}</div>` : ""}
+                </div>
+            </button>`;
+      }
       const assignment = getSailorCurrentAssignment(
         (_s$id8 = s.id) !== null && _s$id8 !== void 0 ? _s$id8 : s._fbKey,
       );
