@@ -2649,9 +2649,12 @@ function undoContinueYesterdayJobs() {
           : store.jobCards.find(j => String(j.id) === String(action.workOrderId) || String(j._fbKey) === String(action.workOrderId));
           
       if (targetObj && targetObj.assigned) {
-          targetObj.assigned = targetObj.assigned.filter(id => String(id) !== String(action.sailorId));
-          if (action.targetType === 'wo' && window.fbSaveWorkOrder) fbSaveWorkOrder(targetObj);
-          if (action.targetType === 'jc' && window.fbSaveJobCard) fbSaveJobCard(targetObj);
+          if (action.targetType === 'wo' && window.safeFbRemoveSailor) {
+              safeFbRemoveSailor(targetObj._fbKey || targetObj.id, action.sailorId, date);
+          } else if (action.targetType === 'jc') {
+              targetObj.assigned = targetObj.assigned.filter(id => String(id) !== String(action.sailorId));
+              if (window.fbSaveJobCard) fbSaveJobCard(targetObj);
+          }
       }
       count++;
   });
@@ -4289,9 +4292,8 @@ function executeGlobalUndo() {
     const wo = store.workOrders.find((w) => String(w.id) === String(workOrderId) || String(w._fbKey) === String(workOrderId));
     const sailor = store.sailors.find((s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
 
-    if (wo) {
-      wo.assigned = prevWoAssigned || [];
-      if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+    if (wo && window.safeFbAssignSailor) {
+      safeFbAssignSailor(wo._fbKey || wo.id, sailorId, today);
     }
     if (sailor && sailorPrevStatus) {
       sailor.status = sailorPrevStatus;
@@ -4317,13 +4319,11 @@ function executeGlobalUndo() {
     const prevWo = prevWoId ? store.workOrders.find((w) => String(w.id) === String(prevWoId) || String(w._fbKey) === String(prevWoId)) : null;
     const sailor = store.sailors.find((s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
 
-    if (targetWo) {
-      targetWo.assigned = targetWoPrevAssigned || [];
-      if (window.fbSaveWorkOrder) fbSaveWorkOrder(targetWo);
+    if (targetWo && window.safeFbRemoveSailor) {
+      safeFbRemoveSailor(targetWo._fbKey || targetWo.id, sailorId, today);
     }
-    if (prevWo && prevWoAssigned) {
-      prevWo.assigned = prevWoAssigned;
-      if (window.fbSaveWorkOrder) fbSaveWorkOrder(prevWo);
+    if (prevWo && window.safeFbAssignSailor) {
+      safeFbAssignSailor(prevWo._fbKey || prevWo.id, sailorId, today);
     }
     if (sailor) {
       if (sailorPrevStatus) sailor.status = sailorPrevStatus;
@@ -4467,7 +4467,22 @@ function saveWorkOrderChanges(autoClose = true) {
           .catch((e) => console.warn(e));
       });
     }
-    if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+    if (wo._fbKey) {
+      opsDB.ref(`work_orders/${wo._fbKey}`).update({
+        status: wo.status,
+        priority: wo.priority,
+        description: wo.description,
+        authority_approval: wo.authority_approval,
+        budget_allocation: wo.budget_allocation,
+        estimated_duration: wo.estimated_duration,
+        progress: wo.progress,
+        incharge: wo.incharge,
+        supervisor: wo.supervisor,
+        project_artificer: wo.project_artificer
+      });
+    } else if (window.fbSaveWorkOrder) {
+      fbSaveWorkOrder(wo);
+    }
     
     // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
     setTimeout(() => {
@@ -4686,7 +4701,14 @@ function proceedWorkOrder() {
   wo.last_commit_date = today;
   wo.last_assigned = [...wo.assigned];
   wo.last_assigned_date = today;
-  if (window.fbSaveWorkOrder) {
+  if (wo._fbKey) {
+    opsDB.ref(`work_orders/${wo._fbKey}`).update({
+      status: "Active",
+      last_commit_date: today,
+      last_assigned: [...wo.assigned],
+      last_assigned_date: today
+    });
+  } else if (window.fbSaveWorkOrder) {
     fbSaveWorkOrder(wo);
   }
   wo.assigned.forEach((sid) => {
