@@ -683,14 +683,6 @@ function initOpsListeners() {
                 : {},
             ),
       };
-      // Update last_assigned_date if missing
-      if (
-        mappedWo.assigned &&
-        mappedWo.assigned.length > 0 &&
-        !mappedWo.last_assigned_date
-      ) {
-        mappedWo.last_assigned_date = today;
-      }
       return mappedWo;
     });
     refreshCurrentView();
@@ -1402,31 +1394,27 @@ function getSailorAssignmentOnDate(sailorId, dateVal) {
   return null;
 }
 function getSailorCurrentAssignment(sailorId) {
-  if (!store.workOrders) return null;
-  // Check Work Orders
-  const activeWo = store.workOrders.find((wo) => {
-    if (wo.status !== "Active" && wo.status !== "Pending") return false;
-    const assignedIds = (wo.assigned || []).map(String);
-    return assignedIds.includes(String(sailorId));
-  });
-  if (activeWo) {
+  const today = getLocalDateString();
+  const alloc = (store.dailyAllocations || []).find(
+    (a) => a.date === today && String(a.sailor_id) === String(sailorId)
+  );
+  if (alloc) {
+    if (alloc.work_order_id) {
+      const wo = (store.workOrders || []).find(
+        (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id)
+      );
+      if (wo) {
+        return {
+          ref: wo.reference_no || "Active WO",
+          title: wo.description || "",
+          zone: wo.zone_id || alloc.zone_id || "",
+        };
+      }
+    }
     return {
-      ref: activeWo.reference_no || "Active WO",
-      title: activeWo.description || "",
-      zone: activeWo.zone_id || "",
-    };
-  }
-  // Also check Job Cards
-  const activeJc = (store.jobCards || []).find((jc) => {
-    if (jc.status !== "Active" && jc.status !== "Pending") return false;
-    const assignedIds = (jc.assigned || []).map(String);
-    return assignedIds.includes(String(sailorId));
-  });
-  if (activeJc) {
-    return {
-      ref: activeJc.job_number || activeJc.reference_no || "Job Card",
-      title: activeJc.title || activeJc.description || "",
-      zone: activeJc.zone_id || "",
+       ref: "Assigned",
+       title: "Assigned today",
+       zone: alloc.zone_id || ""
     };
   }
   return null;
@@ -2427,11 +2415,10 @@ function handleDropOnCard(event, workOrderId) {
     dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
   };
 
-  if (assignment && prevWo) {
+  if (prevWo) {
     prevWo.assigned = (prevWo.assigned || []).filter(
       (id) => String(id) !== String(draggedSailorId),
     );
-    prevWo.last_assigned_date = today;
     if (window.safeFbRemoveSailor) {
       safeFbRemoveSailor(prevWo._fbKey || prevWo.id, draggedSailorId, today);
     }
@@ -3095,7 +3082,6 @@ function toggleWoSailor(sailorId, name) {
           (id) => String(id) !== key,
         );
         const today = getLocalDateString();
-        prevWo.last_assigned_date = today;
         if (window.fbSaveWorkOrder) {
           fbSaveWorkOrder(prevWo);
         }
@@ -4163,11 +4149,10 @@ function assignSingleLabor(sailorId) {
     dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
   };
 
-  if (assignment && prevWo) {
+  if (prevWo) {
     prevWo.assigned = (prevWo.assigned || []).filter(
       (id) => String(id) !== String(sailorId),
     );
-    prevWo.last_assigned_date = today;
     if (window.safeFbRemoveSailor) {
       safeFbRemoveSailor(prevWo._fbKey || prevWo.id, sailorId, today);
     }
@@ -4187,6 +4172,18 @@ function assignSingleLabor(sailorId) {
     if (window.safeFbAssignSailor) {
       safeFbAssignSailor(wo._fbKey || wo.id, sailorId, today);
     }
+    const alloc = {
+      sailor_id: sailorId,
+      work_order_id: wo._fbKey || wo.id,
+      date: today,
+      zone_id: store.currentZone,
+      role_today: "Worker",
+      assigned_by: store.currentUser && store.currentUser.name ? store.currentUser.name : "Officer",
+      status: "Active"
+    };
+    if (!store.dailyAllocations) store.dailyAllocations = [];
+    store.dailyAllocations.push(alloc);
+    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).set(alloc);
     showToast(
       assignment
         ? `Reassigned ${sailor.name} from ${assignment.zone}! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`
