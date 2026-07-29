@@ -2921,10 +2921,13 @@ function renderWoSailorChips(filter = "") {
         const lockedTitle= lockedAssignment?.title
           ? lockedAssignment.title.substring(0, 38) + (lockedAssignment.title.length > 38 ? "…" : "")
           : "";
-        const tooltipLocked = `🔒 ${rank} ${fullName} දැනට ${lockedZone} හි ${lockedRef} රාජකාරිය සඳහා Assign කරලා ඉන්නවා.`;
-        return `
-            <button type="button" disabled
-                title="${tooltipLocked}"
+        const isLockedToday = !!lockedAssignment;
+        const tooltipLocked = isLockedToday ? `🔒 ${rank} ${fullName} දැනට ${lockedZone} හි ${lockedRef} රාජකාරිය සඳහා Assign කරලා ඉන්නවා.` : `${rank} ${fullName} belongs to ${lockedZone}, but is free today. Click to borrow.`;
+        
+        if (isLockedToday) {
+            return `
+                <button type="button" disabled
+                    title="${tooltipLocked}"
                 style="
                     display:flex; align-items:center; gap:8px;
                     padding:7px 10px; border-radius:10px; cursor:not-allowed;
@@ -2950,6 +2953,35 @@ function renderWoSailorChips(filter = "") {
                     ${lockedTitle ? `<div style="font-size:8px; color:#94a3b8; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:130px;">${lockedTitle}</div>` : ""}
                 </div>
             </button>`;
+        } else {
+            // Not locked today, so allow borrowing
+            return `
+                <button type="button"
+                    onclick="toggleWoSailor('${s.id ?? s._fbKey}')"
+                    title="${tooltipLocked}"
+                    class="sailor-chip-card hover:border-indigo-500 hover:shadow-md transition-all duration-200"
+                    style="
+                        display:flex; align-items:center; gap:8px;
+                        padding:7px 10px; border-radius:10px; cursor:pointer;
+                        border:2px dashed #818cf8;
+                        background:#eef2ff;
+                        min-width:140px; position:relative;
+                        text-align:left;
+                    ">
+                    <span style="
+                        width:32px; height:32px; border-radius:8px;
+                        background:#6366f1;
+                        color:white; display:flex; align-items:center; justify-content:center;
+                        font-size:9px; font-weight:800; flex-shrink:0;
+                    ">${s.trade}</span>
+                    <div style="min-width:0; flex:1">
+                        <div style="font-size:11px; font-weight:700; line-height:1.2; color:#4f46e5;
+                            white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:130px;"
+                        >${rank} ${fullName}</div>
+                        <div style="font-size:8px; color:#6366f1; font-weight:700; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">🏢 Borrow from ${lockedZone}</div>
+                    </div>
+                </button>`;
+        }
       }
       const assignment = getSailorCurrentAssignment(
         (_s$id8 = s.id) !== null && _s$id8 !== void 0 ? _s$id8 : s._fbKey,
