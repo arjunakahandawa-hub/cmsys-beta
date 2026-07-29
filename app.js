@@ -2601,7 +2601,7 @@ function continueYesterdayJobs() {
         store.dailyAllocations.push(alloc);
         opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailor.id)}`).set(alloc);
         
-        if (wo && window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+        if (wo && window.safeFbAssignSailor) safeFbAssignSailor(wo._fbKey || wo.id, sailor.id, today);
         if (jc && window.fbSaveJobCard) fbSaveJobCard(jc);
         
         undoData.allocations.push({
@@ -3114,8 +3114,8 @@ function toggleWoSailor(sailorId, name) {
           (id) => String(id) !== key,
         );
         const today = getLocalDateString();
-        if (window.fbSaveWorkOrder) {
-          fbSaveWorkOrder(prevWo);
+        if (window.safeFbRemoveSailor) {
+          safeFbRemoveSailor(prevWo._fbKey || prevWo.id, key, today);
         }
         opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(key)}`).remove();
       }
@@ -4255,7 +4255,11 @@ function updateWorkOrderStatus() {
           .catch((e) => console.warn(e));
       });
     }
-    if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+    if (wo._fbKey) {
+      opsDB.ref(`work_orders/${wo._fbKey}`).update({ status: newStatus });
+    } else if (window.fbSaveWorkOrder) {
+      fbSaveWorkOrder(wo);
+    }
     refreshCurrentViewImmediately();
   }
 }
