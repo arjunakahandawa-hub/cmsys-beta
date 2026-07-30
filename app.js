@@ -4711,14 +4711,16 @@ function proceedWorkOrder() {
       btn.innerHTML = btn.dataset.originalText;
     }
     return;
-  } // Activate the work order and write today's allocations
-  wo.status = "Active";
+  } // Update the work order and write today's allocations
+  if (wo.status !== "Hold" && wo.status !== "Completed") {
+    wo.status = "Active";
+  }
   wo.last_commit_date = today;
   wo.last_assigned = [...wo.assigned];
   wo.last_assigned_date = today;
   if (wo._fbKey) {
     opsDB.ref(`work_orders/${wo._fbKey}`).update({
-      status: "Active",
+      status: wo.status,
       last_commit_date: today,
       last_assigned: [...wo.assigned],
       last_assigned_date: today
