@@ -252,6 +252,7 @@ function initSailorsListener() {
         console.log("🔍 DB#1 Sailor raw fields:", Object.keys(raw[0]));
         console.log("🔍 DB#1 First sailor sample:", raw[0]);
       }
+      store._seenSailorIds = new Set();
       store.sailors = raw.map((s, idx) => {
         var _ref,
           _ref2,
@@ -383,8 +384,22 @@ function initSailorsListener() {
           .filter((v) => typeof v === "string" || typeof v === "number")
           .map((v) => String(v).toLowerCase())
           .join(" ");
+        // Ensure strictly unique ID to prevent mass-assignment bugs if DB has duplicated IDs
+        let rawId = s.id !== null && s.id !== void 0 ? String(s.id).trim() : "";
+        if (!rawId || rawId === "undefined" || rawId === "null" || rawId === "[object Object]") {
+          rawId = String(s._fbKey || idx + 1);
+        }
+        // Fallback to fbKey/idx if id is duplicated across multiple sailors
+        let finalId = rawId;
+        if (store._seenSailorIds && store._seenSailorIds.has(finalId)) {
+          finalId = String(s._fbKey || idx + 1);
+          if (store._seenSailorIds.has(finalId)) finalId = `ID_${idx}_${Date.now()}`;
+        }
+        if (!store._seenSailorIds) store._seenSailorIds = new Set();
+        store._seenSailorIds.add(finalId);
+
         return {
-          id: (_s$id = s.id) !== null && _s$id !== void 0 ? _s$id : idx + 1,
+          id: finalId,
           official_number:
             offNo !== null && offNo !== void 0 ? offNo : `ID/${idx}`,
           name: fullName,
