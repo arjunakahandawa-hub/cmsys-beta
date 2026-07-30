@@ -1360,7 +1360,7 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
         const createdDate = d.toISOString().split("T")[0];
         if (createdDate <= dateStr) {
           if (dateStr === today) {
-            if (wo.status === "Completed" || wo.status === "Hold") {
+            if (wo.status === "Completed") {
                 return false;
             }
             return true;
@@ -1383,7 +1383,7 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
   }
   
   if (dateStr === today) {
-    if (wo.status !== "Completed" && wo.status !== "Hold") return true;
+    if (wo.status !== "Completed") return true;
   }
 
   return false;
