@@ -535,6 +535,9 @@
                     <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300 tab-active">
                         <span class="hidden xl:inline">📊 </span>Dashboard
                     </button>
+                    <button onclick="switchView('nastatus')" id="tab-nastatus" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
+                        <span class="hidden xl:inline">🛌 </span>N/A Status
+                    </button>
                     <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📋 </span>Daily Details
                     </button>
@@ -638,6 +641,39 @@
 
     <!-- Main Content -->
     <main class="container mx-auto px-4 py-5 pb-20 md:pb-5">
+
+        <!-- View: N/A Status -->
+        <div id="view-nastatus" class="view-content hidden p-4 md:p-6 space-y-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                    <span class="bg-rose-500/20 text-rose-400 p-2 rounded-lg">🛌</span>
+                    N/A Sailors Status
+                </h2>
+                <div class="flex items-center gap-2">
+                    <span class="text-sm text-slate-400">Total N/A:</span>
+                    <span id="nastatusTotalCount" class="text-lg font-bold text-rose-400 bg-rose-500/10 px-3 py-1 rounded-full border border-rose-500/20">0</span>
+                </div>
+            </div>
+
+            <div class="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-xl">
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-max">
+                        <thead>
+                            <tr class="bg-slate-800/80 border-b border-slate-700 text-slate-300 text-[11px] uppercase tracking-wider">
+                                <th class="p-3 pl-4 font-semibold w-12">#</th>
+                                <th class="p-3 font-semibold">Name & Rank</th>
+                                <th class="p-3 font-semibold text-center w-32">Status</th>
+                                <th class="p-3 font-semibold text-center">Duration</th>
+                                <th class="p-3 font-semibold text-right pr-4">Yesterday's Job</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nastatusTableBody" class="text-sm divide-y divide-slate-800/50">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
         
         <!-- ==================== DASHBOARD VIEW ==================== -->
         <div id="view-dashboard" class="view-content">
@@ -2199,8 +2235,6 @@
                 <div id="housingProjectsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 </div>
             </div>
-
-            <!-- Other Bases -->
             <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
                 <div class="flex justify-between items-center mb-4">
                     <h3 class="text-lg font-bold text-slate-800">Other Bases</h3>
@@ -3490,10 +3524,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v4.95
+        App Version: v4.96
     </div>
 
-    <script src="app.js?v=4.95"></script>
+    <script src="app.js?v=4.96"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

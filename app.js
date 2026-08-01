@@ -494,6 +494,7 @@ function initSailorsListener() {
             (_s$evaluated = s.evaluated) !== null && _s$evaluated !== void 0
               ? _s$evaluated
               : false,
+          na_duration: s.na_duration || s.leave_pattern || s.duration_str || "",
           _fbKey: s._fbKey,
           _searchIndex, // ← used for search — covers ALL Firebase fields
         };
@@ -899,15 +900,147 @@ function safeFbAssignSailor(woKey, sailorId, dateStr) {
 
 function safeFbRemoveSailor(woKey, sailorId, dateStr) {
   if (!woKey || !sailorId) return;
+
+  const sailor = (store.sailors || []).find(
+    (s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId) || String(s.official_number) === String(sailorId)
+  );
+
+  const idsToRemove = new Set([String(sailorId)]);
+  if (sailor) {
+    if (sailor.id) idsToRemove.add(String(sailor.id));
+    if (sailor._fbKey) idsToRemove.add(String(sailor._fbKey));
+    if (sailor.official_number) idsToRemove.add(String(sailor.official_number));
+  }
+
+  // 1. Transaction for work_orders
   const woRef = opsDB.ref('work_orders/' + woKey);
   woRef.child('assigned').transaction((curr) => {
     if (!curr) return null;
     let arr = Array.isArray(curr) ? curr : Object.values(curr);
-    const filtered = arr.filter(id => String(id) !== String(sailorId));
+    const filtered = arr.filter(id => !idsToRemove.has(String(id)));
     return filtered.length > 0 ? filtered : null;
   });
-  if (dateStr) woRef.update({ last_assigned_date: dateStr });
+
+  // 2. Transaction for job_cards
+  const jcRef = opsDB.ref('job_cards/' + woKey);
+  jcRef.child('assigned').transaction((curr) => {
+    if (!curr) return null;
+    let arr = Array.isArray(curr) ? curr : Object.values(curr);
+    const filtered = arr.filter(id => !idsToRemove.has(String(id)));
+    return filtered.length > 0 ? filtered : null;
+  });
+
+  if (dateStr) {
+    woRef.update({ last_assigned_date: dateStr });
+    jcRef.update({ last_assigned_date: dateStr });
+
+    // Clean daily_allocations in Firebase for all ID variations
+    idsToRemove.forEach((id) => {
+      opsDB.ref(`daily_allocations/${dateStr}_${sanitizeFbKey(id)}`).remove();
+    });
+
+    // Clean in-memory store.dailyAllocations
+    if (store.dailyAllocations && Array.isArray(store.dailyAllocations)) {
+      store.dailyAllocations = store.dailyAllocations.filter(
+        (a) => a.date !== dateStr || !idsToRemove.has(String(a.sailor_id))
+      );
+    }
+  }
+
+  if (sailor) {
+    sailor.status = "Available";
+  }
 }
+
+// Check if the current logged-in officer is the main administrator (LCDR KMAU KAHANDAWA - NRC 3576)
+function isMainAdminLoggedIn() {
+  if (store.activeProfileType === "OIC" && store.activeOicProfileId) {
+    const profile = (typeof getOicProfiles === "function" ? getOicProfiles() : []).find(
+      (p) => p.id === store.activeOicProfileId
+    );
+    if (profile) {
+      return (profile.serviceNo || "").includes("3576");
+    }
+  }
+  const savedServiceNo = localStorage.getItem("ncw_logged_officer_no") || "";
+  if (savedServiceNo) {
+    return savedServiceNo.includes("3576");
+  }
+  if (store.currentOfficerProfile && store.currentOfficerProfile.serviceNo) {
+    return String(store.currentOfficerProfile.serviceNo).includes("3576");
+  }
+  return false;
+}
+
+// Helper to force clean all stuck/orphaned Firebase assignments for a sailor by any ID variation (Restricted to NRC 3576)
+window.forceCleanSailorAssignments = function(officialNoOrId) {
+  if (!isMainAdminLoggedIn()) {
+    if (typeof showToast === "function") {
+      showToast("Access Denied: Only LCDR KMAU KAHANDAWA (NRC 3576) is authorized to release sailors!", "error");
+    }
+    return;
+  }
+
+  if (!officialNoOrId) return;
+
+  const sailors = (store.sailors || []).filter(s => 
+    String(s.official_number) === String(officialNoOrId) ||
+    String(s.id) === String(officialNoOrId) ||
+    String(s._fbKey) === String(officialNoOrId)
+  );
+
+  const ids = new Set([String(officialNoOrId)]);
+  sailors.forEach(s => {
+    if (s.id) ids.add(String(s.id));
+    if (s._fbKey) ids.add(String(s._fbKey));
+    if (s.official_number) ids.add(String(s.official_number));
+  });
+
+  const today = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
+
+  // 1. Remove from all work_orders assigned in Firebase & Memory
+  (store.workOrders || []).forEach(wo => {
+    if (wo.assigned && Array.isArray(wo.assigned)) {
+      const hasMatch = wo.assigned.some(id => ids.has(String(id)));
+      if (hasMatch) {
+        wo.assigned = wo.assigned.filter(id => !ids.has(String(id)));
+        opsDB.ref(`work_orders/${wo._fbKey || wo.id}/assigned`).set(wo.assigned.length > 0 ? wo.assigned : null);
+      }
+    }
+  });
+
+  // 2. Remove from all job_cards assigned in Firebase & Memory
+  (store.jobCards || []).forEach(jc => {
+    if (jc.assigned && Array.isArray(jc.assigned)) {
+      const hasMatch = jc.assigned.some(id => ids.has(String(id)));
+      if (hasMatch) {
+        jc.assigned = jc.assigned.filter(id => !ids.has(String(id)));
+        opsDB.ref(`job_cards/${jc._fbKey || jc.id}/assigned`).set(jc.assigned.length > 0 ? jc.assigned : null);
+      }
+    }
+  });
+
+  // 3. Remove all daily_allocations in Firebase for all ID variants
+  ids.forEach(id => {
+    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(id)}`).remove();
+    (store.dailyAllocations || []).forEach(a => {
+      if (ids.has(String(a.sailor_id))) {
+        opsDB.ref(`daily_allocations/${a.date}_${sanitizeFbKey(id)}`).remove();
+        if (a._fbKey) opsDB.ref(`daily_allocations/${a._fbKey}`).remove();
+      }
+    });
+  });
+
+  // 4. Update in-memory store
+  if (store.dailyAllocations) {
+    store.dailyAllocations = store.dailyAllocations.filter(a => !ids.has(String(a.sailor_id)));
+  }
+
+  sailors.forEach(s => s.status = "Available");
+
+  if (typeof renderDashboard === "function") renderDashboard();
+  if (typeof showToast === "function") showToast(`Released sailor ${officialNoOrId} from assignment`, "success");
+};
 
 // Save / update a job card
 function fbSaveJobCard(data) {
@@ -1048,6 +1181,9 @@ function refreshCurrentViewImmediately() {
   
   const view = store.currentView || "dashboard";
   switch (view) {
+    case "nastatus":
+      if (typeof renderNastatusView === "function") renderNastatusView();
+      break;
     case "dashboard":
       renderDashboard();
       break;
@@ -1212,10 +1348,13 @@ function switchView(view, preventPushState = false) {
     activeMobileTab.classList.remove("text-slate-400");
     activeMobileTab.classList.add("text-teal-400");
   }
-  switch (view) {
-    case "dashboard":
-      renderDashboard();
-      break;
+    switch (view) {
+      case "nastatus":
+        if (typeof renderNastatusView === "function") renderNastatusView();
+        break;
+      case "dashboard":
+        renderDashboard();
+        break;
     case "projects":
       renderProjectsList();
       break;
@@ -1260,7 +1399,193 @@ function changeZone() {
   toggleViewsBasedOnZone();
   refreshCurrentView();
   showToast(`Switched to ${store.currentZone}`);
-} // =============================================
+} // Helper to calculate automated N/A duration using exact sailors_details.php grouping algorithm
+function calculateSailorNADuration(sailor) {
+  const sailorId = String(sailor.id || sailor._fbKey || "");
+  const sailorFbKey = String(sailor._fbKey || sailor.id || "");
+  const initStatus = String(sailor.status || sailor.attendance || "").trim();
+
+  // 💡 S/R (Sick Report) and DL (Days Leave) are single-day events (morning report / 1-day leave)
+  if (/^(S\/R|Sick Report|DL|Days Leave)$/i.test(initStatus)) {
+    return "1 Day";
+  }
+
+  const isLeaveCode = (val) => {
+    if (!val) return false;
+    const str = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Sick|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|Run|AWOL|නිවාඩු|ගිලන්)$/i.test(str);
+  };
+
+  // 1. Collect all availability records for this sailor from store.availability (same as sailors_details.php)
+  const records = [];
+  if (store.availability && typeof store.availability === "object") {
+    Object.keys(store.availability).forEach((monthKey) => {
+      const monthObj = store.availability[monthKey];
+      if (monthObj && typeof monthObj === "object") {
+        Object.keys(monthObj).forEach((dayKey) => {
+          const dayObj = monthObj[dayKey];
+          if (dayObj && typeof dayObj === "object") {
+            const st = dayObj[sailorFbKey] || dayObj[sailorId];
+            if (st) {
+              const dd = String(dayKey).padStart(2, "0");
+              const fullDate = `${monthKey}-${dd}`;
+              records.push({ date: fullDate, status: String(st).trim() });
+            }
+          }
+        });
+      }
+    });
+  }
+
+  // 2. Sort by date ascending (same as usort in sailors_details.php)
+  records.sort((a, b) => a.date.localeCompare(b.date));
+
+  if (records.length === 0) {
+    if (sailor.sick_days) return sailor.sick_days + " Days";
+    if (sailor.run_days) return sailor.run_days + " Days";
+    return "1 Day";
+  }
+
+  // 3. Group consecutive dates with matching/leave status (exact sailors_details.php logic)
+  const grouped = [];
+  let currentStart = records[0].date;
+  let currentEnd = records[0].date;
+  let currentStatus = records[0].status;
+
+  for (let i = 1; i < records.length; i++) {
+    const rec = records[i];
+    const prevDateObj = new Date(currentEnd + "T12:00:00");
+    const currDateObj = new Date(rec.date + "T12:00:00");
+    
+    const diffTime = currDateObj - prevDateObj;
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    // Consecutive day check and status match (matching T/D, L, R/D, ADM, S/R, etc.)
+    const isConsecutiveGroup = (diffDays === 1) && (
+      rec.status === currentStatus ||
+      (isLeaveCode(rec.status) && isLeaveCode(currentStatus))
+    );
+
+    if (isConsecutiveGroup) {
+      currentEnd = rec.date;
+    } else {
+      const startDate = new Date(currentStart + "T12:00:00");
+      const endDate = new Date(currentEnd + "T12:00:00");
+      const daysCount = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+      grouped.push({ start: currentStart, end: currentEnd, status: currentStatus, days: daysCount });
+
+      currentStart = rec.date;
+      currentEnd = rec.date;
+      currentStatus = rec.status;
+    }
+  }
+
+  const startDate = new Date(currentStart + "T12:00:00");
+  const endDate = new Date(currentEnd + "T12:00:00");
+  const daysCount = Math.round((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+  grouped.push({ start: currentStart, end: currentEnd, status: currentStatus, days: daysCount });
+
+  // 4. Return days from the latest active leave group
+  const latestGroup = grouped[grouped.length - 1];
+  return (latestGroup && latestGroup.days) ? `${latestGroup.days} Days` : "1 Day";
+}
+
+// Helper to resolve Yesterday's Job title or description from Database
+function getSailorYesterdayJobText(sailor) {
+  let jobKey = sailor.yesterdayJob || sailor.yesterday_job;
+  
+  if (!jobKey && store.dailyAllocations) {
+    const today = new Date((typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0]) + "T12:00:00");
+    today.setDate(today.getDate() - 1);
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    const yestStr = `${yyyy}-${mm}-${dd}`;
+
+    const sailorId = String(sailor.id || sailor._fbKey || "");
+    const sailorFbKey = String(sailor._fbKey || sailor.id || "");
+
+    const alloc = store.dailyAllocations.find(a => 
+      a.date === yestStr && (String(a.sailor_id) === sailorId || String(a.sailor_id) === sailorFbKey)
+    );
+
+    if (alloc) {
+      jobKey = alloc.work_order_id;
+    }
+  }
+
+  if (!jobKey) return "-";
+
+  const keyStr = String(jobKey);
+  const wo = (store.workOrders || []).find(w => String(w.id || w._fbKey) === keyStr);
+  if (wo) return wo.description || wo.title || wo.location_name || wo.work_order_no || keyStr;
+
+  const jc = (store.jobCards || []).find(j => String(j.id || j._fbKey) === keyStr);
+  if (jc) return jc.description || jc.title || jc.location_name || jc.job_card_no || keyStr;
+
+  return keyStr;
+}
+
+// =============================================
+// N/A STATUS VIEW
+// =============================================
+function renderNastatusView() {
+  if (!store.sailors) return;
+  const tbody = document.getElementById("nastatusTableBody");
+  if (!tbody) return;
+
+  const isLeaveState = (val) => {
+    if (!val) return false;
+    const s = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
+  };
+
+  const naSailors = store.sailors.filter(s => isLeaveState(s.status) || isLeaveState(s.attendance));
+  
+  const countEl = document.getElementById("nastatusTotalCount");
+  if (countEl) countEl.textContent = naSailors.length;
+
+  let html = "";
+  naSailors.forEach((s, idx) => {
+    let statusText = s.status;
+    if (!isLeaveState(statusText)) statusText = s.attendance;
+    if (!statusText) statusText = "N/A";
+    
+    const durationDisplay = calculateSailorNADuration(s);
+    const yesterdayJobText = getSailorYesterdayJobText(s);
+
+    html += `
+      <tr class="hover:bg-slate-800/50 transition-colors border-b border-slate-800/40">
+        <td class="p-3 pl-4 text-slate-400 font-mono">${idx + 1}</td>
+        <td class="p-3">
+          <div class="font-medium text-slate-200">${s.name}</div>
+          <div class="text-[10px] text-slate-500 font-mono">${s.rank}</div>
+        </td>
+        <td class="p-3 text-center">
+          <span class="inline-flex items-center px-2.5 py-0.5 rounded text-[11px] font-semibold bg-rose-500/10 text-rose-300 border border-rose-500/20">
+            ${statusText}
+          </span>
+        </td>
+        <td class="p-3 text-center">
+          <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-teal-500/10 text-teal-300 border border-teal-500/20">
+            ⏱️ ${durationDisplay}
+          </span>
+        </td>
+        <td class="p-3 text-right pr-4 text-slate-300 text-xs font-medium truncate max-w-[220px]" title="${yesterdayJobText}">
+          ${yesterdayJobText}
+        </td>
+      </tr>
+    `;
+  });
+
+  if (naSailors.length === 0) {
+    html = `<tr><td colspan="5" class="p-8 text-center text-slate-500">No N/A sailors found today.</td></tr>`;
+  }
+
+  tbody.innerHTML = html;
+}
+
+// =============================================
 // DASHBOARD
 // =============================================
 function renderDashboard() {
@@ -1389,50 +1714,50 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
   return false;
 }
 function getSailorAssignmentOnDate(sailorId, dateVal) {
-  if (!store.dailyAllocationsMap) return null;
-  const alloc =
-    store.dailyAllocationsMap[`${dateVal}_${sanitizeFbKey(sailorId)}`];
+  const sailor = (store.sailors || []).find(
+    (s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId) || String(s.official_number) === String(sailorId)
+  );
+  const idsToMatch = new Set([String(sailorId)]);
+  if (sailor) {
+    if (sailor.id) idsToMatch.add(String(sailor.id));
+    if (sailor._fbKey) idsToMatch.add(String(sailor._fbKey));
+    if (sailor.official_number) idsToMatch.add(String(sailor.official_number));
+  }
+
+  // 1. Check store.dailyAllocations
+  const alloc = (store.dailyAllocations || []).find(
+    (a) => a.date === dateVal && idsToMatch.has(String(a.sailor_id))
+  );
+
   if (alloc) {
-    const wo = store.workOrders.find(
-      (w) =>
-        String(w.id) === String(alloc.work_order_id) ||
-        String(w._fbKey) === String(alloc.work_order_id),
+    const wo = (store.workOrders || []).find(
+      (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id)
     );
     if (wo) {
       return {
         ref: wo.reference_no || "Active WO",
         title: wo.description || "",
-        zone: wo.zone_id || "",
+        zone: wo.zone_id || alloc.zone_id || "",
+      };
+    }
+    const jc = (store.jobCards || []).find(
+      (j) => String(j.id) === String(alloc.work_order_id) || String(j._fbKey) === String(alloc.work_order_id)
+    );
+    if (jc) {
+      return {
+        ref: jc.job_card_no || "Job Card",
+        title: jc.description || jc.title || "",
+        zone: jc.zone_id || alloc.zone_id || "",
       };
     }
   }
+
   return null;
 }
+
 function getSailorCurrentAssignment(sailorId) {
-  const today = getLocalDateString();
-  const alloc = (store.dailyAllocations || []).find(
-    (a) => a.date === today && String(a.sailor_id) === String(sailorId)
-  );
-  if (alloc) {
-    if (alloc.work_order_id) {
-      const wo = (store.workOrders || []).find(
-        (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id)
-      );
-      if (wo) {
-        return {
-          ref: wo.reference_no || "Active WO",
-          title: wo.description || "",
-          zone: wo.zone_id || alloc.zone_id || "",
-        };
-      }
-    }
-    return {
-       ref: "Assigned",
-       title: "Assigned today",
-       zone: alloc.zone_id || ""
-    };
-  }
-  return null;
+  const today = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
+  return getSailorAssignmentOnDate(sailorId, today);
 }
 function renderAvailableSailors() {
   const container = document.getElementById("availableSailors");
@@ -1555,6 +1880,13 @@ function renderAvailableSailors() {
                         <p class="font-semibold text-slate-600 text-sm truncate leading-tight">${sailor.name}</p>
                         <div class="flex items-center gap-1.5 mt-1">
                             <span class="text-[11px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">⚠️ Busy: ${assignment.zone}</span>
+                            ${isMainAdminLoggedIn() ? `
+                            <button onclick="event.stopPropagation(); forceCleanSailorAssignments('${sailor.official_number || sailor.id}')" 
+                                    class="text-[10px] bg-rose-600 hover:bg-rose-700 text-white font-bold px-2 py-0.5 rounded shadow transition-all cursor-pointer"
+                                    title="Force release sailor (Authorized: LCDR KMAU KAHANDAWA Only)">
+                                🔓 Release
+                            </button>
+                            ` : ''}
                         </div>
                         <div class="text-[11px] text-slate-500 mt-0.5 truncate">${assignment.ref}${assignment.title ? ' · ' + assignment.title : ''}</div>
                     </div>
@@ -2506,12 +2838,21 @@ function removeSailorFromOrder(sailorId, workOrderId) {
       dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
     };
 
+    const idsToRemove = new Set([
+      String(sailorId),
+      String(sailor.id || ""),
+      String(sailor._fbKey || ""),
+      String(sailor.official_number || "")
+    ]);
+
     workOrder.assigned = (workOrder.assigned || []).filter(
-      (id) => String(id) !== String(sailorId),
+      (id) => !idsToRemove.has(String(id)),
     );
     sailor.status = "Available";
     workOrder.last_assigned_date = today;
-    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).remove();
+    idsToRemove.forEach((id) => {
+      if (id) opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(id)}`).remove();
+    });
     if (window.safeFbRemoveSailor) {
       safeFbRemoveSailor(workOrder._fbKey || workOrder.id, sailorId, today);
       setTimeout(() => {
@@ -11167,8 +11508,8 @@ function toggleViewsBasedOnZone() {
     const el = document.getElementById(id);
     if (el) el.style.display = isSpecialZone ? "none" : "";
   }); // Admin & Staff Duties specific tabs
-  const adminTabs = ["tab-dailydetails", "tab-summary", "tab-projects"];
-  const mobileAdminTabs = ["mobile-tab-dailydetails", "mobile-tab-summary"];
+  const adminTabs = ["tab-nastatus", "tab-dailydetails", "tab-summary", "tab-projects"];
+  const mobileAdminTabs = ["mobile-tab-nastatus", "mobile-tab-dailydetails", "mobile-tab-summary"];
   adminTabs.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.style.display = isSpecialZone ? "block" : "none";
@@ -11176,7 +11517,10 @@ function toggleViewsBasedOnZone() {
   mobileAdminTabs.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.style.display = isSpecialZone ? "flex" : "none";
-  }); // Revert sidebar, sidebar toggle, mainPanel and boardGrid display changes (always use normal layout)
+  });
+  if (!isSpecialZone && store.currentView === "nastatus") {
+    switchView("dashboard");
+  } // Revert sidebar, sidebar toggle, mainPanel and boardGrid display changes (always use normal layout)
   const leftSidebar = document.getElementById("leftSidebarContainer");
   if (leftSidebar) {
     leftSidebar.style.display = "";
