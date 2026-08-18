@@ -1616,6 +1616,41 @@ function renderDashboard() {
   renderZoneSelectors();
   updateBoardEmptyState();
   updateDashboardButtons();
+  updateHistoricalModeBanner();
+}
+function updateHistoricalModeBanner() {
+  const today = getLocalDateString();
+  const dateVal = store.dashboardDate || today;
+  const isToday = dateVal === today;
+  const banner = document.getElementById("historicalModeBanner");
+  const dateText = document.getElementById("historicalBannerDateText");
+  const quickTodayBtn = document.getElementById("quickTodayBtn");
+
+  if (banner) {
+    banner.classList.toggle("hidden", isToday);
+  }
+  if (dateText && !isToday) {
+    try {
+      const parts = dateVal.split("-");
+      const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      const formatted = d.toLocaleDateString("en-GB", {
+        weekday: "long",
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+      dateText.textContent = `Showing records for ${formatted} • සියලුම දත්ත Read-Only ආකාරයෙන් පවතී`;
+    } catch(e) {
+      dateText.textContent = `Showing records for ${dateVal} • Read-Only Mode`;
+    }
+  }
+  if (quickTodayBtn) {
+    if (isToday) {
+      quickTodayBtn.className = "px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-600 text-white hover:bg-teal-700 transition-all shadow-sm";
+    } else {
+      quickTodayBtn.className = "px-2.5 py-1 rounded-lg text-[11px] font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 transition-all shadow-sm animate-pulse";
+    }
+  }
 }
 function updateDashboardButtons() {
   const currentZoneObj = store.zones.find((z) => z.id === store.currentZone);
@@ -2147,6 +2182,64 @@ function handleCardClick(event, workOrderId) {
   }
   openWorkOrderDetail(workOrderId);
 }
+function getWorkOrderAssignedSailors(wo, dateVal) {
+  if (!wo) return { sailors: [], source: "" };
+  const today = getLocalDateString();
+  if (!dateVal) dateVal = store.dashboardDate || today;
+  const isToday = dateVal === today;
+
+  if (isToday) {
+    const assignedIds = (wo.assigned || []).map(String);
+    const sailors = store.sailors.filter(
+      (s) =>
+        assignedIds.includes(String(s.id)) ||
+        assignedIds.includes(String(s._fbKey)),
+    );
+    return { sailors, source: "live" };
+  }
+
+  // Back-date / Historical Mode resolution:
+  // 1st priority: Try dailyAllocations for this specific date
+  const dailyIds = (store.dailyAllocations || [])
+    .filter(
+      (a) => a.date === dateVal && (String(a.work_order_id) === String(wo.id) || String(a.work_order_id) === String(wo._fbKey)),
+    )
+    .map((a) => String(a.sailor_id));
+
+  if (dailyIds.length > 0) {
+    const sailors = store.sailors.filter(
+      (s) =>
+        dailyIds.includes(String(s.id)) ||
+        dailyIds.includes(String(s._fbKey)),
+    );
+    return { sailors, source: "daily_record" };
+  }
+
+  // 2nd priority: Fall back to wo.assigned
+  if (wo.assigned && wo.assigned.length > 0) {
+    const assignedIds = (wo.assigned || []).map(String);
+    const sailors = store.sailors.filter(
+      (s) =>
+        assignedIds.includes(String(s.id)) ||
+        assignedIds.includes(String(s._fbKey)),
+    );
+    return { sailors, source: "current_assigned" };
+  }
+
+  // 3rd priority: Fall back to wo.last_assigned
+  if (wo.last_assigned && wo.last_assigned.length > 0) {
+    const lastIds = (wo.last_assigned || []).map(String);
+    const sailors = store.sailors.filter(
+      (s) =>
+        lastIds.includes(String(s.id)) ||
+        lastIds.includes(String(s._fbKey)),
+    );
+    return { sailors, source: "last_assigned" };
+  }
+
+  return { sailors: [], source: "" };
+}
+
 function renderWorkOrderCard(wo) {
   const priorityMap = {
     High: { bar: "#dc2626", chip: "priority-high", icon: "🔴" },
@@ -2158,13 +2251,10 @@ function renderWorkOrderCard(wo) {
     Pending: { stripe: "work-card-pending", chip: "chip-pending" },
     Hold: { stripe: "border-l-4 border-slate-400", chip: "chip-hold" },
     Completed: { stripe: "border-l-4 border-teal-500", chip: "chip-completed" },
-  }; // Firebase assigned[] may contain string keys OR numeric IDs — normalise both
-  const assignedIds = (wo.assigned || []).map(String);
-  const assignedSailors = store.sailors.filter(
-    (s) =>
-      assignedIds.includes(String(s.id)) ||
-      assignedIds.includes(String(s._fbKey)),
-  );
+  };
+  const today = getLocalDateString();
+  const dateVal = store.dashboardDate || today;
+  const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
   const progress = wo.progress || 0;
   const pendingEvals = assignedSailors.filter((s) => !s.evaluated).length;
   const pm = priorityMap[wo.priority] || priorityMap["Medium"];
@@ -4250,26 +4340,7 @@ function openWorkOrderDetail(workOrderId) {
       .join("");
   }
   document.getElementById("woDetailArtificer").innerHTML = artificerOptions; // Normalised assigned list based on date
-  let assignedSailors = [];
-  if (isToday) {
-    const assignedIds = (wo.assigned || []).map(String);
-    assignedSailors = store.sailors.filter(
-      (s) =>
-        assignedIds.includes(String(s.id)) ||
-        assignedIds.includes(String(s._fbKey)),
-    );
-  } else {
-    const assignedIds = (store.dailyAllocations || [])
-      .filter(
-        (a) => a.date === dateVal && String(a.work_order_id) === String(wo.id),
-      )
-      .map((a) => String(a.sailor_id));
-    assignedSailors = store.sailors.filter(
-      (s) =>
-        assignedIds.includes(String(s.id)) ||
-        assignedIds.includes(String(s._fbKey)),
-    );
-  }
+  const { sailors: assignedSailors, source: historicalSource } = getWorkOrderAssignedSailors(wo, dateVal);
   const tradeCounts = {};
   assignedSailors.forEach((s) => {
     tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
@@ -4279,8 +4350,15 @@ function openWorkOrderDetail(workOrderId) {
     .join(", ");
   document.getElementById("assignedLaborCount").textContent =
     countStr || "0 assigned";
+  // Historical view info banner
+  const histBannerHtml = (!isToday && assignedSailors.length > 0) ? `
+    <div class="flex items-center gap-2 p-2 mb-2 rounded-lg text-xs font-medium" style="background:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.25);color:#0284c7">
+        <span>📋</span>
+        <span>${dateVal} දිනට ${historicalSource === "daily_record" ? "Daily Record වලින්" : historicalSource === "last_assigned" ? "Last Assigned Crew වලින්" : "Current Crew වලින්"} ලබාගත් විස්තර (Read-Only)</span>
+    </div>` : "";
   document.getElementById("woDetailAssigned").innerHTML =
-    assignedSailors
+    histBannerHtml +
+    (assignedSailors
       .map((s) => {
         var _s$id22;
         return `
@@ -4306,7 +4384,7 @@ function openWorkOrderDetail(workOrderId) {
     `;
       })
       .join("") ||
-    '<p class="text-slate-500 text-center py-4">No labour assigned</p>'; // Evaluation tab list (always available on today - req 1)
+    (!isToday ? '<p class="text-slate-400 text-center py-4">📋 මෙම දිනට පවරා ඇති නාවිකයින්ගේ වාර්තා සොයාගත නොහැක</p>' : '<p class="text-slate-500 text-center py-4">No labour assigned</p>')); // Evaluation tab list (always available on today - req 1)
   const pendingEvals = assignedSailors.filter((s) => !s.evaluated).length;
   const evalBadge = document.getElementById("woEvalPendingBadge");
   if (isToday && pendingEvals > 0) {
