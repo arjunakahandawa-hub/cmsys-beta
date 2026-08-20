@@ -399,11 +399,23 @@ function initSailorsListener() {
         store._seenSailorIds.add(finalId);
 
         return {
+          ...s,
           id: finalId,
           official_number:
             offNo !== null && offNo !== void 0 ? offNo : `ID/${idx}`,
           name: fullName,
           rank: rank,
+          city: s.city || "",
+          police_station: s.police_station || "",
+          district: s.district || "",
+          address: s.address || "",
+          special_skill: s.special_skill || s.skills || "",
+          contact_no: s.contact_no || "",
+          blood_group: s.blood_group || "",
+          nok_name: s.nok_name || "",
+          join_date: s.join_date || "",
+          id_expiry: s.id_expiry || "",
+          roll: s.roll || "",
           trade: ((_ref19, _ref20, _s$trade) => {
             const t = (
               (_ref19 =
@@ -513,6 +525,12 @@ function initSailorsListener() {
         !document.getElementById("view-summary").classList.contains("hidden")
       ) {
         renderSummaryView();
+      }
+      if (
+        typeof renderSailorsView === "function" &&
+        !document.getElementById("view-sailors").classList.contains("hidden")
+      ) {
+        renderSailorsView();
       } // Re-render personal sailor dashboard if active profile is Sailor
       if (store.activeProfileType === "Sailor") {
         renderSailorDashboardView();
@@ -1749,6 +1767,10 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
   return false;
 }
 function getSailorAssignmentOnDate(sailorId, dateVal) {
+  const today = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
+  if (!dateVal) dateVal = today;
+  const isToday = dateVal === today;
+
   const sailor = (store.sailors || []).find(
     (s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId) || String(s.official_number) === String(sailorId)
   );
@@ -1759,7 +1781,38 @@ function getSailorAssignmentOnDate(sailorId, dateVal) {
     if (sailor.official_number) idsToMatch.add(String(sailor.official_number));
   }
 
-  // 1. Check store.dailyAllocations
+  // 1. If checking for today, check live active Work Orders first
+  if (isToday) {
+    const activeWo = (store.workOrders || []).find((w) => {
+      if (w.status !== "Active" && w.status !== "Pending") return false;
+      return (w.assigned || []).some((id) => idsToMatch.has(String(id)));
+    });
+    if (activeWo) {
+      const cleanZone = String(activeWo.zone_id || "Active WO").replace(/-/g, " ").trim();
+      return {
+        ref: activeWo.reference_no || "Active WO",
+        title: activeWo.description || "",
+        zone: cleanZone,
+        type: activeWo.type || "WO",
+      };
+    }
+
+    const activeJc = (store.jobCards || []).find((j) => {
+      if (j.status !== "Active") return false;
+      return (j.assigned || []).some((id) => idsToMatch.has(String(id)));
+    });
+    if (activeJc) {
+      const cleanZone = String(activeJc.zone_id || "Job Card").replace(/-/g, " ").trim();
+      return {
+        ref: activeJc.job_card_no || "Job Card",
+        title: activeJc.description || activeJc.title || "",
+        zone: cleanZone,
+        type: "JC",
+      };
+    }
+  }
+
+  // 2. Check store.dailyAllocations
   const alloc = (store.dailyAllocations || []).find(
     (a) => a.date === dateVal && idsToMatch.has(String(a.sailor_id))
   );
@@ -1769,20 +1822,41 @@ function getSailorAssignmentOnDate(sailorId, dateVal) {
       (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id)
     );
     if (wo) {
+      const cleanZone = String(wo.zone_id || alloc.zone_id || "Active WO").replace(/-/g, " ").trim();
       return {
         ref: wo.reference_no || "Active WO",
         title: wo.description || "",
-        zone: wo.zone_id || alloc.zone_id || "",
+        zone: cleanZone,
+        type: wo.type || "WO",
       };
     }
     const jc = (store.jobCards || []).find(
       (j) => String(j.id) === String(alloc.work_order_id) || String(j._fbKey) === String(alloc.work_order_id)
     );
     if (jc) {
+      const cleanZone = String(jc.zone_id || alloc.zone_id || "Job Card").replace(/-/g, " ").trim();
       return {
         ref: jc.job_card_no || "Job Card",
         title: jc.description || jc.title || "",
-        zone: jc.zone_id || alloc.zone_id || "",
+        zone: cleanZone,
+        type: "JC",
+      };
+    }
+  }
+
+  // 3. If historical date and no allocation record found, check if WO was active on that date
+  if (!isToday) {
+    const histWo = (store.workOrders || []).find((w) => {
+      if (typeof isWorkOrderActiveOnDate === "function" && !isWorkOrderActiveOnDate(w, dateVal)) return false;
+      return (w.assigned || []).some((id) => idsToMatch.has(String(id)));
+    });
+    if (histWo) {
+      const cleanZone = String(histWo.zone_id || "Work Order").replace(/-/g, " ").trim();
+      return {
+        ref: histWo.reference_no || "Work Order",
+        title: histWo.description || "",
+        zone: cleanZone,
+        type: histWo.type || "WO",
       };
     }
   }
@@ -5506,13 +5580,18 @@ function selectJobCard(id) {
   const materials = store.jobCardMaterials.filter(
     (m) => String(m.job_card_id) === String(id),
   );
-  const totalCost = materials.reduce((sum, m) => sum + m.total_cost, 0);
+  const totalCost = materials.reduce((sum, m) => sum + (parseFloat(m.total_cost) || 0), 0);
   document.getElementById("totalMaterialCost").textContent =
-    formatCurrency(totalCost); // Show/hide add material button based on status
+    formatCurrency(totalCost); // Show/hide action buttons based on status
   document.getElementById("addMaterialBtn").style.display =
     jc.status === "Active" ? "block" : "none";
   document.getElementById("deleteJobCardBtn").style.display =
-    jc.status === "Active" ? "block" : "none"; // Show feedback tab for completed jobs
+    jc.status === "Active" ? "block" : "none";
+  const btnPrint = document.getElementById("btnPrintJobCard");
+  if (btnPrint) {
+    btnPrint.style.display = "inline-flex";
+  }
+  // Show feedback tab for completed jobs
   document.getElementById("feedbackTabBtn").style.display =
     jc.status === "Completed" ? "block" : "none";
   renderJobCardMaterials(id);
@@ -5560,19 +5639,9 @@ function deleteJobCard() {
             opsDB.ref(`job_card_labor/${l._fbKey}`).remove();
           }
         });
-        store.selectedJobCard = null; // Reset right panel content
-        document.getElementById("selectedJobNumber").textContent =
-          "Select a Job Card";
-        document.getElementById("selectedJobDesc").textContent = "";
-        document.getElementById("totalMaterialCost").textContent = "Rs. 0.00";
-        document.getElementById("addMaterialBtn").style.display = "none";
-        document.getElementById("deleteJobCardBtn").style.display = "none"; // Clear tab lists in UI
-        document.getElementById("jobCardMaterials").innerHTML =
-          '<tr><td colspan="7" class="text-center py-4 text-slate-400">Select a Job Card to view materials</td></tr>';
-        document.getElementById("jobCardLabor").innerHTML =
-          '<tr><td colspan="6" class="text-center py-4 text-slate-400">Select a Job Card to view labor</td></tr>';
-        showToast(`Deleted Job Card successfully!`);
-        renderJobCardsList();
+        store.selectedJobCard = null;
+        renderJobCardsView();
+        showToast("Job Card deleted successfully.");
       })
       .catch((err) => {
         console.error("Error deleting Job Card:", err);
@@ -5790,6 +5859,13 @@ function openAddMaterialToJobModal() {
     return;
   }
   document.getElementById("matJobCardId").value = store.selectedJobCard; // Reset form
+  const matDateInput = document.getElementById("matDate");
+  if (matDateInput) matDateInput.value = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
+  const matDemandNoInput = document.getElementById("matDemandNo");
+  if (matDemandNoInput) matDemandNoInput.value = "";
+  const matSigInput = document.getElementById("matSig");
+  if (matSigInput) matSigInput.value = "";
+
   const matInput = document.getElementById("matFromInventory");
   matInput.value = "";
   document.getElementById("matName").value = "";
@@ -5830,6 +5906,10 @@ function addMaterialToJob(event) {
   const jobCardId = document.getElementById("matJobCardId").value;
   const qty = parseFloat(document.getElementById("matQuantity").value);
   const cost = parseFloat(document.getElementById("matCost").value) || 0;
+  const demandNo = (document.getElementById("matDemandNo") || {}).value || "";
+  const sigRef = (document.getElementById("matSig") || {}).value || "";
+  const customDate = (document.getElementById("matDate") || {}).value || (typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0]);
+
   const newMaterial = {
     job_card_id: jobCardId,
     material_name: document.getElementById("matName").value,
@@ -5837,6 +5917,10 @@ function addMaterialToJob(event) {
     unit: document.getElementById("matUnit").value,
     cost_per_unit: cost,
     total_cost: qty * cost,
+    demand_no: demandNo,
+    sig_ref: sigRef,
+    work_date: customDate,
+    logged_at: customDate
   }; // Save to Firebase (Realtime Database listener will automatically update store.jobCardMaterials)
   fbSaveJobCardMaterial(newMaterial); // Update job card total in Firebase
   const jc = store.jobCards.find(
@@ -5863,6 +5947,198 @@ function addMaterialToJob(event) {
   closeModal("addMaterialModal");
   selectJobCard(jobCardId);
   showToast("Material added successfully!");
+}
+
+// =============================================
+// OFFICIAL NAVY JOB CARD PRINT & PDF EXPORT
+// =============================================
+function buildOfficialJobCardPrintHTML(jc) {
+  if (!jc) return "";
+  const jcId = jc.id || jc._fbKey;
+  const materials = (store.jobCardMaterials || []).filter(
+    (m) => String(m.job_card_id) === String(jcId) || String(m.job_card_id) === String(jc.id) || String(m.job_card_id) === String(jc._fbKey)
+  );
+  const totalCost = materials.reduce((sum, m) => sum + (parseFloat(m.total_cost) || 0), 0);
+
+  const startDate = jc.start_date || (jc.created_at ? new Date(jc.created_at).toISOString().split("T")[0] : "");
+  const endDate = jc.end_date || (jc.completed_at ? new Date(jc.completed_at).toISOString().split("T")[0] : "");
+  const projectTitle = jc.description || jc.title || "Civil Engineering Maintenance Job";
+  const jobNo = jc.job_number || "JC/" + (new Date().getFullYear()) + "/0000";
+
+  // Build material rows
+  let rowsHtml = "";
+  materials.forEach((m) => {
+    const dateStr =
+      typeof m.logged_at === "number"
+        ? new Date(m.logged_at).toISOString().split("T")[0]
+        : (m.work_date || m.logged_at || startDate || "");
+    const demandNo = m.demand_no || m.demandNo || "";
+    const matName = m.material_name || "";
+    const unit = m.unit || "";
+    const qty = m.quantity !== undefined ? m.quantity : "";
+    const sigRef = m.sig_ref || m.sig || "";
+    const unitCost = m.cost_per_unit !== undefined ? parseFloat(m.cost_per_unit).toFixed(2) : "";
+    const lineTotal = m.total_cost !== undefined ? parseFloat(m.total_cost).toFixed(2) : "";
+
+    rowsHtml += `
+      <tr style="height: 30px;">
+        <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px; font-family: monospace;">${dateStr}</td>
+        <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px; font-family: monospace; font-weight: bold;">${demandNo}</td>
+        <td style="border: 1px solid #000; padding: 4px 8px; text-align: left; font-size: 11px; font-weight: 600;">${matName}</td>
+        <td style="border: 1px solid #000; padding: 4px 4px; text-align: center; font-size: 11px;">${unit}</td>
+        <td style="border: 1px solid #000; padding: 4px 4px; text-align: center; font-size: 11px; font-weight: bold;">${qty}</td>
+        <td style="border: 1px solid #000; padding: 4px 4px; text-align: center; font-size: 11px; font-family: monospace;">${sigRef}</td>
+        <td style="border: 1px solid #000; padding: 4px 6px; text-align: right; font-size: 11px; font-family: monospace;">${unitCost}</td>
+        <td style="border: 1px solid #000; padding: 4px 6px; text-align: right; font-size: 11px; font-family: monospace; font-weight: bold;">${lineTotal}</td>
+      </tr>
+    `;
+  });
+
+  // Fill up blank rows up to 10 minimum rows to mimic the official Navy paper form
+  const minRows = 10;
+  const blankRowsNeeded = Math.max(0, minRows - materials.length);
+  for (let i = 0; i < blankRowsNeeded; i++) {
+    rowsHtml += `
+      <tr style="height: 30px;">
+        <td style="border: 1px solid #000; padding: 4px 6px;">&nbsp;</td>
+        <td style="border: 1px solid #000; padding: 4px 6px;">&nbsp;</td>
+        <td style="border: 1px solid #000; padding: 4px 8px;">&nbsp;</td>
+        <td style="border: 1px solid #000; padding: 4px 4px;">&nbsp;</td>
+        <td style="border: 1px solid #000; padding: 4px 4px;">&nbsp;</td>
+        <td style="border: 1px solid #000; padding: 4px 4px;">&nbsp;</td>
+        <td style="border: 1px solid #000; padding: 4px 6px;">&nbsp;</td>
+        <td style="border: 1px solid #000; padding: 4px 6px;">&nbsp;</td>
+      </tr>
+    `;
+  }
+
+  const formattedTotal = totalCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  return `
+    <div class="jobcard-sheet" style="font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; width: 100%; box-sizing: border-box; padding: 10px;">
+      
+      <!-- Top Section Box -->
+      <div style="border: 1.5px solid #000; padding: 10px 14px; margin-bottom: -1.5px;">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+          
+          <!-- Left Header Info -->
+          <div style="width: 55%; font-size: 11px; line-height: 1.8;">
+            <div style="display: flex; gap: 6px;">
+              <span style="font-weight: 800; width: 140px;">COMMENCED:</span>
+              <span style="border-bottom: 1px dotted #000; flex: 1; padding-bottom: 1px; font-family: monospace;">${startDate}</span>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 3px;">
+              <span style="font-weight: 800; width: 140px;">COMPLETED:</span>
+              <span style="border-bottom: 1px dotted #000; flex: 1; padding-bottom: 1px; font-family: monospace;">${endDate}</span>
+            </div>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <span style="font-weight: 800; width: 140px;">NAME OF PROJECT:</span>
+              <span style="font-weight: 700; flex: 1; text-decoration: underline;">${projectTitle}</span>
+            </div>
+          </div>
+
+          <!-- Right Header Info -->
+          <div style="width: 42%; font-size: 11px; line-height: 1.75; text-align: right;">
+            <div style="font-size: 16px; font-weight: 900; letter-spacing: 1px; text-decoration: underline; margin-bottom: 2px;">JOB CARD</div>
+            <div><strong style="font-weight: 800;">JOB CARD NO:</strong> <span style="font-family: monospace; font-weight: 900; color: #b91c1c; font-size: 12px;">${jobNo}</span></div>
+            <div><strong style="font-weight: 800;">DATE:</strong> <span style="font-family: monospace;">${startDate || (typeof getLocalDateString === "function" ? getLocalDateString() : "")}</span></div>
+            <div><strong style="font-weight: 800;">APPROVED BY -</strong> CCED (E)</div>
+            <div style="margin-top: 2px;"><strong style="font-weight: 800;">TAKEN BY:</strong> <span style="border-bottom: 1px dotted #000; display: inline-block; width: 130px;">&nbsp;</span></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Materials Table -->
+      <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1.5px solid #000;">
+        <thead>
+          <tr style="background: #f8fafc;">
+            <th style="border: 1px solid #000; padding: 6px 4px; text-align: center; width: 11%; font-weight: 800; font-size: 10px;">DATE</th>
+            <th style="border: 1px solid #000; padding: 6px 4px; text-align: center; width: 14%; font-weight: 800; font-size: 10px;">DEMAND NO</th>
+            <th style="border: 1px solid #000; padding: 6px 6px; text-align: center; width: 33%; font-weight: 800; font-size: 10px;">MATERIAL DESCRIPTION</th>
+            <th style="border: 1px solid #000; padding: 6px 4px; text-align: center; width: 6%; font-weight: 800; font-size: 10px;">UNIT</th>
+            <th style="border: 1px solid #000; padding: 6px 4px; text-align: center; width: 6%; font-weight: 800; font-size: 10px;">QTY</th>
+            <th style="border: 1px solid #000; padding: 6px 4px; text-align: center; width: 6%; font-weight: 800; font-size: 10px;">SIG</th>
+            <th style="border: 1px solid #000; padding: 6px 6px; text-align: right; width: 11%; font-weight: 800; font-size: 10px;">UNIT PRICE (RS)</th>
+            <th style="border: 1px solid #000; padding: 6px 6px; text-align: right; width: 13%; font-weight: 800; font-size: 10px;">TOTAL (RS)</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="7" style="border: 1px solid #000; padding: 8px 10px; text-align: right; font-weight: 900; font-size: 13px; letter-spacing: 0.5px;">TOTAL (RS)</td>
+            <td style="border: 1px solid #000; padding: 8px 8px; text-align: right; font-weight: 900; font-size: 13px; font-family: monospace; border-bottom: 3px double #000;">
+              ${formattedTotal}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <!-- Bottom Signatures -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 50px; padding: 0 40px; font-size: 11px;">
+        <div style="text-align: center; width: 220px;">
+          <div style="border-bottom: 1px dashed #000; margin-bottom: 8px; height: 35px;"></div>
+          <strong style="font-weight: 800; font-size: 12px;">Zone Incharge</strong>
+        </div>
+        <div style="text-align: center; width: 220px;">
+          <div style="border-bottom: 1px dashed #000; margin-bottom: 8px; height: 35px;"></div>
+          <strong style="font-weight: 800; font-size: 12px;">SCE(on) / CE(m)</strong>
+        </div>
+      </div>
+
+    </div>
+  `;
+}
+
+function printOfficialJobCard(jobCardId) {
+  const targetId = jobCardId || store.selectedJobCard;
+  if (!targetId) {
+    showToast("Please select a Job Card to print", "error");
+    return;
+  }
+  const jc = (store.jobCards || []).find(
+    (j) => String(j.id) === String(targetId) || String(j._fbKey) === String(targetId)
+  );
+  if (!jc) {
+    showToast("Job card record not found", "error");
+    return;
+  }
+
+  const sheetHtml = buildOfficialJobCardPrintHTML(jc);
+
+  const win = window.open("", "_blank");
+  if (!win) {
+    showToast("Popup blocked! Please allow popups for this site.", "error");
+    return;
+  }
+
+  win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Job Card - ${jc.job_number || 'Print'}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; padding: 15px; }
+    @page { size: A4 portrait; margin: 12mm 15mm; }
+    @media print {
+      body { padding: 0; }
+      .jobcard-sheet { padding: 0 !important; }
+    }
+  </style>
+</head>
+<body>
+  ${sheetHtml}
+</body>
+</html>`);
+
+  win.document.close();
+  win.focus();
+  setTimeout(() => {
+    win.print();
+  }, 400);
 }
 function generateFeedbackLink() {
   const jc = store.jobCards.find((j) => j.id === store.selectedJobCard);
@@ -8317,66 +8593,48 @@ function renderZoneSelectors() {
       let activeCount = 0;
       
       const isThisZoneAdmin = isAdminStaffDuties(z.id);
+      const cleanZoneStr = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
       const isZoneMatch = (zoneId) => {
+          if (!zoneId) return false;
           if (isThisZoneAdmin) {
               const matchedByOther = zonesToRender.some(otherZ => {
                   if (isAdminStaffDuties(otherZ.id)) return false;
-                  return String(zoneId) === String(otherZ.id);
+                  return cleanZoneStr(zoneId) === cleanZoneStr(otherZ.id) || cleanZoneStr(zoneId) === cleanZoneStr(otherZ.name);
               });
               return !matchedByOther;
           }
-          return String(zoneId) === String(z.id);
+          return cleanZoneStr(zoneId) === cleanZoneStr(z.id) || cleanZoneStr(zoneId) === cleanZoneStr(z.name);
       };
 
-      const assignedIds = new Set();
+      const assignedSailorKeys = new Set();
       
       const activeWos = (store.workOrders || []).filter(
         (wo) => isZoneMatch(wo.zone_id) && isWorkOrderActiveOnDate(wo, dateVal),
       );
       activeWos.forEach((wo) => {
-        if (wo.assigned && Array.isArray(wo.assigned)) {
-          wo.assigned.forEach((id) => assignedIds.add(String(id)));
-        }
+        const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
+        sailors.forEach((s) => {
+          assignedSailorKeys.add(String(s.id || s._fbKey));
+        });
       });
       
       const activeJcs = (store.jobCards || []).filter(
         (jc) => isZoneMatch(jc.zone_id) && isWorkOrderActiveOnDate(jc, dateVal),
       );
       activeJcs.forEach((jc) => {
-        if (jc.assigned && Array.isArray(jc.assigned)) {
-          jc.assigned.forEach((id) => assignedIds.add(String(id)));
-        }
+        const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
+        sailors.forEach((s) => {
+          assignedSailorKeys.add(String(s.id || s._fbKey));
+        });
       }); 
       
-      (store.dailyAllocations || []).forEach((alloc) => {
-          if (alloc.date === dateVal) {
-              let allocZoneId = alloc.zone_id;
-              if (!allocZoneId) {
-                  const wo = (store.workOrders || []).find(w => String(w.id) === String(alloc.work_order_id));
-                  if (wo) allocZoneId = wo.zone_id;
-                  else {
-                      const jc = (store.jobCards || []).find(j => String(j.id) === String(alloc.work_order_id));
-                      if (jc) allocZoneId = jc.zone_id;
-                  }
-              }
-              if (isZoneMatch(allocZoneId)) {
-                  assignedIds.add(String(alloc.sailor_id));
-              }
-          }
-      }); 
-      
-      // Match the exact same filtering used by updateCounters() / updatePendingEvals()
-      // We only count sailors if they are "Assigned" globally (not NA, not on leave, not long term)
-      activeCount = 0;
+      activeCount = assignedSailorKeys.size;
       let evalCount = 0;
       
-      assignedIds.forEach((id) => {
+      assignedSailorKeys.forEach((id) => {
           const s = (store.sailors || []).find(sailor => String(sailor.id) === String(id) || String(sailor._fbKey) === String(id));
-          if (s && (s.status === "Assigned" || s.status === "NA" || s.status === "N/A")) {
-              activeCount++;
-              if (s.evaluated === true) {
-                  evalCount++;
-              }
+          if (s && s.evaluated === true) {
+              evalCount++;
           }
       });
       
@@ -13346,101 +13604,541 @@ function calculateSailorPointsPast30Days(sailor) {
 function calculateSailorLeaveDays(sailor) {
   const pts = calculateSailorPoints(sailor);
   return Math.max(0, Math.floor(pts / 10));
-} // Filter Directory by Trade
+}
+
+// =============================================
+// SAILOR OPERATIONS & PERFORMANCE CENTER
+// =============================================
+store.sailorDirectoryViewMode = store.sailorDirectoryViewMode || "table";
+store.sailorTableSortField = store.sailorTableSortField || "perf";
+store.sailorTableSortAsc = false;
+store.sailorSection = store.sailorSection || "details";
+
+function switchSailorSection(sec) {
+  store.sailorSection = sec;
+  const secDetails = document.getElementById("sailorsSectionDetails");
+  const secPerf = document.getElementById("sailorsSectionPerf");
+  const btnDetails = document.getElementById("btnSailorsSecDetails");
+  const btnPerf = document.getElementById("btnSailorsSecPerf");
+
+  if (sec === "performance") {
+    if (secDetails) secDetails.classList.add("hidden");
+    if (secPerf) secPerf.classList.remove("hidden");
+    if (btnDetails) {
+      btnDetails.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-800 transition-all";
+    }
+    if (btnPerf) {
+      btnPerf.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 shadow-sm border border-slate-200/70 transition-all";
+    }
+    renderSailorPerformanceSection();
+  } else {
+    if (secPerf) secPerf.classList.add("hidden");
+    if (secDetails) secDetails.classList.remove("hidden");
+    if (btnPerf) {
+      btnPerf.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-800 transition-all";
+    }
+    if (btnDetails) {
+      btnDetails.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 shadow-sm border border-slate-200/70 transition-all";
+    }
+    renderSailorsView();
+  }
+}
+
+function setSailorDirectoryViewMode(mode) {
+  store.sailorDirectoryViewMode = mode;
+  const btnTable = document.getElementById("btnViewTable");
+  const btnGrid = document.getElementById("btnViewGrid");
+  const tableView = document.getElementById("directorySailorsTableView");
+  const gridView = document.getElementById("directorySailorsGrid");
+
+  if (mode === "grid") {
+    if (btnGrid) {
+      btnGrid.className = "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white shadow-sm transition-all";
+    }
+    if (btnTable) {
+      btnTable.className = "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-200 transition-all";
+    }
+    if (tableView) tableView.classList.add("hidden");
+    if (gridView) gridView.classList.remove("hidden");
+  } else {
+    if (btnTable) {
+      btnTable.className = "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white shadow-sm transition-all";
+    }
+    if (btnGrid) {
+      btnGrid.className = "flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-200 transition-all";
+    }
+    if (gridView) gridView.classList.add("hidden");
+    if (tableView) tableView.classList.remove("hidden");
+  }
+  renderSailorsView();
+}
+
+function toggleSailorColumnMenu(e) {
+  if (e) e.stopPropagation();
+  const menu = document.getElementById("sailorColumnMenu");
+  if (menu) menu.classList.toggle("hidden");
+}
+
+document.addEventListener("click", (e) => {
+  const menu = document.getElementById("sailorColumnMenu");
+  if (menu && !menu.classList.contains("hidden") && !menu.contains(e.target)) {
+    menu.classList.add("hidden");
+  }
+});
+
+function toggleSailorCol(colClass, isVisible) {
+  document.querySelectorAll("." + colClass).forEach((el) => {
+    if (isVisible) el.classList.remove("hidden");
+    else el.classList.add("hidden");
+  });
+}
+
+function sortSailorTable(field) {
+  if (store.sailorTableSortField === field) {
+    store.sailorTableSortAsc = !store.sailorTableSortAsc;
+  } else {
+    store.sailorTableSortField = field;
+    store.sailorTableSortAsc = field === "name" || field === "off_no" || field === "trade" || field === "city";
+  }
+  updateSailorSortIcons();
+  renderSailorsView();
+}
+
+function updateSailorSortIcons() {
+  const fields = ["off_no", "name", "trade", "city", "perf", "zone"];
+  fields.forEach((f) => {
+    const icon = document.getElementById("sort-icon-" + f);
+    if (icon) {
+      if (store.sailorTableSortField === f) {
+        icon.textContent = store.sailorTableSortAsc ? "▲" : "▼";
+        icon.className = "text-teal-400 font-bold";
+      } else {
+        icon.textContent = "↕";
+        icon.className = "text-slate-400";
+      }
+    }
+  });
+}
+
 function filterDirectoryTrade(trade) {
   store.directoryTradeFilter = trade;
   document.querySelectorAll(".dir-trade-btn").forEach((btn) => {
-    btn.classList.remove("bg-slate-800", "text-white");
-    btn.classList.add("bg-slate-100", "text-slate-600", "hover:bg-slate-200");
+    btn.classList.remove("bg-slate-900", "text-white", "font-bold");
+    btn.classList.add("bg-slate-100", "text-slate-600", "font-medium", "hover:bg-slate-200");
   });
   const activeBtn = document.getElementById("dir-trade-" + trade);
   if (activeBtn) {
-    activeBtn.classList.remove(
-      "bg-slate-100",
-      "text-slate-600",
-      "hover:bg-slate-200",
-    );
-    activeBtn.classList.add("bg-slate-800", "text-white");
+    activeBtn.classList.remove("bg-slate-100", "text-slate-600", "font-medium", "hover:bg-slate-200");
+    activeBtn.classList.add("bg-slate-900", "text-white", "font-bold");
   }
   renderSailorsView();
-} // Render Directory Sailors Grid list
+}
+
+function resetSailorFilters() {
+  const searchInput = document.getElementById("directorySailorSearch");
+  if (searchInput) searchInput.value = "";
+  store.directoryTradeFilter = "ALL";
+  filterDirectoryTrade("ALL");
+
+  const citySel = document.getElementById("directoryCityFilter");
+  if (citySel) citySel.value = "ALL";
+  const skillSel = document.getElementById("directorySkillFilter");
+  if (skillSel) skillSel.value = "ALL";
+  const scoreSel = document.getElementById("directoryScoreFilter");
+  if (scoreSel) scoreSel.value = "ALL";
+  const statusSel = document.getElementById("directoryStatusDropdown");
+  if (statusSel) statusSel.value = "ALL";
+  const dateFrom = document.getElementById("directoryDateFrom");
+  if (dateFrom) dateFrom.value = "";
+  const dateTo = document.getElementById("directoryDateTo");
+  if (dateTo) dateTo.value = "";
+
+  renderSailorsView();
+}
+
+function getSailorCityOrHometown(s) {
+  if (!s) return "-";
+  const cleanStr = (val) => val && val !== "-" && val !== "NO" && val !== "No" && val !== "N/A" && val !== "Not Provided" ? String(val).trim() : "";
+  
+  if (cleanStr(s.city)) return cleanStr(s.city);
+  if (cleanStr(s.police_station)) return cleanStr(s.police_station);
+  if (cleanStr(s.district)) return cleanStr(s.district);
+  if (s.address && s.address !== "Not Provided" && s.address.includes(",")) {
+    const parts = s.address.split(",");
+    const lastPart = parts[parts.length - 1].trim();
+    if (lastPart && lastPart.length > 2 && lastPart.length < 30) {
+      return lastPart;
+    }
+  }
+  return cleanStr(s.hometown) || "-";
+}
+
+function populateSailorDropdownFilters() {
+  if (!store.sailors || store.sailors.length === 0) return;
+
+  // Populate Cities & Hometowns
+  const citySelect = document.getElementById("directoryCityFilter");
+  if (citySelect && citySelect.options.length <= 1) {
+    const cities = new Set();
+    store.sailors.forEach((s) => {
+      const c = getSailorCityOrHometown(s);
+      if (c && c !== "-") {
+        // Capitalize nicely
+        cities.add(c.toUpperCase());
+      }
+    });
+    Array.from(cities).sort().forEach((city) => {
+      const opt = document.createElement("option");
+      opt.value = city;
+      opt.textContent = `📍 ${city}`;
+      citySelect.appendChild(opt);
+    });
+  }
+
+  // Populate Special Skills
+  const skillSelect = document.getElementById("directorySkillFilter");
+  if (skillSelect && skillSelect.options.length <= 1) {
+    const skills = new Set();
+    store.sailors.forEach((s) => {
+      const sk = (s.special_skill || s.skills || "").trim();
+      if (sk && sk !== "NO" && sk !== "No" && sk !== "-") {
+        // Take first primary skill keyword
+        const firstLine = sk.split(/[\n,]/)[0].trim();
+        if (firstLine.length > 2 && firstLine.length < 35) {
+          skills.add(firstLine);
+        }
+      }
+    });
+    Array.from(skills).sort().forEach((skill) => {
+      const opt = document.createElement("option");
+      opt.value = skill;
+      opt.textContent = `🛠️ ${skill}`;
+      skillSelect.appendChild(opt);
+    });
+  }
+}
+
+function getSailorLiveDailyStatus(sailor, dateVal) {
+  if (!sailor) return { statusText: "Available", statusClass: "available", isLeave: false, isSick: false, isBusy: false, isLongTerm: false, currentLoc: "—", badgeHtml: `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">✓ Available</span>` };
+
+  const today = getLocalDateString();
+  if (!dateVal) dateVal = store.dashboardDate || today;
+
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+
+  const sFbKey = sailor._fbKey || sailor.id;
+  const sId = sailor.id || sailor._fbKey;
+
+  // 1. Check Firebase Daily Availability / Attendance
+  const fbAvail = (store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey])
+    ? (store.availability[monthKey][dayKey][sFbKey] || store.availability[monthKey][dayKey][sId])
+    : null;
+
+  const rawStatus = fbAvail || sailor.attendance || sailor.status || "";
+  const statusStr = String(rawStatus).trim();
+
+  const isSickCode = /^(Sick|SIQ|S\/R|Hospital|ADM|Admit)$/i.test(statusStr);
+  const isLeaveCode = /^(Leave|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SL|R|Off|Holiday|Absent|AWOL|නිවාඩු|ගිලන්)$/i.test(statusStr);
+
+  if (isSickCode) {
+    return {
+      statusText: "🏥 Sick",
+      statusClass: "sick",
+      badgeHtml: `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">🏥 Sick</span>`,
+      isLeave: false,
+      isSick: true,
+      isBusy: false,
+      isLongTerm: false,
+      currentLoc: "— (Sick)"
+    };
+  }
+
+  if (isLeaveCode) {
+    return {
+      statusText: "🏖️ On Leave",
+      statusClass: "leave",
+      badgeHtml: `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">🏖️ On Leave</span>`,
+      isLeave: true,
+      isSick: false,
+      isBusy: false,
+      isLongTerm: false,
+      currentLoc: "— (On Leave)"
+    };
+  }
+
+  // 2. Check Long Term Deployments (Housing, Out Project, Other Base)
+  const longTerm = getLongTermAllocations();
+  const matchedHousing = (longTerm.housing || []).find(a => String(a.sailor.id || a.sailor._fbKey) === String(sId) || String(a.sailor.id || a.sailor._fbKey) === String(sFbKey));
+  if (matchedHousing) {
+    return {
+      statusText: "🏠 Housing",
+      statusClass: "longterm",
+      badgeHtml: `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">🏠 Housing</span>`,
+      isLeave: false,
+      isSick: false,
+      isBusy: true,
+      isLongTerm: true,
+      currentLoc: matchedHousing.projectName || "Housing Project"
+    };
+  }
+
+  const matchedOut = (longTerm.outProject || []).find(a => String(a.sailor.id || a.sailor._fbKey) === String(sId) || String(a.sailor.id || a.sailor._fbKey) === String(sFbKey));
+  if (matchedOut) {
+    return {
+      statusText: "🏕️ Out Project",
+      statusClass: "longterm",
+      badgeHtml: `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">🏕️ Out Project</span>`,
+      isLeave: false,
+      isSick: false,
+      isBusy: true,
+      isLongTerm: true,
+      currentLoc: matchedOut.projectName || "Out Project"
+    };
+  }
+
+  const matchedOther = (longTerm.otherBase || []).find(a => String(a.sailor.id || a.sailor._fbKey) === String(sId) || String(a.sailor.id || a.sailor._fbKey) === String(sFbKey));
+  if (matchedOther) {
+    return {
+      statusText: "⚓ Other Base",
+      statusClass: "longterm",
+      badgeHtml: `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">⚓ Other Base</span>`,
+      isLeave: false,
+      isSick: false,
+      isBusy: true,
+      isLongTerm: true,
+      currentLoc: matchedOther.projectName || "Other Base"
+    };
+  }
+
+  // 3. Check Active Work Order Assignment
+  const assignment = getSailorCurrentAssignment(sFbKey) || getSailorCurrentAssignment(sId) || getSailorCurrentAssignment(sailor.official_number);
+  if (assignment) {
+    let locStr = assignment.zone || "Active WO";
+    if (assignment.title) {
+      locStr = `${locStr} • ${assignment.title}`;
+    }
+    return {
+      statusText: "⚠️ Daily Task",
+      statusClass: "busy",
+      badgeHtml: `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">⚠️ Daily Task</span>`,
+      isLeave: false,
+      isSick: false,
+      isBusy: true,
+      isLongTerm: false,
+      currentLoc: locStr
+    };
+  }
+
+  // 4. Default: Available
+  return {
+    statusText: "✓ Available",
+    statusClass: "available",
+    badgeHtml: `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">✓ Available</span>`,
+    isLeave: false,
+    isSick: false,
+    isBusy: false,
+    isLongTerm: false,
+    currentLoc: "Available"
+  };
+}
+
+// Render Sailor Operations & Performance Center View
 function renderSailorsView() {
-  var _document$getElementB14, _document$getElementB15;
-  const container = document.getElementById("directorySailorsGrid");
-  if (!container) return;
-  const query = (
-    ((_document$getElementB14 = document.getElementById(
-      "directorySailorSearch",
-    )) === null || _document$getElementB14 === void 0
-      ? void 0
-      : _document$getElementB14.value) || ""
-  )
-    .toLowerCase()
-    .trim();
+  populateSailorDropdownFilters();
+
+  const searchEl = document.getElementById("directorySailorSearch");
+  const query = (searchEl ? searchEl.value : "").toLowerCase().trim();
   const trade = store.directoryTradeFilter || "ALL";
-  const sortBy =
-    ((_document$getElementB15 = document.getElementById(
-      "directorySailorSort",
-    )) === null || _document$getElementB15 === void 0
-      ? void 0
-      : _document$getElementB15.value) || "points-desc";
-  let filtered = [...store.sailors]; // Search filter
-  if (query) {
-    filtered = filtered.filter(
-      (s) =>
-        (s.name || "").toLowerCase().includes(query) ||
-        (s.official_number || "").toLowerCase().includes(query) ||
-        (s.rank || "").toLowerCase().includes(query) ||
-        (s.trade || "").toLowerCase().includes(query),
-    );
-  } // Trade filter
-  if (trade !== "ALL") {
-    filtered = filtered.filter((s) => s.trade === trade);
-  } // Map each sailor with points and leave for sorting
-  const mapped = filtered.map((s) => {
+  const cityFilter = (document.getElementById("directoryCityFilter") || {}).value || "ALL";
+  const skillFilter = (document.getElementById("directorySkillFilter") || {}).value || "ALL";
+  const scoreFilter = (document.getElementById("directoryScoreFilter") || {}).value || "ALL";
+  const statusFilter = (document.getElementById("directoryStatusDropdown") || {}).value || "ALL";
+  const dateFrom = (document.getElementById("directoryDateFrom") || {}).value || "";
+  const dateTo = (document.getElementById("directoryDateTo") || {}).value || "";
+
+  let filtered = [...(store.sailors || [])];
+
+  // Map each sailor with live computed fields & status
+  const today = getLocalDateString();
+  const dateVal = store.dashboardDate || today;
+
+  let mapped = filtered.map((s) => {
+    var _s$idComputed;
+    const sId = (_s$idComputed = s.id) !== null && _s$idComputed !== void 0 ? _s$idComputed : s._fbKey;
+    const offNo = s.official_number || s.off_no || s.service_no || "-";
     const points = calculateSailorPoints(s);
     const leaveDays = calculateSailorLeaveDays(s);
-    return { ...s, points, leaveDays };
-  }); // Sorting
+    const liveStatus = getSailorLiveDailyStatus(s, dateVal);
+    const perf = parseFloat(s.avgScore || s.yesterdayScore || 7.0);
+    const city = getSailorCityOrHometown(s);
+    const assignedZone = liveStatus.currentLoc;
+    return { ...s, offNo, points, leaveDays, liveStatus, perf, city, assignedZone };
+  });
+
+  // Search filter
+  if (query) {
+    mapped = mapped.filter((s) => {
+      const offNo = String(s.offNo || "").toLowerCase();
+      const name = String(s.name || "").toLowerCase();
+      const rank = String(s.rank || "").toLowerCase();
+      const tr = String(s.trade || "").toLowerCase();
+      const city = String(s.city || s.district || s.hometown || "").toLowerCase();
+      const skill = String(s.special_skill || s.skills || "").toLowerCase();
+      return name.includes(query) || offNo.includes(query) || rank.includes(query) || tr.includes(query) || city.includes(query) || skill.includes(query);
+    });
+  }
+
+  // Trade filter
+  if (trade !== "ALL") {
+    mapped = mapped.filter((s) => s.trade === trade);
+  }
+
+  // City filter
+  if (cityFilter !== "ALL") {
+    mapped = mapped.filter((s) => {
+      const c = (s.city || s.district || s.hometown || "").toUpperCase();
+      return c.includes(cityFilter);
+    });
+  }
+
+  // Special skill filter
+  if (skillFilter !== "ALL") {
+    mapped = mapped.filter((s) => {
+      const sk = (s.special_skill || s.skills || "").toLowerCase();
+      return sk.includes(skillFilter.toLowerCase());
+    });
+  }
+
+  // Score level filter
+  if (scoreFilter !== "ALL") {
+    mapped = mapped.filter((s) => {
+      const sc = s.perf;
+      if (scoreFilter === "top") return sc >= 9.0;
+      if (scoreFilter === "good") return sc >= 7.0 && sc < 9.0;
+      if (scoreFilter === "avg") return sc >= 5.0 && sc < 7.0;
+      if (scoreFilter === "low") return sc < 5.0;
+      return true;
+    });
+  }
+
+  // Status filter
+  if (statusFilter !== "ALL") {
+    mapped = mapped.filter((s) => {
+      if (statusFilter === "AVAILABLE") return !s.liveStatus.isLeave && !s.liveStatus.isSick && !s.liveStatus.isBusy;
+      if (statusFilter === "BUSY") return s.liveStatus.isBusy && !s.liveStatus.isLongTerm;
+      if (statusFilter === "LEAVE") return s.liveStatus.isLeave;
+      if (statusFilter === "SICK") return s.liveStatus.isSick;
+      if (statusFilter === "LONG_TERM") return s.liveStatus.isLongTerm;
+      return true;
+    });
+  }
+
+  // Table & Grid Sorting
+  const sortField = store.sailorTableSortField || "perf";
+  const isAsc = store.sailorTableSortAsc;
+
   mapped.sort((a, b) => {
-    if (sortBy === "points-desc") return b.points - a.points;
-    if (sortBy === "points-asc") return a.points - b.points;
-    if (sortBy === "score-desc") return b.avgScore - a.avgScore;
-    if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-    return 0;
-  }); // Update total count
+    let res = 0;
+    if (sortField === "off_no") {
+      res = (a.offNo || "").localeCompare(b.offNo || "", undefined, { numeric: true });
+    } else if (sortField === "name") {
+      res = (a.name || "").localeCompare(b.name || "");
+    } else if (sortField === "trade") {
+      res = (a.trade || "").localeCompare(b.trade || "");
+    } else if (sortField === "city") {
+      res = (a.city || "").localeCompare(b.city || "");
+    } else if (sortField === "perf") {
+      res = (a.perf || 0) - (b.perf || 0);
+    } else if (sortField === "zone") {
+      res = (a.assignedZone || "").localeCompare(b.assignedZone || "");
+    }
+    return isAsc ? res : -res;
+  });
+
+  // Update total count badge
   const totalCountBadge = document.getElementById("directoryTotalCount");
   if (totalCountBadge) {
     totalCountBadge.textContent = `Total: ${mapped.length} Sailors`;
   }
-  const today = getLocalDateString();
-  container.innerHTML =
-    mapped
-      .map((s) => {
-        var _s$id40, _s$id41;
-        const cleanNo = s.official_number
-          ? s.official_number.replace(/[^a-zA-Z0-9]/g, "")
-          : "";
-        const shortRank = s.rank
-          ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 3)
-          : "AB";
+
+  // Render Table View Rows
+  const tableBody = document.getElementById("directorySailorsTableBody");
+  if (tableBody) {
+    if (mapped.length === 0) {
+      tableBody.innerHTML = `<tr><td colspan="9" class="text-center py-12 text-slate-400 font-medium text-sm">No sailors found matching criteria.</td></tr>`;
+    } else {
+      tableBody.innerHTML = mapped.map((s) => {
+        var _s$idRow;
+        const sId = (_s$idRow = s.id) !== null && _s$idRow !== void 0 ? _s$idRow : s._fbKey;
+        const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 2) : "AB";
+        const statusBadge = s.liveStatus.badgeHtml;
+
+        const skillText = s.special_skill && s.special_skill !== "NO" && s.special_skill !== "No" ? s.special_skill.replace(/[\r\n]+/g, " ").trim() : "—";
+        const skillSnippet = skillText.length > 25 ? skillText.substring(0, 25) + "..." : skillText;
+        const cleanCity = s.city && s.city !== "-" ? `📍 ${s.city}` : "—";
+
+        return `
+        <tr class="hover:bg-slate-50/90 transition-colors group">
+            <td class="py-3 px-4 font-mono font-bold text-xs text-slate-800 whitespace-nowrap">${s.offNo}</td>
+            <td class="py-3 px-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-[11px] flex-shrink-0 shadow-sm">
+                        ${shortRank}
+                    </div>
+                    <div class="min-w-0">
+                        <p class="font-bold text-xs text-slate-900 truncate hover:text-teal-600 cursor-pointer" onclick="openSailorProfile('${sId}')">${s.name || "-"}</p>
+                        <p class="text-[10px] text-slate-500 font-semibold">${s.rank || "-"}</p>
+                    </div>
+                </div>
+            </td>
+            <td class="py-3 px-4">
+                <span class="inline-block px-2 py-0.5 rounded text-xs font-extrabold bg-slate-900 text-white">${s.trade || "-"}</span>
+            </td>
+            <td class="py-3 px-4 col-city text-xs text-slate-600 font-medium whitespace-nowrap">${cleanCity}</td>
+            <td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>
+            <td class="py-3 px-4 col-perf whitespace-nowrap">
+                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300 shadow-sm">
+                    ⭐ ${s.perf.toFixed(2)}
+                </span>
+            </td>
+            <td class="py-3 px-4 col-skills text-xs text-slate-500 truncate max-w-[160px]" title="${skillText.replace(/"/g, '&quot;')}">
+                ${skillSnippet !== "—" ? `<span class="text-slate-700">🛠️ ${skillSnippet}</span>` : '<span class="text-slate-300">—</span>'}
+            </td>
+            <td class="py-3 px-4 col-zone text-xs font-semibold text-slate-700 whitespace-nowrap">${s.assignedZone}</td>
+            <td class="py-3 px-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">
+                <div class="flex items-center justify-center gap-1.5">
+                    <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">
+                        <span>👤</span> Profile
+                    </button>
+                    <button onclick="openEvaluationModal('${sId}', '')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-sm">
+                        <span>⭐</span> Eval
+                    </button>
+                </div>
+            </td>
+        </tr>
+        `;
+      }).join("");
+    }
+  }
+
+  // Render Cards Grid View
+  const gridContainer = document.getElementById("directorySailorsGrid");
+  if (gridContainer) {
+    if (mapped.length === 0) {
+      gridContainer.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 font-medium text-sm">No sailors found matching criteria.</div>`;
+    } else {
+      gridContainer.innerHTML = mapped.map((s) => {
+        var _s$idGrid;
+        const sId = (_s$idGrid = s.id) !== null && _s$idGrid !== void 0 ? _s$idGrid : s._fbKey;
+        const cleanNo = s.offNo ? s.offNo.replace(/[^a-zA-Z0-9]/g, "") : "";
+        const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 3) : "AB";
         const fallbackText = `<div class="w-12 h-12 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
-        const avatarHtml = cleanNo
-          ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-12 h-12 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">`
-          : fallbackText; // Check if currently busy on a work order today
-        const assignment = getSailorCurrentAssignment(
-          (_s$id40 = s.id) !== null && _s$id40 !== void 0 ? _s$id40 : s._fbKey,
-        );
-        let statusBadge = "";
-        if (s.attendance === "Leave") {
-          statusBadge = `<span class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">On Leave</span>`;
-        } else if (s.attendance === "Sick") {
-          statusBadge = `<span class="text-[10px] bg-rose-100 text-rose-800 px-2 py-0.5 rounded-full font-bold">Sick</span>`;
-        } else if (assignment) {
-          statusBadge = `<span class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold truncate max-w-[120px]" title="Busy: ${assignment.zone}">⚠️ ${assignment.zone}</span>`;
-        } else {
-          statusBadge = `<span class="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-bold">✓ Available</span>`;
-        }
+        const avatarHtml = cleanNo ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-12 h-12 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` : fallbackText;
+
+        const statusBadge = s.liveStatus.badgeHtml;
+
         const tradeColors = {
           MA: "bg-teal-600",
           CA: "bg-purple-600",
@@ -13453,8 +14151,9 @@ function renderSailorsView() {
           AL: "bg-pink-600",
         };
         const tradeClass = tradeColors[s.trade] || "bg-slate-600";
+
         return `
-        <div onclick="openSailorProfile('${(_s$id41 = s.id) !== null && _s$id41 !== void 0 ? _s$id41 : s._fbKey}')" class="bg-white rounded-2xl shadow-md border border-slate-200/80 p-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between">
+        <div onclick="openSailorProfile('${sId}')" class="bg-white rounded-2xl shadow-md border border-slate-200/80 p-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between">
             <div class="flex items-start gap-3">
                 <div class="relative flex-shrink-0">
                     ${avatarHtml}
@@ -13465,24 +14164,160 @@ function renderSailorsView() {
                 <div class="min-w-0 flex-1">
                     <p class="font-bold text-slate-800 text-sm truncate">${s.name}</p>
                     <p class="text-xs text-slate-500 font-semibold truncate mt-0.5">${s.rank}</p>
-                    <p class="text-[10px] text-slate-400 mono mt-0.5">${s.official_number}</p>
+                    <p class="text-[10px] text-slate-400 mono mt-0.5">${s.offNo}</p>
                 </div>
             </div>
 
-            <!-- Badges and stats section -->
             <div class="border-t border-slate-100 pt-3 mt-4 flex items-center justify-between gap-1">
                 ${statusBadge}
                 <div class="flex gap-2 text-[11px] font-bold">
-                    <span class="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded" title="Total accumulated points">⭐ ${s.points}</span>
+                    <span class="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded" title="Performance score">⭐ ${s.perf.toFixed(2)}</span>
                     <span class="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded" title="Leave days earned">📅 ${s.leaveDays}D</span>
                 </div>
             </div>
         </div>
         `;
-      })
-      .join("") ||
-    '<div class="col-span-full text-center py-12"><p class="text-slate-400 text-sm">No sailors found matching criteria.</p></div>';
-} // Open Sailor Profile Modal with detailed stats
+      }).join("");
+    }
+  }
+}
+
+// Render Section 2: Performance Analyser
+function renderSailorPerformanceSection() {
+  const container = document.getElementById("sailorsSectionPerf");
+  if (!container) return;
+
+  const sailors = store.sailors || [];
+  if (sailors.length === 0) {
+    container.innerHTML = `<div class="p-8 text-center text-slate-400">No sailor data available for analysis.</div>`;
+    return;
+  }
+
+  let totalScore = 0;
+  let topCount = 0;
+  let goodCount = 0;
+  let avgCount = 0;
+  let lowCount = 0;
+
+  const tradeStats = {};
+
+  sailors.forEach((s) => {
+    const sc = parseFloat(s.avgScore || s.yesterdayScore || 7.0);
+    totalScore += sc;
+    if (sc >= 9.0) topCount++;
+    else if (sc >= 7.0) goodCount++;
+    else if (sc >= 5.0) avgCount++;
+    else lowCount++;
+
+    const tr = s.trade || "OTHER";
+    if (!tradeStats[tr]) tradeStats[tr] = { total: 0, count: 0 };
+    tradeStats[tr].total += sc;
+    tradeStats[tr].count += 1;
+  });
+
+  const avgRating = (totalScore / sailors.length).toFixed(2);
+
+  // Sort top 10 sailors
+  const topPerformers = [...sailors]
+    .map((s) => ({
+      ...s,
+      perf: parseFloat(s.avgScore || s.yesterdayScore || 7.0),
+      offNo: s.official_number || s.off_no || s.service_no || "-",
+    }))
+    .sort((a, b) => b.perf - a.perf)
+    .slice(0, 10);
+
+  container.innerHTML = `
+    <!-- Top Summary Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-teal-50 text-teal-600 flex items-center justify-center text-2xl font-bold">⭐</div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Average Performance</p>
+                <p class="text-2xl font-black text-slate-800 mt-0.5">${avgRating} <span class="text-xs font-normal text-slate-400">/ 10</span></p>
+            </div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-2xl font-bold">🏆</div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Outstanding (≥9.0)</p>
+                <p class="text-2xl font-black text-emerald-600 mt-0.5">${topCount} <span class="text-xs font-normal text-slate-400">Sailors</span></p>
+            </div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-2xl font-bold">🎯</div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Good (7.0 - 8.9)</p>
+                <p class="text-2xl font-black text-blue-600 mt-0.5">${goodCount} <span class="text-xs font-normal text-slate-400">Sailors</span></p>
+            </div>
+        </div>
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
+            <div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-2xl font-bold">⚠️</div>
+            <div>
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider">Needs Focus (&lt;7.0)</p>
+                <p class="text-2xl font-black text-amber-600 mt-0.5">${avgCount + lowCount} <span class="text-xs font-normal text-slate-400">Sailors</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts & Leaderboard Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Trade Performance Breakdown -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+            <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                <span>📊</span> Trade-wise Performance Average
+            </h3>
+            <div class="space-y-3">
+                ${Object.keys(tradeStats).map((tr) => {
+                  const stat = tradeStats[tr];
+                  const avg = (stat.total / stat.count).toFixed(2);
+                  const pct = Math.min(100, Math.round((avg / 10) * 100));
+                  return `
+                    <div class="space-y-1">
+                        <div class="flex justify-between text-xs font-bold">
+                            <span class="text-slate-700">${tr} (${stat.count} Sailors)</span>
+                            <span class="text-teal-600">⭐ ${avg}</span>
+                        </div>
+                        <div class="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div class="h-full bg-teal-500 rounded-full" style="width: ${pct}%"></div>
+                        </div>
+                    </div>
+                  `;
+                }).join("")}
+            </div>
+        </div>
+
+        <!-- Top 10 Leaderboard -->
+        <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm space-y-4">
+            <h3 class="font-bold text-slate-800 flex items-center gap-2">
+                <span>🏆</span> Top 10 High Performers
+            </h3>
+            <div class="space-y-2 max-h-[380px] overflow-y-auto pr-1">
+                ${topPerformers.map((s, idx) => {
+                  var _s$idTop;
+                  const sId = (_s$idTop = s.id) !== null && _s$idTop !== void 0 ? _s$idTop : s._fbKey;
+                  const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+                  return `
+                    <div onclick="openSailorProfile('${sId}')" class="flex items-center justify-between p-2.5 bg-slate-50 hover:bg-slate-100 rounded-xl transition-all cursor-pointer">
+                        <div class="flex items-center gap-3">
+                            <span class="w-7 text-center font-bold text-xs text-slate-600">${medal}</span>
+                            <div>
+                                <p class="text-xs font-bold text-slate-800">${s.rank || ""} ${s.name || ""}</p>
+                                <p class="text-[10px] text-slate-500">${s.offNo} • ${s.trade || ""}</p>
+                            </div>
+                        </div>
+                        <span class="px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300">
+                            ⭐ ${s.perf.toFixed(2)}
+                        </span>
+                    </div>
+                  `;
+                }).join("")}
+            </div>
+        </div>
+    </div>
+  `;
+}
+// Open Sailor Profile Modal with detailed stats
 function openSailorProfile(sailorId) {
   var _sailor$id4;
   if (_justClosedModal) return;
@@ -14339,10 +15174,11 @@ function renderPtmLists(filter = "") {
         currentTeam.forEach(s => {
             const div = document.createElement("div");
             div.className = "flex justify-between items-center p-2 bg-slate-50 rounded-lg border border-slate-200 mb-1";
+            const offNo = s.official_number || s.official_no || s.service_no || "-";
             div.innerHTML = `
                 <div>
                     <p class="text-xs font-bold text-slate-800">${s.rank || ""} ${s.name || ""}</p>
-                    <p class="text-[10px] text-slate-500">${s.official_no || ""} • ${s.trade || ""}</p>
+                    <p class="text-[10px] text-slate-500 font-medium">${offNo} • ${s.trade || ""}</p>
                 </div>
                 <button onclick="removePtmSailor('${s._fbKey || s.id}')" class="text-xs bg-red-100 text-red-700 px-2 py-1 rounded hover:bg-red-200">Remove</button>
             `;
@@ -14353,10 +15189,11 @@ function renderPtmLists(filter = "") {
     eligible.forEach(s => {
         const div = document.createElement("div");
         div.className = "flex justify-between items-center p-2 border-b border-slate-100 last:border-0 hover:bg-slate-50 rounded-lg";
+        const offNo = s.official_number || s.official_no || s.service_no || "-";
         div.innerHTML = `
             <div>
                 <p class="text-xs font-bold text-slate-800">${s.rank || ""} ${s.name || ""}</p>
-                <p class="text-[10px] text-slate-500">${s.official_no || ""} • ${s.trade || ""}</p>
+                <p class="text-[10px] text-slate-500 font-medium">${offNo} • ${s.trade || ""}</p>
             </div>
             <button onclick="addPtmSailor('${s._fbKey || s.id}')" class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200">+ Add</button>
         `;
