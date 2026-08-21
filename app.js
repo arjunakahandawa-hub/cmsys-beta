@@ -1881,6 +1881,11 @@ function renderAvailableSailors() {
         wo.assigned.forEach((id) => assignedIds.add(String(id)));
       }
     });
+    (store.dailyAllocations || []).forEach((alloc) => {
+      if (alloc.date === today) {
+        assignedIds.add(String(alloc.sailor_id));
+      }
+    });
   } else {
     (store.dailyAllocations || []).forEach((alloc) => {
       if (alloc.date === dateVal) {
@@ -2263,11 +2268,21 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
   const isToday = dateVal === today;
 
   if (isToday) {
-    const assignedIds = (wo.assigned || []).map(String);
+    const assignedIds = new Set((wo.assigned || []).map(String));
+    (store.dailyAllocations || []).forEach((a) => {
+      if (
+        a.date === today &&
+        (String(a.work_order_id) === String(wo.id) ||
+          String(a.work_order_id) === String(wo._fbKey))
+      ) {
+        if (a.sailor_id) assignedIds.add(String(a.sailor_id));
+      }
+    });
     const sailors = store.sailors.filter(
       (s) =>
-        assignedIds.includes(String(s.id)) ||
-        assignedIds.includes(String(s._fbKey)),
+        assignedIds.has(String(s.id)) ||
+        assignedIds.has(String(s._fbKey)) ||
+        (s.official_number && assignedIds.has(String(s.official_number))),
     );
     return { sailors, source: "live" };
   }
@@ -4413,8 +4428,25 @@ function openWorkOrderDetail(workOrderId) {
       )
       .join("");
   }
-  document.getElementById("woDetailArtificer").innerHTML = artificerOptions; // Normalised assigned list based on date
+  document.getElementById("woDetailArtificer").innerHTML = artificerOptions;
   const { sailors: assignedSailors, source: historicalSource } = getWorkOrderAssignedSailors(wo, dateVal);
+  if (isToday && assignedSailors.length > 0) {
+    const currentAssignedKeys = assignedSailors.map((s) => s.id || s._fbKey);
+    const existingAssigned = (wo.assigned || []).map(String);
+    let needsUpdate = false;
+    currentAssignedKeys.forEach((key) => {
+      if (!existingAssigned.includes(String(key))) {
+        existingAssigned.push(key);
+        needsUpdate = true;
+      }
+    });
+    if (needsUpdate) {
+      wo.assigned = existingAssigned;
+      if (wo._fbKey) {
+        opsDB.ref(`work_orders/${wo._fbKey}/assigned`).set(wo.assigned);
+      }
+    }
+  }
   const tradeCounts = {};
   assignedSailors.forEach((s) => {
     tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
@@ -4543,14 +4575,25 @@ function renderDetailSailorChips(filter = "") {
       String(w._fbKey) === String(store.selectedWorkOrder),
   );
   if (!wo) return;
-  const assignedIds = (wo.assigned || []).map(String); // When searching, show ALL sailors (651) so any sailor can be found and assigned
+  const today = getLocalDateString();
+  const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, today);
+  const assignedIds = new Set();
+  assignedSailors.forEach((s) => {
+    if (s.id) assignedIds.add(String(s.id));
+    if (s._fbKey) assignedIds.add(String(s._fbKey));
+    if (s.official_number) assignedIds.add(String(s.official_number));
+  });
+  (wo.assigned || []).forEach((id) => assignedIds.add(String(id)));
+
+  // When searching, show ALL sailors (651) so any sailor can be found and assigned
   let sailors;
   if (filter) {
     const q = filter.toLowerCase().trim();
     sailors = store.sailors.filter(
       (s) =>
-        !assignedIds.includes(String(s.id)) &&
-        !assignedIds.includes(String(s._fbKey)) &&
+        !assignedIds.has(String(s.id)) &&
+        !assignedIds.has(String(s._fbKey)) &&
+        (!s.official_number || !assignedIds.has(String(s.official_number))) &&
         ((s._searchIndex || "").includes(q) ||
           s.name.toLowerCase().includes(q) ||
           (s.official_number || "").toLowerCase().includes(q) ||
@@ -4563,8 +4606,9 @@ function renderDetailSailorChips(filter = "") {
   } else {
     sailors = store.sailors.filter(
       (s) =>
-        !assignedIds.includes(String(s.id)) &&
-        !assignedIds.includes(String(s._fbKey)) &&
+        !assignedIds.has(String(s.id)) &&
+        !assignedIds.has(String(s._fbKey)) &&
+        (!s.official_number || !assignedIds.has(String(s.official_number))) &&
         s.status !== "Sick" &&
         s.status !== "Leave" &&
         (_detailCurrentTrade === "ALL" || s.trade === _detailCurrentTrade),
