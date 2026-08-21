@@ -5631,6 +5631,10 @@ function selectJobCard(id) {
     jc.status === "Active" ? "block" : "none";
   document.getElementById("deleteJobCardBtn").style.display =
     jc.status === "Active" ? "block" : "none";
+  const btnEdit = document.getElementById("btnEditJobCard");
+  if (btnEdit) {
+    btnEdit.style.display = "inline-flex";
+  }
   const btnPrint = document.getElementById("btnPrintJobCard");
   if (btnPrint) {
     btnPrint.style.display = "inline-flex";
@@ -5645,6 +5649,391 @@ function selectJobCard(id) {
   renderJobCardsList(); // Switch to materials tab
   switchJobCardTab("materials");
 }
+
+let _editJcLaborList = [];
+
+function filterEditJcSailorSearch() {
+  const query =
+    (document.getElementById("editJcSailorSearch") || {}).value || "";
+  renderEditJcAvailableSailors(query);
+}
+
+function renderEditJcAvailableSailors(filter = "") {
+  const container = document.getElementById("editJcAvailableSailorsChips");
+  if (!container) return;
+  const q = filter.toLowerCase().trim();
+
+  const jcId = document.getElementById("editJcId")?.value;
+  const jc = (store.jobCards || []).find(
+    (j) => String(j.id) === String(jcId) || String(j._fbKey) === String(jcId),
+  );
+  const wo = jc
+    ? (store.workOrders || []).find(
+        (w) =>
+          String(w._fbKey) === String(jc.work_order_id) ||
+          String(w.id) === String(jc.work_order_id),
+      )
+    : null;
+  const woAssignedIds = new Set((wo?.assigned || []).map(String));
+
+  const existingSailorIds = new Set(
+    _editJcLaborList.map((l) => String(l.sailor_id)),
+  );
+
+  let list = (store.sailors || []).filter((s) => {
+    const sid = String(s.id || s._fbKey);
+    const off = String(s.official_number || "");
+    if (existingSailorIds.has(sid) || (off && existingSailorIds.has(off)))
+      return false;
+    if (!q) return true;
+    return (
+      (s._searchIndex || "").includes(q) ||
+      (s.name || "").toLowerCase().includes(q) ||
+      (s.official_number || "").toLowerCase().includes(q) ||
+      (s.rank || "").toLowerCase().includes(q) ||
+      (s.trade || "").toLowerCase().includes(q)
+    );
+  });
+
+  list.sort((a, b) => {
+    const aInWo =
+      woAssignedIds.has(String(a.id)) || woAssignedIds.has(String(a._fbKey));
+    const bInWo =
+      woAssignedIds.has(String(b.id)) || woAssignedIds.has(String(b._fbKey));
+    if (aInWo !== bInWo) return aInWo ? -1 : 1;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  const visible = list.slice(0, 25);
+  if (visible.length === 0) {
+    container.innerHTML = `<span class="text-xs text-slate-400 py-1 px-2">No matching sailors found</span>`;
+    return;
+  }
+
+  container.innerHTML = visible
+    .map((s) => {
+      const off = s.official_number || s.officialNumber || "-";
+      const sId = s.id || s._fbKey;
+      const isWoCrew =
+        woAssignedIds.has(String(s.id)) || woAssignedIds.has(String(s._fbKey));
+      return `
+      <button type="button" onclick="addSailorToEditJc('${sId}')" class="text-xs px-2 py-1 rounded-lg border ${isWoCrew ? "border-blue-400 bg-blue-50 hover:bg-blue-100 text-blue-800 font-medium" : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"} flex items-center gap-1 transition-all">
+        <span class="font-bold text-[10px] px-1 py-0.2 bg-slate-200 text-slate-700 rounded">${s.trade || "MA"}</span>
+        <span>${s.rank || ""} ${s.name} (${off})</span>
+        <span class="text-emerald-600 font-bold">+</span>
+      </button>
+    `;
+    })
+    .join("");
+}
+
+function addSailorToEditJc(sailorId) {
+  const s = (store.sailors || []).find(
+    (x) =>
+      String(x.id) === String(sailorId) || String(x._fbKey) === String(sailorId),
+  );
+  if (!s) return;
+  const hours =
+    parseFloat((document.getElementById("editJcSailorHours") || {}).value) || 8;
+  const workDate =
+    (document.getElementById("editJcStartDate") || {}).value ||
+    (typeof getLocalDateString === "function"
+      ? getLocalDateString()
+      : new Date().toISOString().split("T")[0]);
+  const jcId = document.getElementById("editJcId")?.value;
+
+  _editJcLaborList.push({
+    job_card_id: jcId,
+    sailor_id: s.id || s._fbKey,
+    sailor_name: `${s.rank || ""} ${s.name}`.trim(),
+    trade: s.trade || "MA",
+    work_date: workDate,
+    hours: hours,
+    role: "Worker",
+    performance:
+      typeof s.avgScore === "number"
+        ? s.avgScore
+        : typeof s.performance_score === "number"
+          ? s.performance_score
+          : 7.0,
+    isNew: true,
+  });
+
+  renderEditJcCurrentSailors();
+  renderEditJcAvailableSailors(
+    (document.getElementById("editJcSailorSearch") || {}).value || "",
+  );
+}
+
+function removeSailorFromEditJc(index) {
+  const item = _editJcLaborList[index];
+  if (item && item._fbKey) {
+    if (!window._deletedJcLaborKeys) window._deletedJcLaborKeys = [];
+    window._deletedJcLaborKeys.push(item._fbKey);
+  }
+  _editJcLaborList.splice(index, 1);
+  renderEditJcCurrentSailors();
+  renderEditJcAvailableSailors(
+    (document.getElementById("editJcSailorSearch") || {}).value || "",
+  );
+}
+
+function updateEditJcLaborField(index, field, value) {
+  if (_editJcLaborList[index]) {
+    _editJcLaborList[index][field] = value;
+  }
+}
+
+function renderEditJcCurrentSailors() {
+  const container = document.getElementById("editJcCurrentSailorsList");
+  const countBadge = document.getElementById("editJcSailorCountBadge");
+  if (countBadge) {
+    countBadge.textContent = `(${_editJcLaborList.length} sailor${_editJcLaborList.length === 1 ? "" : "s"})`;
+  }
+  if (!container) return;
+
+  if (_editJcLaborList.length === 0) {
+    container.innerHTML = `<span class="text-xs text-slate-400 italic py-2 block text-center">No sailors assigned to this Job Card yet</span>`;
+    return;
+  }
+
+  container.innerHTML = _editJcLaborList
+    .map((l, idx) => {
+      const sailor = (store.sailors || []).find(
+        (s) =>
+          String(s.id) === String(l.sailor_id) ||
+          String(s._fbKey) === String(l.sailor_id) ||
+          String(s.official_number) === String(l.sailor_id),
+      );
+      const off = sailor
+        ? sailor.official_number || sailor.officialNumber || "-"
+        : "-";
+      const name = sailor
+        ? `${sailor.rank || ""} ${sailor.name}`.trim()
+        : l.sailor_name || "Unknown";
+      const trade = sailor ? sailor.trade || "-" : l.trade || "-";
+
+      return `
+      <div class="flex items-center justify-between gap-2 py-1.5 px-2 bg-slate-50 rounded-lg border border-slate-200">
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          <span class="font-bold text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">${trade}</span>
+          <div class="truncate">
+            <span class="font-semibold text-xs text-slate-800">${name}</span>
+            <span class="text-[11px] text-slate-500 font-mono">(${off})</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5">
+          <input type="text" value="${l.role || "Worker"}" onchange="updateEditJcLaborField(${idx}, 'role', this.value)" placeholder="Role" class="w-20 text-xs px-2 py-1 border border-slate-300 rounded bg-white" title="Role / Duty">
+          <div class="flex items-center gap-0.5">
+            <input type="number" value="${l.hours || 8}" min="1" max="24" onchange="updateEditJcLaborField(${idx}, 'hours', parseFloat(this.value) || 8)" class="w-12 text-xs px-1.5 py-1 border border-slate-300 rounded bg-white text-center font-bold" title="Hours">
+            <span class="text-xs text-slate-500">h</span>
+          </div>
+          <button type="button" onclick="removeSailorFromEditJc(${idx})" class="text-red-500 hover:text-red-700 p-1 hover:bg-red-50 rounded transition-colors" title="Remove Sailor">🗑️</button>
+        </div>
+      </div>
+    `;
+    })
+    .join("");
+}
+
+function openEditJobCardModal(id) {
+  const targetId = id || store.selectedJobCard;
+  if (!targetId) return;
+  const jc = store.jobCards.find(
+    (j) =>
+      String(j.id) === String(targetId) ||
+      String(j._fbKey) === String(targetId),
+  );
+  if (!jc) {
+    showToast("Job Card not found", "error");
+    return;
+  }
+
+  window._deletedJcLaborKeys = [];
+  document.getElementById("editJcId").value = jc.id || jc._fbKey;
+  document.getElementById("editJcNumber").value =
+    jc.job_number || jc.job_card_no || "";
+  document.getElementById("editJcStatus").value = jc.status || "Active";
+  document.getElementById("editJcDescription").value =
+    jc.description || jc.title || "";
+  document.getElementById("editJcStartDate").value =
+    jc.start_date || jc.commenced_date || "";
+  document.getElementById("editJcEndDate").value =
+    jc.end_date ||
+    (jc.completed_at
+      ? new Date(jc.completed_at).toISOString().split("T")[0]
+      : "");
+  document.getElementById("editJcApprovedBy").value =
+    jc.approved_by || "CCED (E)";
+  document.getElementById("editJcTakenBy").value = jc.taken_by || "";
+
+  // Load existing labor for this JC
+  const jcId = jc.id || jc._fbKey;
+  const existingLabor = (store.jobCardLabor || []).filter(
+    (l) =>
+      String(l.job_card_id) === String(jcId) ||
+      String(l.job_card_id) === String(jc.id) ||
+      String(l.job_card_id) === String(jc._fbKey),
+  );
+  _editJcLaborList = JSON.parse(JSON.stringify(existingLabor));
+
+  const searchInput = document.getElementById("editJcSailorSearch");
+  if (searchInput) searchInput.value = "";
+  const hoursInput = document.getElementById("editJcSailorHours");
+  if (hoursInput) hoursInput.value = 8;
+
+  renderEditJcCurrentSailors();
+  renderEditJcAvailableSailors();
+
+  document.getElementById("editJobCardModal").classList.remove("hidden");
+}
+
+function saveEditedJobCard(event) {
+  event.preventDefault();
+  const jcId = document.getElementById("editJcId").value;
+  const jc = store.jobCards.find(
+    (j) =>
+      String(j.id) === String(jcId) ||
+      String(j._fbKey) === String(jcId),
+  );
+  if (!jc) {
+    showToast("Job Card not found", "error");
+    return;
+  }
+
+  jc.job_number = document.getElementById("editJcNumber").value.trim();
+  jc.job_card_no = jc.job_number;
+  jc.status = document.getElementById("editJcStatus").value;
+  jc.description = document.getElementById("editJcDescription").value.trim();
+  jc.title = jc.description;
+  jc.start_date = document.getElementById("editJcStartDate").value;
+  jc.commenced_date = jc.start_date;
+  jc.end_date = document.getElementById("editJcEndDate").value;
+  if (jc.status === "Completed" && !jc.completed_at) {
+    jc.completed_at = Date.now();
+  }
+  jc.approved_by = document.getElementById("editJcApprovedBy").value.trim();
+  jc.taken_by = document.getElementById("editJcTakenBy").value.trim();
+
+  // Save Job Card
+  fbSaveJobCard(jc);
+
+  // Remove deleted labor keys from Firebase & local store
+  if (window._deletedJcLaborKeys && window._deletedJcLaborKeys.length > 0) {
+    window._deletedJcLaborKeys.forEach((k) => {
+      opsDB.ref(`job_card_labor/${k}`).remove();
+      store.jobCardLabor = (store.jobCardLabor || []).filter(
+        (l) => String(l._fbKey) !== String(k),
+      );
+    });
+    window._deletedJcLaborKeys = [];
+  }
+
+  // Save updated/new labor entries
+  _editJcLaborList.forEach((l) => {
+    if (l._fbKey) {
+      // Update existing in Firebase & store
+      const updatedFields = {
+        role: l.role || "Worker",
+        hours: l.hours || 8,
+        work_date:
+          l.work_date ||
+          jc.start_date ||
+          (typeof getLocalDateString === "function"
+            ? getLocalDateString()
+            : new Date().toISOString().split("T")[0]),
+      };
+      opsDB.ref(`job_card_labor/${l._fbKey}`).update(updatedFields);
+      const storeItem = (store.jobCardLabor || []).find(
+        (x) => String(x._fbKey) === String(l._fbKey),
+      );
+      if (storeItem) {
+        Object.assign(storeItem, updatedFields);
+      }
+    } else {
+      // Create new
+      const entry = {
+        job_card_id: jcId,
+        sailor_id: l.sailor_id,
+        sailor_name: l.sailor_name,
+        work_date:
+          l.work_date ||
+          jc.start_date ||
+          (typeof getLocalDateString === "function"
+            ? getLocalDateString()
+            : new Date().toISOString().split("T")[0]),
+        hours: l.hours || 8,
+        role: l.role || "Worker",
+        performance: l.performance || 7.0,
+        logged_by: store.currentUser?.name || "Officer",
+      };
+      if (!store.jobCardLabor) store.jobCardLabor = [];
+      store.jobCardLabor.push(entry);
+      fbSaveJobCardLabor(entry);
+    }
+  });
+
+  closeModal("editJobCardModal");
+  selectJobCard(jcId);
+  renderJobCardLabor(jcId);
+  renderJobCardsView();
+  showToast("Job Card and Sailors details updated successfully!");
+}
+
+function deleteSingleJobCardLabor(laborId) {
+  if (!laborId) return;
+  if (!confirm("Are you sure you want to remove this sailor from this Job Card?")) return;
+  const entry = (store.jobCardLabor || []).find(
+    (l) => String(l.id) === String(laborId) || String(l._fbKey) === String(laborId)
+  );
+  const targetKey = entry && entry._fbKey ? entry._fbKey : laborId;
+  opsDB
+    .ref(`job_card_labor/${targetKey}`)
+    .remove()
+    .then(() => {
+      store.jobCardLabor = (store.jobCardLabor || []).filter(
+        (l) => String(l.id) !== String(laborId) && String(l._fbKey) !== String(laborId)
+      );
+      if (store.selectedJobCard) {
+        renderJobCardLabor(store.selectedJobCard);
+      }
+      showToast("Sailor record removed.");
+    })
+    .catch((err) => {
+      console.error("Error deleting labor log:", err);
+      showToast("Failed to remove sailor record.");
+    });
+}
+
+function deleteJobCardMaterial(materialId) {
+  if (!materialId) return;
+  if (!confirm("Are you sure you want to remove this material entry?")) return;
+  const mat = store.jobCardMaterials.find(
+    (m) =>
+      String(m.id) === String(materialId) ||
+      String(m._fbKey) === String(materialId),
+  );
+  const targetKey = mat && mat._fbKey ? mat._fbKey : materialId;
+  opsDB
+    .ref(`job_card_materials/${targetKey}`)
+    .remove()
+    .then(() => {
+      store.jobCardMaterials = store.jobCardMaterials.filter(
+        (m) =>
+          String(m.id) !== String(materialId) &&
+          String(m._fbKey) !== String(materialId),
+      );
+      if (store.selectedJobCard) {
+        selectJobCard(store.selectedJobCard);
+      }
+      showToast("Material entry removed.");
+    })
+    .catch((err) => {
+      console.error("Error deleting material:", err);
+      showToast("Failed to remove material.");
+    });
+}
+
 function deleteJobCard() {
   const jcId = store.selectedJobCard;
   if (!jcId) return;
@@ -5698,26 +6087,35 @@ function renderJobCardMaterials(jobCardId) {
     (m) => String(m.job_card_id) === String(jobCardId),
   );
   const container = document.getElementById("jobCardMaterials");
-  const total = materials.reduce((sum, m) => sum + m.total_cost, 0);
+  const total = materials.reduce(
+    (sum, m) => sum + (parseFloat(m.total_cost) || 0),
+    0,
+  );
   container.innerHTML =
     materials
       .map((m) => {
         const dateStr =
           typeof m.logged_at === "number"
             ? new Date(m.logged_at).toISOString().split("T")[0]
-            : m.logged_at || "-";
+            : m.work_date || m.logged_at || "-";
+        const mId = m.id || m._fbKey;
         return `
         <tr>
-            <td class="px-4 py-2 text-slate-600">${dateStr}</td>
-            <td class="px-4 py-2 font-medium">${m.material_name}</td>
-            <td class="px-4 py-2 text-center">${m.quantity}</td>
-            <td class="px-4 py-2 text-center">${m.unit}</td>
-            <td class="px-4 py-2 text-right">${formatCurrency(m.cost_per_unit)}</td>
-            <td class="px-4 py-2 text-right font-medium text-green-600">${formatCurrency(m.total_cost)}</td>
+            <td class="px-3 py-2 text-slate-600 font-mono text-xs">${dateStr}</td>
+            <td class="px-3 py-2 font-mono text-xs font-semibold text-slate-700">${m.demand_no || m.demandNo || "-"}</td>
+            <td class="px-3 py-2 font-medium text-slate-800">${m.material_name}</td>
+            <td class="px-3 py-2 text-center text-xs text-slate-600">${m.unit}</td>
+            <td class="px-3 py-2 text-center font-bold">${m.quantity}</td>
+            <td class="px-3 py-2 text-center text-xs font-mono text-slate-500">${m.sig_ref || m.sig || "-"}</td>
+            <td class="px-3 py-2 text-right text-xs">${formatCurrency(m.cost_per_unit)}</td>
+            <td class="px-3 py-2 text-right font-semibold text-green-700">${formatCurrency(m.total_cost)}</td>
+            <td class="px-2 py-2 text-center whitespace-nowrap">
+              <button onclick="deleteJobCardMaterial('${mId}')" class="text-red-500 hover:text-red-700 text-xs px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors" title="Delete Material">🗑️</button>
+            </td>
         </tr>`;
       })
       .join("") ||
-    '<tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">No materials logged</td></tr>';
+    '<tr><td colspan="9" class="px-4 py-8 text-center text-slate-500">No materials logged</td></tr>';
   document.getElementById("materialsTotalFooter").textContent =
     formatCurrency(total);
 }
@@ -5734,14 +6132,31 @@ function renderJobCardLabor(jobCardId) {
             String(s.id) === String(l.sailor_id) ||
             String(s._fbKey) === String(l.sailor_id),
         );
+        const perfVal =
+          typeof l.performance === "number"
+            ? l.performance
+            : (sailor && typeof sailor.avgScore === "number"
+                ? sailor.avgScore
+                : (sailor && typeof sailor.performance_score === "number"
+                    ? sailor.performance_score
+                    : null));
+        const perfBadge =
+          perfVal !== null
+            ? `<span class="performance-badge ${getPerformanceColor(perfVal)}">${perfVal.toFixed(1)}</span>`
+            : `<span class="text-slate-400 text-xs">-</span>`;
+
+        const lId = l.id || l._fbKey;
         return `
                 <tr>
                     <td class="px-4 py-2 text-slate-600">${l.work_date}</td>
                     <td class="px-4 py-2 font-medium">${(sailor === null || sailor === void 0 ? void 0 : sailor.name) || "Unknown"}</td>
                     <td class="px-4 py-2 text-center"><span class="bg-slate-100 px-2 py-0.5 rounded text-xs">${(sailor === null || sailor === void 0 ? void 0 : sailor.trade) || "-"}</span></td>
-                    <td class="px-4 py-2 text-center">${l.role}</td>
-                    <td class="px-4 py-2 text-center">${l.hours}h</td>
-                    <td class="px-4 py-2 text-center"><span class="performance-badge ${getPerformanceColor(l.performance)}">${l.performance.toFixed(1)}</span></td>
+                    <td class="px-4 py-2 text-center">${l.role || "Worker"}</td>
+                    <td class="px-4 py-2 text-center">${l.hours || 8}h</td>
+                    <td class="px-4 py-2 text-center">${perfBadge}</td>
+                    <td class="px-2 py-2 text-center whitespace-nowrap">
+                        <button onclick="deleteSingleJobCardLabor('${lId}')" class="text-red-500 hover:text-red-700 text-xs px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors" title="Remove Sailor Record">🗑️</button>
+                    </td>
                 </tr>
             `;
       })
@@ -5774,13 +6189,14 @@ function renderJobCardLabor(jobCardId) {
                         <td class="px-4 py-2 text-center text-slate-500">Pending</td>
                         <td class="px-4 py-2 text-center text-slate-500">-</td>
                         <td class="px-4 py-2 text-center text-slate-500">-</td>
+                        <td class="px-2 py-2 text-center text-slate-400">-</td>
                     </tr>
                 `;
         })
         .join("");
     } else {
       laborHtml =
-        '<tr><td colspan="6" class="px-4 py-8 text-center text-slate-500">No labor logged or assigned</td></tr>';
+        '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No labor logged or assigned</td></tr>';
     }
   }
   document.getElementById("jobCardLabor").innerHTML = laborHtml;
@@ -5897,18 +6313,197 @@ function switchJobCardTab(tab) {
   }
   document.getElementById(`jcTab-${tab}`).classList.remove("hidden");
 }
+let _matSelectedSailors = [];
+
+function toggleMatSailorsSection() {
+  const checkbox = document.getElementById("matIncludeSailors");
+  const section = document.getElementById("matSailorsSection");
+  if (!checkbox || !section) return;
+  section.classList.toggle("hidden", !checkbox.checked);
+  if (checkbox.checked) {
+    renderMatAvailableSailors();
+    renderMatSelectedSailors();
+  }
+}
+
+function filterMatSailorSearch() {
+  const query = (document.getElementById("matSailorSearch") || {}).value || "";
+  renderMatAvailableSailors(query);
+}
+
+function renderMatAvailableSailors(filter = "") {
+  const container = document.getElementById("matAvailableSailorsChips");
+  if (!container) return;
+  const q = filter.toLowerCase().trim();
+
+  // Find linked work order to show its crew first
+  const jc = (store.jobCards || []).find(
+    (j) =>
+      String(j.id) === String(store.selectedJobCard) ||
+      String(j._fbKey) === String(store.selectedJobCard),
+  );
+  const wo = jc
+    ? (store.workOrders || []).find(
+        (w) =>
+          String(w._fbKey) === String(jc.work_order_id) ||
+          String(w.id) === String(jc.work_order_id),
+      )
+    : null;
+  const woAssignedIds = new Set((wo?.assigned || []).map(String));
+
+  let list = (store.sailors || []).filter((s) => {
+    if (
+      _matSelectedSailors.some(
+        (sel) =>
+          String(sel.id) === String(s.id) ||
+          String(sel._fbKey) === String(s._fbKey),
+      )
+    )
+      return false;
+    if (!q) return true;
+    return (
+      (s._searchIndex || "").includes(q) ||
+      (s.name || "").toLowerCase().includes(q) ||
+      (s.official_number || "").toLowerCase().includes(q) ||
+      (s.rank || "").toLowerCase().includes(q) ||
+      (s.trade || "").toLowerCase().includes(q)
+    );
+  });
+
+  // Sort: WO crew first, then by name
+  list.sort((a, b) => {
+    const aInWo =
+      woAssignedIds.has(String(a.id)) || woAssignedIds.has(String(a._fbKey));
+    const bInWo =
+      woAssignedIds.has(String(b.id)) || woAssignedIds.has(String(b._fbKey));
+    if (aInWo !== bInWo) return aInWo ? -1 : 1;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  const visible = list.slice(0, 30);
+  if (visible.length === 0) {
+    container.innerHTML = `<span class="text-xs text-slate-400 py-1 px-2">No matching sailors found</span>`;
+    return;
+  }
+
+  container.innerHTML = visible
+    .map((s) => {
+      const off = s.official_number || s.officialNumber || "-";
+      const sId = s.id || s._fbKey;
+      const isWoCrew =
+        woAssignedIds.has(String(s.id)) || woAssignedIds.has(String(s._fbKey));
+      return `
+      <button type="button" onclick="selectMatSailor('${sId}')" class="text-xs px-2 py-1 rounded-lg border ${isWoCrew ? "border-blue-400 bg-blue-50 hover:bg-blue-100 text-blue-800 font-medium" : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"} flex items-center gap-1 transition-all">
+        <span class="font-bold text-[10px] px-1 py-0.2 bg-slate-200 text-slate-700 rounded">${s.trade || "MA"}</span>
+        <span>${s.rank || ""} ${s.name} (${off})</span>
+        <span class="text-emerald-600 font-bold">+</span>
+      </button>
+    `;
+    })
+    .join("");
+}
+
+function selectMatSailor(sailorId) {
+  const s = (store.sailors || []).find(
+    (x) =>
+      String(x.id) === String(sailorId) || String(x._fbKey) === String(sailorId),
+  );
+  if (!s) return;
+  if (
+    !_matSelectedSailors.some(
+      (x) =>
+        String(x.id) === String(s.id) &&
+        String(x._fbKey) === String(s._fbKey),
+    )
+  ) {
+    _matSelectedSailors.push(s);
+  }
+  renderMatAvailableSailors(
+    (document.getElementById("matSailorSearch") || {}).value || "",
+  );
+  renderMatSelectedSailors();
+}
+
+function removeMatSelectedSailor(sailorId) {
+  _matSelectedSailors = _matSelectedSailors.filter(
+    (x) =>
+      String(x.id) !== String(sailorId) &&
+      String(x._fbKey) !== String(sailorId),
+  );
+  renderMatAvailableSailors(
+    (document.getElementById("matSailorSearch") || {}).value || "",
+  );
+  renderMatSelectedSailors();
+}
+
+function renderMatSelectedSailors() {
+  const container = document.getElementById("matSelectedSailorsList");
+  if (!container) return;
+  if (_matSelectedSailors.length === 0) {
+    container.innerHTML = `<span class="text-xs text-slate-400 italic py-0.5">No sailors selected yet (click above to add)</span>`;
+    return;
+  }
+
+  container.innerHTML = _matSelectedSailors
+    .map((s) => {
+      const off = s.official_number || s.officialNumber || "-";
+      const sId = s.id || s._fbKey;
+      return `
+      <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 font-medium">
+        <span class="font-bold text-[10px] px-1 py-0.2 bg-amber-200 text-amber-900 rounded">${s.trade || "MA"}</span>
+        <span>${s.rank || ""} ${s.name} (${off})</span>
+        <button type="button" onclick="removeMatSelectedSailor('${sId}')" class="text-red-500 hover:text-red-700 font-bold ml-1 text-sm leading-none">&times;</button>
+      </span>
+    `;
+    })
+    .join("");
+}
+
 function openAddMaterialToJobModal() {
   if (!store.selectedJobCard) {
     showToast("Please select a job card first", "error");
     return;
   }
   document.getElementById("matJobCardId").value = store.selectedJobCard; // Reset form
+  const jc = store.jobCards.find(
+    (j) =>
+      String(j.id) === String(store.selectedJobCard) ||
+      String(j._fbKey) === String(store.selectedJobCard),
+  );
+
   const matDateInput = document.getElementById("matDate");
   if (matDateInput) matDateInput.value = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
   const matDemandNoInput = document.getElementById("matDemandNo");
   if (matDemandNoInput) matDemandNoInput.value = "";
+  const matCommencedInput = document.getElementById("matCommenced");
+  if (matCommencedInput) {
+    matCommencedInput.value = (jc && (jc.start_date || jc.commenced_date))
+      ? (jc.start_date || jc.commenced_date)
+      : (typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0]);
+  }
+  const matJobCardNoInput = document.getElementById("matJobCardNo");
+  if (matJobCardNoInput) {
+    matJobCardNoInput.value = (jc && (jc.job_number || jc.job_card_no))
+      ? (jc.job_number || jc.job_card_no)
+      : "";
+  }
   const matSigInput = document.getElementById("matSig");
   if (matSigInput) matSigInput.value = "";
+
+  _matSelectedSailors = [];
+  const includeSailorsCheckbox = document.getElementById("matIncludeSailors");
+  if (includeSailorsCheckbox) {
+    includeSailorsCheckbox.checked = false;
+  }
+  const sailorsSection = document.getElementById("matSailorsSection");
+  if (sailorsSection) {
+    sailorsSection.classList.add("hidden");
+  }
+  const sailorSearchInput = document.getElementById("matSailorSearch");
+  if (sailorSearchInput) sailorSearchInput.value = "";
+  const sailorHoursInput = document.getElementById("matSailorHours");
+  if (sailorHoursInput) sailorHoursInput.value = 8;
+  renderMatSelectedSailors();
 
   const matInput = document.getElementById("matFromInventory");
   matInput.value = "";
@@ -5951,6 +6546,8 @@ function addMaterialToJob(event) {
   const qty = parseFloat(document.getElementById("matQuantity").value);
   const cost = parseFloat(document.getElementById("matCost").value) || 0;
   const demandNo = (document.getElementById("matDemandNo") || {}).value || "";
+  const commenced = (document.getElementById("matCommenced") || {}).value || "";
+  const customJobCardNo = (document.getElementById("matJobCardNo") || {}).value || "";
   const sigRef = (document.getElementById("matSig") || {}).value || "";
   const customDate = (document.getElementById("matDate") || {}).value || (typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0]);
 
@@ -5962,10 +6559,35 @@ function addMaterialToJob(event) {
     cost_per_unit: cost,
     total_cost: qty * cost,
     demand_no: demandNo,
+    commenced: commenced,
+    job_card_no: customJobCardNo,
     sig_ref: sigRef,
     work_date: customDate,
     logged_at: customDate
   }; // Save to Firebase (Realtime Database listener will automatically update store.jobCardMaterials)
+
+  // If Sailors Records included
+  const includeSailors = (document.getElementById("matIncludeSailors") || {}).checked;
+  const hours = parseFloat((document.getElementById("matSailorHours") || {}).value) || 8;
+  if (includeSailors && _matSelectedSailors.length > 0) {
+    _matSelectedSailors.forEach((s) => {
+      const laborEntry = {
+        job_card_id: jobCardId,
+        sailor_id: s.id || s._fbKey,
+        sailor_name: `${s.rank || ""} ${s.name}`.trim(),
+        work_date: customDate,
+        hours: hours,
+        role: "Worker",
+        performance: typeof s.avgScore === "number" ? s.avgScore : (typeof s.performance_score === "number" ? s.performance_score : 7.0),
+        logged_by: store.currentUser?.name || "Officer",
+      };
+      if (!store.jobCardLabor) store.jobCardLabor = [];
+      store.jobCardLabor.push(laborEntry);
+      fbSaveJobCardLabor(laborEntry);
+    });
+    newMaterial.sailors_logged = _matSelectedSailors.length;
+  }
+
   fbSaveJobCardMaterial(newMaterial); // Update job card total in Firebase
   const jc = store.jobCards.find(
     (j) =>
@@ -5975,6 +6597,13 @@ function addMaterialToJob(event) {
   if (jc) {
     jc.total_material_cost =
       (jc.total_material_cost || 0) + newMaterial.total_cost;
+    if (commenced) {
+      jc.start_date = commenced;
+      jc.commenced_date = commenced;
+    }
+    if (customJobCardNo) {
+      jc.job_number = customJobCardNo;
+    }
     fbSaveJobCard(jc);
   } // Deduct from inventory in Firebase if selected
   const invId = document.getElementById("matFromInventory").value;
@@ -5990,7 +6619,8 @@ function addMaterialToJob(event) {
   }
   closeModal("addMaterialModal");
   selectJobCard(jobCardId);
-  showToast("Material added successfully!");
+  renderJobCardLabor(jobCardId);
+  showToast("Material and details saved successfully!");
 }
 
 // =============================================
@@ -6004,10 +6634,12 @@ function buildOfficialJobCardPrintHTML(jc) {
   );
   const totalCost = materials.reduce((sum, m) => sum + (parseFloat(m.total_cost) || 0), 0);
 
-  const startDate = jc.start_date || (jc.created_at ? new Date(jc.created_at).toISOString().split("T")[0] : "");
+  const latestMatWithCommenced = [...materials].reverse().find((m) => m.commenced);
+  const startDate = (latestMatWithCommenced ? latestMatWithCommenced.commenced : "") || jc.start_date || jc.commenced_date || (jc.created_at ? new Date(jc.created_at).toISOString().split("T")[0] : "");
   const endDate = jc.end_date || (jc.completed_at ? new Date(jc.completed_at).toISOString().split("T")[0] : "");
   const projectTitle = jc.description || jc.title || "Civil Engineering Maintenance Job";
-  const jobNo = jc.job_number || "JC/" + (new Date().getFullYear()) + "/0000";
+  const latestMatWithJobNo = [...materials].reverse().find((m) => m.job_card_no);
+  const jobNo = (latestMatWithJobNo ? latestMatWithJobNo.job_card_no : "") || jc.job_number || "JC/" + (new Date().getFullYear()) + "/0000";
 
   // Build material rows
   let rowsHtml = "";
@@ -6056,11 +6688,93 @@ function buildOfficialJobCardPrintHTML(jc) {
     `;
   }
 
+  // Build Labor / Sailors Records Table if any exist
+  const laborLogs = (store.jobCardLabor || []).filter(
+    (l) =>
+      String(l.job_card_id) === String(jcId) ||
+      String(l.job_card_id) === String(jc.id) ||
+      String(l.job_card_id) === String(jc._fbKey),
+  );
+
+  let laborSectionHtml = "";
+  if (laborLogs.length > 0) {
+    let laborRowsHtml = "";
+    laborLogs.forEach((l, idx) => {
+      const sailor = (store.sailors || []).find(
+        (s) =>
+          String(s.id) === String(l.sailor_id) ||
+          String(s._fbKey) === String(l.sailor_id) ||
+          String(s.official_number) === String(l.sailor_id),
+      );
+      const offNo = sailor
+        ? sailor.official_number ||
+          sailor.officialNumber ||
+          sailor.off_no ||
+          sailor.service_no ||
+          "-"
+        : "-";
+      const name = sailor
+        ? `${sailor.rank || ""} ${sailor.name || ""}`.trim()
+        : l.sailor_name || "Unknown";
+      const trade = sailor ? sailor.trade || "-" : "-";
+      const role = l.role || "Worker";
+      const hours = l.hours || l.hours_worked || 8;
+      const workDate = l.work_date || startDate || "-";
+
+      laborRowsHtml += `
+        <tr style="height: 28px;">
+          <td style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10.5px;">${idx + 1}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 10.5px; font-family: monospace; font-weight: bold;">${offNo}</td>
+          <td style="border: 1px solid #000; padding: 4px 8px; text-align: left; font-size: 10.5px; font-weight: 600;">${name}</td>
+          <td style="border: 1px solid #000; padding: 4px; text-align: center; font-size: 10.5px; font-weight: bold;">${trade}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 10.5px;">${role}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 10.5px; font-family: monospace;">${workDate} (${hours}h)</td>
+        </tr>
+      `;
+    });
+
+    laborSectionHtml = `
+      <!-- Sailors / Labor Deployment Record Table -->
+      <div style="margin-top: 14px; page-break-inside: avoid;">
+        <div style="font-size: 11px; font-weight: 900; letter-spacing: 0.5px; border-bottom: 1.5px solid #000; padding-bottom: 3px; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
+          <span>⚓ SAILORS DEPLOYMENT RECORD</span>
+          <span style="font-size: 10px; font-weight: normal; font-style: italic;">(${laborLogs.length} Person(s) Logged)</span>
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px; border: 1.5px solid #000;">
+          <thead>
+            <tr style="background: #f8fafc;">
+              <th style="border: 1px solid #000; padding: 5px 4px; text-align: center; width: 6%; font-weight: 800; font-size: 10px;">NO</th>
+              <th style="border: 1px solid #000; padding: 5px 6px; text-align: center; width: 16%; font-weight: 800; font-size: 10px;">OFFICIAL NO</th>
+              <th style="border: 1px solid #000; padding: 5px 8px; text-align: left; width: 36%; font-weight: 800; font-size: 10px;">RANK & NAME</th>
+              <th style="border: 1px solid #000; padding: 5px 4px; text-align: center; width: 10%; font-weight: 800; font-size: 10px;">TRADE</th>
+              <th style="border: 1px solid #000; padding: 5px 6px; text-align: center; width: 14%; font-weight: 800; font-size: 10px;">ROLE / DUTY</th>
+              <th style="border: 1px solid #000; padding: 5px 6px; text-align: center; width: 18%; font-weight: 800; font-size: 10px;">WORK DATE / HOURS</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${laborRowsHtml}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   const formattedTotal = totalCost.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   return `
     <div class="jobcard-sheet" style="font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; width: 100%; box-sizing: border-box; padding: 10px;">
       
+      <!-- Top Header with Navy Crest (Centered) -->
+      <div style="width: 100%; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; text-align: center;">
+        <div style="display: inline-flex; align-items: center; justify-content: center; gap: 14px;">
+          <img src="${window.location.href.split("?")[0].split("#")[0].replace("index.html", "")}images/navy_crest_cropped.png" style="height: 48px; width: auto; display: block; object-fit: contain;" alt="SLN Crest">
+          <div style="text-align: left;">
+            <div style="font-size: 17px; font-weight: 900; letter-spacing: 0.8px; color: #0f172a; line-height: 1.15;">SRI LANKA NAVY</div>
+            <div style="font-size: 11.5px; font-weight: 800; color: #1e293b; margin-top: 2px; letter-spacing: 0.4px;">CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
+          </div>
+        </div>
+      </div>
+
       <!-- Top Section Box -->
       <div style="border: 1.5px solid #000; padding: 10px 14px; margin-bottom: -1.5px;">
         <div style="display: flex; justify-content: space-between; align-items: flex-start;">
@@ -6120,15 +6834,17 @@ function buildOfficialJobCardPrintHTML(jc) {
         </tfoot>
       </table>
 
+      ${laborSectionHtml}
+
       <!-- Bottom Signatures -->
       <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 50px; padding: 0 40px; font-size: 11px;">
         <div style="text-align: center; width: 220px;">
           <div style="border-bottom: 1px dashed #000; margin-bottom: 8px; height: 35px;"></div>
-          <strong style="font-weight: 800; font-size: 12px;">Zone Incharge</strong>
+          <strong style="font-weight: 800; font-size: 12px;">Checked by</strong>
         </div>
         <div style="text-align: center; width: 220px;">
           <div style="border-bottom: 1px dashed #000; margin-bottom: 8px; height: 35px;"></div>
-          <strong style="font-weight: 800; font-size: 12px;">SCE(on) / CE(m)</strong>
+          <strong style="font-weight: 800; font-size: 12px;">Certified by</strong>
         </div>
       </div>
 
