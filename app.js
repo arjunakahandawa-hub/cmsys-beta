@@ -2441,6 +2441,10 @@ function renderWorkOrderCard(wo) {
   const sm = statusMap[wo.status] || statusMap["Pending"];
   const progressColor =
     progress >= 75 ? "#059669" : progress >= 40 ? "#0d9488" : "#2563eb";
+  const isAssignmentOrAdminStaff =
+    Boolean(wo.assign_type) ||
+    isAdminStaffDuties(wo.zone_id || store.currentZone);
+
   const assignTypeBadge = wo.assign_type
     ? `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">💼 ${wo.assign_type}</span>`
     : ""; // Use _fbKey for the click handler (Firebase primary key)
@@ -2456,6 +2460,38 @@ function renderWorkOrderCard(wo) {
   const tradeBadge = tradeStr
     ? `<span class="text-[10px] text-slate-500 font-bold bg-slate-100 px-1.5 py-0.5 rounded ml-1 border border-slate-200">${tradeStr}</span>`
     : "";
+
+  const priorityBadge = isAssignmentOrAdminStaff
+    ? ""
+    : `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${pm.chip}">${pm.icon} ${wo.priority}</span>`;
+
+  const statusBadge = isAssignmentOrAdminStaff
+    ? ""
+    : `<span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${sm.chip}">${wo.status}</span>`;
+
+  const progressSection = isAssignmentOrAdminStaff
+    ? ""
+    : `
+            <!-- Progress -->
+            <div class="px-3 pb-2">
+                <div class="flex justify-between text-[11px] mb-1">
+                    <span class="text-slate-400">Progress</span>
+                    <span class="font-bold" style="color:${progressColor}">${progress}%</span>
+                </div>
+                <div class="w-full rounded-full h-1.5" style="background:rgba(15,32,64,0.1)">
+                    <div class="h-1.5 rounded-full transition-all duration-500" style="width:${progress}%;background:${progressColor}"></div>
+                </div>
+            </div>`;
+
+  const metaRow = isAssignmentOrAdminStaff
+    ? ""
+    : `
+            <!-- Meta row -->
+            <div class="px-3 pb-2 flex items-center justify-between text-[11px] text-slate-500">
+                <span>⏱ ${wo.estimated_duration}d</span>
+                ${wo.budget_allocation ? `<span class="font-medium text-slate-600">💰 ${formatCurrency(wo.budget_allocation)}</span>` : ""}
+            </div>`;
+
   return `
         <div class="work-order-card ${sm.stripe} rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer group"
             style="background:rgba(255,255,255,0.9);border:1px solid rgba(255,255,255,0.8);backdrop-filter:blur(6px)"
@@ -2465,8 +2501,8 @@ function renderWorkOrderCard(wo) {
             <!-- Header row -->
             <div class="px-3 pt-3 pb-2 flex items-start justify-between">
                 <div class="flex items-center gap-1.5 flex-wrap">
-                    <span class="text-[11px] font-bold px-2 py-0.5 rounded-full ${pm.chip}">${pm.icon} ${wo.priority}</span>
-                    <span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${sm.chip}">${wo.status}</span>
+                    ${priorityBadge}
+                    ${statusBadge}
                     ${assignTypeBadge}
                 </div>
                 <span class="text-[10px] text-slate-400 mono font-medium flex-shrink-0">${wo.reference_no || "—"}</span>
@@ -2477,22 +2513,9 @@ function renderWorkOrderCard(wo) {
                 <p class="text-[11px] text-slate-500">📍 ${wo.location || "Location not set"}${wo.sub_location ? " — " + wo.sub_location : ""}</p>
             </div>
 
-            <!-- Progress -->
-            <div class="px-3 pb-2">
-                <div class="flex justify-between text-[11px] mb-1">
-                    <span class="text-slate-400">Progress</span>
-                    <span class="font-bold" style="color:${progressColor}">${progress}%</span>
-                </div>
-                <div class="w-full rounded-full h-1.5" style="background:rgba(15,32,64,0.1)">
-                    <div class="h-1.5 rounded-full transition-all duration-500" style="width:${progress}%;background:${progressColor}"></div>
-                </div>
-            </div>
+            ${progressSection}
 
-            <!-- Meta row -->
-            <div class="px-3 pb-2 flex items-center justify-between text-[11px] text-slate-500">
-                <span>⏱ ${wo.estimated_duration}d</span>
-                ${wo.budget_allocation ? `<span class="font-medium text-slate-600">💰 ${formatCurrency(wo.budget_allocation)}</span>` : ""}
-            </div>
+            ${metaRow}
 
             <!-- Assigned sailors -->
             <div class="px-3 pb-3 border-t border-slate-100 pt-2">
@@ -4020,15 +4043,15 @@ function openNewAssignModal() {
   const inchargeGroup = document.getElementById("asInchargeGroup");
   const descEl = document.getElementById("asDescription");
 
+  if (inchargeGroup) inchargeGroup.style.display = "none";
+
   if (isAdminStaff) {
     if (typeGroup) typeGroup.style.display = "block";
-    if (inchargeGroup) inchargeGroup.style.display = "block";
     document.getElementById("asType").value = "Admin Staff";
     descEl.value = "";
     descEl.placeholder = "Describe the work...";
   } else {
     if (typeGroup) typeGroup.style.display = "none";
-    if (inchargeGroup) inchargeGroup.style.display = "none";
     document.getElementById("asType").value = "In Charge";
     descEl.value = "In Charge";
     descEl.placeholder = "In Charge";
@@ -4496,6 +4519,26 @@ function openWorkOrderDetail(workOrderId) {
     const el = document.getElementById(id);
     if (el) el.disabled = !isToday;
   });
+
+  const isAssignmentOrAdminStaff =
+    Boolean(wo.assign_type) ||
+    isAdminStaffDuties(wo.zone_id || store.currentZone);
+
+  const statusGroup = document.getElementById("woDetailStatusGroup");
+  const statusPriorityWrapper = document.getElementById("woDetailStatusPriorityWrapper");
+  const metaWrapper = document.getElementById("woDetailMetaWrapper");
+  const jcCostWrapper = document.getElementById("woDetailJobCardCostWrapper");
+  const progressWrapper = document.getElementById("woDetailProgressWrapper");
+  const staffWrapper = document.getElementById("woDetailStaffWrapper");
+
+  if (statusPriorityWrapper) {
+    statusPriorityWrapper.classList.toggle("hidden", isAssignmentOrAdminStaff);
+  }
+  if (metaWrapper) metaWrapper.classList.toggle("hidden", isAssignmentOrAdminStaff);
+  if (jcCostWrapper) jcCostWrapper.classList.toggle("hidden", isAssignmentOrAdminStaff);
+  if (progressWrapper) progressWrapper.classList.toggle("hidden", isAssignmentOrAdminStaff);
+  if (staffWrapper) staffWrapper.classList.toggle("hidden", isAssignmentOrAdminStaff);
+
   document.getElementById("woDetailId").value = wo.id;
   document.getElementById("woDetailTitle").textContent = wo.description;
   document.getElementById("woDetailRef").textContent =
