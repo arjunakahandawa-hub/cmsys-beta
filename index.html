@@ -1577,91 +1577,232 @@
                     </div>
                 </div>
 
-                <!-- ── Tab: User Profile ── -->
+                <!-- ── Tab: User Profile / Zone Management ── -->
                 <div id="stab-content-user" class="settings-tab-content hidden">
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                        <h3 class="font-bold text-slate-800 text-lg mb-1">👤 Zone In-Charge Profile</h3>
-                        <p class="text-sm text-slate-500 mb-6">Select a Zone and assign its In-Charge (EC Sailors only). Auto-fills Rank and Service No.</p>
-                        <div class="grid grid-cols-1 gap-5 max-w-lg">
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Select Zone</label>
-                                <select id="cfg-userZone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onchange="changeSettingsUserZone(this.value)">
-                                    <option value="">-- Select Zone --</option>
-                                </select>
-                            </div>
-                            <div class="relative">
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Full Name (EC Sailors Only)</label>
-                                <input type="text" id="cfg-userName" placeholder="Type name or Off No to search..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showSettingsSailorResults()" oninput="filterSettingsSailorResults(this.value)" autocomplete="off">
-                                <input type="hidden" id="cfg-userSailorId">
-                                <div id="cfg-sailorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Rank</label>
-                                <input type="text" id="cfg-userRank" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Service No (Off No)</label>
-                                <input type="text" id="cfg-userServiceNo" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
-                            </div>
-                            
-                            <!-- Zone Sub In-Charge Profile Section -->
-                            <div class="relative">
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Zone Sub In-Charge Full Name (EC Sailors Only)</label>
-                                <input type="text" id="cfg-userSubName" placeholder="Type name or Off No to search..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showSettingsSubSailorResults()" oninput="filterSettingsSubSailorResults(this.value)" autocomplete="off">
-                                <input type="hidden" id="cfg-userSubSailorId">
-                                <div id="cfg-subSailorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Sub In-Charge Rank</label>
-                                <input type="text" id="cfg-userSubRank" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Sub In-Charge Service No (Off No)</label>
-                                <input type="text" id="cfg-userSubServiceNo" readonly placeholder="Auto-filled" class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-500 cursor-not-allowed">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+                        <div>
+                            <h3 class="font-bold text-slate-800 text-lg mb-1">👤 Zone In-Charge & Team Management</h3>
+                            <p class="text-sm text-slate-500">Configure Zone In-Charge, Acting Incharge, Multiple Supervising Sailors, and Zone Team for each zone.</p>
+                        </div>
+
+                        <!-- Zone Selector -->
+                        <div class="max-w-xl p-4 bg-slate-50 rounded-xl border border-slate-200">
+                            <label class="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">Selected Zone for Profile Setup</label>
+                            <select id="cfg-userZone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-semibold" onchange="changeSettingsUserZone(this.value)">
+                                <option value="">-- Select Zone --</option>
+                            </select>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <!-- Left Column: In-Charge & Acting Incharge -->
+                            <div class="space-y-4 p-5 bg-white border border-slate-200 rounded-xl shadow-xs">
+                                <h4 class="font-bold text-slate-800 text-sm pb-2 border-b border-slate-100 flex items-center gap-1.5">
+                                    <span>🎖️ Zone In-Charge & Acting Incharge</span>
+                                </h4>
+
+                                <!-- Zone In-Charge (EC Only) -->
+                                <div class="space-y-3">
+                                    <div class="relative">
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Zone In-Charge (EC Sailors Only) *</label>
+                                        <input type="text" id="cfg-userName" placeholder="Search In-Charge by name or Off No..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white" onfocus="showSettingsSailorResults()" oninput="filterSettingsSailorResults(this.value)" autocomplete="off">
+                                        <input type="hidden" id="cfg-userSailorId">
+                                        <div id="cfg-sailorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Rank</label>
+                                            <input type="text" id="cfg-userRank" readonly placeholder="Auto-filled" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50 text-slate-600 cursor-not-allowed">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Service No (Off No)</label>
+                                            <input type="text" id="cfg-userServiceNo" readonly placeholder="Auto-filled" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono bg-slate-50 text-slate-600 cursor-not-allowed">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Acting Incharge (EC Only) -->
+                                <div class="space-y-3 pt-3 border-t border-slate-100">
+                                    <div class="relative">
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Acting Incharge (EC Sailors Only)</label>
+                                        <input type="text" id="cfg-userSubName" placeholder="Search Acting Incharge by name or Off No..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white" onfocus="showSettingsSubSailorResults()" oninput="filterSettingsSubSailorResults(this.value)" autocomplete="off">
+                                        <input type="hidden" id="cfg-userSubSailorId">
+                                        <div id="cfg-subSailorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                    </div>
+                                    <div class="grid grid-cols-2 gap-2">
+                                        <div>
+                                            <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Acting Incharge Rank</label>
+                                            <input type="text" id="cfg-userSubRank" readonly placeholder="Auto-filled" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-slate-50 text-slate-600 cursor-not-allowed">
+                                        </div>
+                                        <div>
+                                            <label class="block text-[11px] font-medium text-slate-500 mb-0.5">Service No (Off No)</label>
+                                            <input type="text" id="cfg-userSubServiceNo" readonly placeholder="Auto-filled" class="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs font-mono bg-slate-50 text-slate-600 cursor-not-allowed">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Password & Artificer -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-slate-100">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Profile Password</label>
+                                        <input type="password" id="cfg-userPassword" placeholder="Optional password" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white" oninput="saveSettingsUserPassword(this.value)">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Assigned Artificer (AC Only)</label>
+                                        <div class="relative">
+                                            <input type="text" id="cfg-woArtificerName" placeholder="Search Artificer..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white" onfocus="showWoArtificerResults()" oninput="filterWoArtificerResults(this.value)" autocomplete="off">
+                                            <input type="hidden" id="cfg-woArtificerId">
+                                            <div id="cfg-woArtificerSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Profile Password</label>
-                                <input type="password" id="cfg-userPassword" placeholder="Enter password (optional)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" oninput="saveSettingsUserPassword(this.value)">
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Work Order In-Charge (EC Sailors Only)</label>
-                                <div class="relative">
-                                    <input type="text" id="cfg-woInchargeName" placeholder="Search In-Charge..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showWoInchargeResults()" oninput="filterWoInchargeResults(this.value)" autocomplete="off">
-                                    <input type="hidden" id="cfg-woInchargeId">
-                                    <div id="cfg-woInchargeSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                            <!-- Right Column: Supervising Sailors (Multiple) & Zone Team -->
+                            <div class="space-y-5 p-5 bg-white border border-slate-200 rounded-xl shadow-xs">
+                                <!-- Supervising Sailors (Multiple) -->
+                                <div>
+                                    <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
+                                        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                                            <span>👷 Supervising Sailors (Multiple)</span>
+                                            <span id="cfgSupervisorsCountBadge" class="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">0</span>
+                                        </h4>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mb-2">Add one or more supervisors for this zone (EC Sailors):</p>
+                                    
+                                    <div class="relative mb-2">
+                                        <input type="text" id="cfg-addSupervisorSearch" placeholder="+ Search & add supervisor..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white" onfocus="showAddSupervisorResults()" oninput="filterAddSupervisorResults(this.value)" autocomplete="off">
+                                        <div id="cfg-addSupervisorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                    </div>
+
+                                    <!-- Supervising Sailors Chips -->
+                                    <div id="cfgSupervisorsList" class="flex flex-wrap gap-2 min-h-[40px] p-2 bg-slate-50 rounded-lg border border-slate-200">
+                                        <span class="text-xs text-slate-400 italic">No supervisors added yet</span>
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Work Order Supervisor (EC Sailors Only)</label>
-                                <div class="relative">
-                                    <input type="text" id="cfg-woSupervisorName" placeholder="Search Supervisor..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showWoSupervisorResults()" oninput="filterWoSupervisorResults(this.value)" autocomplete="off">
-                                    <input type="hidden" id="cfg-woSupervisorId">
-                                    <div id="cfg-woSupervisorSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
-                                </div>
-                            </div>
-                            <div>
-                                <label class="block text-sm font-semibold text-slate-700 mb-1">Work Order Artificer (AC Sailors Only)</label>
-                                <div class="relative">
-                                    <input type="text" id="cfg-woArtificerName" placeholder="Search Artificer..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" onfocus="showWoArtificerResults()" oninput="filterWoArtificerResults(this.value)" autocomplete="off">
-                                    <input type="hidden" id="cfg-woArtificerId">
-                                    <div id="cfg-woArtificerSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+
+                                <!-- Zone Team Selection & Release Status -->
+                                <div class="pt-3 border-t border-slate-100">
+                                    <div class="flex items-center justify-between pb-2 border-b border-slate-100 mb-2">
+                                        <h4 class="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                                            <span>⚓ Zone Team (Sailors Pool)</span>
+                                            <span id="cfgZoneTeamCountBadge" class="text-[10px] bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full">0</span>
+                                        </h4>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mb-2">Assign sailors permanently belonging to this Zone Team:</p>
+
+                                    <div class="relative mb-2">
+                                        <input type="text" id="cfg-addZoneTeamSearch" placeholder="+ Search & add sailor to zone team..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white" onfocus="showAddZoneTeamResults()" oninput="filterAddZoneTeamResults(this.value)" autocomplete="off">
+                                        <div id="cfg-addZoneTeamSearchResults" class="absolute left-0 right-0 z-50 border border-slate-200 rounded-lg max-h-48 overflow-y-auto mt-1 divide-y divide-slate-100 bg-white shadow-lg hidden"></div>
+                                    </div>
+
+                                    <!-- Zone Team Sailors Chips -->
+                                    <div id="cfgZoneTeamList" class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto p-2 bg-slate-50 rounded-lg border border-slate-200">
+                                        <span class="text-xs text-slate-400 italic">No sailors assigned to this zone team yet</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- ── Tab: Zones ── -->
+                <!-- ── Tab: Zones & Locations ── -->
                 <div id="stab-content-zones" class="settings-tab-content hidden">
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                        <h3 class="font-bold text-slate-800 text-lg mb-1">🗺️ Zone Management</h3>
-                        <p class="text-sm text-slate-500 mb-6">System Zone list — Firebase DB2 හි save කෙරේ</p>
-                        <div class="flex gap-3 mb-4">
-                            <input type="text" id="newZoneNameSettings" placeholder="New Zone name..." class="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                            <button onclick="addZoneFromSettings()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium">+ Add Zone</button>
+                    <div class="space-y-6">
+                        <!-- Card 1: System Zones & Zone Selector -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                                <div>
+                                    <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                                        <span>🗺️ System Zones</span>
+                                        <span id="cfgZonesCountBadge" class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">0 Zones</span>
+                                    </h3>
+                                    <p class="text-xs text-slate-500 mt-0.5">Select a zone below to view, manage, and add its Locations and Location 2</p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <input type="text" id="newZoneNameSettings" placeholder="New Zone name..." class="px-3 py-1.5 border border-slate-300 rounded-lg text-xs">
+                                    <button onclick="addZoneFromSettings()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold shadow-sm">+ Add Zone</button>
+                                </div>
+                            </div>
+                            
+                            <!-- Zone Selector Cards / Pills -->
+                            <div id="settingsZoneSelectorList" class="flex flex-wrap gap-2 pt-2 border-t border-slate-100">
+                                <!-- Dynamically populated zone pills -->
+                            </div>
                         </div>
-                        <div id="settingsZoneList" class="space-y-2"></div>
+
+                        <!-- Card 2: Selected Zone Locations & Location 2 Database -->
+                        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                                <div>
+                                    <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                                        <span>📍 Locations for: </span>
+                                        <span id="cfgSelectedZoneTitle" class="text-teal-700 bg-teal-50 px-2.5 py-0.5 rounded-lg border border-teal-200 font-extrabold text-base">Select Zone</span>
+                                        <span id="cfgLocationsCountBadge" class="text-xs bg-teal-100 text-teal-800 font-bold px-2 py-0.5 rounded-full">0 Locations</span>
+                                    </h3>
+                                    <p class="text-xs text-slate-500 mt-0.5">Locations and branched Location 2 under this zone with respective End-User details</p>
+                                </div>
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <button onclick="downloadLocationsCsvTemplate()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all border border-slate-300">
+                                        📄 CSV Template
+                                    </button>
+                                    <button onclick="openBulkUploadModal('locations')" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all shadow-sm">
+                                        📥 Bulk Upload (CSV)
+                                    </button>
+                                    <button onclick="exportLocationsCsv()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all shadow-sm">
+                                        📤 Export CSV
+                                    </button>
+                                    <button onclick="openAddLocationModal()" class="bg-teal-600 hover:bg-teal-700 text-white px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all shadow-sm">
+                                        ➕ Add Location
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Quick Add Location & Location 2 Form -->
+                            <div class="my-4 p-4 rounded-xl border border-slate-200 bg-slate-50/80">
+                                <h4 class="font-bold text-slate-700 text-xs uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                                    <span>➕ Quick Add / Branch Location</span>
+                                </h4>
+                                <form onsubmit="quickSaveLocation(event)" class="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                                    <div class="sm:col-span-4">
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location (Building / Facility) *</label>
+                                        <input list="cfgBuildingDatalist" id="quickLocBuilding" required placeholder="Select existing or type new..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
+                                        <datalist id="cfgBuildingDatalist"></datalist>
+                                    </div>
+                                    <div class="sm:col-span-3">
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location 2 <span class="text-slate-400 font-normal">(Sub-location / Room)</span></label>
+                                        <input type="text" id="quickLocSubLocation" placeholder="e.g. Ground Floor, Kitchen" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
+                                    </div>
+                                    <div class="sm:col-span-3">
+                                        <label class="block text-xs font-semibold text-slate-700 mb-1">End User <span class="text-slate-400 font-normal">(Occupant / Dept)</span></label>
+                                        <input type="text" id="quickLocEndUser" placeholder="e.g. Officers Wardroom / Mess Sec" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white">
+                                    </div>
+                                    <div class="sm:col-span-2 flex items-end">
+                                        <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 px-3 rounded-lg text-xs shadow-sm transition-all">
+                                            Save Entry
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <!-- Locations Table with End User -->
+                            <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                                <table class="w-full text-left text-xs">
+                                    <thead class="bg-slate-50 text-slate-700 font-semibold border-b border-slate-200">
+                                        <tr>
+                                            <th class="px-3 py-2.5 w-12 text-center">#</th>
+                                            <th class="px-3 py-2.5">Location (Building / Facility)</th>
+                                            <th class="px-3 py-2.5">Location 2 (Sub-location / Branch)</th>
+                                            <th class="px-3 py-2.5">End User</th>
+                                            <th class="px-3 py-2.5">Description</th>
+                                            <th class="px-3 py-2.5 w-20 text-center">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="cfgLocationsTableBody" class="divide-y divide-slate-100">
+                                        <!-- Dynamically populated -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -2718,8 +2859,8 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Sub Location</label>
-                        <input type="text" id="woSubLocation" class="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="e.g. Server Room, Kitchen">
+                        <label class="block text-sm font-medium text-slate-700 mb-1">Location 2</label>
+                        <input type="text" id="woSubLocation" class="w-full px-3 py-2 border border-slate-300 rounded-lg" placeholder="e.g. Server Room, Ground Floor, Kitchen">
                     </div>
                 </div>
 
@@ -3071,35 +3212,27 @@
 
                 <!-- Optional Sailors Records Section -->
                 <div class="border border-slate-200 rounded-xl p-3 bg-slate-50/90">
-                    <label class="flex items-center gap-2 cursor-pointer font-semibold text-slate-700 text-sm select-none">
-                        <input type="checkbox" id="matIncludeSailors" onchange="toggleMatSailorsSection()" class="w-4 h-4 text-amber-500 rounded border-slate-300 focus:ring-amber-400">
-                        <span>⚓ Sailors Records</span>
-                        <span class="text-xs text-slate-400 font-normal">(Optional)</span>
-                    </label>
+                    <div class="flex items-center justify-between">
+                        <label class="flex items-center gap-2 cursor-pointer font-semibold text-slate-700 text-sm select-none">
+                            <input type="checkbox" id="matIncludeSailors" onchange="toggleMatSailorsSection()" class="w-4 h-4 text-amber-500 rounded border-slate-300 focus:ring-amber-400">
+                            <span>⚓ Sailors Records</span>
+                            <span class="text-xs text-slate-400 font-normal">(Optional)</span>
+                        </label>
+                        <span id="matWoCrewCountBadge" class="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full"></span>
+                    </div>
 
                     <div id="matSailorsSection" class="hidden mt-3 pt-3 border-t border-slate-200 space-y-2.5">
                         <div class="flex items-center justify-between gap-2">
-                            <input type="text" id="matSailorSearch" placeholder="Search sailor name / number..." oninput="filterMatSailorSearch()" class="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white">
+                            <span class="text-xs text-slate-600 font-medium">Assigned Sailors from Work Order:</span>
                             <div class="flex items-center gap-1">
-                                <span class="text-xs text-slate-500 font-medium">Hours:</span>
-                                <input type="number" id="matSailorHours" value="8" min="1" max="24" class="w-16 text-xs px-2 py-1.5 rounded-lg border border-slate-300 bg-white text-center font-bold" title="Working Hours">
-                            </div>
-                        </div>
-                        
-                        <!-- Available Sailor Chips -->
-                        <div>
-                            <div class="text-[11px] font-semibold text-slate-500 mb-1">Click to select sailor(s):</div>
-                            <div id="matAvailableSailorsChips" class="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1.5 bg-white border border-slate-200 rounded-lg">
-                                <span class="text-xs text-slate-400">Loading sailors...</span>
+                                <span class="text-xs text-slate-500 font-medium">Default Hours:</span>
+                                <input type="number" id="matSailorHours" value="8" min="1" max="24" onchange="updateAllMatSailorsHours(this.value)" class="w-14 text-xs px-1.5 py-1 rounded-lg border border-slate-300 bg-white text-center font-bold" title="Working Hours">
                             </div>
                         </div>
 
-                        <!-- Selected Sailors for this Job -->
-                        <div>
-                            <div class="text-[11px] font-semibold text-slate-600 mb-1">Selected Sailors for this Record:</div>
-                            <div id="matSelectedSailorsList" class="flex flex-wrap gap-1.5 min-h-[32px] p-1.5 bg-amber-50/50 border border-dashed border-amber-300 rounded-lg">
-                                <span class="text-xs text-slate-400 italic">No sailors selected yet (click above to add)</span>
-                            </div>
+                        <!-- Work Order Sailors Checklist -->
+                        <div id="matWoSailorsList" class="space-y-1.5 max-h-48 overflow-y-auto p-2 bg-white border border-slate-200 rounded-lg">
+                            <span class="text-xs text-slate-400">Loading Work Order sailors...</span>
                         </div>
                     </div>
                 </div>
@@ -3178,10 +3311,12 @@
                 <!-- Sailors Deployment Records Section in Edit Modal -->
                 <div class="border border-slate-200 rounded-xl p-3.5 bg-slate-50/90 space-y-3">
                     <div class="flex items-center justify-between">
-                        <label class="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                        <label class="font-bold text-sm text-slate-800 flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="editJcIncludeSailors" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
                             <span>⚓ Sailors Deployment Records</span>
                             <span class="text-xs text-blue-600 font-semibold" id="editJcSailorCountBadge">(0 sailors)</span>
                         </label>
+                        <span class="text-[11px] text-slate-500 italic">Show in Print/PDF</span>
                     </div>
 
                     <!-- Add / Search Sailors -->
@@ -3476,8 +3611,12 @@
                     <input type="text" id="locBuilding" required placeholder="e.g., Wardroom Building" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Sub-location</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Sub-location (Location 2)</label>
                     <input type="text" id="locSubLocation" placeholder="e.g., Ground Floor, Room 101" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">End User <span class="text-slate-400 font-normal text-xs">(Occupant / Department)</span></label>
+                    <input type="text" id="locEndUser" placeholder="e.g., Officers Wardroom / Mess Secretary" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-slate-700 mb-1">Description</label>
@@ -3543,55 +3682,115 @@
             <form onsubmit="saveEstimate(event)" class="p-6 space-y-4">
                 <input type="hidden" id="estId">
                 
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
-                        <input type="text" id="estDescription" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Reference Document</label>
-                        <input type="text" id="estReference" placeholder="MS/NCW/2024/..." class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                <div class="grid grid-cols-12 gap-3">
+                    <div class="col-span-12">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Description *</label>
+                        <input type="text" id="estDescription" required placeholder="Describe the estimated work..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
                     </div>
                 </div>
 
-                <!-- Location & End User (req 8) -->
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">Location *</label>
-                        <input type="text" id="estLocation" required placeholder="e.g., Wardroom Building, A-Zone" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                <div class="grid grid-cols-12 gap-3">
+                    <div class="col-span-4">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Reference Type *</label>
+                        <select id="estRefType" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-medium">
+                            <option value="Minute Sheet">Minute</option>
+                            <option value="Letter">Letter</option>
+                            <option value="Verbal Order">Verbal order</option>
+                            <option value="Signal">Signal</option>
+                        </select>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700 mb-1">End User *</label>
-                        <input type="text" id="estEndUser" required placeholder="e.g., Officers Wardroom / Mess Secretary" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    <div class="col-span-4">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Reference No</label>
+                        <input type="text" id="estReference" placeholder="MS/NCW/2024/... or Ref No" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-mono">
+                    </div>
+                    <div class="col-span-4">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Project Type *</label>
+                        <select id="estProjectType" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-medium">
+                            <option value="PROJECT">Project (Type P)</option>
+                            <option value="JOB">Job (Type J)</option>
+                            <option value="TASK">Task (Type T)</option>
+                            <option value="ROUTINE">Routine Work</option>
+                            <option value="EMERGENCY">Emergency Work</option>
+                            <option value="REPAIR">Repair Work</option>
+                        </select>
                     </div>
                 </div>
 
-                <!-- Signatories (req 8) -->
-                <div class="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                    <h4 class="font-semibold text-slate-700 mb-3">Signatories (Name • Rank • Service No.)</h4>
-                    <div class="space-y-3">
+                <div class="grid grid-cols-12 gap-3">
+                    <div class="col-span-5">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location *</label>
+                        <input list="estLocationDatalist" id="estLocation" required oninput="onEstLocationChange(this.value)" placeholder="Select or type Location..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                        <datalist id="estLocationDatalist"></datalist>
+                    </div>
+                    <div class="col-span-4">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location 2</label>
+                        <input list="estLocation2Datalist" id="estLocation2" oninput="onEstLocation2Change(this.value)" onchange="onEstLocation2Change(this.value)" placeholder="Select or type Location 2..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                        <datalist id="estLocation2Datalist"></datalist>
+                    </div>
+                    <div class="col-span-3">
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">End User *</label>
+                        <input type="text" id="estEndUser" required placeholder="e.g. Dockyard / Mess Sec" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    </div>
+                </div>
+
+                <!-- Signatories -->
+                <div class="border border-slate-200 rounded-xl p-3.5 bg-slate-50/90 space-y-3">
+                    <h4 class="font-bold text-slate-800 text-xs uppercase tracking-wide flex items-center gap-1.5">
+                        <span>✍️ Signatories</span>
+                        <span class="text-[11px] font-normal text-slate-500 lowercase">(Name • Rank • Service / Official No.)</span>
+                    </h4>
+                    <div class="space-y-2.5">
+                        <!-- Created By (Sailor) -->
                         <div>
-                            <p class="text-xs font-medium text-slate-500 mb-1">Created By <span class="text-slate-400">(person who visited & created)</span></p>
-                            <div class="grid grid-cols-3 gap-2">
-                                <input type="text" id="estCreatedName" placeholder="Search Name..." autocomplete="off" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-                                <input type="text" id="estCreatedRank" placeholder="Rank" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
-                                <input type="text" id="estCreatedSvc" placeholder="Service No." class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-xs font-semibold text-slate-700">Created By <span class="text-[11px] text-blue-600 font-normal">(Sailor - Person who inspected & created)</span></label>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-5 relative">
+                                    <input type="text" id="estCreatedName" placeholder="Search sailor name or type..." autocomplete="off" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+                                </div>
+                                <div class="col-span-3">
+                                    <input type="text" id="estCreatedRank" placeholder="Rank / Rate" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+                                </div>
+                                <div class="col-span-4">
+                                    <input type="text" id="estCreatedSvc" placeholder="Official / Svc No." class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white">
+                                </div>
                             </div>
                         </div>
+
+                        <!-- Checked By (Zone In-Charge) -->
                         <div>
-                            <p class="text-xs font-medium text-slate-500 mb-1">Checked By <span class="text-slate-400">(person who checked the estimate)</span></p>
-                            <div class="grid grid-cols-3 gap-2">
-                                <input type="text" id="estCheckedName" placeholder="Search Name..." autocomplete="off" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-                                <input type="text" id="estCheckedRank" placeholder="Rank" class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
-                                <input type="text" id="estCheckedSvc" placeholder="Service No." class="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50" readonly>
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-xs font-semibold text-slate-700">Checked By <span class="text-[11px] text-amber-700 font-normal">(Zone In-Charge / Supervisor)</span></label>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-5 relative">
+                                    <input type="text" id="estCheckedName" placeholder="Search in-charge or type..." autocomplete="off" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+                                </div>
+                                <div class="col-span-3">
+                                    <input type="text" id="estCheckedRank" placeholder="Rank" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+                                </div>
+                                <div class="col-span-4">
+                                    <input type="text" id="estCheckedSvc" placeholder="Service No." class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white">
+                                </div>
                             </div>
                         </div>
+
+                        <!-- Approved By (CE Officer) -->
                         <div>
-                            <p class="text-xs font-medium text-slate-500 mb-1">Approved By <span class="text-slate-400">(officer approving for further process)</span></p>
-                            <div class="grid grid-cols-3 gap-2">
-                                <input type="text" id="estApprovedName" placeholder="Name" class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                                <input type="text" id="estApprovedRank" placeholder="Rank" class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                                <input type="text" id="estApprovedSvc" placeholder="Service No." class="px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="text-xs font-semibold text-slate-700">Approved By <span class="text-[11px] text-emerald-700 font-normal">(CE Officer with Designation)</span></label>
+                            </div>
+                            <div class="grid grid-cols-12 gap-2">
+                                <div class="col-span-5 relative">
+                                    <input type="text" id="estApprovedName" placeholder="Search CE officer / type designation..." autocomplete="off" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+                                </div>
+                                <div class="col-span-3">
+                                    <input type="text" id="estApprovedRank" placeholder="Rank / Post" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white">
+                                </div>
+                                <div class="col-span-4">
+                                    <input type="text" id="estApprovedSvc" placeholder="Designation / Svc No." class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-mono bg-white">
+                                </div>
                             </div>
                         </div>
                     </div>

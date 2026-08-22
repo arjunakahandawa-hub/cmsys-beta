@@ -845,6 +845,15 @@ function initOpsListeners() {
         id: (_l$id2 = l.id) !== null && _l$id2 !== void 0 ? _l$id2 : l._fbKey,
       };
     });
+    if (typeof renderSettingsLocationsTable === "function") {
+      renderSettingsLocationsTable();
+    }
+    if (typeof populateEstLocationsDatalist === "function") {
+      populateEstLocationsDatalist();
+    }
+    if (typeof renderLocationsList === "function") {
+      renderLocationsList();
+    }
   }); // ── Maintenance Records ──
   opsDB.ref("maintenance_records").on("value", (snapshot) => {
     store.maintenanceRecords = snapshotToArray(snapshot).map((r) => {
@@ -3248,70 +3257,135 @@ function openNewWorkOrderModal() {
       .toUpperCase();
     return off.startsWith("EC");
   });
-  const inc = (store.settings.zoneInCharges || {})[store.currentZone]; // Incharge option
-  let inchargeOptions = '<option value="">Select...</option>';
-  if (inc && inc.woInchargeId) {
-    const s = store.sailors.find((x) => {
-      var _x$id;
-      return (
-        String(
-          (_x$id = x.id) !== null && _x$id !== void 0 ? _x$id : x._fbKey,
-        ) === String(inc.woInchargeId)
-      );
-    });
+  // ── Populate In-Charge dropdown ──
+  const inc = (store.settings.zoneInCharges || {})[store.currentZone];
+  let primaryInchargeId = "";
+  let inchargeOptions = '<option value="">-- Select In-Charge --</option>';
+
+  const assignedIncharge = inc?.woInchargeId || inc?.sailorId;
+  const actingIncharge = inc?.subSailorId;
+
+  // 1. Zone In-Charge & Acting Incharge first
+  if (assignedIncharge) {
+    const s = store.sailors.find(
+      (x) =>
+        String(x.id !== undefined && x.id !== null ? x.id : x._fbKey) ===
+        String(assignedIncharge),
+    );
     if (s) {
-      inchargeOptions += `<option value="${s.id}">${s.rank} ${s.name}</option>`;
-    }
-  } else {
-    inchargeOptions += ecSailors
-      .map((s) => `<option value="${s.id}">${s.rank} ${s.name}</option>`)
-      .join("");
-  } // Supervisor option
-  let supervisorOptions = '<option value="">Select...</option>';
-  if (inc && inc.woSupervisorId) {
-    const s = store.sailors.find((x) => {
-      var _x$id2;
-      return (
-        String(
-          (_x$id2 = x.id) !== null && _x$id2 !== void 0 ? _x$id2 : x._fbKey,
-        ) === String(inc.woSupervisorId)
+      inchargeOptions += `<option value="${s.id !== undefined && s.id !== null ? s.id : s._fbKey}" class="font-bold bg-blue-50 text-blue-900">⭐ ${s.rank} ${s.name} (Zone In-Charge)</option>`;
+      primaryInchargeId = String(
+        s.id !== undefined && s.id !== null ? s.id : s._fbKey,
       );
-    });
-    if (s) {
-      supervisorOptions += `<option value="${s.id}">${s.rank} ${s.name}</option>`;
     }
-  } else {
-    supervisorOptions += ecSailors
-      .map((s) => `<option value="${s.id}">${s.rank} ${s.name}</option>`)
-      .join("");
   }
-  document.getElementById("woSupervisor").innerHTML = supervisorOptions;
-  document.getElementById("woIncharge").innerHTML = inchargeOptions; // Populate Project Artificer dropdown (filtered to Settings assignments, with fallback to all AC sailors)
+  if (actingIncharge && String(actingIncharge) !== String(assignedIncharge)) {
+    const s = store.sailors.find(
+      (x) =>
+        String(x.id !== undefined && x.id !== null ? x.id : x._fbKey) ===
+        String(actingIncharge),
+    );
+    if (s) {
+      inchargeOptions += `<option value="${s.id !== undefined && s.id !== null ? s.id : s._fbKey}" class="bg-indigo-50 text-indigo-900">🎖️ ${s.rank} ${s.name} (Acting Incharge)</option>`;
+      if (!primaryInchargeId)
+        primaryInchargeId = String(
+          s.id !== undefined && s.id !== null ? s.id : s._fbKey,
+        );
+    }
+  }
+
+  // 2. Other EC sailors
+  inchargeOptions += '<optgroup label="Other Eligible EC Sailors">';
+  ecSailors.forEach((s) => {
+    const sid = String(s.id !== undefined && s.id !== null ? s.id : s._fbKey);
+    if (sid !== String(assignedIncharge) && sid !== String(actingIncharge)) {
+      inchargeOptions += `<option value="${s.id}">${s.rank} ${s.name} (${s.official_number || s.service_no || ""})</option>`;
+    }
+  });
+  inchargeOptions += "</optgroup>";
+  const inchargeEl = document.getElementById("woIncharge");
+  inchargeEl.innerHTML = inchargeOptions;
+  if (primaryInchargeId) inchargeEl.value = primaryInchargeId;
+
+  // ── Populate Supervisor dropdown ──
+  let primarySupervisorId = "";
+  let supervisorOptions = '<option value="">-- Select Supervisor --</option>';
+  const zoneSupervisors = Array.isArray(inc?.supervisors)
+    ? inc.supervisors
+    : inc?.woSupervisorId
+      ? [{ id: inc.woSupervisorId }]
+      : [];
+  const zoneSupervisorIds = new Set(
+    zoneSupervisors.map((sv) =>
+      String(sv.id || sv._fbKey || sv.sailorId),
+    ),
+  );
+
+  if (zoneSupervisors.length > 0) {
+    supervisorOptions += '<optgroup label="⭐ Zone Assigned Supervisors">';
+    zoneSupervisors.forEach((sv) => {
+      const sid = String(sv.id || sv._fbKey || sv.sailorId);
+      const s = store.sailors.find(
+        (x) =>
+          String(x.id !== undefined && x.id !== null ? x.id : x._fbKey) ===
+          sid,
+      );
+      if (s) {
+        supervisorOptions += `<option value="${s.id !== undefined && s.id !== null ? s.id : s._fbKey}" class="font-bold bg-amber-50 text-amber-900">👷 ${s.rank} ${s.name} (Supervisor)</option>`;
+        if (!primarySupervisorId)
+          primarySupervisorId = String(
+            s.id !== undefined && s.id !== null ? s.id : s._fbKey,
+          );
+      }
+    });
+    supervisorOptions += "</optgroup>";
+  }
+
+  supervisorOptions += '<optgroup label="Other Eligible EC Sailors">';
+  ecSailors.forEach((s) => {
+    const sid = String(s.id !== undefined && s.id !== null ? s.id : s._fbKey);
+    if (!zoneSupervisorIds.has(sid)) {
+      supervisorOptions += `<option value="${s.id}">${s.rank} ${s.name} (${s.official_number || s.service_no || ""})</option>`;
+    }
+  });
+  supervisorOptions += "</optgroup>";
+  const supervisorEl = document.getElementById("woSupervisor");
+  supervisorEl.innerHTML = supervisorOptions;
+  if (primarySupervisorId) supervisorEl.value = primarySupervisorId;
+
+  // ── Populate Project Artificer dropdown ──
   const acSailors = store.sailors.filter((s) => {
     const off = String(s.official_number || "")
       .trim()
       .toUpperCase();
     return off.startsWith("AC");
   });
-  let artificerOptions = '<option value="">Select...</option>';
+  let primaryArtificerId = "";
+  let artificerOptions = '<option value="">(None / Optional)</option>';
   if (inc && inc.woArtificerId) {
-    const s = store.sailors.find((x) => {
-      var _x$id3;
-      return (
-        String(
-          (_x$id3 = x.id) !== null && _x$id3 !== void 0 ? _x$id3 : x._fbKey,
-        ) === String(inc.woArtificerId)
-      );
-    });
+    const s = store.sailors.find(
+      (x) =>
+        String(x.id !== undefined && x.id !== null ? x.id : x._fbKey) ===
+        String(inc.woArtificerId),
+    );
     if (s) {
-      artificerOptions += `<option value="${s.id}">${s.rank} ${s.name}</option>`;
+      artificerOptions += `<option value="${s.id !== undefined && s.id !== null ? s.id : s._fbKey}" class="font-bold bg-purple-50 text-purple-900">🔧 ${s.rank} ${s.name} (Assigned Artificer)</option>`;
+      primaryArtificerId = String(
+        s.id !== undefined && s.id !== null ? s.id : s._fbKey,
+      );
     }
-  } else {
-    artificerOptions += acSailors
-      .map((s) => `<option value="${s.id}">${s.rank} ${s.name}</option>`)
-      .join("");
   }
-  document.getElementById("woArtificer").innerHTML = artificerOptions; // Render sailor chips
+  artificerOptions += '<optgroup label="Other AC Sailors">';
+  acSailors.forEach((s) => {
+    const sid = String(s.id !== undefined && s.id !== null ? s.id : s._fbKey);
+    if (sid !== String(inc?.woArtificerId)) {
+      artificerOptions += `<option value="${s.id}">${s.rank} ${s.name} (${s.official_number || s.service_no || ""})</option>`;
+    }
+  });
+  artificerOptions += "</optgroup>";
+  const artificerEl = document.getElementById("woArtificer");
+  artificerEl.innerHTML = artificerOptions;
+  if (primaryArtificerId) artificerEl.value = primaryArtificerId; // Render sailor chips
   renderWoSailorChips(); // Clear search
   document.getElementById("woSailorSearch").value = ""; // Reset trade filter UI
   document.querySelectorAll(".wo-trade-btn").forEach((b) => {
@@ -3357,35 +3431,79 @@ function autofillFromEstimate(estimateId) {
   }
   const est = store.estimates.find((e) => String(e.id) === String(estimateId));
   if (est) {
-    document.getElementById("woBudget").value = est.total_cost || 0;
+    // 1. Reference Type
+    const refTypeInput = document.getElementById("woRefType");
+    if (refTypeInput) {
+      refTypeInput.value = est.ref_type || est.reference_type || "Minute Sheet";
+    }
+
+    // 2. Reference No
+    const refNoInput = document.getElementById("woReference");
+    if (refNoInput) {
+      refNoInput.value =
+        est.reference_doc ||
+        est.reference_no ||
+        est.reference ||
+        est.estimate_number ||
+        "";
+    }
+
+    // 3. Project Type
+    const typeInput = document.getElementById("woType");
+    if (typeInput) {
+      typeInput.value = est.project_type || est.type || "PROJECT";
+    }
+
+    // 4. Description
     const descInput = document.getElementById("woDescription");
-    if (descInput && !descInput.value.trim()) {
+    if (descInput) {
       descInput.value = est.description || "";
     }
-    const locInput = document.getElementById("woLocationSelect");
-    if (locInput && !locInput.value) {
-      const matchedLoc = store.locations.find(
-        (l) =>
-          String(l.id) === String(est.location) ||
-          l.building_name + (l.sub_location ? " - " + l.sub_location : "") ===
-            est.location,
-      );
-      if (matchedLoc) {
-        locInput.value = matchedLoc.building_name;
-        document.getElementById("woSubLocation").value =
-          matchedLoc.sub_location || "";
-      } else {
-        const matchedBuild = store.locations.find(
-          (l) => l.building_name === est.location,
-        );
-        if (matchedBuild) {
-          locInput.value = matchedBuild.building_name;
-          document.getElementById("woSubLocation").value =
-            matchedBuild.sub_location || "";
-        } else {
-          locInput.value = est.location || "";
+
+    // 5. Authority & Est Cost & Duration
+    const authInput = document.getElementById("woAuthority");
+    if (authInput) {
+      authInput.value =
+        est.approvedAuthority ||
+        (est.approvedBy && est.approvedBy.name
+          ? est.approvedBy.name
+          : "CCED(E)");
+    }
+    const budgetInput = document.getElementById("woBudget");
+    if (budgetInput) {
+      budgetInput.value = est.total_cost || 0;
+    }
+    const durationInput = document.getElementById("woDuration");
+    if (durationInput) {
+      durationInput.value = est.totalManDays
+        ? Math.max(1, Math.ceil(est.totalManDays / 4))
+        : 1;
+    }
+
+    // 6. Location & Location 2 (not sub Location)
+    const locSelect = document.getElementById("woLocationSelect");
+    const loc2Input = document.getElementById("woSubLocation"); // Location 2
+
+    if (locSelect) {
+      let found = false;
+      for (let i = 0; i < locSelect.options.length; i++) {
+        if (locSelect.options[i].value === est.location) {
+          locSelect.selectedIndex = i;
+          found = true;
+          break;
         }
       }
+      if (!found && est.location) {
+        const opt = document.createElement("option");
+        opt.value = est.location;
+        opt.textContent = est.location;
+        locSelect.appendChild(opt);
+        locSelect.value = est.location;
+      }
+    }
+
+    if (loc2Input) {
+      loc2Input.value = est.location2 || est.sub_location || "";
     }
   }
 }
@@ -5877,6 +5995,14 @@ function openEditJobCardModal(id) {
   );
   _editJcLaborList = JSON.parse(JSON.stringify(existingLabor));
 
+  const includeSailorsCheckbox = document.getElementById("editJcIncludeSailors");
+  if (includeSailorsCheckbox) {
+    includeSailorsCheckbox.checked =
+      jc.include_sailors === true ||
+      jc.include_sailors === "true" ||
+      (jc.include_sailors !== false && existingLabor.length > 0);
+  }
+
   const searchInput = document.getElementById("editJcSailorSearch");
   if (searchInput) searchInput.value = "";
   const hoursInput = document.getElementById("editJcSailorHours");
@@ -5914,6 +6040,7 @@ function saveEditedJobCard(event) {
   }
   jc.approved_by = document.getElementById("editJcApprovedBy").value.trim();
   jc.taken_by = document.getElementById("editJcTakenBy").value.trim();
+  jc.include_sailors = (document.getElementById("editJcIncludeSailors") || {}).checked;
 
   // Save Job Card
   fbSaveJobCard(jc);
@@ -6121,16 +6248,20 @@ function renderJobCardMaterials(jobCardId) {
 }
 function renderJobCardLabor(jobCardId) {
   let laborHtml = "";
-  const labor = store.jobCardLabor.filter(
-    (l) => String(l.job_card_id) === String(jobCardId),
+  const labor = (store.jobCardLabor || []).filter(
+    (l) =>
+      String(l.job_card_id) === String(jobCardId) ||
+      String(l.job_card_id) === String(store.selectedJobCard),
   );
   if (labor.length > 0) {
     laborHtml = labor
       .map((l) => {
-        const sailor = store.sailors.find(
+        const sailor = (store.sailors || []).find(
           (s) =>
             String(s.id) === String(l.sailor_id) ||
-            String(s._fbKey) === String(l.sailor_id),
+            String(s._fbKey) === String(l.sailor_id) ||
+            String(s.official_number) === String(l.sailor_id) ||
+            (s.off_no && String(s.off_no) === String(l.sailor_id)),
         );
         const perfVal =
           typeof l.performance === "number"
@@ -6146,13 +6277,16 @@ function renderJobCardLabor(jobCardId) {
             : `<span class="text-slate-400 text-xs">-</span>`;
 
         const lId = l.id || l._fbKey;
+        const sailorName = sailor ? `${sailor.rank || ''} ${sailor.name || ''}`.trim() : (l.sailor_name || "Unknown");
+        const sailorTrade = sailor ? (sailor.trade || "-") : (l.trade || "-");
+
         return `
                 <tr>
-                    <td class="px-4 py-2 text-slate-600">${l.work_date}</td>
-                    <td class="px-4 py-2 font-medium">${(sailor === null || sailor === void 0 ? void 0 : sailor.name) || "Unknown"}</td>
-                    <td class="px-4 py-2 text-center"><span class="bg-slate-100 px-2 py-0.5 rounded text-xs">${(sailor === null || sailor === void 0 ? void 0 : sailor.trade) || "-"}</span></td>
+                    <td class="px-4 py-2 text-slate-600 font-mono text-xs">${l.work_date || "-"}</td>
+                    <td class="px-4 py-2 font-medium text-slate-800">${sailorName}</td>
+                    <td class="px-4 py-2 text-center"><span class="bg-slate-100 px-2 py-0.5 rounded text-xs font-bold">${sailorTrade}</span></td>
                     <td class="px-4 py-2 text-center">${l.role || "Worker"}</td>
-                    <td class="px-4 py-2 text-center">${l.hours || 8}h</td>
+                    <td class="px-4 py-2 text-center font-bold">${l.hours || 8}h</td>
                     <td class="px-4 py-2 text-center">${perfBadge}</td>
                     <td class="px-2 py-2 text-center whitespace-nowrap">
                         <button onclick="deleteSingleJobCardLabor('${lId}')" class="text-red-500 hover:text-red-700 text-xs px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors" title="Remove Sailor Record">🗑️</button>
@@ -6162,34 +6296,53 @@ function renderJobCardLabor(jobCardId) {
       })
       .join("");
   } else {
-    // Fallback: show assigned sailors from Work Order
-    const jc = store.jobCards.find(
+    // Fallback: show assigned sailors from linked Work Order / Job Card
+    const jc = (store.jobCards || []).find(
       (j) =>
         String(j.id) === String(jobCardId) ||
         String(j._fbKey) === String(jobCardId),
     );
     const wo = jc
-      ? store.workOrders.find(
+      ? (store.workOrders || []).find(
           (w) =>
             String(w._fbKey) === String(jc.work_order_id) ||
-            String(w.id) === String(jc.work_order_id),
+            String(w.id) === String(jc.work_order_id) ||
+            (w.description && jc.description && w.description.trim().toLowerCase() === jc.description.trim().toLowerCase())
         )
       : null;
-    if (wo && wo.assigned && wo.assigned.length > 0) {
-      laborHtml = wo.assigned
+
+    const assignedIds = (wo && wo.assigned && wo.assigned.length > 0)
+      ? wo.assigned
+      : ((jc && jc.assigned && jc.assigned.length > 0)
+          ? jc.assigned
+          : ((wo && wo.last_assigned && wo.last_assigned.length > 0) ? wo.last_assigned : []));
+
+    if (assignedIds && assignedIds.length > 0) {
+      laborHtml = assignedIds
         .map((sid) => {
-          const sailor = store.sailors.find(
-            (s) => String(s.id) === String(sid),
+          const sailor = (store.sailors || []).find(
+            (s) =>
+              String(s.id) === String(sid) ||
+              String(s._fbKey) === String(sid) ||
+              String(s.official_number) === String(sid) ||
+              (s.off_no && String(s.off_no) === String(sid)),
           );
+          const sailorName = sailor ? `${sailor.rank || ''} ${sailor.name || ''}`.trim() : "Unknown";
+          const sailorTrade = sailor ? (sailor.trade || "-") : "-";
+          const perfVal = sailor && typeof sailor.avgScore === "number" ? sailor.avgScore : (sailor && typeof sailor.performance_score === "number" ? sailor.performance_score : null);
+          const perfBadge = perfVal !== null
+            ? `<span class="performance-badge ${getPerformanceColor(perfVal)}">${perfVal.toFixed(1)}</span>`
+            : `<span class="text-slate-400 text-xs">-</span>`;
+
           return `
-                    <tr class="bg-blue-50/30">
-                        <td class="px-4 py-2 text-slate-400 italic">Assigned</td>
-                        <td class="px-4 py-2 font-medium text-blue-800">${(sailor === null || sailor === void 0 ? void 0 : sailor.name) || "Unknown"}</td>
-                        <td class="px-4 py-2 text-center"><span class="bg-slate-100 px-2 py-0.5 rounded text-xs">${(sailor === null || sailor === void 0 ? void 0 : sailor.trade) || "-"}</span></td>
-                        <td class="px-4 py-2 text-center text-slate-500">Pending</td>
-                        <td class="px-4 py-2 text-center text-slate-500">-</td>
-                        <td class="px-4 py-2 text-center text-slate-500">-</td>
-                        <td class="px-2 py-2 text-center text-slate-400">-</td>
+                    <tr class="bg-blue-50/40">
+                        <td class="px-4 py-2 text-slate-400 italic text-xs font-mono">Assigned</td>
+                        <td class="px-4 py-2 font-medium text-blue-900">${sailorName}</td>
+                        <td class="px-4 py-2 text-center"><span class="bg-blue-100/70 text-blue-800 px-2 py-0.5 rounded text-xs font-bold">${sailorTrade}</span></td>
+                        <td class="px-4 py-2 text-center text-slate-600 text-xs">Worker</td>
+                        <td class="px-4 py-2 text-center text-slate-600 font-mono text-xs">8h</td>
+                        <td class="px-4 py-2 text-center">${perfBadge}</td>
+                        <td class="px-2 py-2 text-center text-slate-400 text-xs">-</td>
                     </tr>
                 `;
         })
@@ -6199,7 +6352,8 @@ function renderJobCardLabor(jobCardId) {
         '<tr><td colspan="7" class="px-4 py-8 text-center text-slate-500">No labor logged or assigned</td></tr>';
     }
   }
-  document.getElementById("jobCardLabor").innerHTML = laborHtml;
+  const laborContainer = document.getElementById("jobCardLabor");
+  if (laborContainer) laborContainer.innerHTML = laborHtml;
 }
 function renderJobCardSummary(jobCardId) {
   const jc = store.jobCards.find(
@@ -6297,23 +6451,29 @@ function renderJobCardFeedback(jobCardId) {
 }
 function switchJobCardTab(tab) {
   document.querySelectorAll(".jc-tab").forEach((t) => {
-    t.classList.remove("border-green-600", "text-green-600", "border-b-2");
-    t.classList.add("text-slate-500");
-  });
-  document
-    .querySelectorAll(".jc-tab-content")
-    .forEach((c) => c.classList.add("hidden"));
-  if (event && event.target) {
-    event.target.classList.remove("text-slate-500");
-    event.target.classList.add(
+    t.classList.remove(
       "border-green-600",
       "text-green-600",
       "border-b-2",
+      "font-semibold",
+    );
+  });
+  document.querySelectorAll(".jc-tab-content").forEach((c) => {
+    c.classList.add("hidden");
+  });
+  const activeBtn = document.querySelector(`[data-tab="${tab}"]`);
+  if (activeBtn) {
+    activeBtn.classList.add(
+      "border-green-600",
+      "text-green-600",
+      "border-b-2",
+      "font-semibold",
     );
   }
-  document.getElementById(`jcTab-${tab}`).classList.remove("hidden");
+  const tabEl = document.getElementById(`jcTab-${tab}`);
+  if (tabEl) tabEl.classList.remove("hidden");
 }
-let _matSelectedSailors = [];
+let _matWoSailorEntries = [];
 
 function toggleMatSailorsSection() {
   const checkbox = document.getElementById("matIncludeSailors");
@@ -6321,22 +6481,11 @@ function toggleMatSailorsSection() {
   if (!checkbox || !section) return;
   section.classList.toggle("hidden", !checkbox.checked);
   if (checkbox.checked) {
-    renderMatAvailableSailors();
-    renderMatSelectedSailors();
+    loadAndRenderMatWoSailors();
   }
 }
 
-function filterMatSailorSearch() {
-  const query = (document.getElementById("matSailorSearch") || {}).value || "";
-  renderMatAvailableSailors(query);
-}
-
-function renderMatAvailableSailors(filter = "") {
-  const container = document.getElementById("matAvailableSailorsChips");
-  if (!container) return;
-  const q = filter.toLowerCase().trim();
-
-  // Find linked work order to show its crew first
+function loadAndRenderMatWoSailors() {
   const jc = (store.jobCards || []).find(
     (j) =>
       String(j.id) === String(store.selectedJobCard) ||
@@ -6349,114 +6498,96 @@ function renderMatAvailableSailors(filter = "") {
           String(w.id) === String(jc.work_order_id),
       )
     : null;
-  const woAssignedIds = new Set((wo?.assigned || []).map(String));
 
-  let list = (store.sailors || []).filter((s) => {
-    if (
-      _matSelectedSailors.some(
-        (sel) =>
-          String(sel.id) === String(s.id) ||
-          String(sel._fbKey) === String(s._fbKey),
-      )
-    )
-      return false;
-    if (!q) return true;
+  const defaultHours =
+    parseFloat((document.getElementById("matSailorHours") || {}).value) || 8;
+  const woAssignedIds = (wo?.assigned || []).map(String);
+  const woSailors = (store.sailors || []).filter((s) => {
     return (
-      (s._searchIndex || "").includes(q) ||
-      (s.name || "").toLowerCase().includes(q) ||
-      (s.official_number || "").toLowerCase().includes(q) ||
-      (s.rank || "").toLowerCase().includes(q) ||
-      (s.trade || "").toLowerCase().includes(q)
+      woAssignedIds.includes(String(s.id)) ||
+      woAssignedIds.includes(String(s._fbKey)) ||
+      (s.official_number && woAssignedIds.includes(String(s.official_number)))
     );
   });
 
-  // Sort: WO crew first, then by name
-  list.sort((a, b) => {
-    const aInWo =
-      woAssignedIds.has(String(a.id)) || woAssignedIds.has(String(a._fbKey));
-    const bInWo =
-      woAssignedIds.has(String(b.id)) || woAssignedIds.has(String(b._fbKey));
-    if (aInWo !== bInWo) return aInWo ? -1 : 1;
-    return (a.name || "").localeCompare(b.name || "");
-  });
-
-  const visible = list.slice(0, 30);
-  if (visible.length === 0) {
-    container.innerHTML = `<span class="text-xs text-slate-400 py-1 px-2">No matching sailors found</span>`;
-    return;
+  const countBadge = document.getElementById("matWoCrewCountBadge");
+  if (countBadge) {
+    countBadge.textContent =
+      woSailors.length > 0 ? `${woSailors.length} assigned to Work Order` : "";
   }
 
-  container.innerHTML = visible
-    .map((s) => {
-      const off = s.official_number || s.officialNumber || "-";
-      const sId = s.id || s._fbKey;
-      const isWoCrew =
-        woAssignedIds.has(String(s.id)) || woAssignedIds.has(String(s._fbKey));
-      return `
-      <button type="button" onclick="selectMatSailor('${sId}')" class="text-xs px-2 py-1 rounded-lg border ${isWoCrew ? "border-blue-400 bg-blue-50 hover:bg-blue-100 text-blue-800 font-medium" : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"} flex items-center gap-1 transition-all">
-        <span class="font-bold text-[10px] px-1 py-0.2 bg-slate-200 text-slate-700 rounded">${s.trade || "MA"}</span>
-        <span>${s.rank || ""} ${s.name} (${off})</span>
-        <span class="text-emerald-600 font-bold">+</span>
-      </button>
-    `;
-    })
-    .join("");
+  // Pre-populate entries with all Work Order sailors checked by default
+  _matWoSailorEntries = woSailors.map((s) => ({
+    sailor: s,
+    sailor_id: s.id || s._fbKey,
+    official_number: s.official_number || s.officialNumber || s.off_no || "-",
+    name: `${s.rank || ""} ${s.name || ""}`.trim(),
+    trade: s.trade || "MA",
+    checked: true,
+    hours: defaultHours,
+    role: "Worker",
+  }));
+
+  renderMatWoSailors();
 }
 
-function selectMatSailor(sailorId) {
-  const s = (store.sailors || []).find(
-    (x) =>
-      String(x.id) === String(sailorId) || String(x._fbKey) === String(sailorId),
-  );
-  if (!s) return;
-  if (
-    !_matSelectedSailors.some(
-      (x) =>
-        String(x.id) === String(s.id) &&
-        String(x._fbKey) === String(s._fbKey),
-    )
-  ) {
-    _matSelectedSailors.push(s);
-  }
-  renderMatAvailableSailors(
-    (document.getElementById("matSailorSearch") || {}).value || "",
-  );
-  renderMatSelectedSailors();
-}
-
-function removeMatSelectedSailor(sailorId) {
-  _matSelectedSailors = _matSelectedSailors.filter(
-    (x) =>
-      String(x.id) !== String(sailorId) &&
-      String(x._fbKey) !== String(sailorId),
-  );
-  renderMatAvailableSailors(
-    (document.getElementById("matSailorSearch") || {}).value || "",
-  );
-  renderMatSelectedSailors();
-}
-
-function renderMatSelectedSailors() {
-  const container = document.getElementById("matSelectedSailorsList");
+function renderMatWoSailors() {
+  const container = document.getElementById("matWoSailorsList");
   if (!container) return;
-  if (_matSelectedSailors.length === 0) {
-    container.innerHTML = `<span class="text-xs text-slate-400 italic py-0.5">No sailors selected yet (click above to add)</span>`;
+
+  if (_matWoSailorEntries.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-3 text-xs text-slate-500 italic">
+        ⚠️ No sailors are currently assigned to this Work Order.
+      </div>
+    `;
     return;
   }
 
-  container.innerHTML = _matSelectedSailors
-    .map((s) => {
-      const off = s.official_number || s.officialNumber || "-";
-      const sId = s.id || s._fbKey;
+  container.innerHTML = _matWoSailorEntries
+    .map((item, idx) => {
       return `
-      <span class="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 font-medium">
-        <span class="font-bold text-[10px] px-1 py-0.2 bg-amber-200 text-amber-900 rounded">${s.trade || "MA"}</span>
-        <span>${s.rank || ""} ${s.name} (${off})</span>
-        <button type="button" onclick="removeMatSelectedSailor('${sId}')" class="text-red-500 hover:text-red-700 font-bold ml-1 text-sm leading-none">&times;</button>
-      </span>
+      <div class="flex items-center justify-between gap-2 p-1.5 rounded-lg border ${item.checked ? "bg-amber-50/60 border-amber-200" : "bg-slate-50 border-slate-200 opacity-60"} transition-all">
+        <label class="flex items-center gap-2 flex-1 min-w-0 cursor-pointer select-none">
+          <input type="checkbox" ${item.checked ? "checked" : ""} onchange="toggleMatSailorEntry(${idx}, this.checked)" class="w-4 h-4 text-amber-500 rounded border-slate-300 focus:ring-amber-400">
+          <span class="font-bold text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded">${item.trade}</span>
+          <div class="truncate text-xs">
+            <span class="font-semibold text-slate-800">${item.name}</span>
+            <span class="text-[11px] text-slate-500 font-mono">(${item.official_number})</span>
+          </div>
+        </label>
+        <div class="flex items-center gap-1.5">
+          <input type="text" value="${item.role || "Worker"}" onchange="updateMatSailorField(${idx}, 'role', this.value)" placeholder="Role" class="w-20 text-xs px-1.5 py-0.5 border border-slate-300 rounded bg-white" title="Role / Duty">
+          <div class="flex items-center gap-0.5">
+            <input type="number" value="${item.hours || 8}" min="1" max="24" onchange="updateMatSailorField(${idx}, 'hours', parseFloat(this.value) || 8)" class="w-12 text-xs px-1 py-0.5 border border-slate-300 rounded bg-white text-center font-bold" title="Hours">
+            <span class="text-[11px] text-slate-500">h</span>
+          </div>
+        </div>
+      </div>
     `;
     })
     .join("");
+}
+
+function toggleMatSailorEntry(index, isChecked) {
+  if (_matWoSailorEntries[index]) {
+    _matWoSailorEntries[index].checked = isChecked;
+    renderMatWoSailors();
+  }
+}
+
+function updateMatSailorField(index, field, value) {
+  if (_matWoSailorEntries[index]) {
+    _matWoSailorEntries[index][field] = value;
+  }
+}
+
+function updateAllMatSailorsHours(hoursVal) {
+  const h = parseFloat(hoursVal) || 8;
+  _matWoSailorEntries.forEach((item) => {
+    item.hours = h;
+  });
+  renderMatWoSailors();
 }
 
 function openAddMaterialToJobModal() {
@@ -6472,25 +6603,33 @@ function openAddMaterialToJobModal() {
   );
 
   const matDateInput = document.getElementById("matDate");
-  if (matDateInput) matDateInput.value = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
+  if (matDateInput)
+    matDateInput.value =
+      typeof getLocalDateString === "function"
+        ? getLocalDateString()
+        : new Date().toISOString().split("T")[0];
   const matDemandNoInput = document.getElementById("matDemandNo");
   if (matDemandNoInput) matDemandNoInput.value = "";
   const matCommencedInput = document.getElementById("matCommenced");
   if (matCommencedInput) {
-    matCommencedInput.value = (jc && (jc.start_date || jc.commenced_date))
-      ? (jc.start_date || jc.commenced_date)
-      : (typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0]);
+    matCommencedInput.value =
+      jc && (jc.start_date || jc.commenced_date)
+        ? jc.start_date || jc.commenced_date
+        : typeof getLocalDateString === "function"
+          ? getLocalDateString()
+          : new Date().toISOString().split("T")[0];
   }
   const matJobCardNoInput = document.getElementById("matJobCardNo");
   if (matJobCardNoInput) {
-    matJobCardNoInput.value = (jc && (jc.job_number || jc.job_card_no))
-      ? (jc.job_number || jc.job_card_no)
-      : "";
+    matJobCardNoInput.value =
+      jc && (jc.job_number || jc.job_card_no)
+        ? jc.job_number || jc.job_card_no
+        : "";
   }
   const matSigInput = document.getElementById("matSig");
   if (matSigInput) matSigInput.value = "";
 
-  _matSelectedSailors = [];
+  _matWoSailorEntries = [];
   const includeSailorsCheckbox = document.getElementById("matIncludeSailors");
   if (includeSailorsCheckbox) {
     includeSailorsCheckbox.checked = false;
@@ -6499,11 +6638,19 @@ function openAddMaterialToJobModal() {
   if (sailorsSection) {
     sailorsSection.classList.add("hidden");
   }
-  const sailorSearchInput = document.getElementById("matSailorSearch");
-  if (sailorSearchInput) sailorSearchInput.value = "";
-  const sailorHoursInput = document.getElementById("matSailorHours");
-  if (sailorHoursInput) sailorHoursInput.value = 8;
-  renderMatSelectedSailors();
+  const countBadge = document.getElementById("matWoCrewCountBadge");
+  if (countBadge) {
+    const wo = jc
+      ? (store.workOrders || []).find(
+          (w) =>
+            String(w._fbKey) === String(jc.work_order_id) ||
+            String(w.id) === String(jc.work_order_id),
+        )
+      : null;
+    const woAssignedIds = (wo?.assigned || []).map(String);
+    countBadge.textContent =
+      woAssignedIds.length > 0 ? `${woAssignedIds.length} in Work Order` : "";
+  }
 
   const matInput = document.getElementById("matFromInventory");
   matInput.value = "";
@@ -6515,14 +6662,49 @@ function openAddMaterialToJobModal() {
   matInput.addEventListener("change", fillMaterialFromInventory);
   document.getElementById("addMaterialModal").classList.remove("hidden");
 }
+function setSelectValueCaseInsensitive(selectEl, targetValue) {
+  if (!selectEl || !targetValue) return;
+  const cleanTarget = String(targetValue).trim().toLowerCase();
+  for (let i = 0; i < selectEl.options.length; i++) {
+    const optVal = selectEl.options[i].value.trim().toLowerCase();
+    const optText = selectEl.options[i].textContent.trim().toLowerCase();
+    if (
+      optVal === cleanTarget ||
+      optText === cleanTarget ||
+      (cleanTarget.startsWith("no") && optVal.startsWith("no")) ||
+      (cleanTarget.startsWith("kg") && optVal.startsWith("kg")) ||
+      (cleanTarget.startsWith("bag") && optVal.startsWith("bag")) ||
+      (cleanTarget.startsWith("cub") && optVal.startsWith("cub")) ||
+      (cleanTarget.startsWith("mtr") && optVal.startsWith("meter")) ||
+      (cleanTarget.startsWith("met") && optVal.startsWith("meter")) ||
+      (cleanTarget.startsWith("ltr") && optVal.startsWith("ltr")) ||
+      (cleanTarget.startsWith("ft") && optVal.startsWith("ft")) ||
+      (cleanTarget.startsWith("sheet") && optVal.startsWith("sheet"))
+    ) {
+      selectEl.selectedIndex = i;
+      return;
+    }
+  }
+  const newOpt = document.createElement("option");
+  newOpt.value = targetValue;
+  newOpt.textContent = targetValue;
+  selectEl.appendChild(newOpt);
+  selectEl.value = targetValue;
+}
+
 function fillMaterialFromInventory() {
-  const inputVal = document.getElementById("matFromInventory").value;
-  const item = store.inventory.find(
-    (i) => i.description === inputVal && i.category !== "Tools",
-  );
+  const inputVal = (document.getElementById("matFromInventory")?.value || "").trim().toLowerCase();
+  if (!inputVal) return;
+  const item =
+    store.inventory.find(
+      (i) => (i.description || "").trim().toLowerCase() === inputVal && i.category !== "Tools",
+    ) ||
+    store.inventory.find(
+      (i) => (i.description || "").trim().toLowerCase().includes(inputVal) && i.category !== "Tools",
+    );
   if (item) {
     document.getElementById("matName").value = item.description;
-    document.getElementById("matUnit").value = item.deno;
+    setSelectValueCaseInsensitive(document.getElementById("matUnit"), item.deno);
     document.getElementById("matCost").value = item.cost_per_unit || "";
     calculateMaterialTotal();
   }
@@ -6547,9 +6729,14 @@ function addMaterialToJob(event) {
   const cost = parseFloat(document.getElementById("matCost").value) || 0;
   const demandNo = (document.getElementById("matDemandNo") || {}).value || "";
   const commenced = (document.getElementById("matCommenced") || {}).value || "";
-  const customJobCardNo = (document.getElementById("matJobCardNo") || {}).value || "";
+  const customJobCardNo =
+    (document.getElementById("matJobCardNo") || {}).value || "";
   const sigRef = (document.getElementById("matSig") || {}).value || "";
-  const customDate = (document.getElementById("matDate") || {}).value || (typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0]);
+  const customDate =
+    (document.getElementById("matDate") || {}).value ||
+    (typeof getLocalDateString === "function"
+      ? getLocalDateString()
+      : new Date().toISOString().split("T")[0]);
 
   const newMaterial = {
     job_card_id: jobCardId,
@@ -6563,29 +6750,41 @@ function addMaterialToJob(event) {
     job_card_no: customJobCardNo,
     sig_ref: sigRef,
     work_date: customDate,
-    logged_at: customDate
+    logged_at: customDate,
   }; // Save to Firebase (Realtime Database listener will automatically update store.jobCardMaterials)
 
   // If Sailors Records included
-  const includeSailors = (document.getElementById("matIncludeSailors") || {}).checked;
-  const hours = parseFloat((document.getElementById("matSailorHours") || {}).value) || 8;
-  if (includeSailors && _matSelectedSailors.length > 0) {
-    _matSelectedSailors.forEach((s) => {
+  const includeSailors = (
+    document.getElementById("matIncludeSailors") || {}
+  ).checked;
+  const selectedEntries = includeSailors
+    ? _matWoSailorEntries.filter((e) => e.checked)
+    : [];
+
+  if (includeSailors && selectedEntries.length > 0) {
+    selectedEntries.forEach((e) => {
+      const s = e.sailor;
       const laborEntry = {
         job_card_id: jobCardId,
-        sailor_id: s.id || s._fbKey,
-        sailor_name: `${s.rank || ""} ${s.name}`.trim(),
+        sailor_id: e.sailor_id,
+        sailor_name: e.name,
+        trade: e.trade,
         work_date: customDate,
-        hours: hours,
-        role: "Worker",
-        performance: typeof s.avgScore === "number" ? s.avgScore : (typeof s.performance_score === "number" ? s.performance_score : 7.0),
+        hours: e.hours || 8,
+        role: e.role || "Worker",
+        performance:
+          s && typeof s.avgScore === "number"
+            ? s.avgScore
+            : s && typeof s.performance_score === "number"
+              ? s.performance_score
+              : 7.0,
         logged_by: store.currentUser?.name || "Officer",
       };
       if (!store.jobCardLabor) store.jobCardLabor = [];
       store.jobCardLabor.push(laborEntry);
       fbSaveJobCardLabor(laborEntry);
     });
-    newMaterial.sailors_logged = _matSelectedSailors.length;
+    newMaterial.sailors_logged = selectedEntries.length;
   }
 
   fbSaveJobCardMaterial(newMaterial); // Update job card total in Firebase
@@ -6604,6 +6803,7 @@ function addMaterialToJob(event) {
     if (customJobCardNo) {
       jc.job_number = customJobCardNo;
     }
+    jc.include_sailors = includeSailors;
     fbSaveJobCard(jc);
   } // Deduct from inventory in Firebase if selected
   const invId = document.getElementById("matFromInventory").value;
@@ -6622,6 +6822,8 @@ function addMaterialToJob(event) {
   renderJobCardLabor(jobCardId);
   showToast("Material and details saved successfully!");
 }
+
+
 
 // =============================================
 // OFFICIAL NAVY JOB CARD PRINT & PDF EXPORT
@@ -6688,7 +6890,7 @@ function buildOfficialJobCardPrintHTML(jc) {
     `;
   }
 
-  // Build Labor / Sailors Records Table if any exist
+  // Build Labor / Sailors Records Table only if include_sailors is enabled and labor logs exist
   const laborLogs = (store.jobCardLabor || []).filter(
     (l) =>
       String(l.job_card_id) === String(jcId) ||
@@ -6696,15 +6898,22 @@ function buildOfficialJobCardPrintHTML(jc) {
       String(l.job_card_id) === String(jc._fbKey),
   );
 
+  const shouldShowSailors =
+    (jc.include_sailors === true ||
+      jc.include_sailors === "true" ||
+      (jc.include_sailors !== false && laborLogs.length > 0)) &&
+    laborLogs.length > 0;
+
   let laborSectionHtml = "";
-  if (laborLogs.length > 0) {
+  if (shouldShowSailors) {
     let laborRowsHtml = "";
     laborLogs.forEach((l, idx) => {
       const sailor = (store.sailors || []).find(
         (s) =>
           String(s.id) === String(l.sailor_id) ||
           String(s._fbKey) === String(l.sailor_id) ||
-          String(s.official_number) === String(l.sailor_id),
+          String(s.official_number) === String(l.sailor_id) ||
+          (s.off_no && String(s.off_no) === String(l.sailor_id)),
       );
       const offNo = sailor
         ? sailor.official_number ||
@@ -6769,8 +6978,8 @@ function buildOfficialJobCardPrintHTML(jc) {
         <div style="display: inline-flex; align-items: center; justify-content: center; gap: 14px;">
           <img src="${window.location.href.split("?")[0].split("#")[0].replace("index.html", "")}images/navy_crest_cropped.png" style="height: 48px; width: auto; display: block; object-fit: contain;" alt="SLN Crest">
           <div style="text-align: left;">
-            <div style="font-size: 17px; font-weight: 900; letter-spacing: 0.8px; color: #0f172a; line-height: 1.15;">SRI LANKA NAVY</div>
-            <div style="font-size: 11.5px; font-weight: 800; color: #1e293b; margin-top: 2px; letter-spacing: 0.4px;">CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
+            <div style="font-size: 18px; font-weight: 900; letter-spacing: 1.2px; color: #0f172a; line-height: 1.15;">JOB CARD</div>
+            <div style="font-size: 11px; font-weight: 800; color: #1e293b; margin-top: 3px; letter-spacing: 0.4px;">CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
           </div>
         </div>
       </div>
@@ -6797,7 +7006,6 @@ function buildOfficialJobCardPrintHTML(jc) {
 
           <!-- Right Header Info -->
           <div style="width: 42%; font-size: 11px; line-height: 1.75; text-align: right;">
-            <div style="font-size: 16px; font-weight: 900; letter-spacing: 1px; text-decoration: underline; margin-bottom: 2px;">JOB CARD</div>
             <div><strong style="font-weight: 800;">JOB CARD NO:</strong> <span style="font-family: monospace; font-weight: 900; color: #b91c1c; font-size: 12px;">${jobNo}</span></div>
             <div><strong style="font-weight: 800;">DATE:</strong> <span style="font-family: monospace;">${startDate || (typeof getLocalDateString === "function" ? getLocalDateString() : "")}</span></div>
             <div><strong style="font-weight: 800;">APPROVED BY -</strong> CCED (E)</div>
@@ -7796,83 +8004,170 @@ function selectEstimate(id) {
   renderEstimates();
 }
 let estWorkScopeCounter = 0;
+
+function populateEstLocationsDatalist() {
+  const datalist = document.getElementById("estLocationDatalist");
+  if (!datalist) return;
+  const currentZoneLocs = (store.locations || []).filter(
+    (l) => !l.zone_id || l.zone_id === store.currentZone,
+  );
+  const uniqueBuildings = [
+    ...new Set(
+      currentZoneLocs
+        .map((l) => (l.building_name || l.name || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  datalist.innerHTML = uniqueBuildings
+    .map((b) => `<option value="${b}">`)
+    .join("");
+}
+
+function onEstLocationChange(selectedLoc) {
+  const loc2Datalist = document.getElementById("estLocation2Datalist");
+  if (!loc2Datalist) return;
+  const q = (selectedLoc || "").toLowerCase().trim();
+  const currentZoneLocs = (store.locations || []).filter(
+    (l) => !l.zone_id || l.zone_id === store.currentZone,
+  );
+  const matchingLocs = currentZoneLocs.filter(
+    (l) =>
+      (l.building_name || l.name || "").toLowerCase().trim() === q ||
+      (l.building_name || l.name || "").toLowerCase().includes(q),
+  );
+  const uniqueLoc2 = [
+    ...new Set(
+      matchingLocs
+        .map((l) => (l.sub_location || l.location2 || "").trim())
+        .filter(Boolean),
+    ),
+  ];
+  loc2Datalist.innerHTML = uniqueLoc2
+    .map((s) => `<option value="${s}">`)
+    .join("");
+
+  const exactMatch = currentZoneLocs.find(
+    (l) => (l.building_name || l.name || "").toLowerCase().trim() === q,
+  );
+  if (exactMatch && exactMatch.end_user) {
+    const endUserEl = document.getElementById("estEndUser");
+    if (endUserEl && !endUserEl.value) {
+      endUserEl.value = exactMatch.end_user;
+    }
+  }
+}
+
+function onEstLocation2Change(selectedLoc2) {
+  const loc1 = (document.getElementById("estLocation")?.value || "").toLowerCase().trim();
+  const loc2 = (selectedLoc2 || "").toLowerCase().trim();
+  if (!loc2) return;
+  const currentZoneLocs = (store.locations || []).filter(
+    (l) => !l.zone_id || l.zone_id === store.currentZone,
+  );
+  const exactMatch = currentZoneLocs.find(
+    (l) =>
+      (l.building_name || l.name || "").toLowerCase().trim() === loc1 &&
+      (l.sub_location || l.location2 || "").toLowerCase().trim() === loc2,
+  );
+  if (exactMatch && exactMatch.end_user) {
+    const endUserEl = document.getElementById("estEndUser");
+    if (endUserEl) {
+      endUserEl.value = exactMatch.end_user;
+    }
+  }
+}
+
 function openNewEstimateModal() {
   document.getElementById("estId").value = "";
   document.getElementById("estDescription").value = "";
+  const refTypeSelect = document.getElementById("estRefType");
+  if (refTypeSelect) refTypeSelect.value = "Minute Sheet";
   document.getElementById("estReference").value = "";
+  const projTypeSelect = document.getElementById("estProjectType");
+  if (projTypeSelect) projTypeSelect.value = "PROJECT";
   document.getElementById("estLocation").value = "";
-  document.getElementById("estEndUser").value = ""; // Default "Created By" to the logged-in user
+  const loc2Input = document.getElementById("estLocation2");
+  if (loc2Input) loc2Input.value = "";
+  document.getElementById("estEndUser").value = "";
+
+  // Created By (Sailor) - default empty or current logged-in user
   document.getElementById("estCreatedName").value =
-    store.currentUser.name || "";
+    store.currentUser?.name || "";
   document.getElementById("estCreatedRank").value =
-    store.currentUser.rank || "";
+    store.currentUser?.rank || "";
   document.getElementById("estCreatedSvc").value =
-    store.currentUser.serviceNo || "";
-  document.getElementById("estCheckedName").value = "";
-  document.getElementById("estCheckedRank").value = "";
-  document.getElementById("estCheckedSvc").value = "";
+    store.currentUser?.serviceNo || store.currentUser?.official_number || "";
+
+  // Checked By (Zone In-Charge)
+  const inc = (store.settings?.zoneInCharges || {})[store.currentZone];
+  let incSailor = null;
+  if (inc && inc.woInchargeId) {
+    incSailor = (store.sailors || []).find(
+      (s) =>
+        String(s.id) === String(inc.woInchargeId) ||
+        String(s._fbKey) === String(inc.woInchargeId),
+    );
+  }
+  document.getElementById("estCheckedName").value = incSailor
+    ? incSailor.name
+    : inc?.name || "";
+  document.getElementById("estCheckedRank").value = incSailor
+    ? incSailor.rank || ""
+    : inc?.rank || "";
+  document.getElementById("estCheckedSvc").value = incSailor
+    ? incSailor.official_number || incSailor.service_no || ""
+    : inc?.serviceNo || "";
+
+  // Approved By (Optional CE Officer)
   document.getElementById("estApprovedName").value = "";
   document.getElementById("estApprovedRank").value = "";
-  document.getElementById("estApprovedSvc").value = ""; // Clear dynamic scopes container and add one default section
+  document.getElementById("estApprovedSvc").value = "";
+
+  // Clear dynamic scopes container and add one default section
   document.getElementById("estWorkScopesContainer").innerHTML = "";
   estWorkScopeCounter = 0;
   addWorkScopeBlock();
   updateEstimateTotals();
+  populateEstLocationsDatalist();
+  populateSignatoryDropdowns();
   document.getElementById("newEstimateModal").classList.remove("hidden");
 }
+
 function editEstimate() {
-  var _est$createdBy,
-    _est$createdBy2,
-    _est$createdBy3,
-    _est$checkedBy,
-    _est$checkedBy2,
-    _est$checkedBy3,
-    _est$approvedBy,
-    _est$approvedBy2,
-    _est$approvedBy3;
   const est = store.estimates.find((e) => e.id === store.selectedEstimate);
   if (!est || est.status !== "Pending") return;
   document.getElementById("estId").value = est.id;
-  document.getElementById("estDescription").value = est.description;
-  document.getElementById("estReference").value = est.reference_doc || "";
+  document.getElementById("estDescription").value = est.description || "";
+  const refTypeSelect = document.getElementById("estRefType");
+  if (refTypeSelect)
+    refTypeSelect.value = est.ref_type || est.reference_type || "Minute Sheet";
+  document.getElementById("estReference").value =
+    est.reference_doc || est.reference_no || "";
+  const projTypeSelect = document.getElementById("estProjectType");
+  if (projTypeSelect)
+    projTypeSelect.value = est.project_type || est.type || "PROJECT";
   document.getElementById("estLocation").value = est.location || "";
+  const loc2Input = document.getElementById("estLocation2");
+  if (loc2Input) loc2Input.value = est.location2 || est.sub_location || "";
   document.getElementById("estEndUser").value = est.endUser || "";
-  document.getElementById("estCreatedName").value =
-    ((_est$createdBy = est.createdBy) === null || _est$createdBy === void 0
-      ? void 0
-      : _est$createdBy.name) || "";
-  document.getElementById("estCreatedRank").value =
-    ((_est$createdBy2 = est.createdBy) === null || _est$createdBy2 === void 0
-      ? void 0
-      : _est$createdBy2.rank) || "";
+
+  document.getElementById("estCreatedName").value = est.createdBy?.name || "";
+  document.getElementById("estCreatedRank").value = est.createdBy?.rank || "";
   document.getElementById("estCreatedSvc").value =
-    ((_est$createdBy3 = est.createdBy) === null || _est$createdBy3 === void 0
-      ? void 0
-      : _est$createdBy3.serviceNo) || "";
-  document.getElementById("estCheckedName").value =
-    ((_est$checkedBy = est.checkedBy) === null || _est$checkedBy === void 0
-      ? void 0
-      : _est$checkedBy.name) || "";
-  document.getElementById("estCheckedRank").value =
-    ((_est$checkedBy2 = est.checkedBy) === null || _est$checkedBy2 === void 0
-      ? void 0
-      : _est$checkedBy2.rank) || "";
+    est.createdBy?.serviceNo || "";
+
+  document.getElementById("estCheckedName").value = est.checkedBy?.name || "";
+  document.getElementById("estCheckedRank").value = est.checkedBy?.rank || "";
   document.getElementById("estCheckedSvc").value =
-    ((_est$checkedBy3 = est.checkedBy) === null || _est$checkedBy3 === void 0
-      ? void 0
-      : _est$checkedBy3.serviceNo) || "";
+    est.checkedBy?.serviceNo || "";
+
   document.getElementById("estApprovedName").value =
-    ((_est$approvedBy = est.approvedBy) === null || _est$approvedBy === void 0
-      ? void 0
-      : _est$approvedBy.name) || "";
+    est.approvedBy?.name || "";
   document.getElementById("estApprovedRank").value =
-    ((_est$approvedBy2 = est.approvedBy) === null || _est$approvedBy2 === void 0
-      ? void 0
-      : _est$approvedBy2.rank) || "";
+    est.approvedBy?.rank || "";
   document.getElementById("estApprovedSvc").value =
-    ((_est$approvedBy3 = est.approvedBy) === null || _est$approvedBy3 === void 0
-      ? void 0
-      : _est$approvedBy3.serviceNo) || "";
+    est.approvedBy?.serviceNo || "";
+
   document.getElementById("estWorkScopesContainer").innerHTML = "";
   estWorkScopeCounter = 0;
   if (est.workScopes && est.workScopes.length > 0) {
@@ -7888,6 +8183,9 @@ function editEstimate() {
     });
   }
   updateEstimateTotals();
+  populateEstLocationsDatalist();
+  onEstLocationChange(est.location || "");
+  populateSignatoryDropdowns();
   document.getElementById("newEstimateModal").classList.remove("hidden");
 }
 function addWorkScopeBlock(data = null) {
@@ -7923,16 +8221,15 @@ function addWorkScopeBlock(data = null) {
                     <thead class="bg-slate-100">
                         <tr>
                             <th class="px-2 py-1.5 text-left">Material</th>
-                            <th class="px-2 py-1.5 text-center" style="width: 80px;">Qty</th>
-                            <th class="px-2 py-1.5 text-center" style="width: 70px;">Unit</th>
-                            <th class="px-2 py-1.5 text-right" style="width: 100px;">Unit Cost</th>
-                            <th class="px-2 py-1.5 text-right" style="width: 100px;">Total</th>
-                            <th class="px-2 py-1.5 text-center" style="width: 100px;">Availability</th>
-                            <th class="px-2 py-1.5" style="width: 30px;"></th>
+                            <th class="px-2 py-1.5 text-center w-20">Avail</th>
+                            <th class="px-2 py-1.5 text-center w-16">Qty</th>
+                            <th class="px-2 py-1.5 text-center w-16">Unit</th>
+                            <th class="px-2 py-1.5 text-right w-24">Unit Cost</th>
+                            <th class="px-2 py-1.5 text-right w-24">Total</th>
+                            <th class="w-8"></th>
                         </tr>
                     </thead>
-                    <tbody id="estScopeMaterialsBody-${sId}">
-                    </tbody>
+                    <tbody id="estScopeMaterialsBody-${sId}"></tbody>
                 </table>
             </div>
         </div>
@@ -7941,121 +8238,138 @@ function addWorkScopeBlock(data = null) {
         <div class="border border-slate-100 rounded-lg p-3 bg-slate-50/30">
             <div class="flex items-center justify-between mb-2">
                 <h6 class="font-semibold text-slate-700 text-xs flex items-center gap-1">👷 Labor Requirement <span class="est-scope-labor-total text-blue-600 font-bold ml-2" id="estScopeLaborTotal-${sId}">0 Man-Days</span></h6>
-                <button type="button" onclick="addScopeLaborRow(${sId})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded text-[10px] font-medium transition-all">+ Add Labor</button>
+                <button type="button" onclick="addScopeLaborRow(${sId})" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded text-[10px] font-medium transition-all">+ Add Trade</button>
             </div>
             <div class="overflow-x-auto">
                 <table class="w-full text-xs">
                     <thead class="bg-slate-100">
                         <tr>
-                            <th class="px-2 py-1.5 text-left">Trade/Role</th>
-                            <th class="px-2 py-1.5 text-center" style="width: 80px;">Workers</th>
-                            <th class="px-2 py-1.5 text-center" style="width: 80px;">Man-Days</th>
+                            <th class="px-2 py-1.5 text-left w-36">Trade</th>
+                            <th class="px-2 py-1.5 text-center w-20">Workers</th>
+                            <th class="px-2 py-1.5 text-center w-20">Man-Days</th>
                             <th class="px-2 py-1.5 text-left">Task Description</th>
-                            <th class="px-2 py-1.5" style="width: 30px;"></th>
+                            <th class="w-8"></th>
                         </tr>
                     </thead>
-                    <tbody id="estScopeLaborBody-${sId}">
-                    </tbody>
+                    <tbody id="estScopeLaborBody-${sId}"></tbody>
                 </table>
             </div>
         </div>
     `;
-  container.appendChild(block); // Populate data if provided
+  container.appendChild(block);
+  renumberWorkScopes(); // Populate with existing data if editing
   if (data) {
-    (data.materials || []).forEach((m) => addScopeMaterialRow(sId, m));
-    (data.labor || []).forEach((l) => addScopeLaborRow(sId, l));
+    if (data.materials && data.materials.length > 0) {
+      data.materials.forEach((m) => addScopeMaterialRow(sId, m));
+    }
+    if (data.labor && data.labor.length > 0) {
+      data.labor.forEach((l) => addScopeLaborRow(sId, l));
+    }
   } else {
-    // Add a default blank row to keep it friendly
+    // Add one blank row to each sub-section for easy input
     addScopeMaterialRow(sId);
     addScopeLaborRow(sId);
   }
-  renumberScopeBlocks();
-  updateEstimateTotals();
 }
 function removeWorkScopeBlock(sId) {
-  const blocks = document.querySelectorAll(".est-scope-block");
-  if (blocks.length <= 1) {
-    showToast("At least one Work Scope Section is required.");
-    return;
-  }
   const block = document.getElementById(`estScopeBlock-${sId}`);
   if (block) {
     block.remove();
-    renumberScopeBlocks();
+    renumberWorkScopes();
     updateEstimateTotals();
   }
 }
-function renumberScopeBlocks() {
+function renumberWorkScopes() {
   const blocks = document.querySelectorAll(".est-scope-block");
   blocks.forEach((b, idx) => {
     const numSpan = b.querySelector(".est-scope-num");
     if (numSpan) numSpan.textContent = idx + 1;
   });
-} // --- Custom Autocomplete for Materials ---
-let activeAutocompleteDropdown = null;
+}
+
+// --- Custom Autocomplete for Materials ---
+let activeMaterialAutocompleteDropdown = null;
 function setupMaterialAutocomplete(inputElement, onSelectCallback) {
-  if (inputElement.hasAttribute("data-autocomplete-init")) return;
+  if (!inputElement || inputElement.hasAttribute("data-autocomplete-init"))
+    return;
   inputElement.setAttribute("data-autocomplete-init", "true");
   inputElement.setAttribute("autocomplete", "off");
-  inputElement.removeAttribute("list"); // Create a global dropdown if it doesn't exist for this input
+  inputElement.removeAttribute("list");
+
   const dropdown = document.createElement("div");
   dropdown.className =
     "hidden absolute z-[9999] w-[350px] bg-white border border-slate-300 rounded-lg shadow-2xl max-h-60 overflow-y-auto text-left";
   document.body.appendChild(dropdown);
+
   const closeDropdown = () => dropdown.classList.add("hidden");
   const updatePosition = () => {
     const rect = inputElement.getBoundingClientRect();
     dropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
-    dropdown.style.left = `${rect.left + window.scrollX}px`; // Ensure it doesn't overflow screen width
+    dropdown.style.left = `${rect.left + window.scrollX}px`;
     if (rect.left + 350 > window.innerWidth) {
       dropdown.style.left = `${window.innerWidth - 360}px`;
     }
   };
+
   const renderResults = (query) => {
-    const lowerQuery = query.toLowerCase();
+    const lowerQuery = (query || "").toLowerCase().trim();
     let count = 0;
     const maxResults = 50;
     let html = "";
-    for (let i = 0; i < store.inventory.length; i++) {
-      const item = store.inventory[i];
-      if (item.category === "Tools") continue;
-      if (!query || item.description.toLowerCase().includes(lowerQuery)) {
-        html += `<div class="px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-id="${item.id}" data-desc="${item.description}">
-                    <div class="text-sm font-medium text-slate-800 leading-tight mb-1">${item.description}</div>
-                    <div class="text-xs text-slate-500">${item.quantity || 0} ${item.deno || ""} @ Rs. ${formatCurrency(item.cost_per_unit)}</div>
-                </div>`;
+    const items = (store.inventory || []).filter((i) => i.category !== "Tools");
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (
+        !lowerQuery ||
+        (item.description || "").toLowerCase().includes(lowerQuery)
+      ) {
+        html += `<div class="px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-id="${item.id || item._fbKey}" data-desc="${item.description}">
+            <div class="text-xs font-semibold text-slate-800 leading-tight mb-0.5">${item.description}</div>
+            <div class="text-[11px] text-slate-500 font-mono">Avail: ${item.quantity || 0} ${item.deno || ""} @ Rs. ${formatCurrency(item.cost_per_unit || 0)}</div>
+        </div>`;
         count++;
         if (count >= maxResults) break;
       }
     }
+
     if (count === 0) {
-      html = `<div class="px-3 py-2 text-sm text-slate-500 italic">No items found</div>`;
+      html = `<div class="px-3 py-2 text-xs text-slate-500 italic">No matching inventory items</div>`;
     }
+
     dropdown.innerHTML = html;
     updatePosition();
     dropdown.classList.remove("hidden");
+
     dropdown.querySelectorAll(".autocomplete-item").forEach((el) => {
       el.addEventListener("mousedown", (e) => {
         e.preventDefault();
-        inputElement.value = el.getAttribute("data-desc");
+        inputElement.value = el.getAttribute("data-desc") || "";
         closeDropdown();
         if (onSelectCallback) onSelectCallback(inputElement.value);
       });
     });
   };
+
   inputElement.addEventListener("focus", () => {
-    if (activeAutocompleteDropdown && activeAutocompleteDropdown !== dropdown) {
-      activeAutocompleteDropdown.classList.add("hidden");
+    if (
+      activeMaterialAutocompleteDropdown &&
+      activeMaterialAutocompleteDropdown !== dropdown
+    ) {
+      activeMaterialAutocompleteDropdown.classList.add("hidden");
     }
-    activeAutocompleteDropdown = dropdown;
+    activeMaterialAutocompleteDropdown = dropdown;
     renderResults(inputElement.value);
   });
+
   inputElement.addEventListener("input", () => {
     renderResults(inputElement.value);
   });
+
   inputElement.addEventListener("blur", () => {
     setTimeout(closeDropdown, 150);
-  }); // Update position on window resize or scroll
+  });
+
   window.addEventListener("resize", () => {
     if (!dropdown.classList.contains("hidden")) updatePosition();
   });
@@ -8067,104 +8381,102 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
     true,
   );
 }
-let scopeMatRowIdCounter = 0;
-function addScopeMaterialRow(scopeId, data = null) {
-  scopeMatRowIdCounter++;
-  const rowId = scopeMatRowIdCounter;
-  const tbody = document.getElementById(`estScopeMaterialsBody-${scopeId}`);
+
+function addScopeMaterialRow(sId, data = null) {
+  const tbody = document.getElementById(`estScopeMaterialsBody-${sId}`);
   if (!tbody) return;
-  const row = document.createElement("tr");
-  row.id = `scopeMatRow-${scopeId}-${rowId}`;
-  row.className = `scope-mat-row`;
-  row.innerHTML = `
-        <td class="px-2 py-1.5">
-            <input type="text" class="est-mat-select w-full px-2 py-1 border rounded text-xs" 
-                   value="${(data === null || data === void 0 ? void 0 : data.description) || ""}" 
-                   placeholder="Search material...">
-            <input type="hidden" class="est-mat-id" value="${(data === null || data === void 0 ? void 0 : data.id) || ""}">
+  const tr = document.createElement("tr");
+  tr.className = "border-b border-slate-100";
+  tr.innerHTML = `
+        <td class="px-2 py-1.5 relative">
+            <input type="text" class="est-mat-select w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="Search inventory item..." autocomplete="off" value="${(data === null || data === void 0 ? void 0 : data.description) || ""}">
         </td>
-        <td class="px-2 py-1.5"><input type="number" step="any" class="est-mat-qty w-full px-2 py-1 border rounded text-xs text-center" value="${(data === null || data === void 0 ? void 0 : data.qty) || ""}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-1.5"><input type="text" class="est-mat-unit w-full px-2 py-1 border rounded text-xs text-center bg-slate-50" value="${(data === null || data === void 0 ? void 0 : data.unit) || ""}" readonly></td>
-        <td class="px-2 py-1.5"><input type="number" step="any" class="est-mat-cost w-full px-2 py-1 border rounded text-xs text-right" value="${(data === null || data === void 0 ? void 0 : data.cost) || ""}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-1.5 text-right font-medium est-mat-total">${formatCurrency(((data === null || data === void 0 ? void 0 : data.qty) || 0) * ((data === null || data === void 0 ? void 0 : data.cost) || 0))}</td>
-        <td class="px-2 py-1.5 text-center"><span class="est-mat-avail text-xxs bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded">${(data === null || data === void 0 ? void 0 : data.availability) || "-"}</span></td>
-        <td class="px-2 py-1.5 text-center"><button type="button" onclick="removeScopeRow('scopeMatRow-${scopeId}-${rowId}')" class="text-red-500 hover:text-red-700 font-bold text-sm">×</button></td>
-    `;
-  tbody.appendChild(row);
-  const inputEl = row.querySelector(".est-mat-select");
-  setupMaterialAutocomplete(inputEl, (val) =>
-    fillScopeMaterialFromInventory(scopeId, rowId, val),
-  ); // If there's an initial value (editing), handle changes as well
-  inputEl.addEventListener("change", () =>
-    fillScopeMaterialFromInventory(scopeId, rowId, inputEl.value),
-  );
-}
-function fillScopeMaterialFromInventory(scopeId, rowId, desc) {
-  const row = document.getElementById(`scopeMatRow-${scopeId}-${rowId}`);
-  if (!row) return;
-  const item = store.inventory.find(
-    (i) => i.description === desc && i.category !== "Tools",
-  );
-  if (item) {
-    row.querySelector(".est-mat-id").value = item.id || item._fbKey || "";
-    row.querySelector(".est-mat-unit").value = item.deno || "";
-    row.querySelector(".est-mat-cost").value = item.cost_per_unit || "";
-    row.querySelector(".est-mat-avail").textContent = item.location || "-";
-    updateEstimateTotals();
-  } else {
-    row.querySelector(".est-mat-id").value = "";
-    row.querySelector(".est-mat-unit").value = "";
-    row.querySelector(".est-mat-cost").value = "";
-    row.querySelector(".est-mat-avail").textContent = "-";
-    updateEstimateTotals();
-  }
-}
-let scopeLabRowIdCounter = 0;
-function addScopeLaborRow(scopeId, data = null) {
-  scopeLabRowIdCounter++;
-  const rowId = scopeLabRowIdCounter;
-  const tbody = document.getElementById(`estScopeLaborBody-${scopeId}`);
-  if (!tbody) return;
-  const row = document.createElement("tr");
-  row.id = `scopeLabRow-${scopeId}-${rowId}`;
-  row.className = `scope-lab-row`;
-  row.innerHTML = `
+        <td class="px-2 py-1.5 text-center est-mat-avail text-slate-500 font-mono">${(data === null || data === void 0 ? void 0 : data.availability) || "-"}</td>
         <td class="px-2 py-1.5">
-            <select class="est-lab-trade w-full px-2 py-1 border rounded text-xs">
-                <option value="MA" ${(data === null || data === void 0 ? void 0 : data.trade) === "MA" ? "selected" : ""}>MA</option>
-                <option value="CA" ${(data === null || data === void 0 ? void 0 : data.trade) === "CA" ? "selected" : ""}>CA</option>
-                <option value="PA" ${(data === null || data === void 0 ? void 0 : data.trade) === "PA" ? "selected" : ""}>PA</option>
-                <option value="PL" ${(data === null || data === void 0 ? void 0 : data.trade) === "PL" ? "selected" : ""}>PL</option>
-                <option value="WE" ${(data === null || data === void 0 ? void 0 : data.trade) === "WE" ? "selected" : ""}>WE</option>
-                <option value="BB" ${(data === null || data === void 0 ? void 0 : data.trade) === "BB" ? "selected" : ""}>BB</option>
-                <option value="SW" ${(data === null || data === void 0 ? void 0 : data.trade) === "SW" ? "selected" : ""}>SW</option>
-                <option value="AL" ${(data === null || data === void 0 ? void 0 : data.trade) === "AL" ? "selected" : ""}>AL</option>
-                <option value="RW" ${(data === null || data === void 0 ? void 0 : data.trade) === "RW" ? "selected" : ""}>RW</option>
+            <input type="number" class="est-mat-qty w-full px-2 py-1 border border-slate-300 rounded text-xs text-center font-bold" min="0" step="any" value="${(data === null || data === void 0 ? void 0 : data.qty) || ""}" oninput="updateEstimateTotals()">
+        </td>
+        <td class="px-2 py-1.5">
+            <input type="text" class="est-mat-unit w-full px-2 py-1 border border-slate-300 rounded text-xs text-center bg-slate-50" readonly value="${(data === null || data === void 0 ? void 0 : data.unit) || ""}">
+        </td>
+        <td class="px-2 py-1.5">
+            <input type="number" class="est-mat-cost w-full px-2 py-1 border border-slate-300 rounded text-xs text-right" min="0" step="0.01" value="${(data === null || data === void 0 ? void 0 : data.cost) || ""}" oninput="updateEstimateTotals()">
+        </td>
+        <td class="px-2 py-1.5 text-right font-semibold est-mat-total text-green-700">Rs. 0.00</td>
+        <td class="px-2 py-1.5 text-center">
+            <button type="button" onclick="this.closest('tr').remove(); updateEstimateTotals();" class="text-red-400 hover:text-red-600 font-bold">&times;</button>
+        </td>
+    `;
+  tbody.appendChild(tr);
+  const inputEl = tr.querySelector(".est-mat-select");
+  setupMaterialAutocomplete(inputEl, () => {
+    const item = store.inventory.find(
+      (i) => i.description === inputEl.value && i.category !== "Tools",
+    );
+    if (item) {
+      tr.querySelector(".est-mat-avail").textContent = item.quantity || 0;
+      tr.querySelector(".est-mat-unit").value = item.deno || "";
+      tr.querySelector(".est-mat-cost").value = item.cost_per_unit || 0;
+      updateEstimateTotals();
+    }
+  });
+  updateEstimateTotals();
+}
+function addScopeLaborRow(sId, data = null) {
+  const tbody = document.getElementById(`estScopeLaborBody-${sId}`);
+  if (!tbody) return;
+  const trades = [
+    "Mason",
+    "Carpenter",
+    "Painter",
+    "Plumber",
+    "Welder",
+    "Electrician",
+    "Aluminum Fabricator",
+    "Steel Bender",
+    "Sawyer",
+    "Laborer",
+    "Artificer",
+    "RW",
+    "SW",
+    "BB",
+    "AL",
+    "Other",
+  ];
+  const tr = document.createElement("tr");
+  tr.className = "border-b border-slate-100";
+  tr.innerHTML = `
+        <td class="px-2 py-1.5">
+            <select class="est-lab-trade w-full px-2 py-1 border border-slate-300 rounded text-xs font-medium">
+                ${trades.map((t) => `<option value="${t}" ${data && data.trade === t ? "selected" : ""}>${t}</option>`).join("")}
             </select>
         </td>
-        <td class="px-2 py-1.5"><input type="number" step="any" class="est-lab-workers w-full px-2 py-1 border rounded text-xs text-center" value="${(data === null || data === void 0 ? void 0 : data.workers) || 1}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-1.5"><input type="number" step="any" class="est-lab-days w-full px-2 py-1 border rounded text-xs text-center" value="${(data === null || data === void 0 ? void 0 : data.manDays) || ""}" onchange="updateEstimateTotals()"></td>
-        <td class="px-2 py-1.5"><input type="text" class="est-lab-desc w-full px-2 py-1 border rounded text-xs" placeholder="Task description" value="${(data === null || data === void 0 ? void 0 : data.taskDescription) || (data === null || data === void 0 ? void 0 : data.desc) || ""}"></td>
-        <td class="px-2 py-1.5 text-center"><button type="button" onclick="removeScopeRow('scopeLabRow-${scopeId}-${rowId}')" class="text-red-500 hover:text-red-700 font-bold text-sm">×</button></td>
+        <td class="px-2 py-1.5">
+            <input type="number" class="est-lab-workers w-full px-2 py-1 border border-slate-300 rounded text-xs text-center" min="1" value="${(data === null || data === void 0 ? void 0 : data.workers) || 1}" oninput="updateEstimateTotals()">
+        </td>
+        <td class="px-2 py-1.5">
+            <input type="number" class="est-lab-days w-full px-2 py-1 border border-slate-300 rounded text-xs text-center font-bold" min="0" step="any" value="${(data === null || data === void 0 ? void 0 : data.manDays) || ""}" oninput="updateEstimateTotals()">
+        </td>
+        <td class="px-2 py-1.5">
+            <input type="text" class="est-lab-desc w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="e.g. Concrete breaking, plastering" value="${(data === null || data === void 0 ? void 0 : data.taskDescription) || ""}">
+        </td>
+        <td class="px-2 py-1.5 text-center">
+            <button type="button" onclick="this.closest('tr').remove(); updateEstimateTotals();" class="text-red-400 hover:text-red-600 font-bold">&times;</button>
+        </td>
     `;
-  tbody.appendChild(row);
-}
-function removeScopeRow(rowId) {
-  const el = document.getElementById(rowId);
-  if (el) {
-    el.remove();
-    updateEstimateTotals();
-  }
+  tbody.appendChild(tr);
+  updateEstimateTotals();
 }
 function updateEstimateTotals() {
   let grandMaterialsTotal = 0;
   let grandLaborTotal = 0;
   const blocks = document.querySelectorAll(".est-scope-block");
   blocks.forEach((b) => {
-    const sId = b.id.replace("estScopeBlock-", ""); // Scope Materials total
+    var _b$querySelector, _b$querySelector2, _b$querySelector3;
+    const sId = b.id.replace("estScopeBlock-", "");
     let scopeMatTotal = 0;
+    let scopeLabTotal = 0;
     b.querySelectorAll(`#estScopeMaterialsBody-${sId} tr`).forEach((row) => {
-      var _row$querySelector, _row$querySelector2;
+      var _row$querySelector, _row$querySelector2, _row$querySelector3;
       const qty =
         parseFloat(
           (_row$querySelector = row.querySelector(".est-mat-qty")) === null ||
@@ -8179,34 +8491,29 @@ function updateEstimateTotals() {
             ? void 0
             : _row$querySelector2.value,
         ) || 0;
-      const total = qty * cost;
-      scopeMatTotal += total;
+      const lineTotal = qty * cost;
+      scopeMatTotal += lineTotal;
       const totalCell = row.querySelector(".est-mat-total");
-      if (totalCell) totalCell.textContent = formatCurrency(total);
+      if (totalCell) totalCell.textContent = formatCurrency(lineTotal);
     });
-    const scopeMatTotalLabel = document.getElementById(
-      `estScopeMaterialsTotal-${sId}`,
-    );
-    if (scopeMatTotalLabel)
-      scopeMatTotalLabel.textContent = formatCurrency(scopeMatTotal);
-    grandMaterialsTotal += scopeMatTotal; // Scope Labor total
-    let scopeLabTotal = 0;
     b.querySelectorAll(`#estScopeLaborBody-${sId} tr`).forEach((row) => {
-      var _row$querySelector3;
+      var _row$querySelector$va;
       const days =
         parseFloat(
-          (_row$querySelector3 = row.querySelector(".est-lab-days")) === null ||
-            _row$querySelector3 === void 0
-            ? void 0
-            : _row$querySelector3.value,
+          (_row$querySelector$va = row.querySelector(".est-lab-days").value) !==
+            null && _row$querySelector$va !== void 0
+            ? _row$querySelector$va
+            : 0,
         ) || 0;
       scopeLabTotal += days;
     });
-    const scopeLabTotalLabel = document.getElementById(
-      `estScopeLaborTotal-${sId}`,
+    const matTotalEl = document.getElementById(
+      `estScopeMaterialsTotal-${sId}`,
     );
-    if (scopeLabTotalLabel)
-      scopeLabTotalLabel.textContent = `${scopeLabTotal} Man-Days`;
+    if (matTotalEl) matTotalEl.textContent = formatCurrency(scopeMatTotal);
+    const labTotalEl = document.getElementById(`estScopeLaborTotal-${sId}`);
+    if (labTotalEl) labTotalEl.textContent = `${scopeLabTotal} Man-Days`;
+    grandMaterialsTotal += scopeMatTotal;
     grandLaborTotal += scopeLabTotal;
   });
   document.getElementById("estSummaryMaterials").textContent =
@@ -8215,6 +8522,7 @@ function updateEstimateTotals() {
   document.getElementById("estSummaryTotal").textContent =
     formatCurrency(grandMaterialsTotal);
 }
+
 function saveEstimate(event) {
   event.preventDefault();
   const workScopes = [];
@@ -8314,6 +8622,7 @@ function saveEstimate(event) {
     });
     workScopes.push({ description: desc, materials: materials, labor: labor });
   });
+
   const id = document.getElementById("estId").value;
   const sig = (n, r, s) => ({
     name: document.getElementById(n).value.trim(),
@@ -8327,17 +8636,33 @@ function saveEstimate(event) {
     "estApprovedRank",
     "estApprovedSvc",
   );
-  const location = document.getElementById("estLocation").value;
-  const endUser = document.getElementById("estEndUser").value;
-  const description = document.getElementById("estDescription").value;
-  const reference_doc = document.getElementById("estReference").value;
+
+  const ref_type =
+    (document.getElementById("estRefType") || {}).value || "Minute Sheet";
+  const project_type =
+    (document.getElementById("estProjectType") || {}).value || "PROJECT";
+  const location = document.getElementById("estLocation").value.trim();
+  const location2 = (
+    document.getElementById("estLocation2") || {}
+  ).value.trim();
+  const endUser = document.getElementById("estEndUser").value.trim();
+  const description = document.getElementById("estDescription").value.trim();
+  const reference_doc = document.getElementById("estReference").value.trim();
   const compiledWorkScope = scopeDescriptions.join("; ");
+
   if (id) {
     const est = store.estimates.find((e) => e.id == id);
     if (est) {
       est.description = description;
+      est.ref_type = ref_type;
+      est.reference_type = ref_type;
       est.reference_doc = reference_doc;
+      est.reference_no = reference_doc;
+      est.project_type = project_type;
+      est.type = project_type;
       est.location = location;
+      est.location2 = location2;
+      est.sub_location = location2;
       est.endUser = endUser;
       est.workScope = compiledWorkScope;
       est.workScopes = workScopes;
@@ -8356,8 +8681,15 @@ function saveEstimate(event) {
       id: store.estimates.length + 1,
       estimate_number: `EST/${new Date().getFullYear()}/${String(store.estimates.length + 1).padStart(4, "0")}`,
       description: description,
+      ref_type: ref_type,
+      reference_type: ref_type,
       reference_doc: reference_doc,
+      reference_no: reference_doc,
+      project_type: project_type,
+      type: project_type,
       location: location,
+      location2: location2,
+      sub_location: location2,
       endUser: endUser,
       workScope: compiledWorkScope,
       workScopes: workScopes,
@@ -8366,7 +8698,7 @@ function saveEstimate(event) {
       total_cost: grandMaterialsTotal,
       totalManDays: grandLaborTotal,
       status: "Pending",
-      approvedAuthority: null,
+      approvedAuthority: approvedBy.name || null,
       createdBy: createdBy,
       checkedBy: checkedBy,
       approvedBy: approvedBy,
@@ -8377,7 +8709,9 @@ function saveEstimate(event) {
   }
   closeModal("newEstimateModal");
   renderEstimates();
-} // Signatory Dropdown Helper
+}
+
+// Signatory Dropdown Helper
 let activeSignatoryDropdown = null;
 function setupSignatoryAutocomplete(prefix) {
   const inputElement = document.getElementById(`est${prefix}Name`);
@@ -8385,60 +8719,220 @@ function setupSignatoryAutocomplete(prefix) {
   const svcEl = document.getElementById(`est${prefix}Svc`);
   if (!inputElement || inputElement.hasAttribute("data-autocomplete-init"))
     return;
-  inputElement.setAttribute("data-autocomplete-init", "true"); // Create a global dropdown if it doesn't exist for this input
+  inputElement.setAttribute("data-autocomplete-init", "true");
+
   const dropdown = document.createElement("div");
   dropdown.className =
-    "hidden absolute z-[9999] w-[350px] bg-white border border-slate-300 rounded-lg shadow-2xl max-h-60 overflow-y-auto text-left";
+    "hidden absolute z-[9999] w-[360px] bg-white border border-slate-300 rounded-lg shadow-2xl max-h-60 overflow-y-auto text-left";
   document.body.appendChild(dropdown);
+
   const closeDropdown = () => dropdown.classList.add("hidden");
   const updatePosition = () => {
     const rect = inputElement.getBoundingClientRect();
     dropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
     dropdown.style.left = `${rect.left + window.scrollX}px`;
-    if (rect.left + 350 > window.innerWidth) {
-      dropdown.style.left = `${window.innerWidth - 360}px`;
+    if (rect.left + 360 > window.innerWidth) {
+      dropdown.style.left = `${window.innerWidth - 370}px`;
     }
   };
+
   const renderResults = (query) => {
-    const lowerQuery = query.toLowerCase();
-    let count = 0;
-    const maxResults = 50;
-    let html = ""; // Filter sailors whose off_no starts with 'EC' or 'AC'
-    const eligibleSailors = store.sailors.filter((s) => {
-      const off = String(s.official_number || s.service_no || "")
-        .trim()
-        .toUpperCase();
-      return off.startsWith("EC") || off.startsWith("AC");
-    });
-    for (let i = 0; i < eligibleSailors.length; i++) {
-      const s = eligibleSailors[i];
-      const offNo = s.official_number || s.service_no || "";
-      const searchStr = `${s.name} ${offNo} ${s.rank || ""}`.toLowerCase();
-      if (!query || searchStr.includes(lowerQuery)) {
-        html += `<div class="px-3 py-2 hover:bg-indigo-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-name="${s.name}" data-rank="${s.rank || ""}" data-svc="${offNo}">
-                    <div class="text-sm font-medium text-slate-800">${s.name}</div>
-                    <div class="text-xs text-slate-500">${s.rank || "-"} • ${offNo}</div>
-                </div>`;
-        count++;
-        if (count >= maxResults) break;
+    const lowerQuery = (query || "").toLowerCase().trim();
+    let items = [];
+
+    if (prefix === "Created") {
+      // Created By -> ALL Sailors in store
+      items = (store.sailors || []).map((s) => {
+        const offNo = s.official_number || s.service_no || "";
+        const rank = s.rank || s.trade || "-";
+        return {
+          name: s.name,
+          rank: rank,
+          svc: offNo,
+          label: `${s.name}`,
+          sub: `${rank} • ${offNo} (${s.trade || "Sailor"})`,
+          badge: s.trade || "Sailor",
+          badgeColor: "bg-blue-100 text-blue-800",
+        };
+      });
+    } else if (prefix === "Checked") {
+      // Checked By -> Zone In-Charge, EC/AC sailors & OIC profiles
+      const inc = (store.settings?.zoneInCharges || {})[store.currentZone];
+      if (inc && inc.name) {
+        items.push({
+          name: inc.name,
+          rank: inc.rank || "In-Charge",
+          svc: inc.serviceNo || inc.official_number || "",
+          label: `${inc.name}`,
+          sub: `${inc.rank || "In-Charge"} • ${inc.serviceNo || ""} (Zone In-Charge)`,
+          badge: "Zone In-Charge",
+          badgeColor: "bg-amber-100 text-amber-800",
+        });
       }
+
+      // OIC profiles
+      const oicProfiles =
+        typeof getOicProfiles === "function" ? getOicProfiles() : [];
+      oicProfiles.forEach((p) => {
+        items.push({
+          name: p.name,
+          rank: p.rank || "OIC",
+          svc: p.serviceNo || "",
+          label: `${p.name}`,
+          sub: `${p.rank || "OIC"} • ${p.serviceNo || ""}`,
+          badge: "OIC",
+          badgeColor: "bg-indigo-100 text-indigo-800",
+        });
+      });
+
+      // EC/AC/MA sailors
+      (store.sailors || [])
+        .filter((s) => {
+          const off = String(s.official_number || s.service_no || "")
+            .trim()
+            .toUpperCase();
+          return (
+            off.startsWith("EC") ||
+            off.startsWith("AC") ||
+            s.trade === "MA" ||
+            s.trade === "CA"
+          );
+        })
+        .forEach((s) => {
+          const offNo = s.official_number || s.service_no || "";
+          items.push({
+            name: s.name,
+            rank: s.rank || s.trade || "-",
+            svc: offNo,
+            label: `${s.name}`,
+            sub: `${s.rank || "-"} • ${offNo} (${s.trade || "Staff"})`,
+            badge: s.trade || "Staff",
+            badgeColor: "bg-slate-100 text-slate-700",
+          });
+        });
+    } else if (prefix === "Approved") {
+      // Approved By -> Specific CE Officers list + Option to leave blank
+      items.push({
+        name: "",
+        rank: "",
+        svc: "",
+        label: "🚫 Clear / Leave Blank",
+        sub: "No approval signature required (Keep blank)",
+        badge: "Blank",
+        badgeColor: "bg-slate-100 text-slate-500",
+      });
+
+      const ceOfficersList = [
+        {
+          rank: "CAPTAIN (CE)",
+          name: "BGL BALASURIYA",
+          svc: "NRC 1843",
+          desig: "CCED(E)",
+        },
+        {
+          rank: "CDR (CE)",
+          name: "TM VITHARANA",
+          svc: "NRC 2541",
+          desig: "CCEO(E)",
+        },
+        {
+          rank: "LCDR (CE)",
+          name: "JAJD SENARATHNA",
+          svc: "NRC 3068",
+          desig: "SCE(M)",
+        },
+        {
+          rank: "LCDR (CE)",
+          name: "JATK JAYAKODI",
+          svc: "NRC 3542",
+          desig: "SCE(P&P)",
+        },
+        {
+          rank: "LCDR (CE)",
+          name: "KMAU KAHANDAWA",
+          svc: "NRC 3576",
+          desig: "SCE(W/W)",
+        },
+        {
+          rank: "LCDR (CE)",
+          name: "HMMI JAYATHUNGA",
+          svc: "NRC 3977",
+          desig: "CE (W/W), CE (P&P)",
+        },
+        {
+          rank: "LT (CE)",
+          name: "WP DARSHANA",
+          svc: "NRC 4126",
+          desig: "QS (E)",
+        },
+        {
+          rank: "LT (CE)",
+          name: "JADU JAYASINGHE",
+          svc: "NRC 4310",
+          desig: "CE(M)I",
+        },
+        {
+          rank: "LT (CE)",
+          name: "PHKR KUMARA",
+          svc: "NRC 4570",
+          desig: "CE(M) II",
+        },
+      ];
+
+      ceOfficersList.forEach((off) => {
+        items.push({
+          name: off.name,
+          rank: off.rank,
+          svc: `${off.svc} - ${off.desig}`,
+          label: `${off.rank} ${off.name}`,
+          sub: `${off.svc} • ${off.desig}`,
+          badge: off.desig,
+          badgeColor: "bg-emerald-100 text-emerald-800",
+        });
+      });
     }
-    if (count === 0) {
-      html = `<div class="px-3 py-2 text-sm text-slate-500 italic">No names found</div>`;
+
+    if (lowerQuery) {
+      items = items.filter((it) => {
+        const text =
+          `${it.name} ${it.rank} ${it.svc} ${it.sub}`.toLowerCase();
+        return text.includes(lowerQuery);
+      });
     }
-    dropdown.innerHTML = html;
+
+    const visibleItems = items.slice(0, 40);
+    if (visibleItems.length === 0) {
+      dropdown.innerHTML = `<div class="px-3 py-2 text-xs text-slate-500 italic">No matching records (type freely)</div>`;
+    } else {
+      dropdown.innerHTML = visibleItems
+        .map(
+          (it) => `
+        <div class="px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-name="${it.name}" data-rank="${it.rank}" data-svc="${it.svc}">
+            <div class="flex items-center justify-between gap-1">
+                <span class="text-xs font-semibold text-slate-800">${it.label}</span>
+                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${it.badgeColor}">${it.badge}</span>
+            </div>
+            <div class="text-[11px] text-slate-500">${it.sub}</div>
+        </div>
+      `,
+        )
+        .join("");
+    }
+
     updatePosition();
     dropdown.classList.remove("hidden");
+
     dropdown.querySelectorAll(".autocomplete-item").forEach((el) => {
       el.addEventListener("mousedown", (e) => {
         e.preventDefault();
-        inputElement.value = el.getAttribute("data-name");
-        if (rankEl) rankEl.value = el.getAttribute("data-rank");
-        if (svcEl) svcEl.value = el.getAttribute("data-svc");
+        inputElement.value = el.getAttribute("data-name") || "";
+        if (rankEl) rankEl.value = el.getAttribute("data-rank") || "";
+        if (svcEl) svcEl.value = el.getAttribute("data-svc") || "";
         closeDropdown();
       });
     });
   };
+
   inputElement.addEventListener("focus", () => {
     if (activeSignatoryDropdown && activeSignatoryDropdown !== dropdown) {
       activeSignatoryDropdown.classList.add("hidden");
@@ -8446,14 +8940,15 @@ function setupSignatoryAutocomplete(prefix) {
     activeSignatoryDropdown = dropdown;
     renderResults(inputElement.value);
   });
+
   inputElement.addEventListener("input", () => {
-    renderResults(inputElement.value); // Clear rank and svc if they modify the name manually
-    if (rankEl) rankEl.value = "";
-    if (svcEl) svcEl.value = "";
+    renderResults(inputElement.value);
   });
+
   inputElement.addEventListener("blur", () => {
     setTimeout(closeDropdown, 150);
   });
+
   window.addEventListener("resize", () => {
     if (!dropdown.classList.contains("hidden")) updatePosition();
   });
@@ -8465,9 +8960,11 @@ function setupSignatoryAutocomplete(prefix) {
     true,
   );
 }
+
 function populateSignatoryDropdowns() {
   setupSignatoryAutocomplete("Created");
   setupSignatoryAutocomplete("Checked");
+  setupSignatoryAutocomplete("Approved");
 } // ---- Approval (req 9) ----
 function approveEstimate() {
   const est = store.estimates.find((e) => e.id === store.selectedEstimate);
@@ -8534,85 +9031,86 @@ function deleteEstimate() {
 // Status intentionally omitted from the printout (req 7)
 function buildEstimatePrintHTML(est) {
   var _store$zones$find2;
+  const zoneObj = store.zones
+    ? store.zones.find((z) => z.id === (est.zone_id || store.currentZone))
+    : null;
+  const zoneName =
+    zoneObj && zoneObj.name ? zoneObj.name : "CE Management System";
+
   const sigBlock = (label, p) => `
         <div style="text-align:center;width:30%;">
-            <div style="height:38px;border-bottom:1px solid #000;margin-bottom:3px;"></div>
-            <div style="font-size:10px;font-weight:bold;">${label}</div>
-            <div style="font-size:10px;">${p && p.name ? p.name : "&nbsp;"}</div>
-            <div style="font-size:9px;color:#444;">${p && p.rank ? p.rank : ""}${p && p.serviceNo ? " • " + p.serviceNo : ""}</div>
+            <div style="height:18px;border-bottom:1px solid #000;margin-bottom:2px;"></div>
+            <div style="font-size:8px;font-weight:bold;">${label}</div>
+            <div style="font-size:7.5px;">${p && p.name ? p.name : "&nbsp;"}</div>
+            <div style="font-size:7px;color:#444;">${p && p.rank ? p.rank : ""}${p && p.serviceNo ? " • " + p.serviceNo : ""}</div>
         </div>`;
+
   let sectionsHtml = "";
   if (est.workScopes && est.workScopes.length > 0) {
     est.workScopes.forEach((s, sIdx) => {
       const matRows = (s.materials || [])
         .map(
           (m, i) => `
-                <tr>
-                    <td style="text-align:center;width:8%;">${i + 1}</td>
-                    <td>${m.description}</td>
-                    <td style="text-align:center;width:10%;">${m.qty}</td>
-                    <td style="text-align:center;width:10%;">${m.unit}</td>
-                    <td style="text-align:right;width:15%;">${formatCurrency(m.cost)}</td>
-                    <td style="text-align:right;width:15%;">${formatCurrency(m.qty * m.cost)}</td>
-                </tr>`,
+            <tr>
+                <td style="text-align:center;width:6%;">${i + 1}</td>
+                <td style="font-weight:600;">${m.description}</td>
+                <td style="text-align:center;width:10%;">${m.qty}</td>
+                <td style="text-align:center;width:10%;">${m.unit}</td>
+                <td style="text-align:right;width:16%;">${formatCurrency(m.cost)}</td>
+                <td style="text-align:right;width:18%;font-weight:bold;">${formatCurrency(m.qty * m.cost)}</td>
+            </tr>`,
         )
         .join("");
+
       const labRows = (s.labor || [])
         .map(
           (l) => `
-                <tr>
-                    <td>${l.trade}</td>
-                    <td style="text-align:center;width:15%;">${l.workers}</td>
-                    <td style="text-align:center;width:15%;">${l.manDays}</td>
-                    <td>${l.taskDescription || ""}</td>
-                </tr>`,
+            <tr>
+                <td style="font-weight:600;">${l.trade}</td>
+                <td style="text-align:center;width:14%;">${l.workers}</td>
+                <td style="text-align:center;width:14%;font-weight:bold;">${l.manDays}</td>
+                <td>${l.taskDescription || "—"}</td>
+            </tr>`,
         )
         .join("");
+
       const sectionTotalCost = (s.materials || []).reduce(
         (sum, m) => sum + m.qty * m.cost,
         0,
       );
-      const sectionTotalDays = (s.labor || []).reduce(
-        (sum, l) => sum + l.manDays,
-        0,
-      );
+
       sectionsHtml += `
-                <div style="margin-top: 14px; border: 1px solid #94a3b8; border-radius: 6px; padding: 10px; background-color: #fafafa; page-break-inside: avoid;">
-                    <div style="font-size: 11px; font-weight: bold; border-bottom: 1.5px solid #475569; padding-bottom: 4px; margin-bottom: 8px; text-transform: uppercase; color: #1e293b;">
-                        Section ${sIdx + 1}: ${s.description}
-                    </div>
-                    
-                    ${
-                      matRows
-                        ? `
-                    <div style="font-size: 10px; font-weight: bold; margin-bottom: 3px; color: #059669;">🛠️ Materials</div>
-                    <table class="est-table" style="margin-bottom: 10px;">
-                        <thead>
-                            <tr><th>#</th><th>Material</th><th>Qty</th><th>Unit</th><th>Unit Cost</th><th>Total</th></tr>
-                        </thead>
-                        <tbody>${matRows}</tbody>
-                        <tfoot>
-                            <tr><td colspan="5" style="text-align:right;"><b>Section Materials Cost</b></td><td style="text-align:right;"><b>${formatCurrency(sectionTotalCost)}</b></td></tr>
-                        </tfoot>
-                    </table>
-                    `
-                        : ""
-                    }
-                    
-                    ${
-                      labRows
-                        ? `
-                    <div style="font-size: 10px; font-weight: bold; margin-bottom: 3px; color: #2563eb;">👷 Labor Requirement</div>
-                    <table class="est-table">
-                        <thead><tr><th>Trade / Role</th><th>Workers</th><th>Man-Days</th><th>Task Description</th></tr></thead>
-                        <tbody>${labRows}</tbody>
-                        <tfoot><tr><td colspan="2" style="text-align:right;"><b>Section Total Man-Days</b></td><td colspan="2" style="text-align:left; padding-left: 10px;"><b>${sectionTotalDays}</b></td></tr></tfoot>
-                    </table>
-                    `
-                        : ""
-                    }
-                </div>
-            `;
+        <div style="margin-top: 3px; border: 1px solid #cbd5e1; border-radius: 3px; padding: 3px 5px; background-color: #fafbfc; page-break-inside: avoid;">
+            <div style="font-size: 8.5px; font-weight: bold; border-bottom: 1px solid #94a3b8; padding-bottom: 2px; margin-bottom: 2px; text-transform: uppercase; color: #0f172a; display: flex; justify-content: space-between;">
+                <span>Section ${sIdx + 1}: ${s.description}</span>
+                <span style="color:#059669;">Cost: ${formatCurrency(sectionTotalCost)}</span>
+            </div>
+            
+            ${
+              matRows
+                ? `
+            <table class="est-table" style="margin-bottom: 2px;">
+                <thead>
+                    <tr><th style="width:6%;text-align:center;">#</th><th>Material</th><th style="width:10%;text-align:center;">Qty</th><th style="width:10%;text-align:center;">Unit</th><th style="width:16%;text-align:right;">Unit Cost</th><th style="width:18%;text-align:right;">Total</th></tr>
+                </thead>
+                <tbody>${matRows}</tbody>
+            </table>
+            `
+                : ""
+            }
+            
+            ${
+              labRows
+                ? `
+            <table class="est-table">
+                <thead><tr><th>Trade / Role</th><th style="width:14%;text-align:center;">Workers</th><th style="width:14%;text-align:center;">Man-Days</th><th>Task Description</th></tr></thead>
+                <tbody>${labRows}</tbody>
+            </table>
+            `
+                : ""
+            }
+        </div>
+      `;
     });
   } else {
     // Fallback for flat layout (old estimates)
@@ -8621,120 +9119,128 @@ function buildEstimatePrintHTML(est) {
         .map(
           (m, i) => `
             <tr>
-                <td style="text-align:center;">${i + 1}</td>
+                <td style="text-align:center;width:6%;">${i + 1}</td>
                 <td>${m.description}</td>
-                <td style="text-align:center;">${m.qty}</td>
-                <td style="text-align:center;">${m.unit}</td>
-                <td style="text-align:right;">${formatCurrency(m.cost)}</td>
-                <td style="text-align:right;">${formatCurrency(m.qty * m.cost)}</td>
+                <td style="text-align:center;width:10%;">${m.qty}</td>
+                <td style="text-align:center;width:10%;">${m.unit}</td>
+                <td style="text-align:right;width:16%;">${formatCurrency(m.cost)}</td>
+                <td style="text-align:right;width:18%;font-weight:bold;">${formatCurrency(m.qty * m.cost)}</td>
             </tr>`,
         )
         .join("") ||
-      '<tr><td colspan="6" style="text-align:center;">No materials</td></tr>';
+      '<tr><td colspan="6" style="text-align:center;font-style:italic;">No materials</td></tr>';
+
     const labRows =
       (est.labor || [])
         .map(
           (l) => `
             <tr>
                 <td>${l.trade}</td>
-                <td style="text-align:center;">${l.workers}</td>
-                <td style="text-align:center;">${l.manDays}</td>
-                <td>${l.taskDescription || ""}</td>
+                <td style="text-align:center;width:15%;">${l.workers}</td>
+                <td style="text-align:center;width:15%;font-weight:bold;">${l.manDays}</td>
+                <td>${l.taskDescription || "—"}</td>
             </tr>`,
         )
         .join("") ||
-      '<tr><td colspan="4" style="text-align:center;">No labour</td></tr>';
+      '<tr><td colspan="4" style="text-align:center;font-style:italic;">No labor</td></tr>';
+
     sectionsHtml = `
-            <table class="est-table" style="margin-top:10px;">
-                <thead>
-                    <tr>
-                        <th style="width:4%;text-align:center;">#</th>
-                        <th>Material</th>
-                        <th style="width:8%;text-align:center;">Qty</th>
-                        <th style="width:8%;text-align:center;">Unit</th>
-                        <th style="width:16%;text-align:right;">Unit Cost</th>
-                        <th style="width:18%;text-align:right;">Total</th>
-                    </tr>
-                </thead>
-                <tbody>${matRows}</tbody>
-                <tfoot>
-                    <tr><td colspan="5" style="text-align:right;"><b>Materials Total</b></td><td style="text-align:right;"><b>${formatCurrency(est.total_cost)}</b></td></tr>
-                </tfoot>
-            </table>
+      <table class="est-table" style="margin-top:2px;">
+          <thead>
+              <tr>
+                  <th style="width:6%;text-align:center;">#</th>
+                  <th>Material</th>
+                  <th style="width:10%;text-align:center;">Qty</th>
+                  <th style="width:10%;text-align:center;">Unit</th>
+                  <th style="width:16%;text-align:right;">Unit Cost</th>
+                  <th style="width:18%;text-align:right;">Total</th>
+              </tr>
+          </thead>
+          <tbody>${matRows}</tbody>
+      </table>
 
-            <table class="est-table" style="margin-top:10px;">
-                <thead><tr>
-                    <th style="width:25%;">Trade / Role</th>
-                    <th style="width:15%;text-align:center;">Workers</th>
-                    <th style="width:15%;text-align:center;">Man-Days</th>
-                    <th>Task Description</th>
-                </tr></thead>
-                <tbody>${labRows}</tbody>
-                <tfoot><tr><td colspan="2" style="text-align:right;"><b>Total Man-Days</b></td><td colspan="2" style="padding-left:10px;"><b>${est.totalManDays || 0}</b></td></tr></tfoot>
-            </table>
-        `;
+      <table class="est-table" style="margin-top:2px;">
+          <thead><tr>
+              <th>Trade / Role</th>
+              <th style="width:15%;text-align:center;">Workers</th>
+              <th style="width:15%;text-align:center;">Man-Days</th>
+              <th>Task Description</th>
+          </tr></thead>
+          <tbody>${labRows}</tbody>
+      </table>
+    `;
   }
-  return `
-    <div class="est-sheet">
-        <div style="width:100%;border-bottom:2.5px solid #000;padding-bottom:10px;margin-bottom:12px;">
-            <table style="width:100%;border:none;border-collapse:collapse;">
-                <tr>
-                    <td style="border:none;padding:0;width:70px;vertical-align:middle;">
-                        <img src="${window.location.href.split("?")[0].split("#")[0].replace("index.html", "")}navy_crest.jpg" style="height:60px;display:block;" alt="SLN Crest">
-                    </td>
-                    <td style="border:none;padding:0 0 0 12px;vertical-align:middle;">
-                        <div style="font-size:15px;font-weight:800;letter-spacing:0.5px;color:#0f172a;line-height:1.25;">SRI LANKA NAVY<br>CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
-                        <div style="font-size:11px;font-weight:bold;color:#475569;margin-top:4px;">${((_store$zones$find2 = store.zones.find((z) => z.id === (est.zone_id || store.currentZone))) === null || _store$zones$find2 === void 0 ? void 0 : _store$zones$find2.name) || "CE Management System"} — Cost Estimate</div>
-                    </td>
-                </tr>
-            </table>
-        </div>
-        <table style="width:100%;font-size:11px;margin-bottom:6px;">
-            <tr>
-                <td><b>Estimate No:</b> ${est.estimate_number}</td>
-                <td><b>Reference:</b> ${est.reference_doc || "—"}</td>
-            </tr>
-            <tr>
-                <td><b>Location:</b> ${est.location || "—"}</td>
-                <td><b>End User:</b> ${est.endUser || "—"}</td>
-            </tr>
-            <tr>
-                <td colspan="2"><b>Description:</b> ${est.description}</td>
-            </tr>
-            ${est.approvedAuthority ? `<tr><td colspan="2"><b>Approving Authority:</b> ${est.approvedAuthority}</td></tr>` : ""}
-        </table>
-        ${est.workScope && !est.workScopes ? `<p style="font-size:11px;margin:4px 0;"><b>Work Scope:</b> ${est.workScope}</p>` : ""}
 
-        ${sectionsHtml}
-        
-        <!-- Summary Section (Always printed at the bottom of sheets) -->
-        <div style="margin-top: 14px; border: 1.5px solid #000; border-radius: 6px; padding: 12px; background-color: #f8fafc; page-break-inside: avoid;">
-            <div style="font-size: 11px; font-weight: bold; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 8px; text-transform: uppercase;">
-                📊 Grand Summary
-            </div>
-            <table style="width: 100%; font-size: 11px; border: none;">
-                <tr style="border: none;">
-                    <td style="border: none; padding: 4px 0; width: 33%;"><b>Total Materials Cost:</b></td>
-                    <td style="border: none; padding: 4px 0; color: #059669; font-size: 12px;"><b>${formatCurrency(est.total_cost)}</b></td>
-                </tr>
-                <tr style="border: none;">
-                    <td style="border: none; padding: 4px 0;"><b>Total Labor (Man-Days):</b></td>
-                    <td style="border: none; padding: 4px 0; color: #2563eb; font-size: 12px;"><b>${est.totalManDays || 0}</b></td>
-                </tr>
-                <tr style="border: none; border-top: 1px solid #cbd5e1;">
-                    <td style="border: none; padding: 6px 0; font-size: 13px;"><b>Grand Total Estimate:</b></td>
-                    <td style="border: none; padding: 6px 0; color: #d97706; font-size: 14px;"><b>${formatCurrency(est.total_cost)}</b></td>
-                </tr>
-            </table>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;margin-top:26px;page-break-inside:avoid;">
+  const hasSignatures = est.createdBy || est.checkedBy || est.approvedBy;
+  const sigSection = hasSignatures
+    ? `
+        <div style="display:flex;justify-content:space-between;margin-top:4px;page-break-inside:avoid;">
             ${sigBlock("Created By", est.createdBy)}
             ${sigBlock("Checked By", est.checkedBy)}
             ${sigBlock("Approved By", est.approvedBy)}
         </div>
+      `
+    : "";
+
+  const createdDate = est.created_at
+    ? typeof est.created_at === "number"
+      ? new Date(est.created_at).toISOString().split("T")[0]
+      : est.created_at
+    : "";
+
+  return `
+    <div class="est-sheet">
+        <!-- Compact Header with Crest and ONLY Captain Civil Engineering Department (E) -->
+        <div style="width:100%;border-bottom:1.5px solid #000;padding-bottom:3px;margin-bottom:3px;">
+            <table style="width:100%;border:none;border-collapse:collapse;">
+                <tr>
+                    <td style="border:none;padding:0;width:38px;vertical-align:middle;">
+                        <img src="${window.location.href.split("?")[0].split("#")[0].replace("index.html", "")}images/navy_crest_cropped.png" style="height:32px;width:auto;display:block;" alt="SLN Crest">
+                    </td>
+                    <td style="border:none;padding:0 0 0 8px;vertical-align:middle;">
+                        <div style="font-size:12px;font-weight:900;letter-spacing:0.4px;color:#0f172a;line-height:1.15;">CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
+                        <div style="font-size:8.5px;font-weight:bold;color:#475569;margin-top:1px;">${zoneName} — Cost Estimate</div>
+                    </td>
+                    <td style="border:none;padding:0;text-align:right;vertical-align:middle;">
+                        <div style="font-size:11px;font-weight:900;color:#b91c1c;font-family:monospace;">${est.estimate_number}</div>
+                        ${createdDate ? `<div style="font-size:8px;color:#64748b;font-family:monospace;">${createdDate}</div>` : ""}
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Compact Info Table -->
+        <table style="width:100%;font-size:8.5px;line-height:1.25;margin-bottom:2px;border:none;border-collapse:collapse;">
+            <tr>
+                <td style="border:none;padding:1px 0;width:35%;"><b>Ref Type:</b> ${est.ref_type || est.reference_type || "Minute"}</td>
+                <td style="border:none;padding:1px 0;width:35%;"><b>Ref No:</b> ${est.reference_doc || est.reference_no || "—"}</td>
+                <td style="border:none;padding:1px 0;width:30%;text-align:right;"><b>Type:</b> ${est.project_type || est.type || "Project"}</td>
+            </tr>
+            <tr>
+                <td style="border:none;padding:1px 0;"><b>Location:</b> ${est.location || "—"}</td>
+                <td style="border:none;padding:1px 0;"><b>Location 2:</b> ${est.location2 || est.sub_location || "—"}</td>
+                <td style="border:none;padding:1px 0;text-align:right;"><b>End User:</b> ${est.endUser || "—"}</td>
+            </tr>
+            <tr>
+                <td colspan="3" style="border:none;padding:1px 0;"><b>Description:</b> ${est.description}${est.approvedAuthority ? ` | <b>Appr:</b> ${est.approvedAuthority}` : ""}</td>
+            </tr>
+        </table>
+        ${est.workScope && !est.workScopes ? `<p style="font-size:8.5px;margin:2px 0;"><b>Work Scope:</b> ${est.workScope}</p>` : ""}
+
+        <!-- Work Scopes / Sections -->
+        ${sectionsHtml}
+        
+        <!-- Compact Grand Summary Bar -->
+        <div style="margin-top: 3px; border: 1.2px solid #000; border-radius: 3px; padding: 3px 6px; background-color: #f1f5f9; display: flex; justify-content: space-between; align-items: center; page-break-inside: avoid; font-size: 8.5px;">
+            <span>Materials: <strong style="color: #059669; font-size: 9px;">${formatCurrency(est.total_cost)}</strong></span>
+            <span>Labor: <strong style="color: #2563eb; font-size: 9px;">${est.totalManDays || 0} Man-Days</strong></span>
+            <span>Grand Total: <strong style="color: #b45309; font-size: 10px; font-weight: 900;">${formatCurrency(est.total_cost)}</strong></span>
+        </div>
+
+        ${sigSection}
     </div>`;
 }
+
 function printEstimatesByIds(ids, settings = null) {
   // Only print estimates belonging to the current zone
   const ests = store.estimates.filter(
@@ -8748,34 +9254,39 @@ function printEstimatesByIds(ids, settings = null) {
   let sheetsHtml = "";
   let customCSS = "";
   if (settings && settings.isTiled) {
-    // Tiled: 2 estimates per A4 portrait page
+    // Tiled mode
     customCSS = `
-            @page { size: A4 portrait; margin: 10mm; }
-            body { margin: 0; }
+            @page { size: A4 portrait; margin: 6mm 8mm; }
+            body { margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .est-sheet { 
                 width: 100%; 
-                height: 135mm; /* Roughly half of A4 printable height (297-20 = 277. Half = 138.5) */
-                margin-bottom: 5mm; 
-                padding: 0;
-                box-sizing: border-box;
-                overflow: hidden;
+                margin: 0 0 4mm 0; 
+                padding: 6px 8px; 
+                border: 1.2px solid #000; 
+                border-radius: 4px; 
+                background: #fff; 
+                box-sizing: border-box; 
+                page-break-inside: avoid !important; 
+                break-inside: avoid !important; 
             }
+            .est-table { width: 100%; border-collapse: collapse; font-size: 8px; }
+            .est-table th { border: 1px solid #64748b; padding: 2px 3px; background: #e2e8f0; text-align: left; font-size: 8px; font-weight: bold; }
+            .est-table td { border: 1px solid #64748b; padding: 1.5px 3px; font-size: 8px; }
+            .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 8px; }
             .html-page-break { page-break-after: always; }
         `;
     sheetsHtml = ests
       .map((e, i) => {
         let html = buildEstimatePrintHTML(e);
-        if ((i + 1) % 2 === 0 && i !== ests.length - 1) {
+        if ((i + 1) % 3 === 0 && i !== ests.length - 1) {
           html += '<div class="html-page-break"></div>';
         }
         return html;
       })
       .join("");
   } else {
-    // Normal printing
-    sheetsHtml = ests
-      .map((e) => buildEstimatePrintHTML(e))
-      .join('<div class="html-page-break"></div>');
+    // Continuous / Flow mode (fits up to 3 estimates per A4, avoids breaking inside cards)
+    sheetsHtml = ests.map((e) => buildEstimatePrintHTML(e)).join("");
     let pSize = "A4";
     let pOri = "portrait";
     if (settings) {
@@ -8783,9 +9294,23 @@ function printEstimatesByIds(ids, settings = null) {
       pOri = settings.orientation;
     }
     customCSS = `
-            @page { size: ${pSize} ${pOri}; margin: 10mm 12mm; }
-            body { margin: 0; }
-            .est-sheet { width: 100%; margin: 0; padding: 0; }
+            @page { size: ${pSize} ${pOri}; margin: 6mm 8mm; }
+            body { margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .est-sheet { 
+                width: 100%; 
+                margin: 0 0 4mm 0; 
+                padding: 6px 8px; 
+                border: 1.2px solid #000; 
+                border-radius: 4px; 
+                background: #fff; 
+                box-sizing: border-box; 
+                page-break-inside: avoid !important; 
+                break-inside: avoid !important; 
+            }
+            .est-table { width: 100%; border-collapse: collapse; font-size: 8px; }
+            .est-table th { border: 1px solid #64748b; padding: 2px 3px; background: #e2e8f0; text-align: left; font-size: 8px; font-weight: bold; }
+            .est-table td { border: 1px solid #64748b; padding: 1.5px 3px; font-size: 8px; }
+            .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 8px; }
             .html-page-break { page-break-after: always; }
         `;
   }
@@ -8795,10 +9320,21 @@ function printEstimatesByIds(ids, settings = null) {
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; }
-  .est-table { width: 100%; border-collapse: collapse; font-size: 10px; }
-  .est-table th { border: 1px solid #555; padding: 4px 5px; background: #e2e8f0; text-align: left; font-size: 10px; }
-  .est-table td { border: 1px solid #555; padding: 3px 5px; font-size: 10px; }
-  .est-table tfoot td { background: #f1f5f9; font-weight: bold; }
+  .est-sheet { 
+      width: 100%; 
+      margin: 0 0 4mm 0; 
+      padding: 6px 8px; 
+      border: 1.2px solid #000; 
+      border-radius: 4px; 
+      background: #fff; 
+      box-sizing: border-box; 
+      page-break-inside: avoid !important; 
+      break-inside: avoid !important; 
+  }
+  .est-table { width: 100%; border-collapse: collapse; font-size: 8px; }
+  .est-table th { border: 1px solid #64748b; padding: 2px 3px; background: #e2e8f0; text-align: left; font-size: 8px; font-weight: bold; }
+  .est-table td { border: 1px solid #64748b; padding: 1.5px 3px; font-size: 8px; }
+  .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 8px; }
   @media print {
       ${customCSS}
   }
@@ -8810,6 +9346,7 @@ function printEstimatesByIds(ids, settings = null) {
     win.print();
   }, 500);
 }
+
 function exportEstimatesToPDFByIds(ids) {
   const ests = store.estimates.filter(
     (e) =>
@@ -8826,8 +9363,7 @@ function exportEstimatesToPDFByIds(ids) {
     );
     return;
   }
-  showToast("Generating PDF, please wait...", "info"); // Create a container attached to the body (visible but covering everything temporarily)
-  // This is the ONLY reliable way to ensure html2canvas doesn't clip on different viewports
+  showToast("Generating PDF, please wait...", "info");
   const tempDiv = document.createElement("div");
   tempDiv.style.position = "absolute";
   tempDiv.style.top = "0";
@@ -8837,28 +9373,35 @@ function exportEstimatesToPDFByIds(ids) {
   tempDiv.style.fontFamily = "Arial, Helvetica, sans-serif";
   tempDiv.style.color = "#000";
   tempDiv.style.backgroundColor = "#fff";
-  tempDiv.style.minHeight = "100vh"; // buildEstimatePrintHTML(e) already returns <div class="est-sheet">...</div>
-  tempDiv.innerHTML = ests
-    .map((e) => buildEstimatePrintHTML(e))
-    .join('<div class="html2pdf__page-break"></div>'); // Inject the necessary table styles for PDF
+  tempDiv.style.minHeight = "100vh";
+  tempDiv.innerHTML = ests.map((e) => buildEstimatePrintHTML(e)).join("");
   const style = document.createElement("style");
   style.innerHTML = `
-        .est-sheet { padding: 10px; width: 100%; box-sizing: border-box; margin: 0; }
-        .est-table { width: 100%; border-collapse: collapse; font-size: 10px; table-layout: auto; }
-        .est-table th { border: 1px solid #555; padding: 4px 5px; background: #e2e8f0; text-align: left; }
-        .est-table td { border: 1px solid #555; padding: 3px 5px; word-wrap: break-word; }
-        .est-table tfoot td { background: #f1f5f9; font-weight: bold; }
-        .html2pdf__page-break { page-break-after: always; }
+        .est-sheet { 
+            width: 100%; 
+            margin: 0 0 5mm 0; 
+            padding: 6px 8px; 
+            border: 1.2px solid #000; 
+            border-radius: 4px; 
+            background: #fff; 
+            box-sizing: border-box; 
+            page-break-inside: avoid !important; 
+            break-inside: avoid !important; 
+        }
+        .est-table { width: 100%; border-collapse: collapse; font-size: 8px; table-layout: auto; }
+        .est-table th { border: 1px solid #64748b; padding: 2px 3px; background: #e2e8f0; text-align: left; font-size: 8px; font-weight: bold; }
+        .est-table td { border: 1px solid #64748b; padding: 1.5px 3px; word-wrap: break-word; font-size: 8px; }
+        .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 8px; }
     `;
   tempDiv.appendChild(style);
-  document.body.appendChild(tempDiv); // Scroll to top to ensure html2canvas captures from the beginning
+  document.body.appendChild(tempDiv);
   window.scrollTo(0, 0);
   const filename =
     ests.length === 1
       ? `Estimate_${ests[0].estimate_number.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`
       : `Estimates_Bulk_Export.pdf`;
   const opt = {
-    margin: 10,
+    margin: [6, 8, 6, 8],
     filename: filename,
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: {
@@ -9168,6 +9711,7 @@ function saveLocation(event) {
     zone_id: document.getElementById("locZone").value,
     building_name: document.getElementById("locBuilding").value,
     sub_location: document.getElementById("locSubLocation").value,
+    end_user: document.getElementById("locEndUser")?.value || "",
     description: document.getElementById("locDescription").value,
   };
   if (fbKeyVal) {
@@ -9191,7 +9735,19 @@ function saveLocation(event) {
       document.getElementById("locFbKey").value = "";
       document.getElementById("locBuilding").value = "";
       document.getElementById("locSubLocation").value = "";
-      document.getElementById("locDescription").value = ""; // If we edited the currently selected location, update the details view
+      if (document.getElementById("locEndUser")) {
+        document.getElementById("locEndUser").value = "";
+      }
+      document.getElementById("locDescription").value = "";
+      if (typeof updateSelectedZoneLocationsView === "function") {
+        updateSelectedZoneLocationsView();
+      }
+      if (typeof renderSettingsZoneSelectorList === "function") {
+        renderSettingsZoneSelectorList();
+      }
+      if (typeof populateEstLocationsDatalist === "function") {
+        populateEstLocationsDatalist();
+      }
       if (fbKeyVal && store.selectedLocation === locData.id) {
         selectLocation(locData.id);
       } else {
@@ -10263,20 +10819,357 @@ function normalizeLocationsCsvHeader(h) {
   if (clean.includes("zone") || clean === "zone_id") {
     return "zone";
   }
-  if (clean.includes("building") || clean === "building_name") {
+  if (
+    clean.includes("building") ||
+    clean.includes("location 1") ||
+    clean === "location1" ||
+    clean === "location" ||
+    clean === "building_name" ||
+    clean === "building name" ||
+    clean === "facility"
+  ) {
     return "building name";
   }
   if (
+    clean.includes("location 2") ||
+    clean.includes("location2") ||
     clean.includes("sub-location") ||
     clean.includes("sub_location") ||
-    clean === "sublocation"
+    clean.includes("sublocation") ||
+    clean.includes("branch") ||
+    clean.includes("room")
   ) {
     return "sub-location";
   }
-  if (clean.includes("description") || clean === "desc") {
+  if (
+    clean.includes("end user") ||
+    clean.includes("end_user") ||
+    clean.includes("occupant") ||
+    clean.includes("department") ||
+    clean === "dept"
+  ) {
+    return "end user";
+  }
+  if (
+    clean.includes("description") ||
+    clean === "desc" ||
+    clean.includes("note")
+  ) {
     return "description";
   }
   return clean;
+}
+
+function downloadLocationsCsvTemplate() {
+  const csvContent =
+    "Zone,Location,Location 2,End User,Description\n" +
+    "A-Zone,Wardroom Building,Ground Floor,Officers Wardroom / Mess Sec,Dining & Lounge\n" +
+    "A-Zone,Wardroom Building,First Floor,Officers Living Quarters,12 Rooms\n" +
+    "BC-Zone,Junior Rates Mess,Kitchen,Mess Committee,Dining Hall & Cooking Area\n" +
+    "Carpentry-Shop,Main Workshop,Timber Store,Workshop Incharge,Wood Cutting & Storage\n";
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.setAttribute("hidden", "");
+  a.setAttribute("href", url);
+  a.setAttribute("download", "zone_locations_template.csv");
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+function exportLocationsCsv() {
+  const zid = _cfgSelectedZone || "ALL";
+  let locs = store.locations || [];
+  if (zid !== "ALL") {
+    locs = locs.filter((l) => l.zone_id === zid);
+  }
+  if (locs.length === 0) {
+    showToast("No locations to export for this zone", "info");
+    return;
+  }
+  let csvContent = "\uFEFFZone,Location,Location 2,End User,Description\n";
+  locs.forEach((l) => {
+    const zone = `"${(l.zone_id || "").replace(/"/g, '""')}"`;
+    const loc1 = `"${(l.building_name || l.name || "").replace(/"/g, '""')}"`;
+    const loc2 = `"${(l.sub_location || l.location2 || "").replace(/"/g, '""')}"`;
+    const endUser = `"${(l.end_user || "").replace(/"/g, '""')}"`;
+    const desc = `"${(l.description || "").replace(/"/g, '""')}"`;
+    csvContent += `${zone},${loc1},${loc2},${endUser},${desc}\n`;
+  });
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.setAttribute("hidden", "");
+  a.setAttribute("href", url);
+  a.setAttribute(
+    "download",
+    `Zone_Locations_${zid}_${new Date().toISOString().split("T")[0]}.csv`,
+  );
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  showToast("Locations exported to CSV successfully!");
+}
+
+let _cfgSelectedZone = null;
+
+function renderSettingsZoneSelectorList() {
+  const container = document.getElementById("settingsZoneSelectorList");
+  if (!container) return;
+  const zones = store.zones || store.settings.zones || [];
+  const badge = document.getElementById("cfgZonesCountBadge");
+  if (badge) badge.textContent = `${zones.length} Zones`;
+
+  if (!_cfgSelectedZone && zones.length > 0) {
+    _cfgSelectedZone = store.currentZone || zones[0].id || zones[0].name;
+  }
+
+  container.innerHTML =
+    zones
+      .map((z, idx) => {
+        const zid = z.id || z.name;
+        const isSelected = _cfgSelectedZone === zid;
+        const locCount = (store.locations || []).filter(
+          (l) => l.zone_id === zid,
+        ).length;
+        return `
+      <div onclick="selectSettingsZone('${zid}')" class="flex items-center gap-2 px-3.5 py-2 rounded-xl cursor-pointer transition-all border ${
+        isSelected
+          ? "bg-teal-600 text-white border-teal-700 shadow-md ring-2 ring-teal-300 font-bold"
+          : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200"
+      }">
+        <span class="text-xs">🏢 ${z.name || z.id}</span>
+        <span class="text-[11px] px-2 py-0.5 rounded-full font-bold ${
+          isSelected
+            ? "bg-teal-800 text-teal-100"
+            : "bg-slate-100 text-slate-600"
+        }">${locCount}</span>
+        <button onclick="event.stopPropagation(); removeZoneFromSettings(${idx})" class="p-0.5 rounded hover:bg-red-500/20 text-red-300 hover:text-white" title="Remove Zone">
+          ✕
+        </button>
+      </div>
+    `;
+      })
+      .join("") ||
+    '<p class="text-xs text-slate-400 italic">No zones configured yet.</p>';
+
+  updateSelectedZoneLocationsView();
+}
+
+function selectSettingsZone(zoneId) {
+  _cfgSelectedZone = zoneId;
+  renderSettingsZoneSelectorList();
+}
+
+function updateSelectedZoneLocationsView() {
+  const titleEl = document.getElementById("cfgSelectedZoneTitle");
+  if (titleEl) {
+    const zObj = (store.zones || store.settings?.zones || []).find(
+      (z) => (z.id || z.name) === _cfgSelectedZone,
+    );
+    titleEl.textContent = zObj
+      ? zObj.name
+      : _cfgSelectedZone || "Select Zone";
+  }
+
+  // Populate building datalist for quick add
+  const datalist = document.getElementById("cfgBuildingDatalist");
+  if (datalist && _cfgSelectedZone) {
+    const locs = (store.locations || []).filter(
+      (l) => l.zone_id === _cfgSelectedZone,
+    );
+    const uniqueBuildings = [
+      ...new Set(
+        locs
+          .map((l) => (l.building_name || l.name || "").trim())
+          .filter(Boolean),
+      ),
+    ];
+    datalist.innerHTML = uniqueBuildings
+      .map((b) => `<option value="${b}">`)
+      .join("");
+  }
+
+  renderSettingsLocationsTable();
+}
+
+function quickSaveLocation(event) {
+  event.preventDefault();
+  const zid = _cfgSelectedZone || store.currentZone;
+  if (!zid) {
+    showToast("Please select a zone first", "error");
+    return;
+  }
+  const buildingInput = document.getElementById("quickLocBuilding");
+  const subLocInput = document.getElementById("quickLocSubLocation");
+  const endUserInput = document.getElementById("quickLocEndUser");
+
+  const building = buildingInput ? buildingInput.value.trim() : "";
+  const subLocation = subLocInput ? subLocInput.value.trim() : "";
+  const endUser = endUserInput ? endUserInput.value.trim() : "";
+
+  if (!building) {
+    showToast("Please enter a Location (Building Name)", "error");
+    return;
+  }
+
+  const maxId = store.locations.length
+    ? Math.max(...store.locations.map((l) => l.id || 0))
+    : 0;
+
+  const locData = {
+    id: maxId + 1,
+    zone_id: zid,
+    building_name: building,
+    sub_location: subLocation,
+    end_user: endUser,
+    description: "",
+    created_at: Date.now(),
+  };
+
+  fbSaveLocation(locData)
+    .then(() => {
+      showToast(
+        `Location "${building}${subLocation ? " - " + subLocation : ""}" added to ${zid}!`,
+      );
+      if (subLocInput) subLocInput.value = "";
+      if (endUserInput) endUserInput.value = "";
+      updateSelectedZoneLocationsView();
+      populateEstLocationsDatalist();
+      renderSettingsZoneSelectorList();
+    })
+    .catch((err) => {
+      console.error(err);
+      showToast("Error saving location", "error");
+    });
+}
+
+function renderSettingsLocationsTable() {
+  const tableBody = document.getElementById("cfgLocationsTableBody");
+  if (!tableBody) return;
+  const countBadge = document.getElementById("cfgLocationsCountBadge");
+
+  const zid = _cfgSelectedZone || store.currentZone;
+  const filtered = (store.locations || []).filter((l) => l.zone_id === zid);
+
+  if (countBadge) {
+    countBadge.textContent = `${filtered.length} Locations`;
+  }
+
+  if (filtered.length === 0) {
+    tableBody.innerHTML = `
+      <tr>
+        <td colspan="6" class="px-4 py-8 text-center text-slate-400 italic">
+          No locations found for this zone. Use <b>"➕ Quick Add / Branch Location"</b> above or <b>"📥 Bulk Upload (CSV)"</b> to add locations.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tableBody.innerHTML = filtered
+    .map(
+      (loc, idx) => `
+      <tr class="hover:bg-slate-50/80 transition-colors">
+        <td class="px-3 py-2 text-center text-slate-400 font-mono text-[11px]">${idx + 1}</td>
+        <td class="px-3 py-2 font-semibold text-slate-800">🏢 ${loc.building_name || loc.name || "—"}</td>
+        <td class="px-3 py-2 text-teal-700 font-medium">📍 ${loc.sub_location || loc.location2 || '<span class="text-slate-400 italic font-normal">Main / General</span>'}</td>
+        <td class="px-3 py-2 text-slate-700 font-medium">${loc.end_user ? `<span class="inline-flex items-center gap-1 bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded text-[11px] font-semibold">👤 ${loc.end_user}</span>` : '<span class="text-slate-400 italic text-[11px]">Not assigned</span>'}</td>
+        <td class="px-3 py-2 text-slate-500 text-[11px]">${loc.description || "—"}</td>
+        <td class="px-3 py-2 text-center">
+          <div class="flex items-center justify-center gap-1.5">
+            <button onclick="editLocationFromSettings('${loc.id || loc._fbKey}')" class="text-indigo-600 hover:text-indigo-800 p-1 rounded hover:bg-indigo-50" title="Edit">
+              ✏️
+            </button>
+            <button onclick="deleteLocationFromSettings('${loc.id || ""}', '${loc._fbKey || ""}')" class="text-red-500 hover:text-red-700 p-1 rounded hover:bg-red-50" title="Delete">
+              🗑️
+            </button>
+          </div>
+        </td>
+      </tr>
+    `,
+    )
+    .join("");
+}
+
+function openAddLocationModal() {
+  document.getElementById("locationModalTitle").textContent = "Add Location";
+  document.getElementById("locId").value = "";
+  document.getElementById("locFbKey").value = "";
+  const zoneEl = document.getElementById("locZone");
+  if (zoneEl) {
+    const zones = store.zones || store.settings?.zones || [];
+    zoneEl.innerHTML = zones.map(z => `<option value="${z.id || z.name}">${z.name || z.id}</option>`).join("");
+    zoneEl.value = _cfgSelectedZone || store.currentZone;
+  }
+  document.getElementById("locBuilding").value = "";
+  document.getElementById("locSubLocation").value = "";
+  if (document.getElementById("locEndUser")) document.getElementById("locEndUser").value = "";
+  document.getElementById("locDescription").value = "";
+  document.getElementById("addLocationModal").classList.remove("hidden");
+}
+
+function editLocationFromSettings(idOrKey) {
+  const loc = (store.locations || []).find(
+    (l) => String(l.id) === String(idOrKey) || l._fbKey === idOrKey,
+  );
+  if (!loc) return;
+  const titleEl = document.getElementById("locationModalTitle");
+  if (titleEl) titleEl.textContent = "Edit Location";
+  const idEl = document.getElementById("locId");
+  if (idEl) idEl.value = loc.id || "";
+  const keyEl = document.getElementById("locFbKey");
+  if (keyEl) keyEl.value = loc._fbKey || "";
+  const zoneEl = document.getElementById("locZone");
+  if (zoneEl) {
+    const zones = store.zones || store.settings?.zones || [];
+    zoneEl.innerHTML = zones.map(z => `<option value="${z.id || z.name}">${z.name || z.id}</option>`).join("");
+    zoneEl.value = loc.zone_id || store.currentZone;
+  }
+  document.getElementById("locBuilding").value =
+    loc.building_name || loc.name || "";
+  document.getElementById("locSubLocation").value =
+    loc.sub_location || loc.location2 || "";
+  if (document.getElementById("locEndUser")) {
+    document.getElementById("locEndUser").value = loc.end_user || "";
+  }
+  document.getElementById("locDescription").value = loc.description || "";
+  document.getElementById("addLocationModal").classList.remove("hidden");
+}
+
+function deleteLocationFromSettings(id, fbKey) {
+  const loc = (store.locations || []).find(
+    (l) => (id && String(l.id) === String(id)) || (fbKey && l._fbKey === fbKey),
+  );
+  const locName = loc
+    ? `${loc.building_name} (${loc.sub_location || "General"})`
+    : "this location";
+  if (
+    !confirm(
+      `⚠️ Are you sure you want to delete ${locName}?\n\nThis will remove the location record from Firebase.`,
+    )
+  ) {
+    return;
+  }
+  const key = fbKey || (loc ? loc._fbKey : null);
+  if (key) {
+    opsDB
+      .ref(`locations/${key}`)
+      .remove()
+      .then(() => {
+        showToast("Location deleted successfully!");
+        updateSelectedZoneLocationsView();
+        renderSettingsZoneSelectorList();
+        renderLocationsList();
+      })
+      .catch((err) => {
+        console.error(err);
+        showToast("Failed to delete location", "error");
+      });
+  } else {
+    showToast("Cannot find location record key", "error");
+  }
 }
 function migrateInventoryLocationAndBookNo() {
   var _store$zones$find3;
@@ -10409,6 +11302,7 @@ function processLocationsCsv(csvText) {
       if (header === "zone") itemData.zone_id = values[index];
       if (header === "building name") itemData.building_name = values[index];
       if (header === "sub-location") itemData.sub_location = values[index];
+      if (header === "end user") itemData.end_user = values[index];
       if (header === "description") itemData.description = values[index];
     }); // Validation - Zone and Building Name are required
     if (!itemData.zone_id || !itemData.building_name) {
@@ -10416,6 +11310,7 @@ function processLocationsCsv(csvText) {
       continue;
     }
     itemData.sub_location = itemData.sub_location || "";
+    itemData.end_user = itemData.end_user || "";
     itemData.description = itemData.description || ""; // Save to Firebase
     fbSaveLocation(itemData);
     addedCount++;
@@ -10615,28 +11510,12 @@ function switchSettingsTab(tab) {
         store.zones
           .map((z) => `<option value="${z.id}">${z.name}</option>`)
           .join("");
-      zoneDropdown.value = s.selectedSettingsZone || "";
-    } // Populate values based on selected zone
-    const selZone = s.selectedSettingsZone;
-    if (selZone && s.zoneInCharges && s.zoneInCharges[selZone]) {
-      const inc = s.zoneInCharges[selZone];
-      setValue("cfg-userSailorId", inc.sailorId || "");
-      const displayName = inc.rank
-        ? `${inc.rank} ${inc.name} (${inc.serviceNo})`
-        : inc.name;
-      setValue("cfg-userName", displayName || "");
-      setValue("cfg-userRank", inc.rank || "");
-      setValue("cfg-userServiceNo", inc.serviceNo || "");
-      setValue("cfg-userPassword", inc.password || "");
-    } else {
-      setValue("cfg-userSailorId", "");
-      setValue("cfg-userName", "");
-      setValue("cfg-userRank", "");
-      setValue("cfg-userServiceNo", "");
-      setValue("cfg-userPassword", "");
+      zoneDropdown.value = s.selectedSettingsZone || (store.zones[0] ? store.zones[0].id : "");
     }
+    changeSettingsUserZone(zoneDropdown ? zoneDropdown.value : s.selectedSettingsZone);
   } else if (tab === "zones") {
-    renderSettingsZoneList();
+    renderSettingsZoneSelectorList();
+    renderSettingsLocationsTable();
   } else if (tab === "offcharge") {
     renderSettingsOffChargeList();
   } else if (tab === "workorder") {
@@ -10698,6 +11577,319 @@ function changeSettingsUserZone(zoneId) {
     setValue("cfg-woArtificerId", "");
     setValue("cfg-woArtificerName", "");
   }
+  renderSettingsSupervisorsList(zoneId);
+  renderSettingsZoneTeamList(zoneId);
+}
+
+function renderSettingsSupervisorsList(zoneId) {
+  const container = document.getElementById("cfgSupervisorsList");
+  if (!container) return;
+  const zid = zoneId || document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) {
+    container.innerHTML = '<span class="text-xs text-slate-400 italic">Select a Zone above to view supervisors</span>';
+    const badge = document.getElementById("cfgSupervisorsCountBadge");
+    if (badge) badge.textContent = "0";
+    return;
+  }
+  const inc = (store.settings.zoneInCharges || {})[zid] || {};
+  let supervisors = Array.isArray(inc.supervisors) ? inc.supervisors : (inc.woSupervisorId ? [{ id: inc.woSupervisorId, name: inc.woSupervisorName }] : []);
+
+  const badge = document.getElementById("cfgSupervisorsCountBadge");
+  if (badge) badge.textContent = String(supervisors.length);
+
+  if (supervisors.length === 0) {
+    container.innerHTML = '<span class="text-xs text-slate-400 italic">No supervisors added yet. Search above to add.</span>';
+    return;
+  }
+
+  container.innerHTML = supervisors.map(sv => {
+    const s = store.sailors.find(x => String(x.id ?? x._fbKey) === String(sv.id || sv.sailorId)) || sv;
+    const displayName = s.rank ? `${s.rank} ${s.name} (${s.official_number || s.service_no || ''})` : (sv.name || sv.id);
+    const sid = String(sv.id || sv.sailorId || sv._fbKey);
+    return `
+      <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-900 border border-blue-200 text-xs font-semibold shadow-2xs">
+        <span>👷 ${displayName}</span>
+        <button onclick="removeSupervisorFromZone('${sid}')" class="text-blue-400 hover:text-red-600 font-bold ml-1 p-0.5" title="Remove Supervisor">✕</button>
+      </div>
+    `;
+  }).join("");
+}
+
+function showAddSupervisorResults() {
+  const resultsDiv = document.getElementById("cfg-addSupervisorSearchResults");
+  if (!resultsDiv) return;
+  resultsDiv.classList.remove("hidden");
+  filterAddSupervisorResults(document.getElementById("cfg-addSupervisorSearch")?.value || "");
+}
+
+function filterAddSupervisorResults(query) {
+  const resultsDiv = document.getElementById("cfg-addSupervisorSearchResults");
+  if (!resultsDiv) return;
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) {
+    resultsDiv.innerHTML = '<div class="p-3 text-xs text-red-500 italic">Please select a Zone first</div>';
+    resultsDiv.classList.remove("hidden");
+    return;
+  }
+  const inc = (store.settings.zoneInCharges || {})[zid] || {};
+  const currentSupervisors = new Set((inc.supervisors || []).map(s => String(s.id || s.sailorId)));
+
+  const ecSailors = getEcSailors();
+  const q = (query || "").toLowerCase().trim();
+  let filtered = ecSailors.filter(s => {
+    const sid = String(s.id ?? s._fbKey);
+    if (currentSupervisors.has(sid)) return false;
+    if (!q) return true;
+    const name = (s.name || "").toLowerCase();
+    const offNo = (s.official_number || s.officialNumber || s.service_no || "").toLowerCase();
+    const rank = (s.rank || "").toLowerCase();
+    return name.includes(q) || offNo.includes(q) || rank.includes(q);
+  });
+
+  if (filtered.length === 0) {
+    resultsDiv.innerHTML = '<div class="p-3 text-xs text-slate-400 italic">No available EC sailors found</div>';
+  } else {
+    resultsDiv.innerHTML = filtered.slice(0, 30).map(s => {
+      const sid = String(s.id !== undefined && s.id !== null ? s.id : s._fbKey);
+      const displayName = `${s.rank} ${s.name} (${s.official_number || s.service_no || ''})`;
+      return `
+        <div onclick="addSupervisorToZone('${sid}')" class="p-2.5 text-xs hover:bg-blue-50 cursor-pointer text-slate-700 transition-colors flex items-center justify-between">
+          <span class="font-semibold text-slate-800">${s.rank} ${s.name}</span>
+          <span class="text-[11px] text-slate-400 font-mono">${s.official_number || s.service_no || ''}</span>
+        </div>
+      `;
+    }).join("");
+  }
+  resultsDiv.classList.remove("hidden");
+}
+
+function addSupervisorToZone(sailorId) {
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) {
+    showToast("Please select a Zone first", "error");
+    return;
+  }
+  if (!store.settings.zoneInCharges) store.settings.zoneInCharges = {};
+  if (!store.settings.zoneInCharges[zid]) store.settings.zoneInCharges[zid] = {};
+
+  let supervisors = Array.isArray(store.settings.zoneInCharges[zid].supervisors)
+    ? [...store.settings.zoneInCharges[zid].supervisors]
+    : [];
+
+  const s = store.sailors.find(x => String(x.id ?? x._fbKey) === String(sailorId));
+  if (!s) return;
+
+  if (supervisors.some(sv => String(sv.id || sv.sailorId) === String(sailorId))) {
+    showToast("Supervisor already added", "info");
+    return;
+  }
+
+  supervisors.push({
+    id: sailorId,
+    name: `${s.rank} ${s.name}`,
+    rank: s.rank || "",
+    serviceNo: s.official_number || s.service_no || "",
+  });
+
+  store.settings.zoneInCharges[zid].supervisors = supervisors;
+  store.settings.zoneInCharges[zid].woSupervisorId = supervisors[0].id;
+  store.settings.zoneInCharges[zid].woSupervisorName = supervisors[0].name;
+
+  opsDB.ref(`settings/zoneInCharges/${zid}/supervisors`).set(supervisors);
+  opsDB.ref(`settings/zoneInCharges/${zid}/woSupervisorId`).set(supervisors[0].id);
+  opsDB.ref(`settings/zoneInCharges/${zid}/woSupervisorName`).set(supervisors[0].name);
+
+  document.getElementById("cfg-addSupervisorSearch").value = "";
+  document.getElementById("cfg-addSupervisorSearchResults").classList.add("hidden");
+  renderSettingsSupervisorsList(zid);
+  showToast(`Added ${s.rank} ${s.name} as supervisor for ${zid}`);
+}
+
+function removeSupervisorFromZone(sailorId) {
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) return;
+  if (!store.settings.zoneInCharges || !store.settings.zoneInCharges[zid]) return;
+
+  let supervisors = (store.settings.zoneInCharges[zid].supervisors || []).filter(
+    sv => String(sv.id || sv.sailorId) !== String(sailorId)
+  );
+
+  store.settings.zoneInCharges[zid].supervisors = supervisors;
+  if (supervisors.length > 0) {
+    store.settings.zoneInCharges[zid].woSupervisorId = supervisors[0].id;
+    store.settings.zoneInCharges[zid].woSupervisorName = supervisors[0].name;
+    opsDB.ref(`settings/zoneInCharges/${zid}/woSupervisorId`).set(supervisors[0].id);
+    opsDB.ref(`settings/zoneInCharges/${zid}/woSupervisorName`).set(supervisors[0].name);
+  } else {
+    delete store.settings.zoneInCharges[zid].woSupervisorId;
+    delete store.settings.zoneInCharges[zid].woSupervisorName;
+    opsDB.ref(`settings/zoneInCharges/${zid}/woSupervisorId`).remove();
+    opsDB.ref(`settings/zoneInCharges/${zid}/woSupervisorName`).remove();
+  }
+
+  opsDB.ref(`settings/zoneInCharges/${zid}/supervisors`).set(supervisors);
+  renderSettingsSupervisorsList(zid);
+  showToast("Supervisor removed");
+}
+
+function renderSettingsZoneTeamList(zoneId) {
+  const container = document.getElementById("cfgZoneTeamList");
+  if (!container) return;
+  const zid = zoneId || document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) {
+    container.innerHTML = '<span class="text-xs text-slate-400 italic">Select a Zone above to view zone team</span>';
+    const badge = document.getElementById("cfgZoneTeamCountBadge");
+    if (badge) badge.textContent = "0";
+    return;
+  }
+  const inc = (store.settings.zoneInCharges || {})[zid] || {};
+  const team = Array.isArray(inc.zoneTeam) ? inc.zoneTeam : [];
+
+  const badge = document.getElementById("cfgZoneTeamCountBadge");
+  if (badge) badge.textContent = String(team.length);
+
+  if (team.length === 0) {
+    container.innerHTML = '<span class="text-xs text-slate-400 italic">No sailors assigned to this zone team yet. Search above to add.</span>';
+    return;
+  }
+
+  container.innerHTML = team.map(tm => {
+    const s = store.sailors.find(x => String(x.id ?? x._fbKey) === String(tm.id || tm.sailorId)) || tm;
+    const sid = String(tm.id || tm.sailorId || tm._fbKey);
+    const isReleased = !!tm.releasedForOtherZones;
+    return `
+      <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold shadow-2xs ${
+        isReleased 
+          ? "bg-amber-50 text-amber-900 border-amber-300 ring-1 ring-amber-200" 
+          : "bg-teal-50 text-teal-900 border-teal-200"
+      }">
+        <span>⚓ ${s.rank || ''} ${s.name || tm.name} <span class="font-mono text-[10px] text-slate-500">(${s.official_number || s.service_no || tm.serviceNo || ''})</span></span>
+        <button onclick="toggleSailorZoneRelease('${sid}')" class="text-[10px] px-1.5 py-0.5 rounded font-bold transition-all ${
+          isReleased ? "bg-amber-200 text-amber-900 hover:bg-amber-300" : "bg-teal-200 text-teal-900 hover:bg-teal-300"
+        }" title="${isReleased ? 'Click to reclaim in zone' : 'Click to release for other zones'}">
+          ${isReleased ? '🔓 Released' : '🔒 In-Zone'}
+        </button>
+        <button onclick="removeSailorFromZoneTeam('${sid}')" class="text-slate-400 hover:text-red-600 font-bold ml-1 p-0.5" title="Remove from Team">✕</button>
+      </div>
+    `;
+  }).join("");
+}
+
+function showAddZoneTeamResults() {
+  const resultsDiv = document.getElementById("cfg-addZoneTeamSearchResults");
+  if (!resultsDiv) return;
+  resultsDiv.classList.remove("hidden");
+  filterAddZoneTeamResults(document.getElementById("cfg-addZoneTeamSearch")?.value || "");
+}
+
+function filterAddZoneTeamResults(query) {
+  const resultsDiv = document.getElementById("cfg-addZoneTeamSearchResults");
+  if (!resultsDiv) return;
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) {
+    resultsDiv.innerHTML = '<div class="p-3 text-xs text-red-500 italic">Please select a Zone first</div>';
+    resultsDiv.classList.remove("hidden");
+    return;
+  }
+  const inc = (store.settings.zoneInCharges || {})[zid] || {};
+  const currentTeam = new Set((inc.zoneTeam || []).map(s => String(s.id || s.sailorId)));
+
+  const q = (query || "").toLowerCase().trim();
+  let filtered = (store.sailors || []).filter(s => {
+    const sid = String(s.id ?? s._fbKey);
+    if (currentTeam.has(sid)) return false;
+    if (!q) return true;
+    const name = (s.name || "").toLowerCase();
+    const offNo = (s.official_number || s.officialNumber || s.service_no || "").toLowerCase();
+    const rank = (s.rank || "").toLowerCase();
+    const trade = (s.trade || "").toLowerCase();
+    return name.includes(q) || offNo.includes(q) || rank.includes(q) || trade.includes(q);
+  });
+
+  if (filtered.length === 0) {
+    resultsDiv.innerHTML = '<div class="p-3 text-xs text-slate-400 italic">No matching sailors found</div>';
+  } else {
+    resultsDiv.innerHTML = filtered.slice(0, 30).map(s => {
+      const sid = String(s.id !== undefined && s.id !== null ? s.id : s._fbKey);
+      return `
+        <div onclick="addSailorToZoneTeam('${sid}')" class="p-2.5 text-xs hover:bg-teal-50 cursor-pointer text-slate-700 transition-colors flex items-center justify-between">
+          <span class="font-semibold text-slate-800">${s.rank || ''} ${s.name} <span class="text-teal-700 font-normal">(${s.trade || 'General'})</span></span>
+          <span class="text-[11px] text-slate-400 font-mono">${s.official_number || s.service_no || ''}</span>
+        </div>
+      `;
+    }).join("");
+  }
+  resultsDiv.classList.remove("hidden");
+}
+
+function addSailorToZoneTeam(sailorId) {
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) {
+    showToast("Please select a Zone first", "error");
+    return;
+  }
+  if (!store.settings.zoneInCharges) store.settings.zoneInCharges = {};
+  if (!store.settings.zoneInCharges[zid]) store.settings.zoneInCharges[zid] = {};
+
+  let team = Array.isArray(store.settings.zoneInCharges[zid].zoneTeam)
+    ? [...store.settings.zoneInCharges[zid].zoneTeam]
+    : [];
+
+  const s = store.sailors.find(x => String(x.id ?? x._fbKey) === String(sailorId));
+  if (!s) return;
+
+  if (team.some(tm => String(tm.id || tm.sailorId) === String(sailorId))) {
+    showToast("Sailor already in Zone Team", "info");
+    return;
+  }
+
+  team.push({
+    id: sailorId,
+    name: s.name,
+    rank: s.rank || "",
+    serviceNo: s.official_number || s.service_no || "",
+    trade: s.trade || "",
+    releasedForOtherZones: false,
+  });
+
+  store.settings.zoneInCharges[zid].zoneTeam = team;
+  opsDB.ref(`settings/zoneInCharges/${zid}/zoneTeam`).set(team);
+
+  document.getElementById("cfg-addZoneTeamSearch").value = "";
+  document.getElementById("cfg-addZoneTeamSearchResults").classList.add("hidden");
+  renderSettingsZoneTeamList(zid);
+  showToast(`Added ${s.name} to ${zid} Zone Team`);
+}
+
+function removeSailorFromZoneTeam(sailorId) {
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) return;
+  if (!store.settings.zoneInCharges || !store.settings.zoneInCharges[zid]) return;
+
+  let team = (store.settings.zoneInCharges[zid].zoneTeam || []).filter(
+    tm => String(tm.id || tm.sailorId) !== String(sailorId)
+  );
+
+  store.settings.zoneInCharges[zid].zoneTeam = team;
+  opsDB.ref(`settings/zoneInCharges/${zid}/zoneTeam`).set(team);
+  renderSettingsZoneTeamList(zid);
+  showToast("Sailor removed from Zone Team");
+}
+
+function toggleSailorZoneRelease(sailorId) {
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) return;
+  if (!store.settings.zoneInCharges || !store.settings.zoneInCharges[zid]) return;
+
+  let team = [...(store.settings.zoneInCharges[zid].zoneTeam || [])];
+  const item = team.find(tm => String(tm.id || tm.sailorId) === String(sailorId));
+  if (!item) return;
+
+  item.releasedForOtherZones = !item.releasedForOtherZones;
+  store.settings.zoneInCharges[zid].zoneTeam = team;
+  opsDB.ref(`settings/zoneInCharges/${zid}/zoneTeam`).set(team);
+  renderSettingsZoneTeamList(zid);
+  showToast(item.releasedForOtherZones ? `Sailor released for deployment to other zones` : `Sailor marked as In-Zone only`);
 }
 function getEcSailors() {
   return store.sailors.filter((sailor) => {
