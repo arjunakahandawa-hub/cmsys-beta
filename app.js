@@ -7307,24 +7307,25 @@ function renderInventoryTable() {
         };
         const catCls =
           catColors[item.category] || "bg-slate-100 text-slate-600";
+        const rowId = item._fbKey || item.id || '';
         return `
         <tr class="hover:bg-teal-50/40 cursor-pointer transition-colors border-b border-slate-100">
-            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 font-medium text-slate-800 text-sm">${item.description}</td>
-            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center"><span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${catCls}">${item.category}</span></td>
-            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center text-xs text-slate-500">${item.deno}</td>
-            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center">
+            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 font-medium text-slate-800 text-sm">${item.description}</td>
+            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-center"><span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${catCls}">${item.category}</span></td>
+            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-center text-xs text-slate-500">${item.deno}</td>
+            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-center">
                 <span class="font-bold text-sm ${isLow ? "text-rose-600" : "text-slate-800"}">${item.totalQty}</span>
                 ${isLow ? '<span class="ml-1 text-[10px] text-rose-500 font-medium">⚠ Low</span>' : ""}
             </td>
-            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm">${formatCurrency(item.cost_per_unit)}</td>
-            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center"><span class="mono text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">${item.book_no || "—"}</span></td>
-            <td onclick="showInventoryDetail('${item.id}')" class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}${item.zone_id && item.zone_id !== store.currentZone ? ` (${item.zone_id})` : ""}</span></td>
+            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm">${formatCurrency(item.cost_per_unit)}</td>
+            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-center"><span class="mono text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">${item.book_no || "—"}</span></td>
+            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}${item.zone_id && item.zone_id !== store.currentZone ? ` (${item.zone_id})` : ""}</span></td>
             <td class="px-4 py-2.5 text-center">
                 <div class="flex items-center justify-center gap-2">
-                    <button onclick="editInventoryItem('${item.id}')" class="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50" title="Edit">
+                    <button onclick="editInventoryItem('${rowId}')" class="text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50" title="Edit">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </button>
-                    <button onclick="showInventoryDetail('${item.id}')" class="text-teal-600 hover:text-teal-800 p-1 rounded hover:bg-teal-50" title="View Detail">
+                    <button onclick="showInventoryDetail('${rowId}')" class="text-teal-600 hover:text-teal-800 p-1 rounded hover:bg-teal-50" title="View Detail">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                     </button>
                 </div>
@@ -7493,8 +7494,8 @@ function showInventoryDetail(itemId) {
 
             <!-- Off-Charge action (req 5) -->
             <div class="border-t pt-4">
-                <button onclick="openOffChargeModal('${item.id}')" class="w-full bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm">
-                    📇 Off-Charge to Base / Zone (Nav 254)
+                <button onclick="openOffChargeModal('${item._fbKey || item.id || ""}')" class="w-full bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm transition-all shadow-sm flex items-center justify-center gap-2">
+                    <span>📇 Off-Charge to Base / Zone (Nav 254)</span>
                 </button>
             </div>
         </div>
@@ -7502,9 +7503,17 @@ function showInventoryDetail(itemId) {
   document.getElementById("inventoryDetailModal").classList.remove("hidden");
 } // ---- Off-charge to another base/zone (req 5) ----
 function openOffChargeModal(itemId) {
-  const item = store.inventory.find((i) => i.id === itemId);
-  if (!item) return;
-  document.getElementById("ocItemId").value = item.id;
+  const item = store.inventory.find(
+    (i) =>
+      String(i._fbKey) === String(itemId) ||
+      String(i.id) === String(itemId) ||
+      (itemId && (i.description === itemId || i._fbKey === itemId)),
+  );
+  if (!item) {
+    showToast("Inventory item not found", "error");
+    return;
+  }
+  document.getElementById("ocItemId").value = item._fbKey || item.id || "";
   document.getElementById("ocItemName").textContent = item.description;
   document.getElementById("ocItemAvail").textContent =
     `${item.quantity} ${item.deno}`;
@@ -7515,26 +7524,52 @@ function openOffChargeModal(itemId) {
   document.getElementById("ocDate").value = new Date()
     .toISOString()
     .split("T")[0];
+
+  const defaultDests = [
+    "BC-Zone",
+    "A-Zone",
+    "Carpentry-Shop",
+    "Main-Store",
+    "SLNS TISSA",
+    "SLNS DAKSHINA",
+    "SLNS VIJAYA",
+    "Base Store",
+    "Civil Engineering Dept",
+  ];
+  const dests =
+    store.settings &&
+    store.settings.offChargeDestinations &&
+    store.settings.offChargeDestinations.length > 0
+      ? store.settings.offChargeDestinations
+      : store.offChargeDestinations && store.offChargeDestinations.length > 0
+        ? store.offChargeDestinations
+        : defaultDests;
+
   document.getElementById("ocDest").innerHTML =
     '<option value="">Select destination...</option>' +
-    store.offChargeDestinations
-      .map((d) => `<option value="${d}">${d}</option>`)
-      .join("");
+    dests.map((d) => `<option value="${d}">${d}</option>`).join("");
   closeModal("inventoryDetailModal");
   document.getElementById("offChargeModal").classList.remove("hidden");
 }
 function submitOffCharge(event) {
   event.preventDefault();
+  const ocId = document.getElementById("ocItemId").value;
   const item = store.inventory.find(
-    (i) => i.id == document.getElementById("ocItemId").value,
+    (i) =>
+      String(i._fbKey) === String(ocId) ||
+      String(i.id) === String(ocId) ||
+      (ocId && i.description === ocId),
   );
-  if (!item) return;
+  if (!item) {
+    showToast("Inventory item not found", "error");
+    return;
+  }
   const qty = parseFloat(document.getElementById("ocQty").value);
   const ref = document.getElementById("ocRef").value.trim();
   const dest = document.getElementById("ocDest").value;
   const date = document.getElementById("ocDate").value;
   const remarks = document.getElementById("ocRemarks").value.trim();
-  if (qty <= 0 || qty > item.quantity) {
+  if (isNaN(qty) || qty <= 0 || qty > item.quantity) {
     showToast(`Quantity must be between 0 and ${item.quantity}`, "error");
     return;
   }
@@ -7542,12 +7577,22 @@ function submitOffCharge(event) {
   if (!item.off_charge_records) item.off_charge_records = [];
   item.off_charge_records.push({ ref, qty, date, dest, remarks });
   item.off_charge_ref = ref;
-  fbSaveInventoryItem(item);
-  closeModal("offChargeModal");
-  renderInventoryTable();
-  showToast(
-    `Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`,
-  );
+  fbSaveInventoryItem(item)
+    .then(() => {
+      closeModal("offChargeModal");
+      renderInventoryTable();
+      showToast(
+        `Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`,
+      );
+    })
+    .catch((err) => {
+      console.error(err);
+      closeModal("offChargeModal");
+      renderInventoryTable();
+      showToast(
+        `Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`,
+      );
+    });
 }
 let passwordCallback = null;
 function showPasswordModal(callback) {
