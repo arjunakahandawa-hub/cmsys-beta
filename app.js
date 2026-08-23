@@ -10576,99 +10576,459 @@ function bulkExportEstimatesPDF() {
   }
   exportEstimatesToPDFByIds([...store.selectedEstimatesForPrint]);
 } // =============================================
-// MAINTENANCE RECORDS
+// LOCATIONS & MAINTENANCE (LMD)
 // =============================================
+
+let _currentLmdTab = "dashboard";
+
+function switchLmdTab(tab) {
+  _currentLmdTab = tab;
+  const dashTabBtn = document.getElementById("lmdTab-dashboard");
+  const locsTabBtn = document.getElementById("lmdTab-locations");
+  const dashContent = document.getElementById("lmdContent-dashboard");
+  const locsContent = document.getElementById("lmdContent-locations");
+
+  if (tab === "dashboard") {
+    if (dashTabBtn) {
+      dashTabBtn.className = "px-4 py-2 rounded-xl text-xs font-bold transition-all bg-teal-600 text-white shadow-sm flex items-center gap-1.5";
+    }
+    if (locsTabBtn) {
+      locsTabBtn.className = "px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all flex items-center gap-1.5";
+    }
+    if (dashContent) dashContent.classList.remove("hidden");
+    if (locsContent) locsContent.classList.add("hidden");
+    renderLmdDashboard();
+  } else {
+    if (dashTabBtn) {
+      dashTabBtn.className = "px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-all flex items-center gap-1.5";
+    }
+    if (locsTabBtn) {
+      locsTabBtn.className = "px-4 py-2 rounded-xl text-xs font-bold transition-all bg-teal-600 text-white shadow-sm flex items-center gap-1.5";
+    }
+    if (dashContent) dashContent.classList.add("hidden");
+    if (locsContent) locsContent.classList.remove("hidden");
+    renderLocationsList();
+  }
+}
+
 function renderMaintenance() {
+  const currentZone = store.currentZone;
+  const zoneLocations = (store.locations || []).filter(
+    (l) => l.zone_id === currentZone
+  );
+  const locIdsSet = new Set(zoneLocations.map((l) => String(l.id || l._fbKey)));
+  const locNamesSet = new Set(
+    zoneLocations.flatMap((l) => [
+      (l.building_name || "").toLowerCase().trim(),
+      (l.sub_location || "").toLowerCase().trim(),
+      `${(l.building_name || "").toLowerCase().trim()} — ${(l.sub_location || "").toLowerCase().trim()}`,
+      `${(l.building_name || "").toLowerCase().trim()} / ${(l.sub_location || "").toLowerCase().trim()}`
+    ]).filter(Boolean)
+  );
+
+  // 1. Gather all maintenance records for this zone
+  const zoneRecords = (store.maintenanceRecords || []).filter((r) =>
+    locIdsSet.has(String(r.location_id))
+  );
+
+  // 2. Gather completed/attended jobs in this zone
+  const completedJobCards = (store.jobCards || []).filter(
+    (jc) =>
+      jc.zone_id === currentZone &&
+      (jc.status === "Completed" || jc.completed_date)
+  );
+
+  const recentAttendedCount =
+    zoneRecords.length + completedJobCards.length;
+
+  // 3. Gather pending / ongoing work orders & active job cards for this zone
+  const pendingWos = (store.workOrders || []).filter(
+    (w) =>
+      (w.zone_id === currentZone || (w.location && locNamesSet.has(w.location.toLowerCase().trim()))) &&
+      (w.status === "Ongoing" || w.status === "Pending" || w.status === "Hold")
+  );
+  const pendingJcs = (store.jobCards || []).filter(
+    (j) =>
+      j.zone_id === currentZone &&
+      (j.status === "Active" || j.status === "Hold")
+  );
+  const totalPending = pendingWos.length + pendingJcs.length;
+
+  // 4. Calculate locations needing attention (>90 days without maintenance record)
+  const now = Date.now();
+  let dueAttentionCount = 0;
+  zoneLocations.forEach((loc) => {
+    const locKey = String(loc.id || loc._fbKey);
+    const recs = zoneRecords.filter((r) => String(r.location_id) === locKey);
+    if (recs.length === 0) {
+      dueAttentionCount++;
+    } else {
+      const latestDate = Math.max(...recs.map((r) => new Date(r.date || 0).getTime()));
+      if (now - latestDate > 90 * 24 * 60 * 60 * 1000) {
+        dueAttentionCount++;
+      }
+    }
+  });
+
+  // Update KPI counters
+  const totalLocsEl = document.getElementById("lmdStatTotalLocs");
+  if (totalLocsEl) totalLocsEl.textContent = zoneLocations.length;
+
+  const recentAttEl = document.getElementById("lmdStatRecentAttended");
+  if (recentAttEl) recentAttEl.textContent = recentAttendedCount;
+
+  const pendingEl = document.getElementById("lmdStatPendingJobs");
+  if (pendingEl) pendingEl.textContent = totalPending;
+
+  const dueEl = document.getElementById("lmdStatDueAttention");
+  if (dueEl) dueEl.textContent = dueAttentionCount;
+
+  const locBadge = document.getElementById("lmdLocCountBadge");
+  if (locBadge) locBadge.textContent = zoneLocations.length;
+
+  // Render sub-views
+  renderLmdDashboard();
   renderLocationsList();
 }
+
+function renderLmdDashboard() {
+  const currentZone = store.currentZone;
+  const zoneLocations = (store.locations || []).filter(
+    (l) => l.zone_id === currentZone
+  );
+  const locMap = {};
+  zoneLocations.forEach((l) => {
+    locMap[String(l.id)] = `${l.building_name} — ${l.sub_location || "General"}`;
+    locMap[String(l._fbKey)] = `${l.building_name} — ${l.sub_location || "General"}`;
+  });
+
+  const recentSearch = (document.getElementById("lmdRecentSearch")?.value || "").toLowerCase().trim();
+  const pendingSearch = (document.getElementById("lmdPendingSearch")?.value || "").toLowerCase().trim();
+
+  // --- RECENTLY ATTENDED JOBS ---
+  const attendedContainer = document.getElementById("lmdRecentlyAttendedList");
+  const attendedBadge = document.getElementById("lmdRecentAttendedBadge");
+
+  let attendedItems = [];
+
+  // A. From maintenance records
+  (store.maintenanceRecords || []).forEach((r) => {
+    const locName = locMap[String(r.location_id)];
+    if (locName) {
+      attendedItems.push({
+        type: "record",
+        maint_type: r.maintenance_type || "Routine",
+        location: locName,
+        date: r.date || "",
+        description: r.description || "Maintenance service completed",
+        job_number: r.job_number || null,
+        cost: 0,
+        timestamp: new Date(r.date || 0).getTime()
+      });
+    }
+  });
+
+  // B. From completed Job Cards in this zone
+  (store.jobCards || []).forEach((jc) => {
+    if (jc.zone_id === currentZone && (jc.status === "Completed" || jc.completed_date)) {
+      attendedItems.push({
+        type: "job_card",
+        maint_type: "Job Card",
+        location: jc.location || "Zone Facility",
+        date: jc.completed_date || jc.start_date || "",
+        description: jc.description || "Completed Job Card",
+        job_number: jc.job_number || null,
+        cost: jc.total_material_cost || 0,
+        timestamp: new Date(jc.completed_date || jc.start_date || 0).getTime()
+      });
+    }
+  });
+
+  // Sort descending by date
+  attendedItems.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  if (recentSearch) {
+    attendedItems = attendedItems.filter(
+      (item) =>
+        item.location.toLowerCase().includes(recentSearch) ||
+        item.description.toLowerCase().includes(recentSearch) ||
+        (item.job_number && item.job_number.toLowerCase().includes(recentSearch)) ||
+        item.maint_type.toLowerCase().includes(recentSearch)
+    );
+  }
+
+  if (attendedBadge) attendedBadge.textContent = attendedItems.length;
+
+  if (attendedContainer) {
+    if (attendedItems.length === 0) {
+      attendedContainer.innerHTML = `
+        <div class="text-center py-10 text-slate-400">
+          <span class="text-3xl block mb-2">📋</span>
+          <p class="text-xs font-semibold text-slate-500">No recently attended jobs found in this zone.</p>
+          <p class="text-[10px] text-slate-400 mt-0.5">Completed Job Cards & maintenance records will appear here.</p>
+        </div>
+      `;
+    } else {
+      const typeColors = {
+        Repair: "bg-rose-100 text-rose-800 border-rose-200 font-bold",
+        Preventive: "bg-blue-100 text-blue-800 border-blue-200",
+        Emergency: "bg-red-200 text-red-900 border-red-300 font-bold",
+        Routine: "bg-teal-100 text-teal-800 border-teal-200",
+        Upgrade: "bg-purple-100 text-purple-800 border-purple-200",
+        "Job Card": "bg-emerald-100 text-emerald-800 border-emerald-200 font-bold"
+      };
+
+      attendedContainer.innerHTML = attendedItems
+        .map((item) => {
+          const badgeCls = typeColors[item.maint_type] || "bg-slate-100 text-slate-700 border-slate-200";
+          return `
+            <div class="p-3.5 rounded-xl border border-slate-200/80 bg-white hover:bg-slate-50/80 transition-all shadow-xs">
+              <div class="flex items-start justify-between gap-2 mb-1.5">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs font-bold text-slate-800 flex items-center gap-1">
+                    📍 ${item.location}
+                  </span>
+                  <span class="px-2 py-0.5 rounded text-[10px] border ${badgeCls}">${item.maint_type}</span>
+                </div>
+                <span class="font-mono text-[11px] font-semibold text-slate-500 whitespace-nowrap bg-slate-100 px-2 py-0.5 rounded">
+                  🗓️ ${item.date || "—"}
+                </span>
+              </div>
+              <p class="text-xs text-slate-600 leading-relaxed">${item.description}</p>
+              <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-100 text-[11px]">
+                ${item.job_number ? `<span class="font-mono font-bold text-indigo-600">🔗 ${item.job_number}</span>` : `<span class="text-slate-400">Regular Log</span>`}
+                ${item.cost > 0 ? `<span class="font-mono font-bold text-emerald-700">Cost: ${formatCurrency(item.cost)}</span>` : ""}
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+  }
+
+  // --- PENDING & DUE MAINTENANCE JOBS ---
+  const pendingContainer = document.getElementById("lmdPendingJobsList");
+  const pendingBadge = document.getElementById("lmdPendingJobsBadge");
+
+  let pendingItems = [];
+
+  // A. Work Orders in this zone (Ongoing/Pending)
+  (store.workOrders || []).forEach((wo) => {
+    if (wo.zone_id === currentZone && (wo.status === "Ongoing" || wo.status === "Pending" || wo.status === "Hold")) {
+      pendingItems.push({
+        id: wo.id || wo._fbKey,
+        type: "work_order",
+        title: wo.description || "Work Order",
+        location: wo.location || "Zone Location",
+        status: wo.status || "Pending",
+        priority: wo.priority || "Medium",
+        ref: wo.reference_no || wo.type || "WO",
+        progress: wo.progress || 0,
+        assigned_count: (wo.assigned || []).length,
+        date: wo.date || ""
+      });
+    }
+  });
+
+  // B. Active Job Cards in this zone
+  (store.jobCards || []).forEach((jc) => {
+    if (jc.zone_id === currentZone && (jc.status === "Active" || jc.status === "Hold")) {
+      pendingItems.push({
+        id: jc.id || jc._fbKey,
+        type: "job_card",
+        title: jc.description || "Job Card",
+        location: jc.location || "Zone Location",
+        status: jc.status || "Active",
+        priority: "High",
+        ref: jc.job_number || "JC",
+        progress: 50,
+        assigned_count: 0,
+        date: jc.start_date || ""
+      });
+    }
+  });
+
+  if (pendingSearch) {
+    pendingItems = pendingItems.filter(
+      (item) =>
+        item.location.toLowerCase().includes(pendingSearch) ||
+        item.title.toLowerCase().includes(pendingSearch) ||
+        item.ref.toLowerCase().includes(pendingSearch)
+    );
+  }
+
+  if (pendingBadge) pendingBadge.textContent = pendingItems.length;
+
+  if (pendingContainer) {
+    if (pendingItems.length === 0) {
+      pendingContainer.innerHTML = `
+        <div class="text-center py-10 text-slate-400">
+          <span class="text-3xl block mb-2">✨</span>
+          <p class="text-xs font-semibold text-slate-500">All maintenance tasks attended!</p>
+          <p class="text-[10px] text-slate-400 mt-0.5">No pending or overdue work orders in this zone.</p>
+        </div>
+      `;
+    } else {
+      const priorityColors = {
+        High: "bg-rose-100 text-rose-800 border-rose-200 font-bold",
+        Medium: "bg-amber-100 text-amber-800 border-amber-200",
+        Low: "bg-blue-100 text-blue-800 border-blue-200"
+      };
+
+      pendingContainer.innerHTML = pendingItems
+        .map((item) => {
+          const pCls = priorityColors[item.priority] || "bg-slate-100 text-slate-700 border-slate-200";
+          return `
+            <div class="p-3.5 rounded-xl border border-amber-200/80 bg-amber-50/30 hover:bg-amber-50/70 transition-all shadow-xs">
+              <div class="flex items-start justify-between gap-2 mb-1.5">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="text-xs font-bold text-slate-800 flex items-center gap-1">
+                    📍 ${item.location}
+                  </span>
+                  <span class="px-2 py-0.5 rounded text-[10px] border ${pCls}">${item.priority}</span>
+                  <span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-100 text-slate-700 font-semibold">${item.status}</span>
+                </div>
+                <span class="font-mono text-[11px] font-bold text-indigo-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                  ${item.ref}
+                </span>
+              </div>
+              <p class="text-xs text-slate-700 font-medium leading-relaxed">${item.title}</p>
+              <div class="flex items-center justify-between mt-2 pt-2 border-t border-amber-200/50 text-[11px]">
+                <span class="text-slate-500">
+                  ${item.date ? `Started: ${item.date}` : ""} ${item.assigned_count > 0 ? `• 👨‍🔧 ${item.assigned_count} Sailors` : ""}
+                </span>
+                <button onclick="${item.type === 'work_order' ? `openWorkOrderDetail('${item.id}')` : `switchView('jobcards'); selectJobCard('${item.id}')`}" 
+                  class="bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 py-1 rounded-lg font-semibold text-[11px] shadow-xs transition-all">
+                  View Job ➜
+                </button>
+              </div>
+            </div>
+          `;
+        })
+        .join("");
+    }
+  }
+}
+
 function renderLocationsList() {
   const container = document.getElementById("locationsList");
-  const groupedLocations = {}; // Filter by current zone
-  const zoneLocations = store.locations.filter(
-    (l) => l.zone_id === store.currentZone,
+  if (!container) return;
+
+  const groupedLocations = {};
+  const zoneLocations = (store.locations || []).filter(
+    (l) => l.zone_id === store.currentZone
   );
+
   zoneLocations.forEach((loc) => {
     if (!groupedLocations[loc.building_name]) {
       groupedLocations[loc.building_name] = [];
     }
     groupedLocations[loc.building_name].push(loc);
   });
-  container.innerHTML =
-    Object.entries(groupedLocations)
-      .map(
-        ([building, locs]) => `
-        <div class="border-b border-slate-100">
-            <div class="px-3 py-2.5 font-semibold text-slate-700 text-xs flex items-center gap-2"
-                style="background:rgba(15,32,64,0.04)">
-                🏢 <span>${building}</span>
-            </div>
-            ${locs
-              .map((loc) => {
-                const recCount = store.maintenanceRecords.filter(
-                  (r) => r.location_id === loc.id,
-                ).length;
-                return `
-                <div class="px-3 py-2 pl-7 hover:bg-teal-50 cursor-pointer text-sm flex items-center justify-between group transition-colors
-                    ${store.selectedLocation === loc.id ? "bg-teal-100 border-l-3 border-teal-500 font-medium text-teal-800" : "text-slate-600"}"
-                    onclick="selectLocation('${loc.id}')">
-                    <span>📍 ${loc.sub_location || "General"}</span>
-                    ${recCount > 0 ? `<span class="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full font-medium">${recCount}</span>` : ""}
-                </div>`;
-              })
-              .join("")}
-        </div>
-    `,
-      )
-      .join("") ||
-    '<p class="text-slate-400 text-center py-8 text-sm">No locations in this zone</p>';
+
+  if (zoneLocations.length === 0) {
+    container.innerHTML = '<p class="text-slate-400 text-center py-8 text-xs">No locations registered in this zone. Click "+ Add Location" above.</p>';
+    return;
+  }
+
+  container.innerHTML = Object.entries(groupedLocations)
+    .map(
+      ([building, locs]) => `
+      <div class="border-b border-slate-100">
+          <div class="px-3.5 py-2.5 font-bold text-slate-700 text-xs flex items-center justify-between"
+              style="background:rgba(15,32,64,0.03)">
+              <div class="flex items-center gap-1.5 truncate">
+                <span>🏢</span>
+                <span class="truncate">${building}</span>
+              </div>
+              <span class="text-[10px] text-slate-400 font-semibold">${locs.length} sub-loc</span>
+          </div>
+          ${locs
+            .map((loc) => {
+              const locId = loc.id || loc._fbKey;
+              const recs = (store.maintenanceRecords || []).filter(
+                (r) => String(r.location_id) === String(locId)
+              );
+              const isSelected = String(store.selectedLocation) === String(locId);
+              return `
+              <div class="px-3.5 py-2 pl-7 hover:bg-teal-50 cursor-pointer text-xs flex items-center justify-between group transition-colors
+                  ${isSelected ? "bg-teal-100/80 border-l-4 border-teal-600 font-bold text-teal-900" : "text-slate-600"}"
+                  onclick="selectLocation('${locId}')">
+                  <span class="truncate">📍 ${loc.sub_location || "General"}</span>
+                  ${recs.length > 0 ? `<span class="text-[10px] bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full font-bold font-mono">${recs.length}</span>` : ""}
+              </div>`;
+            })
+            .join("")}
+      </div>
+  `
+    )
+    .join("");
 }
+
 function selectLocation(id) {
   store.selectedLocation = id;
-  const loc = store.locations.find((l) => l.id === id);
+  const loc = (store.locations || []).find((l) => String(l.id) === String(id) || String(l._fbKey) === String(id));
   if (!loc) return;
-  const records = store.maintenanceRecords.filter((r) => r.location_id === id);
-  document.getElementById("selectedLocationName").textContent =
-    `${loc.building_name} — ${loc.sub_location || "General"}`;
-  document.getElementById("selectedLocationZone").textContent =
-    `Zone: ${loc.zone_id}`; // Show action buttons container
+
+  const locId = loc.id || loc._fbKey;
+  const records = (store.maintenanceRecords || []).filter((r) => String(r.location_id) === String(locId));
+
+  document.getElementById("selectedLocationName").textContent = `${loc.building_name} — ${loc.sub_location || "General"}`;
+  document.getElementById("selectedLocationZone").textContent = `Zone: ${loc.zone_id}`;
+
+  const lmdBadge = document.getElementById("selectedLocationLmdBadge");
+  if (lmdBadge) {
+    if (records.length > 0) {
+      const sorted = [...records].sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      lmdBadge.textContent = `LMD: ${sorted[0].date}`;
+      lmdBadge.classList.remove("hidden");
+    } else {
+      lmdBadge.textContent = "No maintenance recorded";
+      lmdBadge.classList.remove("hidden");
+    }
+  }
+
   const actionBtns = document.getElementById("locationActionButtons");
   if (actionBtns) actionBtns.style.display = "flex";
   const addMaintBtn = document.getElementById("addMaintenanceBtn");
   if (addMaintBtn) addMaintBtn.style.display = "block";
+
   const typeColors = {
-    Repair: "bg-rose-100 text-rose-700 border-rose-300",
+    Repair: "bg-rose-100 text-rose-700 border-rose-300 font-bold",
     Preventive: "bg-blue-100 text-blue-700 border-blue-300",
-    Emergency: "bg-red-200 text-red-800 border-red-400",
+    Emergency: "bg-red-200 text-red-800 border-red-400 font-bold",
     Routine: "bg-teal-100 text-teal-700 border-teal-300",
     Upgrade: "bg-purple-100 text-purple-700 border-purple-300",
   };
+
   document.getElementById("maintenanceHistory").innerHTML = records.length
     ? `
-        <div class="space-y-3">
-            ${records
-              .sort((a, b) => new Date(b.date) - new Date(a.date))
-              .map(
-                (r) => `
-                <div class="p-4 rounded-xl border-l-4 transition-all hover:shadow-sm"
-                    style="background:rgba(255,255,255,0.9);border-left-color:#0d9488;box-shadow:0 2px 8px rgba(15,32,64,0.05)">
-                    <div class="flex justify-between items-start mb-2">
-                        <span class="text-xs font-semibold px-2 py-0.5 rounded-full border ${typeColors[r.maintenance_type] || "bg-slate-100 text-slate-600"}">${r.maintenance_type}</span>
-                        <span class="text-xs text-slate-400 mono">${r.date}</span>
-                    </div>
-                    <p class="text-sm text-slate-700 leading-relaxed">${r.description}</p>
-                    ${r.job_number ? `<p class="text-[11px] text-teal-600 mt-2 font-medium">🔗 ${r.job_number}</p>` : ""}
-                </div>
-            `,
-              )
-              .join("")}
-        </div>
-    `
+      <div class="space-y-3">
+          ${records
+            .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+            .map(
+              (r) => `
+              <div class="p-4 rounded-xl border border-slate-200 transition-all hover:shadow-sm bg-white"
+                  style="border-left: 4px solid #0d9488;">
+                  <div class="flex justify-between items-start mb-2">
+                      <span class="text-xs font-semibold px-2 py-0.5 rounded-full border ${typeColors[r.maintenance_type] || "bg-slate-100 text-slate-600"}">${r.maintenance_type}</span>
+                      <span class="text-xs font-mono font-bold text-slate-500">${r.date}</span>
+                  </div>
+                  <p class="text-xs text-slate-700 leading-relaxed">${r.description}</p>
+                  ${r.job_number ? `<p class="text-[11px] text-teal-700 mt-2 font-bold font-mono">🔗 ${r.job_number}</p>` : ""}
+              </div>
+          `
+            )
+            .join("")}
+      </div>
+  `
     : `
-        <div class="text-center py-12">
-            <div class="text-4xl mb-3">📋</div>
-            <p class="text-slate-400 font-medium">No maintenance records</p>
-            <p class="text-slate-300 text-sm mt-1">Click "+ Add Record" to log the first entry</p>
-        </div>`;
+      <div class="text-center py-12">
+          <div class="text-4xl mb-3">📋</div>
+          <p class="text-slate-500 font-bold text-sm">No maintenance records yet</p>
+          <p class="text-slate-400 text-xs mt-1">Click "+ Add Record" above to log the first maintenance entry for this location.</p>
+      </div>`;
+
   renderLocationsList();
 }
 function searchLocations() {
