@@ -1349,8 +1349,8 @@
                 </div>
             </div>
 
-            <!-- Cement Pre-Cast Workshop Banner (Shown in G Zone / Workshop) -->
-            <div id="cementPrecastWorkshopBanner" class="mb-4 p-4 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+            <!-- Cement Pre-Cast Workshop Banner (Shown only in G Zone / Cement Pre-Cast Workshop) -->
+            <div id="cementPrecastWorkshopBanner" class="hidden mb-4 p-4 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
                     <div class="w-12 h-12 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-2xl">
                         🧱
@@ -1376,31 +1376,38 @@
                 </div>
             </div>
 
-            <!-- Inventory Category Tabs -->
-            <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-4">
-                <div id="inventoryCategoryTabsContainer" class="border-b border-slate-200 flex overflow-x-auto"></div>
-            </div>
-
-            <!-- Search & Filter Bar -->
-            <div class="bg-white rounded-xl shadow-lg p-4 mb-4">
-                <div class="flex flex-col sm:flex-row gap-3">
-                    <input type="text" id="inventorySearch" placeholder="Search by description or book no..." 
-                        class="flex-1 px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-green-500 text-sm"
-                        onkeyup="filterInventory()">
-                    <div class="flex gap-2">
-                        <select id="inventoryLocation" onchange="filterInventory()" class="flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-                            <option value="">Current Locations & Zone</option>
-                            <option value="ALL_ZONES">All Locations & Zone</option>
+            <!-- Simplified Unified Category & Search Bar -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3.5 mb-4 space-y-3">
+                <!-- Search & Filters Row -->
+                <div class="flex flex-col sm:flex-row gap-2.5 items-center">
+                    <div class="relative flex-1 w-full">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none text-xs">🔍</span>
+                        <input type="text" id="inventorySearch" placeholder="Search materials by description, book no, or location..." 
+                            class="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 text-xs font-medium"
+                            onkeyup="filterInventory()">
+                    </div>
+                    <div class="flex gap-2 w-full sm:w-auto flex-wrap">
+                        <select id="inventoryCategoryFilter" onchange="handleInventoryCategoryDropdownChange(this.value)" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white font-semibold text-slate-700">
+                            <option value="all">🏷️ All Categories</option>
+                        </select>
+                        <select id="inventoryLocation" onchange="filterInventory()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 font-medium">
+                            <option value="">Current Zone</option>
+                            <option value="ALL_ZONES">All Locations & Zones</option>
                             <option value="Balance Store">Balance Store</option>
                         </select>
-                        <select id="inventorySort" onchange="filterInventory()" class="flex-1 sm:flex-initial px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
-                            <option value="description">Sort: Description</option>
-                            <option value="quantity">Sort: Quantity</option>
+                        <select id="inventorySort" onchange="filterInventory()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 font-medium">
+                            <option value="description">Sort: Name</option>
+                            <option value="quantity">Sort: Qty</option>
                             <option value="cost">Sort: Cost</option>
-                            <option value="date">Sort: Date Added</option>
+                            <option value="date">Sort: Date</option>
                             <option value="book_no">Sort: Book No</option>
                         </select>
                     </div>
+                </div>
+
+                <!-- Clean Horizontal Category Pills Ribbon -->
+                <div class="pt-2 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto pb-1" id="inventoryCategoryTabsContainer">
+                    <!-- Populated dynamically by JS -->
                 </div>
             </div>
 
@@ -4949,10 +4956,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.18
+        App Version: v5.19
     </div>
 
-    <script src="app.js?v=5.18"></script>
+    <script src="app.js?v=5.19"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

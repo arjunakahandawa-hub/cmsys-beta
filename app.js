@@ -8122,7 +8122,23 @@ function exportAllMaterialsUsageCsv() {
 } // =============================================
 // INVENTORY
 // =============================================
+function isGZoneSelected() {
+  const z = (store.currentZone || "").toLowerCase().trim();
+  return z === "g-zone" || z === "g zone" || z.startsWith("g-") || z.startsWith("g ") || z.includes("cement") || z.includes("precast") || z === "g";
+}
+
 function renderInventory() {
+  // Show Pre-Cast Workshop banner ONLY if G-Zone is currently selected
+  const isGZone = isGZoneSelected();
+  const banner = document.getElementById("cementPrecastWorkshopBanner");
+  if (banner) {
+    if (isGZone) {
+      banner.classList.remove("hidden");
+    } else {
+      banner.classList.add("hidden");
+    }
+  }
+
   renderInventoryCategories();
   renderInventoryTable();
   populateProjectDropdown();
@@ -8147,28 +8163,24 @@ function populateProjectDropdown() {
       .join("");
 }
 function switchInventoryCategory(category) {
-  store.currentInventoryCategory = category;
-  document.querySelectorAll(".inv-cat-tab").forEach((t) => {
-    t.classList.remove(
-      "border-green-600",
-      "text-green-600",
-      "bg-green-50",
-      "border-b-2",
-    );
-    t.classList.add("text-slate-500");
-  });
-  event.target.classList.remove("text-slate-500");
-  event.target.classList.add(
-    "border-green-600",
-    "text-green-600",
-    "bg-green-50",
-    "border-b-2",
-  );
+  store.currentInventoryCategory = category || "all";
+  
+  // Sync category dropdown in filter bar
+  const filterDropdown = document.getElementById("inventoryCategoryFilter");
+  if (filterDropdown) filterDropdown.value = store.currentInventoryCategory;
+
+  renderInventoryCategories();
   renderInventoryTable();
 }
+
+function handleInventoryCategoryDropdownChange(category) {
+  switchInventoryCategory(category);
+}
+
 function renderInventoryCategories() {
   const container = document.getElementById("inventoryCategoryTabsContainer");
-  if (!container) return; // Default categories that should always appear
+  
+  // Standard categories that should always appear across all zones
   const defaultCats = [
     "Pre-Cast Products",
     "BMS",
@@ -8182,21 +8194,46 @@ function renderInventoryCategories() {
     "Tools",
     "Lubricant Oil",
     "Eng",
-  ]; // We only use the default allowed categories
+  ];
   const allCats = [...defaultCats];
-  let html = `<button onclick="switchInventoryCategory('all')" class="inv-cat-tab px-6 py-3 text-sm font-medium whitespace-nowrap ${store.currentInventoryCategory === "all" ? "border-b-2 border-green-600 text-green-600 bg-green-50" : "text-slate-500 hover:bg-slate-50"}">
-        📦 All
-    </button>`;
-  allCats.forEach((cat) => {
-    const isActive = store.currentInventoryCategory === cat;
-    const activeClass = isActive
-      ? "border-b-2 border-green-600 text-green-600 bg-green-50"
-      : "text-slate-500 hover:bg-slate-50";
-    html += `<button onclick="switchInventoryCategory('${cat}')" class="inv-cat-tab px-6 py-3 text-sm font-medium whitespace-nowrap ${activeClass}">
-            🏷️ ${cat}
-        </button>`;
-  });
-  container.innerHTML = html; // Also update the select dropdown options, keeping standard ones only
+
+  // Also populate the filter dropdown
+  const filterDropdown = document.getElementById("inventoryCategoryFilter");
+  if (filterDropdown) {
+    let opts = '<option value="all">🏷️ All Categories</option>';
+    allCats.forEach((cat) => {
+      opts += `<option value="${cat}">${cat}</option>`;
+    });
+    filterDropdown.innerHTML = opts;
+    filterDropdown.value = store.currentInventoryCategory || "all";
+  }
+
+  if (container) {
+    const currentCat = store.currentInventoryCategory || "all";
+
+    let html = `
+      <button type="button" onclick="switchInventoryCategory('all')" 
+        class="px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1 shrink-0
+        ${currentCat === "all" ? "bg-emerald-600 text-white shadow-xs font-bold" : "bg-slate-100 hover:bg-slate-200 text-slate-600"}">
+        <span>📦</span> All
+      </button>
+    `;
+
+    allCats.forEach((cat) => {
+      const isActive = currentCat === cat;
+      html += `
+        <button type="button" onclick="switchInventoryCategory('${cat}')" 
+          class="px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1 shrink-0
+          ${isActive ? "bg-emerald-600 text-white shadow-xs font-bold" : "bg-slate-100 hover:bg-slate-200 text-slate-600"}">
+          <span>🏷️</span> ${cat}
+        </button>
+      `;
+    });
+
+    container.innerHTML = html;
+  }
+
+  // Also update modal add/edit category dropdown
   const catSelect = document.getElementById("invCategory");
   if (catSelect) {
     let optionsHtml = '<option value="">-- Select Category --</option>';
