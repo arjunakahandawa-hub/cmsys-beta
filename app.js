@@ -17332,8 +17332,10 @@ function renderSummaryView() {
     }
   }); // 5. Build and render the table rows with subtotals and grand totals
   let tableHtml = `
-        <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
-            <td colspan="17" class="px-3 py-2 text-slate-800 font-extrabold uppercase text-[11px] tracking-wider">ONGOING CONSTRUCTIONS AT DOCKYARD</td>
+        <tr id="sec-dockyard" class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
+            <td colspan="17" class="px-3 py-2 text-slate-800 font-extrabold uppercase text-[11px] tracking-wider flex items-center justify-between">
+              <span>🏗️ ONGOING CONSTRUCTIONS AT DOCKYARD</span>
+            </td>
         </tr>
     `; // Columns counters helper
   function getColumnsSum(rowsArray) {
@@ -17363,12 +17365,13 @@ function renderSummaryView() {
     regSub: 0,
     fullTotal: 0,
   };
-  function appendSectionToTable(sectionObj) {
+  function appendSectionToTable(sectionObj, secAnchorId = "") {
     const rowsList = Object.values(sectionObj.rows);
     if (rowsList.length === 0) return; // Skip empty sections
     const sums = getColumnsSum(rowsList);
+    const anchorAttr = secAnchorId ? `id="${secAnchorId}"` : "";
     tableHtml += `
-            <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
+            <tr ${anchorAttr} class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
                 <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">${sectionObj.title}</td>
             </tr>
         `;
@@ -17401,8 +17404,8 @@ function renderSummaryView() {
     columnGrandTotals.fullTotal += sums.fullTotal;
   } // 2. Workshop (Grouped by individual workshop subsections)
   tableHtml += `
-        <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
-            <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">WORKSHOP</td>
+        <tr id="sec-workshop" class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
+            <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">🔧 WORKSHOP</td>
         </tr>
     `;
   const workshopRowsList = [];
@@ -17456,8 +17459,8 @@ function renderSummaryView() {
   columnGrandTotals.regSub += workshopMainSums.regSub;
   columnGrandTotals.fullTotal += workshopMainSums.fullTotal; // 3. Zones (A-G grouped under main ZONE header)
   tableHtml += `
-        <tr class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
-            <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">ZONE</td>
+        <tr id="sec-zones" class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
+            <td colspan="17" class="px-3 py-2 text-slate-800 uppercase text-[10px] tracking-wider">📍 ZONE</td>
         </tr>
     `;
   const zoneRowsList = [];
@@ -17510,11 +17513,11 @@ function renderSummaryView() {
   columnGrandTotals.vssSub += zoneMainSums.vssSub;
   columnGrandTotals.regSub += zoneMainSums.regSub;
   columnGrandTotals.fullTotal += zoneMainSums.fullTotal;
-  appendSectionToTable(sections.othersDuty);
-  appendSectionToTable(sections.outProjects);
-  appendSectionToTable(sections.housingProjects);
-  appendSectionToTable(sections.otherBases);
-  appendSectionToTable(sections.leaveSick); // Render Grand Total Row at the absolute bottom
+  appendSectionToTable(sections.othersDuty, "sec-othersDuty");
+  appendSectionToTable(sections.outProjects, "sec-outProjects");
+  appendSectionToTable(sections.housingProjects, "sec-housingProjects");
+  appendSectionToTable(sections.otherBases, "sec-otherBases");
+  appendSectionToTable(sections.leaveSick, "sec-leaveSick"); // Render Grand Total Row at the absolute bottom
   tableHtml += `
         <tr class="bg-slate-900 text-white font-extrabold text-center text-sm border-t-4 border-slate-800">
             <td class="px-3 py-3 text-left uppercase">GRAND TOTAL</td>
@@ -17526,6 +17529,60 @@ function renderSummaryView() {
         </tr>
     `;
   document.getElementById("summaryMatrixTableBody").innerHTML = tableHtml;
+
+  // Update Headcount KPI Counters in the UI
+  const vssEl = document.getElementById("summaryHeadcountVss");
+  if (vssEl) vssEl.textContent = columnGrandTotals.vssSub || 0;
+
+  const ssEl = document.getElementById("summaryHeadcountSS");
+  if (ssEl) ssEl.textContent = columnGrandTotals.reg[0] || 0;
+
+  const jsTotal = (columnGrandTotals.reg[1] || 0) + (columnGrandTotals.reg[2] || 0) + (columnGrandTotals.reg[3] || 0);
+  const jsEl = document.getElementById("summaryHeadcountJS");
+  if (jsEl) jsEl.textContent = jsTotal;
+
+  const fullEl = document.getElementById("summaryHeadcountFull");
+  if (fullEl) fullEl.textContent = columnGrandTotals.fullTotal || 0;
+
+  // Attach scroll listener to dynamically update section indicator
+  const scrollContainer = document.getElementById("summaryTableScrollContainer");
+  if (scrollContainer && !scrollContainer._hasScrollListener) {
+    scrollContainer._hasScrollListener = true;
+    scrollContainer.addEventListener("scroll", () => {
+      const secAnchors = [
+        { id: "sec-dockyard", title: "Dockyard" },
+        { id: "sec-workshop", title: "Workshop" },
+        { id: "sec-zones", title: "Zones (A-G)" },
+        { id: "sec-othersDuty", title: "Other Duties" },
+        { id: "sec-outProjects", title: "Out Projects" },
+        { id: "sec-housingProjects", title: "Housing" },
+        { id: "sec-otherBases", title: "Other Bases" },
+        { id: "sec-leaveSick", title: "Leave & Sick" }
+      ];
+      const scrollTop = scrollContainer.scrollTop + 100;
+      for (let i = secAnchors.length - 1; i >= 0; i--) {
+        const el = document.getElementById(secAnchors[i].id);
+        if (el && el.offsetTop <= scrollTop) {
+          const badge = document.getElementById("summaryCurrentSectionBadge");
+          if (badge) badge.textContent = `📍 Viewing: ${secAnchors[i].title}`;
+          break;
+        }
+      }
+    });
+  }
+}
+
+function scrollToSummarySection(secId, title = "") {
+  const targetEl = document.getElementById(secId);
+  const container = document.getElementById("summaryTableScrollContainer");
+  if (targetEl && container) {
+    const targetTop = targetEl.offsetTop - 70;
+    container.scrollTo({ top: Math.max(0, targetTop), behavior: "smooth" });
+    const badge = document.getElementById("summaryCurrentSectionBadge");
+    if (badge && title) {
+      badge.textContent = `📍 Viewing: ${title}`;
+    }
+  }
 }
 function exportSummaryCsv() {
   const today = getLocalDateString();

@@ -1044,6 +1044,87 @@
                 </div>
             </div>
 
+            <!-- Head Count Total KPI Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4 no-print">
+                <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">VSS Total</p>
+                        <p class="text-xl font-black text-indigo-700 font-mono" id="summaryHeadcountVss">0</p>
+                    </div>
+                    <div class="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-base">
+                        👨‍🏭
+                    </div>
+                </div>
+
+                <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">S/S Total (Senior)</p>
+                        <p class="text-xl font-black text-amber-700 font-mono" id="summaryHeadcountSS">0</p>
+                    </div>
+                    <div class="w-9 h-9 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center text-base">
+                        ⚓
+                    </div>
+                </div>
+
+                <div class="bg-white p-3.5 rounded-xl border border-slate-200 shadow-xs flex items-center justify-between">
+                    <div>
+                        <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider">J/S Total (Junior)</p>
+                        <p class="text-xl font-black text-blue-700 font-mono" id="summaryHeadcountJS">0</p>
+                    </div>
+                    <div class="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center text-base">
+                        👷
+                    </div>
+                </div>
+
+                <div class="bg-white p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/40 shadow-xs flex items-center justify-between">
+                    <div>
+                        <p class="text-[11px] font-semibold text-emerald-800 uppercase tracking-wider">Full Total Headcount</p>
+                        <p class="text-xl font-black text-emerald-700 font-mono" id="summaryHeadcountFull">0</p>
+                    </div>
+                    <div class="w-9 h-9 rounded-lg bg-emerald-100/70 border border-emerald-200 flex items-center justify-center text-base">
+                        👥
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Navigation Bar (Quick Jump) -->
+            <div class="bg-white px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-xs mb-3 flex items-center justify-between gap-2 overflow-x-auto no-print">
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <span class="text-xs font-bold text-slate-700 flex items-center gap-1">
+                        <span>🧭</span> Jump to:
+                    </span>
+                    <button onclick="scrollToSummarySection('sec-dockyard', 'Ongoing Constructions at Dockyard')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap">
+                        🏗️ Dockyard
+                    </button>
+                    <button onclick="scrollToSummarySection('sec-workshop', 'Workshop Subsections')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap">
+                        🔧 Workshop
+                    </button>
+                    <button onclick="scrollToSummarySection('sec-zones', 'Zones (A-G)')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap">
+                        📍 Zones
+                    </button>
+                    <button onclick="scrollToSummarySection('sec-othersDuty', 'Other Duties')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap">
+                        🛡️ Other Duties
+                    </button>
+                    <button onclick="scrollToSummarySection('sec-outProjects', 'Out Projects')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap">
+                        ⛺ Out Projects
+                    </button>
+                    <button onclick="scrollToSummarySection('sec-housingProjects', 'Housing Projects')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap">
+                        🏠 Housing
+                    </button>
+                    <button onclick="scrollToSummarySection('sec-otherBases', 'Other Bases')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap">
+                        ⚓ Other Bases
+                    </button>
+                    <button onclick="scrollToSummarySection('sec-leaveSick', 'Leave & Sick')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap">
+                        🏥 Leave & Sick
+                    </button>
+                </div>
+                <div class="shrink-0 hidden md:block">
+                    <span id="summaryCurrentSectionBadge" class="text-[11px] font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200 whitespace-nowrap">
+                        📍 Viewing: Dockyard
+                    </span>
+                </div>
+            </div>
+
             <!-- Print Header (Visible only on print) -->
             <div class="print-header hidden">
                 <div class="flex justify-between items-center pb-2 border-b border-slate-800 mb-4">
@@ -1057,32 +1138,32 @@
                 </div>
             </div>
 
-            <!-- Scrollable Table Wrapper -->
-            <div class="glass-card p-4 overflow-x-auto rounded-xl border border-slate-100 shadow-sm print-table-container">
+            <!-- Scrollable Table Wrapper with Sticky Frozen Header -->
+            <div id="summaryTableScrollContainer" class="glass-card p-0 overflow-auto rounded-xl border border-slate-200 shadow-sm max-h-[70vh] print-table-container relative">
                 <table class="w-full text-left border-collapse border border-slate-200 text-xs" id="summaryMatrixTable">
-                    <thead>
+                    <thead class="sticky top-0 z-30 shadow-xs">
                         <tr class="bg-slate-900 text-white font-bold text-center">
-                            <th rowspan="2" class="px-3 py-2 border border-slate-700 text-left min-w-[200px]">Description</th>
-                            <th colspan="9" class="px-1 py-1 border border-slate-700">VSS</th>
-                            <th rowspan="2" class="px-1 py-2 border border-slate-700 min-w-[50px]">VSS SUB TOTAL</th>
-                            <th colspan="4" class="px-1 py-1 border border-slate-700">REGULAR</th>
-                            <th rowspan="2" class="px-1 py-2 border border-slate-700 min-w-[50px]">REG SUB TOTAL</th>
-                            <th rowspan="2" class="px-2 py-2 border border-slate-700 min-w-[55px]">FULL TOTAL</th>
+                            <th rowspan="2" class="sticky top-0 z-30 bg-slate-900 px-3 py-2 border border-slate-700 text-left min-w-[200px]">Description</th>
+                            <th colspan="9" class="sticky top-0 z-30 bg-slate-900 px-1 py-1 border border-slate-700">VSS</th>
+                            <th rowspan="2" class="sticky top-0 z-30 bg-slate-900 px-1 py-2 border border-slate-700 min-w-[50px]">VSS SUB TOTAL</th>
+                            <th colspan="4" class="sticky top-0 z-30 bg-slate-900 px-1 py-1 border border-slate-700">REGULAR</th>
+                            <th rowspan="2" class="sticky top-0 z-30 bg-slate-900 px-1 py-2 border border-slate-700 min-w-[50px]">REG SUB TOTAL</th>
+                            <th rowspan="2" class="sticky top-0 z-30 bg-slate-900 px-2 py-2 border border-slate-700 min-w-[55px]">FULL TOTAL</th>
                         </tr>
                         <tr class="bg-slate-800 text-white font-bold text-center text-[10px]">
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">MA</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">CA</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">PA</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">PL</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">BB</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">RW</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">WL</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">AL</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">SW</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">S/S</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">LME</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">ME</th>
-                            <th class="px-0.5 py-1 border border-slate-600 w-[4%]">OJT</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">MA</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">CA</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">PA</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">PL</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">BB</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">RW</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">WL</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">AL</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">SW</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">S/S</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">LME</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">ME</th>
+                            <th class="sticky top-[31px] z-30 bg-slate-800 px-0.5 py-1 border border-slate-600 w-[4%]">OJT</th>
                         </tr>
                     </thead>
                     <tbody id="summaryMatrixTableBody">
@@ -4956,10 +5037,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.19
+        App Version: v5.20
     </div>
 
-    <script src="app.js?v=5.19"></script>
+    <script src="app.js?v=5.20"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
