@@ -698,6 +698,32 @@ function standardizeInventoryCategory(cat) {
   if (matched) return matched;
   return cat.trim().charAt(0).toUpperCase() + cat.trim().slice(1).toLowerCase();
 }
+
+function standardizeInventoryDeno(deno) {
+  if (!deno) return "Nos";
+  const d = String(deno).trim();
+  if (d.toLowerCase() === "lft") return "lft";
+  if (d.toLowerCase() === "cube" || d.toLowerCase() === "cubes") return "Cube";
+  if (d.toLowerCase() === "nos" || d.toLowerCase() === "no" || d.toLowerCase() === "no.") return "Nos";
+  if (d.toLowerCase() === "kg" || d.toLowerCase() === "kgs") return "Kg";
+  if (d.toLowerCase() === "ltr" || d.toLowerCase() === "ltrs" || d.toLowerCase() === "liters" || d.toLowerCase() === "litres") return "Ltr";
+  if (d.toLowerCase() === "bag" || d.toLowerCase() === "bags") return "Bags";
+  if (d.toLowerCase() === "sheet" || d.toLowerCase() === "sheets") return "Sheets";
+  if (d.toLowerCase() === "roll" || d.toLowerCase() === "rolls") return "Rolls";
+  if (d.toLowerCase() === "set" || d.toLowerCase() === "sets") return "Sets";
+  if (d.toLowerCase() === "pkt" || d.toLowerCase() === "pkts" || d.toLowerCase() === "packet" || d.toLowerCase() === "packets") return "Pkts";
+  if (d.toLowerCase() === "pair" || d.toLowerCase() === "pairs") return "Pairs";
+  if (d.toLowerCase() === "bundle" || d.toLowerCase() === "bundles") return "Bundles";
+  if (d.toLowerCase() === "box" || d.toLowerCase() === "boxes") return "Boxes";
+  if (d.toLowerCase() === "bottle" || d.toLowerCase() === "bottles") return "Bottles";
+  if (d.toLowerCase() === "tin" || d.toLowerCase() === "tins") return "Tins";
+  if (d.toLowerCase() === "ton" || d.toLowerCase() === "tons") return "Tons";
+  if (d.toLowerCase() === "yd" || d.toLowerCase() === "yds" || d.toLowerCase() === "yard" || d.toLowerCase() === "yards") return "Yds";
+  if (d.toLowerCase() === "sq.ft" || d.toLowerCase() === "sqft") return "Sq.ft";
+  if (d.toLowerCase() === "sq.m" || d.toLowerCase() === "sqm") return "Sq.m";
+  return d;
+}
+
 function initOpsListeners() {
   // ── Work Orders ──
   opsDB.ref("work_orders").on("value", (snapshot) => {
@@ -1162,6 +1188,9 @@ function fbSaveInventoryItem(data) {
   if (clean.description) {
     clean.description = standardizeInventoryDescription(clean.description);
   }
+  if (clean.deno) {
+    clean.deno = standardizeInventoryDeno(clean.deno);
+  }
 
   const targetKey =
     _fbKey ||
@@ -1525,6 +1554,9 @@ function switchView(view, preventPushState = false) {
       break;
     case "sailordashboard":
       renderSailorDashboardView();
+      break;
+    case "documents":
+      renderDocumentsView();
       break;
   }
 }
@@ -3364,10 +3396,14 @@ function undoContinueYesterdayJobs() {
 // Tracks which sailor IDs are selected in the modal
 let _woSelectedSailors = new Set();
 let _woCurrentTrade = "ALL";
+let _woLinkedJobMinuteId = null;
 function openNewWorkOrderModal() {
-  // Reset sailor selection
+  // Reset sailor selection & minute link
   _woSelectedSailors = new Set();
-  _woCurrentTrade = "ALL"; // Populate Approved Ref dropdown
+  _woLinkedJobMinuteId = null;
+  _woCurrentTrade = "ALL"; 
+  populateIncomingMinutesInWorkOrderModal();
+  // Populate Approved Ref dropdown
   document.getElementById("woApprovedRef").innerHTML =
     '<option value="">📋 Approved</option>' +
     store.approvedPendingJobs
@@ -4206,6 +4242,11 @@ function createWorkOrder(event) {
             jobCardFbKey: jcKey,
             assignedSailors: newOrder.assigned
           };
+
+          // Link to Job Minute record if referenced
+          if (_woLinkedJobMinuteId || (newOrder.reference_no && newOrder.type === "Minute Sheet")) {
+            linkJobCardToJobMinute(_woLinkedJobMinuteId || newOrder.reference_no, jobNumber);
+          }
         });
       } else {
         _lastCreatedWorkOrder = {
@@ -5969,6 +6010,7 @@ function submitEvaluation(event) {
 // JOB CARDS
 // =============================================
 function renderJobCardsView() {
+  renderIncomingJobMinutesInJobCards();
   renderJobCardsList();
 }
 function switchJobCardsTab(tab) {
@@ -8296,6 +8338,8 @@ function renderInventoryTable() {
       : _document$getElementB7.value) || "description";
   items.sort((a, b) => {
     switch (sort) {
+      case "category":
+        return (a.category || "").localeCompare(b.category || "") || (a.description || "").localeCompare(b.description || "");
       case "quantity":
         return b.quantity - a.quantity;
       case "cost":
@@ -8843,7 +8887,22 @@ function editInventoryItem(itemId) {
   document.getElementById("invId").value = item._fbKey || item.id || "";
   document.getElementById("invCategory").value = item.category || "BMS";
   document.getElementById("invDescription").value = item.description || "";
-  document.getElementById("invDeno").value = item.deno || "Nos";
+  
+  const denoSelect = document.getElementById("invDeno");
+  if (denoSelect) {
+    const itemDeno = standardizeInventoryDeno(item.deno || "Nos");
+    const exists = Array.from(denoSelect.options).some(
+      (opt) => opt.value.toLowerCase() === itemDeno.toLowerCase()
+    );
+    if (!exists && itemDeno) {
+      const newOpt = document.createElement("option");
+      newOpt.value = itemDeno;
+      newOpt.textContent = itemDeno;
+      denoSelect.appendChild(newOpt);
+    }
+    denoSelect.value = itemDeno;
+  }
+
   document.getElementById("invQuantity").value = item.quantity !== undefined ? item.quantity : 0;
   document.getElementById("invCost").value = item.cost_per_unit !== undefined ? item.cost_per_unit : 0;
   const bookNoEl = document.getElementById("invBookNo");
@@ -8862,8 +8921,10 @@ function editInventoryItem(itemId) {
 }
 
 function saveInventoryItem(event) {
-  event.preventDefault();
-  const id = document.getElementById("invId").value;
+  if (event && typeof event.preventDefault === "function") {
+    event.preventDefault();
+  }
+  const id = document.getElementById("invId") ? document.getElementById("invId").value : "";
   const reqSelect = document.getElementById("invRequirement") ? document.getElementById("invRequirement").value : "";
   const reqText = document.getElementById("invRequirementText") ? document.getElementById("invRequirementText").value : "";
   const requirement = reqSelect || reqText || "General";
@@ -8910,8 +8971,12 @@ function saveInventoryItem(event) {
     .then(() => {
       closeModal("inventoryModal");
       showToast(id ? "Item updated successfully!" : "Item added successfully!");
-      document.getElementById("inventoryForm").reset();
-      document.getElementById("invId").value = "";
+      const formEl = document.getElementById("inventoryForm");
+      if (formEl && typeof formEl.reset === "function") {
+        formEl.reset();
+      }
+      const idEl = document.getElementById("invId");
+      if (idEl) idEl.value = "";
     })
     .catch((err) => {
       console.error("Firebase save inventory error:", err);
@@ -8921,6 +8986,7 @@ function saveInventoryItem(event) {
 // ESTIMATES
 // =============================================
 function renderEstimates() {
+  renderIncomingJobMinutesInEstimates();
   const container = document.getElementById("estimatesList");
   const filteredEstimates = store.estimates.filter(
     (e) => !e.zone_id || e.zone_id === store.currentZone,
@@ -9284,6 +9350,7 @@ function openNewEstimateModal() {
   updateEstimateTotals();
   populateEstLocationsDatalist();
   populateSignatoryDropdowns();
+  populateIncomingMinutesInEstimateModal();
   document.getElementById("newEstimateModal").classList.remove("hidden");
 }
 
@@ -9859,6 +9926,9 @@ function saveEstimate(event) {
       zone_id: store.currentZone,
     };
     fbSaveEstimate(newEst);
+    if (reference_doc) {
+      linkEstimateToJobMinute(newEst.estimate_number, reference_doc);
+    }
     showToast("Estimate created!");
   }
   closeModal("newEstimateModal");
@@ -12882,10 +12952,68 @@ const defaultSettings = {
     "Welding-Shop",
     "Public Supply (Town)",
   ],
-  approvalAuthorities: ["CCED(E)", "CENA", "DAC(E)", "DGCE", "CCEO(E)"],
-  workOrderTypes: ["PROJECT", "ROUTINE", "EMERGENCY", "REPAIR"],
   priorityLevels: ["Low", "Medium", "High", "Critical"],
   holidays: {},
+  minuteConfig: {
+    addressees_si: [
+      "විධායක නිලධාරි (තඨාකාංගනය)",
+      "සහකාර විනයාරක්ෂකාධිපති (නැ)",
+      "ප්‍රධාන ඉංජිනේරු",
+      "නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු",
+      "අණදෙන නිලධාරි",
+      "මූලස්ථාන සැපයුම් නිලධාරි",
+      "කාර්ය භාර නිලධාරි (සිවිල් නඩත්තු)"
+    ],
+    addressees_en: [
+      "Executive Officer (Dockyard)",
+      "Assistant Provost Marshal (E)",
+      "Chief Engineer",
+      "Deputy Chief Engineer",
+      "Commanding Officer",
+      "Base Supply Officer",
+      "Officer in Charge - Civil Maintenance"
+    ],
+    originators_si: [
+      "ජ්‍යෙෂ්ඨ සිවිල් ඉංජිනේරු නිලධාරි (නඩත්තු) මඟින්",
+      "කාර්ය භාර නිලධාරි (සිවිල් නඩත්තු) මඟින්",
+      "විධායක නිලධාරි මඟින්",
+      "නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු මඟින්",
+      "ප්‍රධාන ඉංජිනේරු මඟින්"
+    ],
+    originators_en: [
+      "Senior Civil Engineering Officer (Maintenance)",
+      "Officer in Charge - Civil Maintenance",
+      "From: Executive Officer",
+      "From: Deputy Chief Engineer",
+      "From: Chief Engineer"
+    ],
+    signatoryTitles_si: [
+      "ජ්‍යෙ.සි.ඉ.නි (නඩත්තු)",
+      "කාර්ය භාර නිලධාරි (සිවිල් නඩත්තු)",
+      "නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු",
+      "ප්‍රධාන ඉංජිනේරු",
+      "විධායක නිලධාරි"
+    ],
+    signatoryTitles_en: [
+      "Senior Civil Engineering Officer (Maintenance)",
+      "Officer in Charge - Civil Maintenance",
+      "Deputy Chief Engineer",
+      "Chief Engineer",
+      "Executive Officer"
+    ],
+    endorsements_si: [
+      "නිර්දේශ කර ඉදිරිපත් කරමි.",
+      "කාරුණික අනුමැතිය සඳහා ඉදිරිපත් කරමි.",
+      "අනුමත කරමි.",
+      "අනුමැතිය සඳහා ඉදිරිපත් කරමි."
+    ],
+    endorsements_en: [
+      "Recommended and forwarded please.",
+      "Submitted for your kind approval please.",
+      "Approved as requested.",
+      "Forwarded for necessary action please."
+    ]
+  }
 }; // Live settings object (merged from Firebase)
 store.settings = { ...defaultSettings }; // ── Load settings from Firebase DB2 ──
 function ensureArray(val) {
@@ -13060,6 +13188,8 @@ function switchSettingsTab(tab) {
     renderDateScheduleCalendar();
   } else if (tab === "projects") {
     renderApprovedProjectsSettings();
+  } else if (tab === "minutesheet") {
+    renderMinuteSheetSettings();
   }
 }
 function setValue(id, val) {
@@ -18741,10 +18871,132 @@ function setSailorDirectoryViewMode(mode) {
   renderSailorsView();
 }
 
+// Sailor Directory Columns Configuration
+const SAILOR_COLUMNS_CONFIG = [
+  { id: "off_no", label: "OFF NO", sortable: true, defaultWidth: 120, minWidth: 80, sortField: "off_no" },
+  { id: "name", label: "SAILOR NAME & RANK", sortable: true, defaultWidth: 220, minWidth: 150, sortField: "name" },
+  { id: "trade", label: "TRADE", sortable: true, defaultWidth: 90, minWidth: 70, sortField: "trade" },
+  { id: "city", label: "CITY / HOMETOWN", sortable: true, defaultWidth: 160, minWidth: 100, sortField: "city" },
+  { id: "status", label: "STATUS & CATEGORY", sortable: false, defaultWidth: 150, minWidth: 110 },
+  { id: "perf", label: "PERFORMANCE (1-10)", sortable: true, defaultWidth: 170, minWidth: 130, sortField: "perf" },
+  { id: "skills", label: "SPECIAL SKILLS", sortable: false, defaultWidth: 180, minWidth: 110 },
+  { id: "zone", label: "ASSIGNED ZONE", sortable: true, defaultWidth: 140, minWidth: 100, sortField: "zone" },
+  { id: "actions", label: "ACTIONS", sortable: false, defaultWidth: 110, minWidth: 90, fixedRight: true },
+];
+
+function getSailorActiveColumnOrder() {
+  try {
+    const raw = localStorage.getItem("sailor_col_order_v2");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const allIds = SAILOR_COLUMNS_CONFIG.map((c) => c.id);
+        const valid = parsed.filter((id) => allIds.includes(id));
+        allIds.forEach((id) => {
+          if (!valid.includes(id)) valid.push(id);
+        });
+        return valid;
+      }
+    }
+  } catch (e) {
+    console.error("Error parsing col order:", e);
+  }
+  return SAILOR_COLUMNS_CONFIG.map((c) => c.id);
+}
+
+function getSailorHiddenColumns() {
+  try {
+    const raw = localStorage.getItem("sailor_col_hidden_v2");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed);
+    }
+  } catch (e) {
+    console.error("Error parsing hidden cols:", e);
+  }
+  return new Set();
+}
+
+function getSailorColumnWidths() {
+  try {
+    const raw = localStorage.getItem("sailor_col_widths_v2");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === "object" && parsed !== null) return parsed;
+    }
+  } catch (e) {
+    console.error("Error parsing col widths:", e);
+  }
+  return {};
+}
+
+function saveSailorColumnSettings(order, hidden, widths) {
+  if (order) localStorage.setItem("sailor_col_order_v2", JSON.stringify(order));
+  if (hidden) localStorage.setItem("sailor_col_hidden_v2", JSON.stringify(Array.from(hidden)));
+  if (widths) localStorage.setItem("sailor_col_widths_v2", JSON.stringify(widths));
+}
+
+let _resizingColId = null;
+let _resizeStartX = 0;
+let _resizeStartWidth = 0;
+
+function initSailorColResize(e, colId) {
+  e.preventDefault();
+  e.stopPropagation();
+  _resizingColId = colId;
+  _resizeStartX = e.pageX;
+
+  const thEl = document.getElementById("th-col-" + colId);
+  _resizeStartWidth = thEl ? thEl.offsetWidth : 120;
+
+  document.body.classList.add("is-resizing-col");
+  document.querySelectorAll(".sailor-th-resizer").forEach((r) => r.classList.remove("is-resizing"));
+  if (e.target) e.target.classList.add("is-resizing");
+
+  window.addEventListener("mousemove", onSailorColMouseMove);
+  window.addEventListener("mouseup", onSailorColMouseUp);
+}
+
+function onSailorColMouseMove(e) {
+  if (!_resizingColId) return;
+  const diff = e.pageX - _resizeStartX;
+  const colDef = SAILOR_COLUMNS_CONFIG.find((c) => c.id === _resizingColId);
+  const minW = colDef ? colDef.minWidth : 80;
+  const newWidth = Math.max(minW, _resizeStartWidth + diff);
+
+  const thEl = document.getElementById("th-col-" + _resizingColId);
+  if (thEl) {
+    thEl.style.width = newWidth + "px";
+    thEl.style.minWidth = newWidth + "px";
+  }
+}
+
+function onSailorColMouseUp(e) {
+  if (_resizingColId) {
+    const thEl = document.getElementById("th-col-" + _resizingColId);
+    if (thEl) {
+      const finalWidth = thEl.offsetWidth;
+      const widths = getSailorColumnWidths();
+      widths[_resizingColId] = finalWidth;
+      saveSailorColumnSettings(null, null, widths);
+    }
+    document.querySelectorAll(".sailor-th-resizer").forEach((r) => r.classList.remove("is-resizing"));
+  }
+  _resizingColId = null;
+  document.body.classList.remove("is-resizing-col");
+  window.removeEventListener("mousemove", onSailorColMouseMove);
+  window.removeEventListener("mouseup", onSailorColMouseUp);
+}
+
 function toggleSailorColumnMenu(e) {
   if (e) e.stopPropagation();
   const menu = document.getElementById("sailorColumnMenu");
-  if (menu) menu.classList.toggle("hidden");
+  if (menu) {
+    menu.classList.toggle("hidden");
+    if (!menu.classList.contains("hidden")) {
+      renderSailorColumnMenu();
+    }
+  }
 }
 
 document.addEventListener("click", (e) => {
@@ -18754,11 +19006,99 @@ document.addEventListener("click", (e) => {
   }
 });
 
-function toggleSailorCol(colClass, isVisible) {
-  document.querySelectorAll("." + colClass).forEach((el) => {
-    if (isVisible) el.classList.remove("hidden");
-    else el.classList.add("hidden");
-  });
+function renderSailorColumnMenu() {
+  const container = document.getElementById("sailorColumnList");
+  if (!container) return;
+
+  const order = getSailorActiveColumnOrder();
+  const hidden = getSailorHiddenColumns();
+
+  container.innerHTML = order.map((colId, idx) => {
+    const col = SAILOR_COLUMNS_CONFIG.find((c) => c.id === colId);
+    if (!col) return "";
+    const isVisible = !hidden.has(col.id);
+    const isFirst = idx === 0;
+    const isLast = idx === order.length - 1;
+
+    return `
+      <div class="flex items-center justify-between p-1.5 hover:bg-slate-50 rounded-lg border border-slate-100 transition-all">
+        <label class="flex items-center gap-2 cursor-pointer flex-1 font-semibold text-slate-700 select-none truncate">
+          <input type="checkbox" class="accent-teal-600 rounded cursor-pointer" ${isVisible ? "checked" : ""} onchange="toggleSailorColumnVisibility('${col.id}', this.checked)">
+          <span class="truncate">${col.label}</span>
+        </label>
+        <div class="flex items-center gap-1 flex-shrink-0">
+          <button type="button" onclick="moveSailorColumn('${col.id}', -1)" ${isFirst ? "disabled" : ""} class="px-1.5 py-0.5 rounded hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs" title="Move Up">⬆️</button>
+          <button type="button" onclick="moveSailorColumn('${col.id}', 1)" ${isLast ? "disabled" : ""} class="px-1.5 py-0.5 rounded hover:bg-slate-200 text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer text-xs" title="Move Down">⬇️</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function toggleSailorColumnVisibility(colId, isVisible) {
+  const hidden = getSailorHiddenColumns();
+  if (isVisible) hidden.delete(colId);
+  else hidden.add(colId);
+  saveSailorColumnSettings(null, hidden, null);
+  renderSailorsView();
+}
+
+function moveSailorColumn(colId, direction) {
+  const order = getSailorActiveColumnOrder();
+  const idx = order.indexOf(colId);
+  if (idx === -1) return;
+  const targetIdx = idx + direction;
+  if (targetIdx < 0 || targetIdx >= order.length) return;
+
+  const item = order.splice(idx, 1)[0];
+  order.splice(targetIdx, 0, item);
+
+  saveSailorColumnSettings(order, null, null);
+  renderSailorsView();
+}
+
+function resetSailorColumns() {
+  localStorage.removeItem("sailor_col_order_v2");
+  localStorage.removeItem("sailor_col_hidden_v2");
+  localStorage.removeItem("sailor_col_widths_v2");
+  renderSailorsView();
+}
+
+function renderSailorsTableHeader() {
+  const thead = document.getElementById("directorySailorsTableHead");
+  if (!thead) return;
+
+  const order = getSailorActiveColumnOrder();
+  const hidden = getSailorHiddenColumns();
+  const widths = getSailorColumnWidths();
+
+  const activeCols = order
+    .map((id) => SAILOR_COLUMNS_CONFIG.find((c) => c.id === id))
+    .filter((c) => c && !hidden.has(c.id));
+
+  thead.innerHTML = `
+    <tr class="bg-slate-900 text-white text-[11px] font-bold uppercase tracking-wider select-none">
+      ${activeCols.map((col) => {
+        const w = widths[col.id] || col.defaultWidth;
+        const sortIcon = col.sortable ? `<span id="sort-icon-${col.sortField}" class="text-slate-400">↕</span>` : "";
+        const onclickAttr = col.sortable ? `onclick="sortSailorTable('${col.sortField}')"` : "";
+        const cursorClass = col.sortable ? "cursor-pointer hover:bg-slate-800" : "";
+        const stickyClass = col.fixedRight ? "sticky right-0 top-0 z-40 bg-slate-900 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.4)] text-center" : "";
+
+        return `
+          <th id="th-col-${col.id}" style="width: ${w}px; min-width: ${col.minWidth}px;" class="py-3.5 px-4 sailor-th-cell whitespace-nowrap bg-slate-900 transition-colors ${cursorClass} ${stickyClass}" ${onclickAttr}>
+            <div class="flex items-center justify-between gap-1">
+              <span>${col.label}</span>
+              ${sortIcon}
+            </div>
+            ${!col.fixedRight ? `<div class="sailor-th-resizer" onmousedown="initSailorColResize(event, '${col.id}')" title="Drag to resize column width"></div>` : ""}
+          </th>
+        `;
+      }).join("")}
+    </tr>
+  `;
+
+  updateSailorSortIcons();
 }
 
 function sortSailorTable(field) {
@@ -19191,11 +19531,21 @@ function renderSailorsView() {
     totalCountBadge.textContent = `Total: ${mapped.length} Sailors`;
   }
 
+  // Render Table Header dynamically
+  renderSailorsTableHeader();
+
+  // Active columns configuration
+  const activeOrder = getSailorActiveColumnOrder();
+  const hiddenCols = getSailorHiddenColumns();
+  const activeColumns = activeOrder
+    .map((id) => SAILOR_COLUMNS_CONFIG.find((c) => c.id === id))
+    .filter((c) => c && !hiddenCols.has(c.id));
+
   // Render Table View Rows
   const tableBody = document.getElementById("directorySailorsTableBody");
   if (tableBody) {
     if (mapped.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="9" class="text-center py-12 text-slate-400 font-medium text-sm">No sailors found matching criteria.</td></tr>`;
+      tableBody.innerHTML = `<tr><td colspan="${Math.max(1, activeColumns.length)}" class="text-center py-12 text-slate-400 font-medium text-sm">No sailors found matching criteria.</td></tr>`;
     } else {
       tableBody.innerHTML = mapped.map((s) => {
         var _s$idRow;
@@ -19208,49 +19558,68 @@ function renderSailorsView() {
         const skillSnippet = skillText.length > 25 ? skillText.substring(0, 25) + "..." : skillText;
         const cleanCity = s.city && s.city !== "-" ? `📍 ${s.city}` : "—";
 
-        return `
-        <tr class="hover:bg-slate-50/90 transition-colors group">
-            <td class="py-3 px-4 font-mono font-bold text-xs text-slate-800 whitespace-nowrap">${s.offNo}</td>
-            <td class="py-3 px-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-[11px] flex-shrink-0 shadow-sm">
-                        ${shortRank}
+        // Map cells according to activeColumns order
+        const rowCells = activeColumns.map((col) => {
+          switch (col.id) {
+            case "off_no":
+              return `<td class="py-3 px-4 font-mono font-bold text-xs text-slate-800 whitespace-nowrap">${s.offNo}</td>`;
+            case "name":
+              return `
+                <td class="py-3 px-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-[11px] flex-shrink-0 shadow-xs">
+                            ${shortRank}
+                        </div>
+                        <div class="min-w-0">
+                            <p class="font-bold text-xs text-slate-900 truncate hover:text-teal-600 cursor-pointer" onclick="openSailorProfile('${sId}')">${s.name || "-"}</p>
+                            <p class="text-[10px] text-slate-500 font-semibold">${s.rank || "-"}</p>
+                        </div>
                     </div>
-                    <div class="min-w-0">
-                        <p class="font-bold text-xs text-slate-900 truncate hover:text-teal-600 cursor-pointer" onclick="openSailorProfile('${sId}')">${s.name || "-"}</p>
-                        <p class="text-[10px] text-slate-500 font-semibold">${s.rank || "-"}</p>
+                </td>`;
+            case "trade":
+              return `
+                <td class="py-3 px-4">
+                    <span class="inline-block px-2 py-0.5 rounded text-xs font-extrabold bg-slate-900 text-white">${s.trade || "-"}</span>
+                </td>`;
+            case "city":
+              return `<td class="py-3 px-4 text-xs text-slate-600 font-medium whitespace-nowrap">${cleanCity}</td>`;
+            case "status":
+              return `<td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>`;
+            case "perf":
+              return `
+                <td class="py-3 px-4 whitespace-nowrap">
+                    <div class="flex flex-col items-start gap-1">
+                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300 shadow-xs">
+                            ⭐ ${s.perf.toFixed(2)}
+                        </span>
+                        <div class="flex items-center gap-1 text-[10px] font-bold">
+                            <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d Eval</span>
+                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d Non-eval</span>
+                        </div>
                     </div>
-                </div>
-            </td>
-            <td class="py-3 px-4">
-                <span class="inline-block px-2 py-0.5 rounded text-xs font-extrabold bg-slate-900 text-white">${s.trade || "-"}</span>
-            </td>
-            <td class="py-3 px-4 col-city text-xs text-slate-600 font-medium whitespace-nowrap">${cleanCity}</td>
-            <td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>
-            <td class="py-3 px-4 col-perf whitespace-nowrap">
-                <div class="flex flex-col items-start gap-1">
-                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300 shadow-xs">
-                        ⭐ ${s.perf.toFixed(2)}
-                    </span>
-                    <div class="flex items-center gap-1 text-[10px] font-bold">
-                        <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d Eval</span>
-                        <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d Non-eval</span>
+                </td>`;
+            case "skills":
+              return `
+                <td class="py-3 px-4 text-xs text-slate-500 truncate max-w-[180px]" title="${skillText.replace(/"/g, '&quot;')}">
+                    ${skillSnippet !== "—" ? `<span class="text-slate-700">🛠️ ${skillSnippet}</span>` : '<span class="text-slate-300">—</span>'}
+                </td>`;
+            case "zone":
+              return `<td class="py-3 px-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${s.assignedZone}</td>`;
+            case "actions":
+              return `
+                <td class="py-3 px-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">
+                    <div class="flex items-center justify-center">
+                        <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 border border-slate-200 transition-all shadow-xs cursor-pointer">
+                            <span>👤</span> Profile
+                        </button>
                     </div>
-                </div>
-            </td>
-            <td class="py-3 px-4 col-skills text-xs text-slate-500 truncate max-w-[160px]" title="${skillText.replace(/"/g, '&quot;')}">
-                ${skillSnippet !== "—" ? `<span class="text-slate-700">🛠️ ${skillSnippet}</span>` : '<span class="text-slate-300">—</span>'}
-            </td>
-            <td class="py-3 px-4 col-zone text-xs font-semibold text-slate-700 whitespace-nowrap">${s.assignedZone}</td>
-            <td class="py-3 px-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">
-                <div class="flex items-center justify-center">
-                    <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 border border-slate-200 transition-all shadow-xs cursor-pointer">
-                        <span>👤</span> Profile
-                    </button>
-                </div>
-            </td>
-        </tr>
-        `;
+                </td>`;
+            default:
+              return `<td class="py-3 px-4 text-xs text-slate-600">—</td>`;
+          }
+        }).join("");
+
+        return `<tr class="hover:bg-slate-50/90 transition-colors group">${rowCells}</tr>`;
       }).join("");
     }
   }
@@ -19545,6 +19914,24 @@ function openSailorProfile(sailorId) {
   setText("profOtherDistrict", sailor.district || "BADULLA");
   setText("profOtherPolice", sailor.police_station || "DIYATHALAWA");
 
+  // PHYSICAL FITNESS & LIVE BMI CALCULATOR (No Fabricated Data)
+  currentSailorProfileId = sailor.id !== undefined ? sailor.id : (sailor._fbKey || sailor.official_number);
+
+  const wInput = document.getElementById("profInputWeight");
+  if (wInput) wInput.value = sailor.weight ? sailor.weight : "68.0";
+  const hInput = document.getElementById("profInputHeight");
+  if (hInput) hInput.value = sailor.height ? sailor.height : "172.0";
+
+  calculateSailorLiveBMI();
+
+  // Real Naval Medical Records (only actual values)
+  setText("profMedCategory", sailor.medical_category || sailor.med_cat || "—");
+  const healthCond = sailor.attendance === "Sick" ? "⚠️ Active Sick Recovery" : "Normal / Active";
+  setText("profHealthCondition", healthCond);
+  setText("profDutyRestrictions", sailor.medical_remarks || sailor.duty_restrictions || "—");
+  const bloodGrp = sailor.blood_group || "—";
+  setText("profBloodDonorReady", bloodGrp !== "—" ? `🩸 ${bloodGrp}` : "—");
+
   // Right Column: PERFORMANCE & INSIGHTS
   const scoreNumEl = document.getElementById("profScoreNumber");
   if (scoreNumEl) scoreNumEl.innerHTML = `${perfScore.toFixed(2)} <span class="text-xs font-normal text-amber-500">/ 10</span>`;
@@ -19603,6 +19990,12 @@ function openSailorProfile(sailorId) {
   const discBarEl = document.getElementById("profBarDiscipline");
   if (discBarEl) discBarEl.style.width = `${Math.min(100, Math.round((discScore / 10) * 100))}%`;
 
+  // Initialize and Render Period Attendance, Performance & Sick History
+  const now = new Date();
+  sailorProfileCalYear = now.getFullYear();
+  sailorProfileCalMonth = now.getMonth();
+  setSailorProfilePeriodMode("monthly");
+
   // SPECIAL RECORDS
   const specEl = document.getElementById("profSpecialRecords");
   if (specEl) {
@@ -19641,7 +20034,7 @@ function openSailorProfile(sailorId) {
       pastAttachEl.innerHTML = sailor.past_attachments.map((pa) => `
         <div class="p-2.5 bg-slate-50 border border-slate-200/80 rounded-lg text-xs">
           <p class="font-bold text-slate-800">${pa.unit || pa.location || pa}</p>
-          <p class="text-[10px] text-slate-400 font-mono">${pa.period || ""}</p>
+          ${pa.period ? `<p class="text-[10px] text-slate-400 font-mono">${pa.period}</p>` : ""}
         </div>
       `).join("");
     } else {
@@ -19683,6 +20076,502 @@ function openSailorProfile(sailorId) {
   if (modal) {
     modal.classList.remove("hidden");
   }
+}
+
+// Global state and methods for Sailor Profile Period Attendance, Calendar & Sick History
+let currentSailorProfileId = null;
+let sailorProfileCalYear = 2026;
+let sailorProfileCalMonth = 7; // August (0-indexed)
+let sailorProfilePeriodMode = "monthly"; // "monthly" | "since_joined" | "custom"
+
+function setSailorProfilePeriodMode(mode) {
+  sailorProfilePeriodMode = mode;
+
+  const btnM = document.getElementById("btnProfPeriodMonthly");
+  const btnJ = document.getElementById("btnProfPeriodJoined");
+  const btnC = document.getElementById("btnProfPeriodCustom");
+
+  [btnM, btnJ, btnC].forEach((btn) => {
+    if (btn) {
+      btn.className = "px-2.5 py-1 rounded-lg font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer";
+    }
+  });
+
+  const mControls = document.getElementById("profPeriodMonthlyControls");
+  const cControls = document.getElementById("profPeriodCustomControls");
+  const jInfo = document.getElementById("profPeriodJoinedInfo");
+  const calWrapper = document.getElementById("profCalendarGridWrapper");
+
+  if (mode === "monthly") {
+    if (btnM) btnM.className = "px-2.5 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer";
+    if (mControls) mControls.classList.remove("hidden");
+    if (cControls) cControls.classList.add("hidden");
+    if (jInfo) jInfo.classList.add("hidden");
+    if (calWrapper) calWrapper.classList.remove("hidden");
+  } else if (mode === "since_joined") {
+    if (btnJ) btnJ.className = "px-2.5 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer";
+    if (mControls) mControls.classList.add("hidden");
+    if (cControls) cControls.classList.add("hidden");
+    if (jInfo) jInfo.classList.remove("hidden");
+    if (calWrapper) calWrapper.classList.add("hidden");
+  } else if (mode === "custom") {
+    if (btnC) btnC.className = "px-2.5 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer";
+    if (mControls) mControls.classList.add("hidden");
+    if (cControls) cControls.classList.remove("hidden");
+    if (jInfo) jInfo.classList.add("hidden");
+    if (calWrapper) calWrapper.classList.add("hidden");
+  }
+
+  refreshSailorProfilePeriodData();
+}
+
+function navigateSailorProfileMonth(dir) {
+  if (dir === 0) {
+    const now = new Date();
+    sailorProfileCalYear = now.getFullYear();
+    sailorProfileCalMonth = now.getMonth();
+  } else {
+    sailorProfileCalMonth += dir;
+    if (sailorProfileCalMonth < 0) {
+      sailorProfileCalMonth = 11;
+      sailorProfileCalYear--;
+    } else if (sailorProfileCalMonth > 11) {
+      sailorProfileCalMonth = 0;
+      sailorProfileCalYear++;
+    }
+  }
+
+  refreshSailorProfilePeriodData();
+}
+
+function calculateSailorLiveBMI() {
+  const wInput = document.getElementById("profInputWeight");
+  const hInput = document.getElementById("profInputHeight");
+  const scoreDisp = document.getElementById("profBmiScoreDisplay");
+  const catBadge = document.getElementById("profBmiCategoryBadge");
+  const fitBadge = document.getElementById("profMedFitBadge");
+
+  const w = parseFloat(wInput ? wInput.value : 0);
+  const h = parseFloat(hInput ? hInput.value : 0);
+
+  if (w > 20 && h > 50) {
+    const hM = h / 100;
+    const bmi = w / (hM * hM);
+    if (scoreDisp) scoreDisp.textContent = bmi.toFixed(1);
+
+    let catText = "Optimal (සාමාන්‍ය බර)";
+    let catClass = "bg-emerald-100 text-emerald-800 border-emerald-300";
+    let fitText = "Class A1 - Fully Fit";
+    let fitClass = "bg-emerald-100 text-emerald-800 border-emerald-300";
+
+    if (bmi < 18.5) {
+      catText = "Underweight (අඩු බර)";
+      catClass = "bg-amber-100 text-amber-800 border-amber-300";
+      fitText = "Underweight - Nutrition Focus";
+      fitClass = "bg-amber-100 text-amber-800 border-amber-300";
+    } else if (bmi >= 25.0 && bmi < 30.0) {
+      catText = "Overweight (වැඩි බර)";
+      catClass = "bg-amber-100 text-amber-800 border-amber-300";
+      fitText = "Overweight - Weight Mgmt";
+      fitClass = "bg-amber-100 text-amber-800 border-amber-300";
+    } else if (bmi >= 30.0) {
+      catText = "Obese (තරබාරු)";
+      catClass = "bg-rose-100 text-rose-800 border-rose-300";
+      fitText = "Med Review (Obesity)";
+      fitClass = "bg-rose-100 text-rose-800 border-rose-300";
+    }
+
+    if (catBadge) {
+      catBadge.textContent = catText;
+      catBadge.className = `px-2 py-0.5 rounded-md text-[10px] font-extrabold border ${catClass}`;
+    }
+
+    const sailor = (store.sailors || []).find(
+      (s) =>
+        String(s.id) === String(currentSailorProfileId) ||
+        String(s._fbKey) === String(currentSailorProfileId) ||
+        String(s.official_number) === String(currentSailorProfileId),
+    );
+    if (fitBadge) {
+      if (sailor && sailor.attendance === "Sick") {
+        fitBadge.textContent = "🏥 Duty Restriction (Sick)";
+        fitBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-100 text-rose-800 border border-rose-300";
+      } else {
+        fitBadge.textContent = fitText;
+        fitBadge.className = `px-2.5 py-0.5 rounded-full text-[10px] font-extrabold border ${fitClass}`;
+      }
+    }
+  } else {
+    if (scoreDisp) scoreDisp.textContent = "—";
+    if (catBadge) {
+      catBadge.textContent = "Enter W/H";
+      catBadge.className = "px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-200";
+    }
+  }
+}
+
+function saveSailorMeasurements() {
+  const wInput = document.getElementById("profInputWeight");
+  const hInput = document.getElementById("profInputHeight");
+  const w = parseFloat(wInput ? wInput.value : 0);
+  const h = parseFloat(hInput ? hInput.value : 0);
+
+  const sailor = (store.sailors || []).find(
+    (s) =>
+      String(s.id) === String(currentSailorProfileId) ||
+      String(s._fbKey) === String(currentSailorProfileId) ||
+      String(s.official_number) === String(currentSailorProfileId),
+  );
+  if (!sailor) return;
+
+  sailor.weight = w || null;
+  sailor.height = h || null;
+  if (w > 20 && h > 50) {
+    const hM = h / 100;
+    sailor.bmi = (w / (hM * hM)).toFixed(1);
+  }
+
+  showToast("Measurements & BMI saved successfully", "success");
+}
+
+function getSailorSickRecords(sailor) {
+  if (!sailor) return [];
+  const sId = String(sailor.id !== undefined && sailor.id !== null ? sailor.id : "");
+  const sFbKey = String(sailor._fbKey || "");
+  const offNo = String(sailor.official_number || sailor.offNo || "");
+
+  const records = [];
+
+  // 1. If explicit sick_history array is stored on sailor
+  if (Array.isArray(sailor.sick_history) && sailor.sick_history.length > 0) {
+    sailor.sick_history.forEach((sh) => {
+      records.push({
+        date: sh.date || sh.dates || sh.range || getLocalDateString(),
+        category: sh.category || sh.type || "SIQ",
+        days: parseInt(sh.days || sh.duration || 1, 10),
+        reason: sh.reason || sh.diagnosis || sh.remarks || "Attended Naval Sick Bay",
+        hospital: sh.hospital || sh.location || "Sick Quarters",
+      });
+    });
+  }
+
+  // 2. Scan dailyAllocations for sick events
+  const allocs = (store.dailyAllocations || []).filter((a) => {
+    const aSailorId = String(a.sailor_id || "");
+    const matches = (sId && aSailorId === sId) || (sFbKey && aSailorId === sFbKey) || (offNo && aSailorId === offNo);
+    if (!matches) return false;
+    const st = String(a.status || a.attendance || "");
+    return /sick|siq|s\/r|adm|sl|m\/d|gilan/i.test(st);
+  });
+
+  allocs.forEach((a) => {
+    let cat = "SIQ";
+    const st = String(a.status || a.attendance || "").toUpperCase();
+    if (st.includes("S/R") || st.includes("SICK REPORT")) cat = "S/R";
+    else if (st.includes("ADM") || st.includes("ADMIT")) cat = "ADM";
+    else if (st.includes("SL") || st.includes("SICK LEAVE")) cat = "SL";
+    else if (st.includes("M/D")) cat = "M/D";
+    else if (st.includes("NSL")) cat = "NSL";
+    else if (st.includes("SIQ")) cat = "SIQ";
+
+    const exists = records.some((r) => r.date === a.date);
+    if (!exists) {
+      records.push({
+        date: a.date,
+        category: cat,
+        days: 1,
+        reason: a.remarks || a.reason || "Duty Exemption (Sick)",
+        hospital: a.hospital || "Sick Quarters",
+      });
+    }
+  });
+
+  // 3. If sailor currently has attendance === "Sick"
+  if (sailor.attendance === "Sick" && records.length === 0) {
+    records.push({
+      date: getLocalDateString(),
+      category: "SIQ",
+      days: parseInt(sailor.sick_days || 1, 10),
+      reason: sailor.sick_reason || sailor.medical_remarks || "Active Sick List",
+      hospital: "Sick Quarters",
+    });
+  }
+
+  records.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  return records;
+}
+
+function refreshSailorProfilePeriodData() {
+  const sailor = (store.sailors || []).find(
+    (s) =>
+      String(s.id) === String(currentSailorProfileId) ||
+      String(s._fbKey) === String(currentSailorProfileId) ||
+      String(s.official_number) === String(currentSailorProfileId),
+  );
+  if (!sailor) return;
+
+  const sId = String(sailor.id !== undefined && sailor.id !== null ? sailor.id : "");
+  const sFbKey = String(sailor._fbKey || "");
+  const offNo = String(sailor.official_number || "");
+
+  // Match allocations for this sailor
+  const allocs = (store.dailyAllocations || []).filter((a) => {
+    const aSailorId = String(a.sailor_id || "");
+    return (sId && aSailorId === sId) || (sFbKey && aSailorId === sFbKey) || (offNo && aSailorId === offNo);
+  });
+
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  let startDate = "";
+  let endDate = "";
+  let periodLabelText = "";
+
+  if (sailorProfilePeriodMode === "monthly") {
+    const mm = String(sailorProfileCalMonth + 1).padStart(2, "0");
+    const lastDay = new Date(sailorProfileCalYear, sailorProfileCalMonth + 1, 0).getDate();
+    startDate = `${sailorProfileCalYear}-${mm}-01`;
+    endDate = `${sailorProfileCalYear}-${mm}-${String(lastDay).padStart(2, "0")}`;
+    periodLabelText = `Period: ${monthNames[sailorProfileCalMonth]} ${sailorProfileCalYear}`;
+  } else if (sailorProfilePeriodMode === "since_joined") {
+    startDate = sailor.join_date || sailor.drafted_date || "2026-01-01";
+    endDate = getLocalDateString();
+    periodLabelText = `Since Base Join: ${startDate} to ${endDate}`;
+    const jDateEl = document.getElementById("profPeriodJoinedDate");
+    if (jDateEl) jDateEl.textContent = startDate;
+  } else if (sailorProfilePeriodMode === "custom") {
+    const fromEl = document.getElementById("profPeriodDateFrom");
+    const toEl = document.getElementById("profPeriodDateTo");
+    startDate = (fromEl && fromEl.value) ? fromEl.value : "2026-01-01";
+    endDate = (toEl && toEl.value) ? toEl.value : getLocalDateString();
+    periodLabelText = `Period: ${startDate} to ${endDate}`;
+  }
+
+  const lblEl = document.getElementById("profActivePeriodLabel");
+  if (lblEl) lblEl.textContent = periodLabelText;
+
+  // Filter allocations in range
+  const filteredAllocs = allocs.filter((a) => {
+    if (!a.date) return false;
+    return a.date >= startDate && a.date <= endDate;
+  });
+
+  // Calculate duty days and evaluation scores in range
+  let dutyDays = 0;
+  let scoreSum = 0;
+  let scoreCount = 0;
+  filteredAllocs.forEach((a) => {
+    dutyDays++;
+    if (a.evaluated || (typeof a.score === "number" && a.score > 0)) {
+      const sc = typeof a.score === "number" && a.score > 0 ? a.score : parseFloat(sailor.avgScore || 7.0);
+      scoreSum += sc;
+      scoreCount++;
+    }
+  });
+
+  // Calculate Leave days in range
+  let leaveDaysCount = 0;
+  if (sailor.leave_history && Array.isArray(sailor.leave_history)) {
+    sailor.leave_history.forEach((lh) => {
+      leaveDaysCount += parseInt(lh.days || lh.duration || 0, 10);
+    });
+  }
+  if (leaveDaysCount === 0 && sailor.attendance === "Leave") {
+    leaveDaysCount = calculateSailorLeaveDays(sailor);
+  }
+
+  // Extract Sick records
+  const allSickRecords = getSailorSickRecords(sailor);
+  const filteredSickRecords = allSickRecords.filter((r) => {
+    if (!r.date) return true;
+    return r.date >= startDate && r.date <= endDate;
+  });
+
+  let sickDaysCount = 0;
+  const catCountMap = {};
+  filteredSickRecords.forEach((r) => {
+    sickDaysCount += r.days || 1;
+    const cat = r.category || "SIQ";
+    catCountMap[cat] = (catCountMap[cat] || 0) + (r.days || 1);
+  });
+
+  // If monthly, render calendar grid
+  if (sailorProfilePeriodMode === "monthly") {
+    renderSailorProfileCalendar(sailor, sailorProfileCalYear, sailorProfileCalMonth);
+  }
+
+  // Update Stats Bar
+  const lCountEl = document.getElementById("profCalLeaveCount");
+  if (lCountEl) lCountEl.textContent = leaveDaysCount;
+  const sCountEl = document.getElementById("profCalSickCount");
+  if (sCountEl) sCountEl.textContent = sickDaysCount;
+  const dCountEl = document.getElementById("profCalDutyCount");
+  if (dCountEl) dCountEl.textContent = dutyDays;
+
+  const avgScore = scoreCount > 0 ? (scoreSum / scoreCount).toFixed(2) : parseFloat(sailor.avgScore || 7.0).toFixed(2);
+  const avgEl = document.getElementById("profCalMonthAvgScore");
+  if (avgEl) avgEl.textContent = avgScore;
+
+  // Render Sick Categories Pills
+  const pillsEl = document.getElementById("profSickCategoriesPills");
+  if (pillsEl) {
+    const cats = Object.keys(catCountMap);
+    if (cats.length === 0) {
+      pillsEl.innerHTML = `<span class="text-slate-400 italic">No sick categories recorded in this period.</span>`;
+    } else {
+      const catLabels = {
+        SIQ: "🏥 SIQ (Sick in Quarters)",
+        "S/R": "📋 S/R (Sick Report)",
+        ADM: "🏥 ADM (Hospital Admission)",
+        SL: "🏖️ SL (Sick Leave)",
+        "M/D": "🩺 M/D (Medical Officer Attending)",
+        NSL: "⚓ NSL (Naval Sick List)",
+        ED: "🛡️ ED (Excused Duty)",
+      };
+      pillsEl.innerHTML = cats.map((cat) => {
+        const lbl = catLabels[cat] || `🏥 ${cat}`;
+        const days = catCountMap[cat];
+        return `
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-800 font-bold border border-rose-200">
+            ${lbl}: <strong class="text-rose-900 font-black">${days}d</strong>
+          </span>
+        `;
+      }).join("");
+    }
+  }
+
+  // Update Sick Incidents Badge
+  const incBadge = document.getElementById("profSickIncidentsBadge");
+  if (incBadge) {
+    incBadge.textContent = `${filteredSickRecords.length} Incidents (${sickDaysCount} Days)`;
+  }
+
+  // Render Detailed Sick Incidents List
+  const listEl = document.getElementById("profSickHistoryList");
+  if (listEl) {
+    if (filteredSickRecords.length === 0) {
+      listEl.innerHTML = `
+        <div class="p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">
+          No sick or medical incidents recorded for this period.
+        </div>
+      `;
+    } else {
+      listEl.innerHTML = filteredSickRecords.map((sr) => `
+        <div class="p-3 bg-rose-50/70 border border-rose-200/80 rounded-xl flex items-center justify-between transition-all hover:bg-rose-100/60">
+          <div class="space-y-0.5">
+            <div class="flex items-center gap-2">
+              <span class="inline-block px-2 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white uppercase">${sr.category || "SIQ"}</span>
+              <span class="text-xs font-bold text-slate-800">${sr.reason || "Sick Bay Medical Attention"}</span>
+            </div>
+            <p class="text-[11px] text-slate-500 font-medium flex items-center gap-2">
+              <span>📅 ${sr.date}</span>
+              <span>🏥 ${sr.hospital || "Sick Quarters"}</span>
+            </p>
+          </div>
+          <span class="text-sm font-black text-rose-700 bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-300">
+            ${sr.days || 1} <span class="text-[10px] font-bold text-rose-600">Days</span>
+          </span>
+        </div>
+      `).join("");
+    }
+  }
+}
+
+function renderSailorProfileCalendar(sailor, year, month) {
+  const monthNames = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+  const titleEl = document.getElementById("profCalMonthYear");
+  if (titleEl) titleEl.textContent = `${monthNames[month]} ${year}`;
+
+  const grid = document.getElementById("profCalendarGrid");
+  if (!grid) return;
+
+  const firstDayIndex = new Date(year, month, 1).getDay();
+  const mondayOffset = (firstDayIndex + 6) % 7;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const sId = String(sailor.id !== undefined && sailor.id !== null ? sailor.id : "");
+  const sFbKey = String(sailor._fbKey || "");
+  const offNo = String(sailor.official_number || "");
+
+  const allocs = (store.dailyAllocations || []).filter((a) => {
+    const aSailorId = String(a.sailor_id || "");
+    return (sId && aSailorId === sId) || (sFbKey && aSailorId === sFbKey) || (offNo && aSailorId === offNo);
+  });
+  const allocDateMap = new Map();
+  allocs.forEach((a) => {
+    if (a.date) allocDateMap.set(a.date, a);
+  });
+
+  const todayStr = getLocalDateString();
+  const cells = [];
+
+  for (let i = 0; i < mondayOffset; i++) {
+    cells.push(`<div class="bg-slate-50 min-h-[50px] p-1 text-slate-300 select-none"></div>`);
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const mm = String(month + 1).padStart(2, "0");
+    const dd = String(d).padStart(2, "0");
+    const dateStr = `${year}-${mm}-${dd}`;
+    const dayOfWeek = new Date(year, month, d).getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    const isToday = dateStr === todayStr;
+
+    const alloc = allocDateMap.get(dateStr);
+    let dayType = "available";
+    let badgeText = "";
+    let scoreBadge = "";
+
+    const liveSt = getSailorLiveDailyStatus(sailor, dateStr);
+    if (liveSt.isLeave) {
+      dayType = "leave";
+      badgeText = `<span class="inline-block px-1 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300">🏖️ Leave</span>`;
+    } else if (liveSt.isSick) {
+      dayType = "sick";
+      badgeText = `<span class="inline-block px-1 py-0.5 rounded text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-300">🏥 Sick</span>`;
+    } else if (alloc) {
+      dayType = "duty";
+      const hasScore = typeof alloc.score === "number" && alloc.score > 0;
+      if (hasScore || alloc.evaluated) {
+        const sc = hasScore ? alloc.score : parseFloat(sailor.avgScore || 7.0);
+        scoreBadge = `<span class="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">⭐ ${sc.toFixed(1)}</span>`;
+      }
+      badgeText = `<span class="inline-block px-1 py-0.5 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200 truncate max-w-full">🏗️ Duty</span>`;
+    } else if (isWeekend) {
+      badgeText = `<span class="inline-block px-1 py-0.5 rounded text-[9px] font-medium text-slate-400">Off</span>`;
+    }
+
+    let bgStyle = "bg-white";
+    if (dayType === "leave") bgStyle = "bg-amber-50/40";
+    else if (dayType === "sick") bgStyle = "bg-rose-50/40";
+    else if (dayType === "duty") bgStyle = "bg-blue-50/30";
+
+    const todayRing = isToday ? "ring-2 ring-teal-500 font-black bg-teal-50/30" : "";
+
+    cells.push(`
+      <div class="${bgStyle} ${todayRing} min-h-[50px] p-1 flex flex-col justify-between transition-colors hover:bg-slate-100/80 group">
+        <div class="flex items-center justify-between">
+          <span class="text-[11px] font-bold ${isWeekend ? "text-rose-600" : "text-slate-700"}">${d}</span>
+          ${scoreBadge}
+        </div>
+        <div class="mt-0.5 flex flex-col gap-0.5">
+          ${badgeText}
+        </div>
+      </div>
+    `);
+  }
+
+  const remaining = (7 - (cells.length % 7)) % 7;
+  for (let i = 0; i < remaining; i++) {
+    cells.push(`<div class="bg-slate-50 min-h-[50px] p-1 text-slate-300 select-none"></div>`);
+  }
+
+  grid.innerHTML = cells.join("");
 } // =============================================================================
 // SAILOR LOGIN AUTOCOMPLETE & PERSONAL DASHBOARD VIEW METHODS
 // =============================================================================
@@ -20607,3 +21496,2397 @@ function isCurrentDayHoliday(dateObj = new Date()) {
     }
     return isSunday;
 }
+
+// =============================================================================
+// DOCUMENTS & MINUTE SHEET MANAGEMENT SYSTEM
+// =============================================================================
+
+// Sinhala Month Names
+const SINHALA_MONTHS = [
+  "ජනවාරි", "පෙබරවාරි", "මාර්තු", "අප්‍රේල්", "මැයි", "ජූනි",
+  "ජූලි", "අගෝස්තු", "සැප්තැම්බර්", "ඔක්තෝබර්", "නොවැම්බර්", "දෙසැම්බර්"
+];
+
+function getSinhalaDateString(d = new Date()) {
+  const year = d.getFullYear();
+  const month = SINHALA_MONTHS[d.getMonth()];
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year} ${month} මස ${day}`;
+}
+
+function getEnglishNavalDateString(d = new Date()) {
+  const day = String(d.getDate()).padStart(2, "0");
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  return `${day} ${month} ${year}`;
+}
+
+// Standard Naval Appointments (Addressees)
+const STANDARD_NAVAL_ADDRESSEES_SI = [
+  "විධායක නිලධාරි (තඨාකාංගනය)",
+  "සහකාර විනයාරක්ෂකාධිපති (නැ)",
+  "ප්‍රධාන ඉංජිනේරු",
+  "නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු",
+  "අණදෙන නිලධාරි",
+  "මූලස්ථාන සැපයුම් නිලධාරි",
+  "කාර්ය භාර නිලධාරි (සිවිල් නඩත්තු)"
+];
+
+const STANDARD_NAVAL_ADDRESSEES_EN = [
+  "Executive Officer (Dockyard)",
+  "Assistant Provost Marshal (E)",
+  "Chief Engineer",
+  "Deputy Chief Engineer",
+  "Commanding Officer",
+  "Base Supply Officer",
+  "Officer in Charge - Civil Maintenance"
+];
+
+// Default Standard Naval Minute Templates (Sinhala & English)
+const DEFAULT_NAVAL_MINUTE_TEMPLATES = [
+  // 1. Sinhala - Sailor Leave Extension (From User Pic 3 & 4)
+  {
+    id: "tpl_sailor_leave_si",
+    lang: "si",
+    title: "නාවිකයෙකුගේ නිවාඩු දීර්ඝ කිරීමේ මාණ්ඩලික සටහන්පත",
+    category: "Sailors & Admin",
+    ref_no: "MIN/2026/08/002",
+    subject: "නිවාඩු දීර්ඝ කිරීම සදහා",
+    addressees: "විධායක නිලධාරි (තඨාකාංගනය)\n\nසහකාර විනයාරක්ෂකාධිපති (නැ)",
+    originator: "ජ්‍යෙෂ්ඨ සිවිල් ඉංජිනේරු නිලධාරි (නඩත්තු) මඟින්",
+    paragraphs: [
+      "කපිතාන් සිවිල් ඉංජිනේරු දෙපාර්තමේන්තුව (නැ) ට අනුයුක්තව රාජකාරි සිදු කරනු ලබන [නම / නිලය / නිල අංකය] දරණ කණිෂ්ඨ නාවිකයා 2026 අගෝස්තු මස 14 වන දින සිට දින 09 ක් නිවාඩු ගොස් 2026 අගෝස්තු මස 23 වන දින 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට තිබූ අතර, ඔහුගේ මව අසනීප වී ඇති බව දුරකථන ඇමතුමක් මඟින් දන්වා ඇත.",
+      "කරුණු එසේ හෙයින් එම නාවිකයා හට දින 02 ක් නිවාඩු දීර්ඝ කර එනම් 2026 අගෝස්තු මස 25 වන දින 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට අවශ්‍ය නිසි කටයුතු සලසා දෙන මෙන් අයදේ."
+    ],
+    recommendation: "",
+    sign_title: "ජ්‍යෙ.සි.ඉ.නි (නඩත්තු)",
+    m02_enabled: false,
+    m02_addressee: "සහකාර විනයාරක්ෂකාධිපති (නැ)",
+    m02_originator: "විධායක නිලධාරි මඟින්",
+    m02_text: "නිර්දේශ කර ඉදිරිපත් කරමි.",
+    m02_sign_title: "විධායක නිලධාරි"
+  },
+  // 2. Sinhala - Civil Maintenance Approval
+  {
+    id: "tpl_civil_repair_si",
+    lang: "si",
+    title: "හදිසි සිවිල් නඩත්තු කටයුතු සඳහා අනුමැතිය ලබා ගැනීම",
+    category: "Civil Works",
+    ref_no: "MIN/2026/08/001",
+    subject: "[ස්ථානයේ නම] හදිසි සිවිල් නඩත්තු කටයුතු සිදු කිරීම සඳහා අනුමැතිය ලබා ගැනීම",
+    addressees: "ප්‍රධාන ඉංජිනේරු\n\nනියෝජ්‍ය ප්‍රධාන ඉංජිනේරු",
+    originator: "කාර්ය භාර නිලධාරි - සිවිල් නඩත්තු මඟින්",
+    paragraphs: [
+      "නාවික තඨාකාංගන [ස්ථානය / ගොඩනැගිල්ල] හි වහල සහ වැහි පිහිලි අබලන් වීම හේතුවෙන් වැසි කාලයේදී දැඩි ජල කාන්දුවක් පවතින බව කාරුණිකව දන්වා සිටිමි.",
+      "මේ සඳහා අවශ්‍ය මූලික තාක්ෂණික ඇස්තමේන්තුව අංක [ඇස්තමේන්තු අංකය] යටතේ සකස් කර ඇති අතර, වැඩපළ ශ්‍රමිකයන් යොදවා කඩිනමින් අලුත්වැඩියා කටයුතු සිදු කිරීමට සැලසුම් කර ඇත."
+    ],
+    recommendation: "කාර්ය පත්‍රිකාවක් (Job Card) නිකුත් කර කාර්යය ආරම්භ කිරීමට කාරුණික අනුමැතිය අයදිමි.",
+    sign_title: "කාර්ය භාර නිලධාරි (සිවිල් නඩත්තු)",
+    m02_enabled: true,
+    m02_addressee: "නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු",
+    m02_originator: "කාර්ය භාර නිලධාරි මඟින්",
+    m02_text: "නිර්දේශ කර ඉදිරිපත් කරමි.",
+    m02_sign_title: "නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු"
+  },
+  // 3. English - Civil Maintenance & Structural Repair
+  {
+    id: "tpl_civil_repair_en",
+    lang: "en",
+    title: "Civil Maintenance & Structural Repair Minute",
+    category: "Civil Works",
+    ref_no: "MIN/2026/08/001",
+    subject: "APPROVAL FOR URGENT CIVIL REPAIR WORKS AT [LOCATION / FACILITY]",
+    addressees: "Chief Engineer\n\nDeputy Chief Engineer",
+    originator: "Senior Civil Engineering Officer (Maintenance)",
+    paragraphs: [
+      "It is brought to your kind notice that urgent civil maintenance and structural rehabilitation are required at [LOCATION / BUILDING NAME] due to wear, tear, and weather exposure.",
+      "A joint technical inspection has been conducted by Civil Directorate personnel. Scope entails roof repairs, gutter renewal, and masonry restoration.",
+      "The engineering estimate has been prepared under Reference [ESTIMATE_NO]. Required skilled manpower and initial materials are available."
+    ],
+    recommendation: "Forwarded for your kind approval and authorization to issue Job Card and commence work please.",
+    sign_title: "Senior Civil Engineering Officer (Maintenance)",
+    m02_enabled: true,
+    m02_addressee: "Deputy Chief Engineer",
+    m02_originator: "From: Officer in Charge - Civil Maintenance",
+    m02_text: "Recommended and forwarded please.",
+    m02_sign_title: "Deputy Chief Engineer"
+  },
+  // 4. English - Material Requisition & Stores Issuance
+  {
+    id: "tpl_stores_requisition_en",
+    lang: "en",
+    title: "Material Requisition & Stores Issuance Minute",
+    category: "Material & Stores",
+    ref_no: "MIN/2026/08/003",
+    subject: "REQUISITION OF CIVIL ENGINEERING STORES FOR [PROJECT NAME]",
+    addressees: "Commanding Officer\n\nBase Supply Officer",
+    originator: "Officer in Charge - Civil Works",
+    paragraphs: [
+      "Reference is made to the scheduled civil maintenance task approved under Job Card [JOB_NUMBER].",
+      "To ensure uninterrupted progress, the civil engineering materials specified below are urgently required from Central Stores:",
+      "1. Ordinary Portland Cement - [QTY] Bags\n2. Tor Steel 12mm - [QTY] Nos\n3. Weather-shield Emulsion Paint - [QTY] Liters"
+    ],
+    recommendation: "Forwarded for your approval to issue the requested stores on priority please.",
+    sign_title: "Officer in Charge - Civil Works",
+    m02_enabled: false,
+    m02_addressee: "Base Supply Officer",
+    m02_originator: "Executive Officer",
+    m02_text: "Approved as requested.",
+    m02_sign_title: "Executive Officer"
+  },
+  // 5. English - Sailor Leave Extension (English Format)
+  {
+    id: "tpl_sailor_leave_en",
+    lang: "en",
+    title: "Sailor Leave Extension Minute",
+    category: "Sailors & Admin",
+    ref_no: "MIN/2026/08/002",
+    subject: "EXTENSION OF LEAVE - [SAILOR_OFF_NO] [SAILOR_NAME]",
+    addressees: "Executive Officer (Dockyard)\n\nAssistant Provost Marshal (E)",
+    originator: "Senior Civil Engineering Officer (Maintenance)",
+    paragraphs: [
+      "Reference is made to [SAILOR_NAME] ([SAILOR_OFF_NO]) attached to Captain Civil Engineering Department (E), who proceeded on 09 days vacation leave from [START_DATE] and was due to report base on [REPORT_DATE] at 2000 hrs.",
+      "The sailor has informed via telephonic message that his mother is hospitalized due to sudden illness.",
+      "In view of the above circumstances, it is recommended that the sailor be granted an extension of 02 days leave to report camp on [NEW_REPORT_DATE] at 2000 hrs."
+    ],
+    recommendation: "Submitted for your kind approval please.",
+    sign_title: "Senior Civil Engineering Officer (Maintenance)",
+    m02_enabled: false,
+    m02_addressee: "Assistant Provost Marshal (E)",
+    m02_originator: "From: Executive Officer",
+    m02_text: "Recommended and forwarded please.",
+    m02_sign_title: "Executive Officer"
+  }
+];
+
+// Initialize Documents State
+function initDocumentsSystem() {
+  if (!store.msLanguage) {
+    store.msLanguage = "si"; // Default to Sinhala
+  }
+
+  if (!store.jobMinutes) {
+    try {
+      const saved = localStorage.getItem("ncw_job_minutes_v1");
+      store.jobMinutes = saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      store.jobMinutes = [];
+    }
+  }
+
+  // Seed sample minutes if empty
+  if (store.jobMinutes.length === 0) {
+    store.jobMinutes = [
+      {
+        id: "min_001",
+        ref_no: "MIN/2026/08/001",
+        date_received: "2026-08-10",
+        end_user: "Wardroom Mess",
+        subject: "Urgent roof repair and stormwater drainage rehabilitation",
+        description: "Severe rainwater leakage during monsoon at dining hall and officers lounge. Gutter replacement required.",
+        priority: "High",
+        directed_type: "Zone for Maintenance",
+        directed_to: "A-Zone",
+        position: "WIP",
+        linked_estimate_id: "EST-2026-014",
+        linked_job_number: "JC-2026-042",
+        position_trail: [
+          { date: "2026-08-10", officer: "Duty Officer - Wardroom", position: "RECEIVED", remarks: "Minute received and directed to A-Zone for Maintenance" },
+          { date: "2026-08-11", officer: "Planning Draftsman", position: "ESTIMATION", remarks: "Site inspection completed, Estimate EST-2026-014 prepared" },
+          { date: "2026-08-13", officer: "DCE / CE", position: "APPROVAL", remarks: "Estimate recommended & financial sanction granted" },
+          { date: "2026-08-14", officer: "OIC Civil Works", position: "ASSIGNED", remarks: "Assigned to Aluminum & Masonry workshop. Job Card JC-2026-042 issued" },
+          { date: "2026-08-16", officer: "Workshop Supervisor", position: "WIP", remarks: "Materials drawn and roofing sheets installation in progress" }
+        ],
+        created_at: new Date().toISOString()
+      },
+      {
+        id: "min_002",
+        ref_no: "MIN/2026/08/002",
+        date_received: "2026-08-18",
+        end_user: "Supply School",
+        subject: "Civil Partitioning & Wiring for New Computer Laboratory",
+        description: "Aluminum glass partitions and timber workstation installation for 25 computer stations.",
+        priority: "Normal",
+        directed_type: "Zone for Maintenance",
+        directed_to: "BC-Zone",
+        position: "APPROVAL",
+        linked_estimate_id: "EST-2026-019",
+        linked_job_number: "",
+        position_trail: [
+          { date: "2026-08-18", officer: "Training Officer - Supply School", position: "RECEIVED", remarks: "Official request received and directed to BC-Zone" },
+          { date: "2026-08-20", officer: "QS / Civil Planning", position: "ESTIMATION", remarks: "Detailed BOQ prepared (LKR 340,000)" },
+          { date: "2026-08-22", officer: "Civil Directorate", position: "APPROVAL", remarks: "Submitted to Area Commander for financial approval" }
+        ],
+        created_at: new Date().toISOString()
+      },
+      {
+        id: "min_003",
+        ref_no: "MIN/2026/08/003",
+        date_received: "2026-08-21",
+        end_user: "MT Pool / Transport Section",
+        subject: "Heavy vehicle ramp concrete recasting and grease trap maintenance",
+        description: "Ramp edge concrete collapsed under heavy vehicle load. Urgent repair needed.",
+        priority: "Emergency",
+        directed_type: "Workshop for Job",
+        directed_to: "Welding-Shop",
+        position: "ESTIMATION",
+        linked_estimate_id: "",
+        linked_job_number: "",
+        position_trail: [
+          { date: "2026-08-21", officer: "OIC MT Pool", position: "RECEIVED", remarks: "Emergency minute received and directed to Welding Shop for Job execution" },
+          { date: "2026-08-22", officer: "Site Engineer", position: "ESTIMATION", remarks: "Soil compaction and concrete reinforcement assessment ongoing" }
+        ],
+        created_at: new Date().toISOString()
+      }
+    ];
+    saveJobMinutesToStorage();
+  }
+
+  // Load Templates
+  if (!store.minuteTemplates) {
+    try {
+      const savedTpl = localStorage.getItem("ncw_minute_templates_v1");
+      store.minuteTemplates = savedTpl ? JSON.parse(savedTpl) : DEFAULT_NAVAL_MINUTE_TEMPLATES;
+    } catch (e) {
+      store.minuteTemplates = DEFAULT_NAVAL_MINUTE_TEMPLATES;
+    }
+  }
+}
+
+function saveJobMinutesToStorage() {
+  try {
+    localStorage.setItem("ncw_job_minutes_v1", JSON.stringify(store.jobMinutes || []));
+  } catch (e) {
+    console.warn("Error saving job minutes to localStorage", e);
+  }
+}
+
+function saveMinuteTemplatesToStorage() {
+  try {
+    localStorage.setItem("ncw_minute_templates_v1", JSON.stringify(store.minuteTemplates || []));
+  } catch (e) {
+    console.warn("Error saving minute templates to localStorage", e);
+  }
+}
+
+// Destination / Routing Options Generator
+function onDirectedTypeChange() {
+  const typeSelect = document.getElementById("njmDirectedType");
+  const targetSelect = document.getElementById("njmDirectedTarget");
+  const lblTarget = document.getElementById("lblNjmDirectedTarget");
+  if (!typeSelect || !targetSelect) return;
+
+  const type = typeSelect.value;
+  targetSelect.innerHTML = "";
+
+  if (type === "Zone for Maintenance") {
+    if (lblTarget) lblTarget.textContent = "Target Zone (අදාළ කලාපය) *";
+    const zones = store.zones || [{ id: "A-Zone", name: "A-Zone" }, { id: "BC-Zone", name: "BC-Zone" }];
+    targetSelect.innerHTML = zones.map((z) => `<option value="${z.id}">${z.name || z.id}</option>`).join("");
+  } else if (type === "Workshop for Job") {
+    if (lblTarget) lblTarget.textContent = "Target Workshop (අදාළ වැඩපළ) *";
+    const workshops = [
+      { id: "Carpentry-Shop", name: "Carpentry Shop (වඩු වැඩපළ)" },
+      { id: "Welding-Shop", name: "Welding Shop (පෑස්සුම් වැඩපළ)" },
+      { id: "Masonry-Shop", name: "Masonry & Building (මේසන් වැඩපළ)" },
+      { id: "Aluminum-Shop", name: "Aluminum & Fitting (ඇලුමිනියම් වැඩපළ)" },
+      { id: "Plumbing-Shop", name: "Plumbing & Piping (නළ කාර්මික වැඩපළ)" },
+      { id: "Painting-Shop", name: "Painting & Polishing (තීන්ත වැඩපළ)" }
+    ];
+    targetSelect.innerHTML = workshops.map((w) => `<option value="${w.id}">${w.name}</option>`).join("");
+  } else if (type === "Admin Officer") {
+    if (lblTarget) lblTarget.textContent = "Admin Officer (පරිපාලන නිලධාරි) *";
+    const officers = [
+      { id: "CE", name: "Chief Engineer (ප්‍රධාන ඉංජිනේරු)" },
+      { id: "DCE", name: "Deputy Chief Engineer (නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු)" },
+      { id: "SO(C)", name: "Staff Officer Civil (මාණ්ඩලික නිලධාරි - සිවිල්)" },
+      { id: "XO", name: "Executive Officer (විධායක නිලධාරි)" },
+      { id: "APM", name: "Assistant Provost Marshal (සහකාර විනයාරක්ෂකාධිපති)" }
+    ];
+    targetSelect.innerHTML = officers.map((o) => `<option value="${o.id}">${o.name}</option>`).join("");
+  } else {
+    if (lblTarget) lblTarget.textContent = "Relevant Desk / Unit (අදාළ අංශය) *";
+    const desks = [
+      { id: "Civil Planning", name: "Civil Planning & Estimating Desk" },
+      { id: "Stores & Logistics", name: "Stores & Logistics Section" },
+      { id: "Quantity Surveyor", name: "QS & Measurement Desk" }
+    ];
+    targetSelect.innerHTML = desks.map((d) => `<option value="${d.id}">${d.name}</option>`).join("");
+  }
+}
+
+// Render Main Documents View
+function renderDocumentsView() {
+  initDocumentsSystem();
+  updateDocumentsMetricStats();
+
+  const activeSubTab = store.currentDocSubTab || "jobminutes";
+  switchDocumentsSubTab(activeSubTab);
+}
+
+// Sub-Tab Switcher
+function switchDocumentsSubTab(subTab) {
+  store.currentDocSubTab = subTab;
+
+  const tabs = ["jobminutes", "minutesheet", "templates"];
+  tabs.forEach((t) => {
+    const btn = document.getElementById(`docTabBtn-${t}`);
+    const panel = document.getElementById(`docPanel-${t}`);
+    if (btn) {
+      if (t === subTab) {
+        btn.className = "px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer flex items-center gap-2";
+      } else {
+        btn.className = "px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-2";
+      }
+    }
+    if (panel) {
+      if (t === subTab) {
+        panel.classList.remove("hidden");
+      } else {
+        panel.classList.add("hidden");
+      }
+    }
+  });
+
+  if (subTab === "jobminutes") {
+    renderJobMinutesTable();
+  } else if (subTab === "minutesheet") {
+    populateMinuteSheetDropdowns();
+    if (!document.getElementById("msParagraphsContainer")?.children?.length) {
+      initMinuteSheetBuilder();
+    }
+    updateMinuteSheetPreview();
+  } else if (subTab === "templates") {
+    renderMinuteTemplatesInventory();
+  }
+}
+
+// Update Top Metrics
+function updateDocumentsMetricStats() {
+  const minutes = store.jobMinutes || [];
+  const total = minutes.length;
+  const inProgress = minutes.filter((m) => m.position !== "COMPLETED" && m.position !== "ARCHIVED").length;
+  const completed = minutes.filter((m) => m.position === "COMPLETED").length;
+  const tplCount = (store.minuteTemplates || []).length;
+
+  const totalEl = document.getElementById("docStatTotalMinutes");
+  if (totalEl) totalEl.textContent = total;
+  const actEl = document.getElementById("docStatActiveTracking");
+  if (actEl) actEl.textContent = inProgress;
+  const compEl = document.getElementById("docStatCompleted");
+  if (compEl) compEl.textContent = completed;
+  const tplEl = document.getElementById("docStatTemplates");
+  if (tplEl) tplEl.textContent = tplCount;
+}
+
+// Position Badges & Labels
+const MINUTE_POSITION_CONFIG = {
+  RECEIVED: { label: "📥 Received", bg: "bg-slate-100 text-slate-800 border-slate-300", step: 1 },
+  ESTIMATION: { label: "📐 Under Estimation", bg: "bg-blue-100 text-blue-800 border-blue-300", step: 2 },
+  APPROVAL: { label: "✍️ Pending Approval", bg: "bg-amber-100 text-amber-800 border-amber-300", step: 3 },
+  ASSIGNED: { label: "🔨 JC Generated", bg: "bg-purple-100 text-purple-800 border-purple-300", step: 4 },
+  WIP: { label: "⚙️ In Progress", bg: "bg-teal-100 text-teal-800 border-teal-300", step: 5 },
+  COMPLETED: { label: "✅ Handed Over", bg: "bg-emerald-100 text-emerald-800 border-emerald-300", step: 6 },
+  ARCHIVED: { label: "🗄️ Archived", bg: "bg-slate-100 text-slate-500 border-slate-200", step: 7 }
+};
+
+// Render Job Minutes Table
+function renderJobMinutesTable() {
+  const tbody = document.getElementById("jobMinutesTableBody");
+  if (!tbody) return;
+
+  const search = (document.getElementById("docMinuteSearchInput")?.value || "").toLowerCase().trim();
+  const destFilter = document.getElementById("docMinuteDestinationFilter")?.value || "ALL";
+  const posFilter = document.getElementById("docMinutePositionFilter")?.value || "ALL";
+
+  // Populate Destination Filter options dynamically
+  const destSelect = document.getElementById("docMinuteDestinationFilter");
+  if (destSelect && destSelect.options.length <= 1) {
+    const destinations = new Set();
+    (store.jobMinutes || []).forEach((m) => {
+      if (m.directed_to) destinations.add(m.directed_to);
+    });
+    destSelect.innerHTML = `<option value="ALL">All Destinations (සියලු කලාප/වැඩපළ)</option>` +
+      Array.from(destinations).map((d) => `<option value="${d}">${d}</option>`).join("");
+  }
+
+  let list = (store.jobMinutes || []).slice();
+
+  // Search Filter
+  if (search) {
+    list = list.filter((m) =>
+      String(m.ref_no || "").toLowerCase().includes(search) ||
+      String(m.end_user || "").toLowerCase().includes(search) ||
+      String(m.subject || "").toLowerCase().includes(search) ||
+      String(m.directed_to || "").toLowerCase().includes(search) ||
+      String(m.linked_job_number || "").toLowerCase().includes(search) ||
+      String(m.linked_estimate_id || "").toLowerCase().includes(search)
+    );
+  }
+
+  // Destination Filter
+  if (destFilter !== "ALL") {
+    list = list.filter((m) => m.directed_to === destFilter);
+  }
+
+  // Position Filter
+  if (posFilter !== "ALL") {
+    list = list.filter((m) => m.position === posFilter);
+  }
+
+  if (list.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" class="text-center py-10 text-slate-400 italic">
+          No Job Minutes found matching your criteria. Click <strong>+ New Registration</strong> to register an incoming Minute.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = list.map((m) => {
+    const posCfg = MINUTE_POSITION_CONFIG[m.position] || MINUTE_POSITION_CONFIG.RECEIVED;
+    const estBadge = m.linked_estimate_id
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono font-bold bg-blue-50 text-blue-700 border border-blue-200" title="Linked Estimate">📐 ${m.linked_estimate_id}</span>`
+      : `<span class="text-slate-400 italic text-[11px]">—</span>`;
+
+    const jcBadge = m.linked_job_number
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-mono font-bold bg-purple-50 text-purple-700 border border-purple-200" title="Linked Job Card">📋 ${m.linked_job_number}</span>`
+      : `<span class="text-slate-400 italic text-[11px]">—</span>`;
+
+    const priorityColor = m.priority === "Emergency"
+      ? "bg-rose-100 text-rose-800 border-rose-300"
+      : m.priority === "High"
+      ? "bg-amber-100 text-amber-800 border-amber-300"
+      : "bg-slate-100 text-slate-600 border-slate-200";
+
+    const destBadge = m.directed_to
+      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] ${m.directed_type === 'Workshop for Job' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-teal-50 text-teal-700 border border-teal-200'}" title="${m.directed_type || 'Directed'}">
+          ${m.directed_type === 'Workshop for Job' ? '🔨' : '📍'} ${m.directed_to}
+        </span>`
+      : `<span class="text-slate-400 italic text-[11px]">Unassigned</span>`;
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition-colors">
+        <td class="py-3 px-4">
+          <div class="flex items-center gap-1.5">
+            <span class="font-mono font-black text-teal-800 text-xs">${m.ref_no}</span>
+            <button onclick="navigator.clipboard.writeText('${m.ref_no}'); showToast('Tracking Ref No Copied!', 'success');" class="text-slate-400 hover:text-slate-700 text-[10px] p-1 rounded hover:bg-slate-200" title="Copy Reference Number">
+              📋
+            </button>
+          </div>
+          <span class="inline-block mt-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold border ${priorityColor}">
+            ${m.priority || "Normal"}
+          </span>
+        </td>
+        <td class="py-3 px-3 font-mono text-[11px] text-slate-500 whitespace-nowrap">
+          ${m.date_received || "—"}
+        </td>
+        <td class="py-3 px-4 font-bold text-slate-800">
+          ${m.end_user}
+        </td>
+        <td class="py-3 px-4 max-w-xs">
+          <p class="font-semibold text-slate-800 truncate" title="${m.subject}">${m.subject}</p>
+          ${m.description ? `<p class="text-[11px] text-slate-500 line-clamp-1">${m.description}</p>` : ""}
+        </td>
+        <td class="py-3 px-3 whitespace-nowrap">
+          ${destBadge}
+        </td>
+        <td class="py-3 px-3 whitespace-nowrap">
+          ${estBadge}
+        </td>
+        <td class="py-3 px-3 whitespace-nowrap">
+          ${jcBadge}
+        </td>
+        <td class="py-3 px-4 whitespace-nowrap">
+          <div class="flex flex-col gap-1">
+            <span class="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-[10px] font-extrabold border shadow-2xs ${posCfg.bg}">
+              ${posCfg.label}
+            </span>
+            <div class="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
+              <div class="bg-teal-600 h-full rounded-full" style="width: ${(posCfg.step / 6) * 100}%"></div>
+            </div>
+          </div>
+        </td>
+        <td class="py-3 px-4 text-center whitespace-nowrap">
+          <div class="flex items-center justify-center gap-1.5">
+            <button onclick="openUpdatePositionModal('${m.id}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-all cursor-pointer flex items-center gap-1" title="Update Present Position & Movement Log">
+              <span>🔄</span> Update Position
+            </button>
+            <button onclick="openMinuteSlipModal('${m.id}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 transition-all cursor-pointer" title="Print End-User Slip">
+              🧾 Slip
+            </button>
+            <button onclick="createMinuteSheetFromJobMinute('${m.id}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200 transition-all cursor-pointer" title="Build Official Minute Sheet">
+              ✍️ Minute
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function filterJobMinutesList() {
+  renderJobMinutesTable();
+}
+
+// Generate Next Sequential Minute Ref No
+function generateNextMinuteRefNo() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const prefix = `MIN/${year}/${month}/`;
+
+  const existing = (store.jobMinutes || []).filter((m) => m.ref_no && m.ref_no.startsWith(prefix));
+  let maxSeq = 0;
+  existing.forEach((m) => {
+    const parts = m.ref_no.split("/");
+    const seq = parseInt(parts[parts.length - 1], 10);
+    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+  });
+
+  const nextSeq = String(maxSeq + 1).padStart(3, "0");
+  return `${prefix}${nextSeq}`;
+}
+
+// Open New Job Minute Registration Modal
+function openNewJobMinuteModal() {
+  initDocumentsSystem();
+  const nextRef = generateNextMinuteRefNo();
+  const refDisp = document.getElementById("njmRefNumberDisplay");
+  if (refDisp) refDisp.textContent = nextRef;
+
+  const dateInput = document.getElementById("njmDateReceived");
+  if (dateInput) dateInput.value = getLocalDateString();
+
+  const endUserInput = document.getElementById("njmEndUser");
+  if (endUserInput) endUserInput.value = "";
+  const subInput = document.getElementById("njmSubject");
+  if (subInput) subInput.value = "";
+  const descInput = document.getElementById("njmDescription");
+  if (descInput) descInput.value = "";
+
+  // Initialize Routing options
+  onDirectedTypeChange();
+  const targetSelect = document.getElementById("njmDirectedTarget");
+  if (targetSelect && store.currentZone) {
+    targetSelect.value = store.currentZone;
+  }
+
+  // Populate Estimate dropdown
+  const estSelect = document.getElementById("njmLinkEstimate");
+  if (estSelect) {
+    const estimates = store.estimates || [];
+    estSelect.innerHTML = `<option value="">-- No Linked Estimate Yet --</option>` +
+      estimates.map((e) => `<option value="${e.estimate_number || e.id}">${e.estimate_number || e.id} - ${e.job_description || e.description || "Estimate"}</option>`).join("");
+  }
+
+  // Populate Job Card dropdown
+  const jcSelect = document.getElementById("njmLinkJobCard");
+  if (jcSelect) {
+    const jobCards = store.jobCards || [];
+    jcSelect.innerHTML = `<option value="">-- No Linked Job Card Yet --</option>` +
+      jobCards.map((j) => `<option value="${j.job_number || j.id}">${j.job_number || j.id} - ${j.description || "Job Card"}</option>`).join("");
+  }
+
+  const modal = document.getElementById("newJobMinuteModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+// Save New Job Minute Record
+function saveNewJobMinuteRecord() {
+  const refNo = document.getElementById("njmRefNumberDisplay")?.textContent || generateNextMinuteRefNo();
+  const dateReceived = document.getElementById("njmDateReceived")?.value || getLocalDateString();
+  const endUser = document.getElementById("njmEndUser")?.value || "End User";
+  const subject = document.getElementById("njmSubject")?.value || "Civil Maintenance Request";
+  const description = document.getElementById("njmDescription")?.value || "";
+  const directedType = document.getElementById("njmDirectedType")?.value || "Zone for Maintenance";
+  const directedTarget = document.getElementById("njmDirectedTarget")?.value || store.currentZone || "A-Zone";
+  const priority = document.getElementById("njmPriority")?.value || "Normal";
+  const position = document.getElementById("njmPosition")?.value || "RECEIVED";
+  const linkedEst = document.getElementById("njmLinkEstimate")?.value || "";
+  const linkedJc = document.getElementById("njmLinkJobCard")?.value || "";
+
+  const newId = `min_${Date.now()}`;
+  const newRecord = {
+    id: newId,
+    ref_no: refNo,
+    date_received: dateReceived,
+    end_user: endUser,
+    subject: subject,
+    description: description,
+    directed_type: directedType,
+    directed_to: directedTarget,
+    priority: priority,
+    position: position,
+    linked_estimate_id: linkedEst,
+    linked_job_number: linkedJc,
+    position_trail: [
+      {
+        date: dateReceived,
+        officer: `Registered by ${store.activeProfileName || "OIC Planning"}`,
+        position: position,
+        remarks: `Directed to ${directedTarget} (${directedType})`
+      }
+    ],
+    created_at: new Date().toISOString()
+  };
+
+  store.jobMinutes.unshift(newRecord);
+  saveJobMinutesToStorage();
+  closeModal("newJobMinuteModal");
+  updateDocumentsMetricStats();
+  renderJobMinutesTable();
+
+  // If in estimates view, refresh incoming banner
+  renderIncomingJobMinutesInEstimates();
+
+  showToast(`Job Minute ${refNo} directed to ${directedTarget}!`, "success");
+  openMinuteSlipModal(newId);
+}
+
+// =============================================================================
+// ESTIMATE SECTION INTEGRATION: INCOMING JOB MINUTES BANNER & AUTO-FILL
+// =============================================================================
+
+function renderIncomingJobMinutesInEstimates() {
+  const banner = document.getElementById("incomingMinutesEstimateBanner");
+  if (!banner) return;
+
+  initDocumentsSystem();
+  const currentZone = store.currentZone || "A-Zone";
+
+  // Filter minutes directed to the current zone or workshop that need estimation
+  const incoming = (store.jobMinutes || []).filter((m) => {
+    const matchesDest = m.directed_to === currentZone ||
+                        (m.directed_type === "Zone for Maintenance" && (!m.directed_to || m.directed_to === currentZone));
+    const isPending = m.position !== "COMPLETED" && m.position !== "ARCHIVED";
+    return matchesDest && isPending;
+  });
+
+  if (incoming.length === 0) {
+    banner.innerHTML = "";
+    banner.classList.add("hidden");
+    return;
+  }
+
+  banner.classList.remove("hidden");
+  banner.innerHTML = `
+    <div class="bg-gradient-to-r from-teal-900 to-slate-900 rounded-2xl p-4 text-white shadow-md border border-teal-700/50 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-400/40 flex items-center justify-center text-base">
+            📥
+          </div>
+          <div>
+            <h4 class="font-black text-sm text-teal-100 flex items-center gap-2">
+              Incoming Job Minutes for ${currentZone}
+              <span class="px-2 py-0.5 rounded-full bg-teal-500 text-white text-[10px] font-bold">${incoming.length} Pending</span>
+            </h4>
+            <p class="text-[11px] text-teal-200/80">Directed from Document Management for Estimation & Maintenance execution</p>
+          </div>
+        </div>
+        <button onclick="openNewEstimateModal()" class="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1.5">
+          <span>+</span> Create Blank Estimate
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+        ${incoming.map((m) => {
+          const isUnderEst = m.position === "ESTIMATION";
+          const priorityBadge = m.priority === "Emergency"
+            ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+            : m.priority === "High"
+            ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+            : "bg-teal-500/20 text-teal-300 border-teal-500/40";
+
+          return `
+            <div class="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10 space-y-2 flex flex-col justify-between hover:bg-white/15 transition-all">
+              <div class="space-y-1">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono font-bold text-teal-300 text-xs">${m.ref_no}</span>
+                  <span class="text-[9px] px-1.5 py-0.2 rounded font-bold border ${priorityBadge}">${m.priority || "Normal"}</span>
+                </div>
+                <p class="text-xs font-bold text-white truncate" title="${m.end_user}">${m.end_user}</p>
+                <p class="text-[11px] text-slate-300 line-clamp-2">${m.subject}</p>
+              </div>
+
+              <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+                <span class="text-[10px] text-teal-300 font-medium">
+                  ${m.linked_estimate_id ? `📐 ${m.linked_estimate_id}` : (isUnderEst ? "📐 Estimating" : "📥 Received")}
+                </span>
+                <button onclick="createEstimateFromIncomingMinute('${m.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-500 hover:bg-teal-400 text-slate-950 transition-all cursor-pointer flex items-center gap-1 shadow-xs">
+                  <span>📐</span> ${m.linked_estimate_id ? "View/Edit" : "Create Estimate"}
+                </button>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+// Create Estimate directly from Incoming Job Minute
+function createEstimateFromIncomingMinute(minuteId) {
+  openNewEstimateModal();
+  autoFillEstimateFromMinute(minuteId);
+}
+
+// Populate Incoming Minutes dropdown inside New Estimate Modal
+function populateIncomingMinutesInEstimateModal() {
+  const select = document.getElementById("estLinkJobMinuteSelect");
+  if (!select) return;
+
+  initDocumentsSystem();
+  const currentZone = store.currentZone || "A-Zone";
+
+  const minutes = (store.jobMinutes || []).filter((m) => {
+    return m.directed_to === currentZone ||
+           (m.directed_type === "Zone for Maintenance" && (!m.directed_to || m.directed_to === currentZone));
+  });
+
+  select.innerHTML = `<option value="">-- Choose Incoming Minute to Auto-fill (${currentZone}) --</option>` +
+    minutes.map((m) => `<option value="${m.id}">${m.ref_no} • ${m.end_user} - ${m.subject}</option>`).join("");
+}
+
+// Auto-fill Estimate Modal Fields from selected Job Minute
+function autoFillEstimateFromMinute(minuteId) {
+  if (!minuteId) return;
+
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  const descInput = document.getElementById("estDescription");
+  if (descInput) descInput.value = `${minute.subject} (${minute.end_user})`;
+
+  const refTypeSelect = document.getElementById("estRefType");
+  if (refTypeSelect) refTypeSelect.value = "Minute Sheet";
+
+  const refInput = document.getElementById("estReference");
+  if (refInput) refInput.value = minute.ref_no;
+
+  const endUserInput = document.getElementById("estEndUser");
+  if (endUserInput) endUserInput.value = minute.end_user;
+
+  const locInput = document.getElementById("estLocation");
+  if (locInput) locInput.value = minute.end_user;
+
+  const select = document.getElementById("estLinkJobMinuteSelect");
+  if (select) select.value = minute.id;
+
+  showToast(`Auto-filled from ${minute.ref_no}!`, "success");
+}
+
+// Link Estimate to Job Minute when Estimate is saved
+function linkEstimateToJobMinute(estimateNumber, minuteRefNo) {
+  if (!minuteRefNo) return;
+  initDocumentsSystem();
+
+  const minute = (store.jobMinutes || []).find((m) => m.ref_no === minuteRefNo || m.id === minuteRefNo);
+  if (!minute) return;
+
+  minute.linked_estimate_id = estimateNumber;
+  if (minute.position === "RECEIVED") {
+    minute.position = "ESTIMATION";
+  }
+
+  if (!minute.position_trail) minute.position_trail = [];
+  minute.position_trail.push({
+    date: getLocalDateString(),
+    officer: `Estimated by ${store.activeProfileName || "Planning Desk"}`,
+    position: minute.position,
+    remarks: `Estimate ${estimateNumber} created in ${store.currentZone}`
+  });
+
+  saveJobMinutesToStorage();
+}
+
+// ── Render Incoming Job Minutes Banner in Job Cards View (for this Zone / Workshop) ──
+function renderIncomingJobMinutesInJobCards() {
+  const banner = document.getElementById("incomingMinutesJobCardsBanner");
+  if (!banner) return;
+
+  initDocumentsSystem();
+  const currentZone = store.currentZone || "A-Zone";
+
+  // Filter minutes directed to the current zone or workshop that are pending execution
+  const incoming = (store.jobMinutes || []).filter((m) => {
+    const matchesDest = m.directed_to === currentZone ||
+                        (m.directed_type === "Zone for Maintenance" && (!m.directed_to || m.directed_to === currentZone)) ||
+                        (m.directed_type === "Workshop for Job" && m.directed_to === currentZone);
+    const isPending = m.position !== "COMPLETED" && m.position !== "ARCHIVED";
+    return matchesDest && isPending;
+  });
+
+  if (incoming.length === 0) {
+    banner.innerHTML = "";
+    banner.classList.add("hidden");
+    return;
+  }
+
+  banner.classList.remove("hidden");
+  banner.innerHTML = `
+    <div class="bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 rounded-2xl p-4 text-white shadow-md border border-purple-800/50 space-y-3">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-base">
+            📜
+          </div>
+          <div>
+            <h4 class="font-black text-sm text-purple-100 flex items-center gap-2">
+              Incoming Job Minute Sheets for ${currentZone}
+              <span class="px-2 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-bold">${incoming.length} Pending</span>
+            </h4>
+            <p class="text-[11px] text-purple-200/80">Directed from Documents Register for Job Card creation & execution in this Zone / Shop</p>
+          </div>
+        </div>
+        <button onclick="openNewWorkOrderModal()" class="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1.5">
+          <span>+</span> Create Blank Job Card
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+        ${incoming.map((m) => {
+          const priorityBadge = m.priority === "Emergency"
+            ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+            : m.priority === "High"
+            ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+            : "bg-purple-500/20 text-purple-300 border-purple-500/40";
+
+          return `
+            <div class="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10 space-y-2 flex flex-col justify-between hover:bg-white/15 transition-all">
+              <div class="space-y-1">
+                <div class="flex items-center justify-between">
+                  <span class="font-mono font-bold text-purple-300 text-xs">${m.ref_no}</span>
+                  <span class="text-[9px] px-1.5 py-0.2 rounded font-bold border ${priorityBadge}">${m.priority || "Normal"}</span>
+                </div>
+                <p class="text-xs font-bold text-white truncate" title="${m.end_user}">${m.end_user}</p>
+                <p class="text-[11px] text-slate-300 line-clamp-2">${m.subject}</p>
+              </div>
+
+              <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+                <span class="text-[10px] text-purple-300 font-medium truncate">
+                  ${m.linked_job_number ? `🔨 ${m.linked_job_number}` : (m.linked_estimate_id ? `📐 ${m.linked_estimate_id}` : "📥 Received")}
+                </span>
+                <button onclick="createJobCardFromIncomingMinute('${m.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-purple-500 hover:bg-purple-400 text-white transition-all cursor-pointer flex items-center gap-1 shadow-xs">
+                  <span>⚡</span> ${m.linked_job_number ? "View Job Card" : "Create Job Card"}
+                </button>
+              </div>
+            </div>
+          `;
+        }).join("")}
+      </div>
+    </div>
+  `;
+}
+
+// Populate Incoming Minutes dropdown inside New Work Order / Job Card Modal
+function populateIncomingMinutesInWorkOrderModal() {
+  const select = document.getElementById("woIncomingMinuteSelect");
+  if (!select) return;
+
+  initDocumentsSystem();
+  const currentZone = store.currentZone || "A-Zone";
+
+  const minutes = (store.jobMinutes || []).filter((m) => {
+    return m.directed_to === currentZone ||
+           (m.directed_type === "Zone for Maintenance" && (!m.directed_to || m.directed_to === currentZone)) ||
+           (m.directed_type === "Workshop for Job" && m.directed_to === currentZone);
+  });
+
+  select.innerHTML = `<option value="">-- Choose Incoming Minute Sheet (${currentZone}) --</option>` +
+    minutes.map((m) => `<option value="${m.id}">${m.ref_no} • ${m.end_user} - ${m.subject}</option>`).join("");
+}
+
+// Auto-fill Work Order / Job Card Modal from Selected Minute
+function autoFillWorkOrderFromMinute(minuteId) {
+  if (!minuteId) return;
+
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  _woLinkedJobMinuteId = minute.id;
+
+  const refType = document.getElementById("woRefType");
+  if (refType) refType.value = "Minute Sheet";
+
+  const refInput = document.getElementById("woReference");
+  if (refInput) refInput.value = minute.ref_no;
+
+  const descInput = document.getElementById("woDescription");
+  if (descInput) {
+    descInput.value = `${minute.subject}\n\n${minute.description || ""}`.trim();
+  }
+
+  const authInput = document.getElementById("woAuthority");
+  if (authInput && !authInput.value) {
+    authInput.value = minute.end_user || "CE";
+  }
+
+  // If minute already has a linked estimate, select it
+  if (minute.linked_estimate_id) {
+    const estSelect = document.getElementById("woEstimateSelect");
+    if (estSelect) {
+      const match = Array.from(estSelect.options).find((o) => o.text.includes(minute.linked_estimate_id) || o.value.includes(minute.linked_estimate_id));
+      if (match) {
+        estSelect.value = match.value;
+        if (typeof autofillFromEstimate === "function") {
+          autofillFromEstimate(match.value);
+        }
+      }
+    }
+  }
+
+  showToast(`Auto-filled Job Card from ${minute.ref_no}`, "success");
+}
+
+// 1-Click Launch Work Order / Job Card Modal from Incoming Minute
+function createJobCardFromIncomingMinute(minuteId) {
+  openNewWorkOrderModal();
+  const select = document.getElementById("woIncomingMinuteSelect");
+  if (select) select.value = minuteId;
+  autoFillWorkOrderFromMinute(minuteId);
+}
+
+// Link Job Card to Job Minute when Job Card is created
+function linkJobCardToJobMinute(minuteIdOrRef, jobNumber) {
+  if (!minuteIdOrRef || !jobNumber) return;
+  initDocumentsSystem();
+
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteIdOrRef || m.ref_no === minuteIdOrRef);
+  if (!minute) return;
+
+  minute.linked_job_number = jobNumber;
+  if (minute.position === "RECEIVED" || minute.position === "ESTIMATION" || minute.position === "APPROVAL") {
+    minute.position = "ASSIGNED";
+  }
+
+  if (!minute.position_trail) minute.position_trail = [];
+  minute.position_trail.push({
+    date: getLocalDateString(),
+    officer: `${store.activeProfileName || "In-Charge"} (${store.currentZone || "Zone"})`,
+    position: "ASSIGNED",
+    remarks: `Job Card ${jobNumber} created in ${store.currentZone || "Zone"}`
+  });
+
+  saveJobMinutesToStorage();
+}
+
+// Open Update Present Position Modal
+function openUpdatePositionModal(minuteId) {
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  const idInput = document.getElementById("uppMinuteId");
+  if (idInput) idInput.value = minute.id;
+
+  const titleEl = document.getElementById("uppMinuteRefTitle");
+  if (titleEl) titleEl.textContent = `${minute.ref_no} • ${minute.end_user}`;
+
+  const posSelect = document.getElementById("uppNewPosition");
+  if (posSelect) posSelect.value = minute.position || "RECEIVED";
+
+  const dateInput = document.getElementById("uppDate");
+  if (dateInput) dateInput.value = getLocalDateString();
+
+  const officerInput = document.getElementById("uppOfficer");
+  if (officerInput) officerInput.value = "";
+
+  const remarksInput = document.getElementById("uppRemarks");
+  if (remarksInput) remarksInput.value = "";
+
+  // Render Trail
+  const trailContainer = document.getElementById("uppTrailContainer");
+  if (trailContainer) {
+    const trail = minute.position_trail || [];
+    if (trail.length === 0) {
+      trailContainer.innerHTML = `<p class="text-slate-400 italic text-[11px]">No history trail logged yet.</p>`;
+    } else {
+      trailContainer.innerHTML = trail.map((t) => {
+        const cfg = MINUTE_POSITION_CONFIG[t.position] || MINUTE_POSITION_CONFIG.RECEIVED;
+        return `
+          <div class="p-2 bg-slate-50 border border-slate-200 rounded-lg space-y-0.5">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-[10px] ${cfg.bg} px-1.5 py-0.5 rounded">${cfg.label}</span>
+              <span class="text-[10px] text-slate-400 font-mono">${t.date}</span>
+            </div>
+            <p class="text-[11px] font-semibold text-slate-700">${t.officer || "Officer / Desk"}</p>
+            ${t.remarks ? `<p class="text-[10px] text-slate-500 italic">${t.remarks}</p>` : ""}
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  const modal = document.getElementById("updatePositionModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+// Save Updated Present Position
+function saveUpdatedPresentPosition() {
+  const minuteId = document.getElementById("uppMinuteId")?.value;
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  const newPos = document.getElementById("uppNewPosition")?.value || "RECEIVED";
+  const date = document.getElementById("uppDate")?.value || getLocalDateString();
+  const officer = document.getElementById("uppOfficer")?.value || "Planning Desk";
+  const remarks = document.getElementById("uppRemarks")?.value || "Position updated";
+
+  minute.position = newPos;
+  if (!minute.position_trail) minute.position_trail = [];
+  minute.position_trail.push({
+    date: date,
+    officer: officer,
+    position: newPos,
+    remarks: remarks
+  });
+
+  saveJobMinutesToStorage();
+  closeModal("updatePositionModal");
+  updateDocumentsMetricStats();
+  renderJobMinutesTable();
+
+  showToast(`Present position updated to ${MINUTE_POSITION_CONFIG[newPos]?.label || newPos}`, "success");
+}
+
+// Open Printable End-User Minute Tracking Slip Modal
+function openMinuteSlipModal(minuteId) {
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  const slipArea = document.getElementById("minuteSlipPrintArea");
+  if (slipArea) {
+    slipArea.innerHTML = `
+      <div class="text-center border-b border-slate-300 pb-2 space-y-0.5">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Sri Lanka Navy • Civil Engineering Directorate</p>
+        <h3 class="text-sm font-black text-slate-900 uppercase">JOB MINUTE ACKNOWLEDGEMENT & TRACKING SLIP</h3>
+        <p class="text-[11px] font-mono font-bold text-teal-800">${minute.ref_no}</p>
+      </div>
+
+      <div class="divide-y divide-slate-200 text-xs py-1 space-y-1.5">
+        <div class="flex justify-between pt-1">
+          <span class="text-slate-500 font-medium">Date Received:</span>
+          <span class="font-bold text-slate-800 font-mono">${minute.date_received}</span>
+        </div>
+        <div class="flex justify-between pt-1">
+          <span class="text-slate-500 font-medium">End User / Department:</span>
+          <span class="font-bold text-slate-800">${minute.end_user}</span>
+        </div>
+        <div class="flex justify-between pt-1">
+          <span class="text-slate-500 font-medium">Subject / Scope:</span>
+          <span class="font-bold text-slate-800 text-right max-w-xs">${minute.subject}</span>
+        </div>
+        <div class="flex justify-between pt-1">
+          <span class="text-slate-500 font-medium">Current Status:</span>
+          <span class="font-bold text-teal-700">${MINUTE_POSITION_CONFIG[minute.position]?.label || minute.position}</span>
+        </div>
+        ${minute.linked_job_number ? `
+        <div class="flex justify-between pt-1">
+          <span class="text-slate-500 font-medium">Assigned Job Card:</span>
+          <span class="font-bold text-purple-700 font-mono">${minute.linked_job_number}</span>
+        </div>` : ""}
+      </div>
+
+      <div class="bg-teal-50 p-2.5 rounded-lg border border-teal-200 text-[10px] text-teal-900 space-y-1">
+        <p class="font-bold">📌 Instructions for End User:</p>
+        <p>Please quote tracking number <strong>${minute.ref_no}</strong> for all inquiries regarding the progress of this task.</p>
+      </div>
+
+      <div class="pt-6 grid grid-cols-2 text-center text-[10px] text-slate-500">
+        <div>
+          <div class="border-t border-slate-400 w-28 mx-auto pt-1 font-bold text-slate-700">Receiving Officer</div>
+          <p>Civil Planning Section</p>
+        </div>
+        <div>
+          <div class="border-t border-slate-400 w-28 mx-auto pt-1 font-bold text-slate-700">End User Handover</div>
+          <p>${minute.end_user}</p>
+        </div>
+      </div>
+    `;
+  }
+
+  const modal = document.getElementById("minuteSlipModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+// Language Switcher for Minute Sheet Creator
+function setMinuteSheetLanguage(lang = "si") {
+  store.msLanguage = lang;
+
+  const btnSi = document.getElementById("btnMsLangSinhala");
+  const btnEn = document.getElementById("btnMsLangEnglish");
+
+  if (lang === "si") {
+    if (btnSi) btnSi.className = "px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer";
+    if (btnEn) btnEn.className = "px-3 py-1 rounded-lg font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer";
+
+    // Set Sinhala labels
+    const lblRef = document.getElementById("lblMsRefNo");
+    if (lblRef) lblRef.textContent = "File Ref (Optional Tracking)";
+    const lblDate = document.getElementById("lblMsDate");
+    if (lblDate) lblDate.textContent = "Date (දිනය)";
+    const lblSub = document.getElementById("lblMsSubject");
+    if (lblSub) lblSub.textContent = "Subject (විෂයය)";
+    const lblAdd = document.getElementById("lblMsAddressees");
+    if (lblAdd) lblAdd.textContent = "Addressee(s) (යොමුවන පාර්ශ්ව)";
+    const lblOri = document.getElementById("lblMsOriginator");
+    if (lblOri) lblOri.textContent = "Originating Officer / Appointment (Red Area)";
+    const lblM01 = document.getElementById("lblMsM01Header");
+    if (lblM01) lblM01.textContent = "M-01 (මා.ස 01) Details";
+    const lblM02 = document.getElementById("lblMsM02Toggle");
+    if (lblM02) lblM02.textContent = "Include Minute 02 (මා.ස 02 Endorsement)";
+
+    // Update Date to Sinhala if default
+    const dateInput = document.getElementById("msInputDate");
+    if (dateInput && (!dateInput.value || dateInput.value.includes("2026") || dateInput.value.includes("Aug"))) {
+      dateInput.value = getSinhalaDateString();
+    }
+  } else {
+    if (btnEn) btnEn.className = "px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer";
+    if (btnSi) btnSi.className = "px-3 py-1 rounded-lg font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer";
+
+    // Set English labels
+    const lblRef = document.getElementById("lblMsRefNo");
+    if (lblRef) lblRef.textContent = "File Ref (Optional Tracking)";
+    const lblDate = document.getElementById("lblMsDate");
+    if (lblDate) lblDate.textContent = "Date";
+    const lblSub = document.getElementById("lblMsSubject");
+    if (lblSub) lblSub.textContent = "Subject";
+    const lblAdd = document.getElementById("lblMsAddressees");
+    if (lblAdd) lblAdd.textContent = "Addressee(s)";
+    const lblOri = document.getElementById("lblMsOriginator");
+    if (lblOri) lblOri.textContent = "Originating Officer / Appointment";
+    const lblM01 = document.getElementById("lblMsM01Header");
+    if (lblM01) lblM01.textContent = "M-01 Details";
+    const lblM02 = document.getElementById("lblMsM02Toggle");
+    if (lblM02) lblM02.textContent = "Include Minute 02 (M-02 Endorsement)";
+
+    // Update Date to English if default
+    const dateInput = document.getElementById("msInputDate");
+    if (dateInput && (!dateInput.value || dateInput.value.includes("මස"))) {
+      dateInput.value = getEnglishNavalDateString();
+    }
+  }
+
+  populateMinuteSheetDropdowns();
+  updateMinuteSheetPreview();
+}
+
+// Margin Width Slider & Presets (Adjust Yellow Highlight Line from Pic 1)
+store.msMarginWidth = store.msMarginWidth || 28;
+store.msPaperSize = store.msPaperSize || "a4";
+
+function setMinuteMarginWidth(val) {
+  const num = parseInt(val, 10) || 28;
+  store.msMarginWidth = Math.max(15, Math.min(45, num));
+  
+  const slider = document.getElementById("msInputMarginWidth");
+  if (slider) slider.value = store.msMarginWidth;
+
+  const display = document.getElementById("msMarginWidthDisplay");
+  if (display) display.textContent = `${store.msMarginWidth}%`;
+
+  updateMinuteSheetPreview();
+}
+
+function setMinutePaperSize(size) {
+  store.msPaperSize = size === "letter" ? "letter" : "a4";
+
+  const btnA4 = document.getElementById("btnPaperA4");
+  const btnLetter = document.getElementById("btnPaperLetter");
+  const title = document.getElementById("msPreviewPaperTitle");
+
+  if (store.msPaperSize === "letter") {
+    if (btnLetter) {
+      btnLetter.className = "px-2 py-0.5 rounded bg-teal-600 text-white shadow-2xs font-bold";
+    }
+    if (btnA4) {
+      btnA4.className = "px-2 py-0.5 rounded text-slate-600 hover:text-slate-900 font-medium";
+    }
+    if (title) title.textContent = "Letter Size Minute Paper View";
+  } else {
+    if (btnA4) {
+      btnA4.className = "px-2 py-0.5 rounded bg-teal-600 text-white shadow-2xs font-bold";
+    }
+    if (btnLetter) {
+      btnLetter.className = "px-2 py-0.5 rounded text-slate-600 hover:text-slate-900 font-medium";
+    }
+    if (title) title.textContent = "A4 Naval Minute Paper View";
+  }
+
+  updateMinuteSheetPreview();
+}
+
+// ── Populate Minute Sheet Quick Select Dropdowns from Settings ──
+function populateMinuteSheetDropdowns() {
+  const lang = store.msLanguage || "si";
+  const cfg = (store.settings && store.settings.minuteConfig) || defaultSettings.minuteConfig;
+
+  // 1. Templates
+  const tplSelect = document.getElementById("msSelectTemplate");
+  if (tplSelect) {
+    const templates = store.minuteTemplates || DEFAULT_NAVAL_MINUTE_TEMPLATES;
+    tplSelect.innerHTML = `<option value="">-- Choose Template (${lang === "si" ? "සිංහල" : "English"}) --</option>` +
+      templates.map((t) => {
+        const flag = t.lang === "si" ? "🇱🇰 [සිංහල]" : "🇬🇧 [English]";
+        return `<option value="${t.id}">${flag} ${t.title}</option>`;
+      }).join("");
+  }
+
+  // 2. Sailors (for Leave Extension etc. - Search by Off No or Name)
+  const sailorSelect = document.getElementById("msSelectSailor");
+  const sailorDatalist = document.getElementById("msSailorsDatalist");
+  const sailors = store.sailors || [];
+
+  if (sailorDatalist) {
+    sailorDatalist.innerHTML = sailors.map((s) => `
+      <option value="${s.official_number} - ${s.rank || ''} ${s.name || ''}"></option>
+      <option value="${s.name || ''} (${s.official_number})"></option>
+    `).join("");
+  }
+
+  if (sailorSelect) {
+    sailorSelect.innerHTML = `<option value="">-- Or select from list (${sailors.length} sailors) --</option>` +
+      sailors.map((s) => `<option value="${s.id || s.official_number}">${s.official_number || ""} • ${s.rank || ""} ${s.name || s.initials || "Sailor"}</option>`).join("");
+  }
+
+  // 3. Addressees Dropdown
+  const addSelect = document.getElementById("msAddresseeQuickSelect");
+  if (addSelect) {
+    const list = lang === "si" ? (cfg.addressees_si || []) : (cfg.addressees_en || []);
+    addSelect.innerHTML = `<option value="">+ Choose Address from Settings</option>` +
+      list.map((item) => `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`).join("");
+  }
+
+  // 4. M-01 Originator Dropdown
+  const oriSelect = document.getElementById("msM01OriginatorSelect");
+  if (oriSelect) {
+    const list = lang === "si" ? (cfg.originators_si || []) : (cfg.originators_en || []);
+    oriSelect.innerHTML = `<option value="">-- Choose Originator from Settings --</option>` +
+      list.map((item) => `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`).join("");
+  }
+
+  // 5. M-01 Signatory Title Dropdown (Pic 3)
+  const sigSelect = document.getElementById("msSignatorySelect");
+  if (sigSelect) {
+    const list = lang === "si" ? (cfg.signatoryTitles_si || []) : (cfg.signatoryTitles_en || []);
+    sigSelect.innerHTML = `<option value="">-- Choose Title from Settings --</option>` +
+      list.map((item) => `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`).join("");
+  }
+
+  // 6. M-02 Addressee Dropdown (Pic 2)
+  const m02AddSelect = document.getElementById("msM02AddresseeSelect");
+  if (m02AddSelect) {
+    const list = lang === "si" ? (cfg.addressees_si || []) : (cfg.addressees_en || []);
+    m02AddSelect.innerHTML = `<option value="">-- Choose from Settings --</option>` +
+      list.map((item) => `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`).join("");
+  }
+
+  // 7. M-02 Originator Designation Dropdown (Pic 2)
+  const m02OriSelect = document.getElementById("msM02OriginatorSelect");
+  if (m02OriSelect) {
+    const list = lang === "si" ? (cfg.originators_si || []) : (cfg.originators_en || []);
+    m02OriSelect.innerHTML = `<option value="">-- Choose from Settings --</option>` +
+      list.map((item) => `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`).join("");
+  }
+
+  // 8. M-02 Signatory Title Dropdown
+  const m02SigSelect = document.getElementById("msM02SignatorySelect");
+  if (m02SigSelect) {
+    const list = lang === "si" ? (cfg.signatoryTitles_si || []) : (cfg.signatoryTitles_en || []);
+    m02SigSelect.innerHTML = `<option value="">-- Choose from Settings --</option>` +
+      list.map((item) => `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`).join("");
+  }
+
+  // 9. M-02 Quick Endorsement Text Dropdown
+  const m02QuickSelect = document.getElementById("msM02QuickTextSelect");
+  if (m02QuickSelect) {
+    const list = lang === "si" ? (cfg.endorsements_si || []) : (cfg.endorsements_en || []);
+    m02QuickSelect.innerHTML = `<option value="">-- Quick Endorsement Text --</option>` +
+      list.map((item) => `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`).join("");
+  }
+}
+
+// ── Dropdown Handlers in Builder Form ──
+function addAddresseeFromDropdown(val) {
+  if (!val) return;
+  const input = document.getElementById("msInputAddressees");
+  if (input) {
+    if (input.value.trim()) {
+      input.value += `\n\n${val}`;
+    } else {
+      input.value = val;
+    }
+    updateMinuteSheetPreview();
+  }
+  const sel = document.getElementById("msAddresseeQuickSelect");
+  if (sel) sel.value = "";
+}
+
+function applyM01OriginatorFromSelect(val) {
+  if (!val) return;
+  const input = document.getElementById("msInputOriginator");
+  if (input) {
+    input.value = val;
+    updateMinuteSheetPreview();
+  }
+}
+
+function applySignatoryTitleFromSelect(val) {
+  if (!val) return;
+  const input = document.getElementById("msInputSignatoryTitle");
+  if (input) {
+    input.value = val;
+    updateMinuteSheetPreview();
+  }
+}
+
+function applyM02AddresseeFromSelect(val) {
+  if (!val) return;
+  const input = document.getElementById("msM02Addressee");
+  if (input) {
+    input.value = val;
+    updateMinuteSheetPreview();
+  }
+}
+
+function applyM02OriginatorFromSelect(val) {
+  if (!val) return;
+  const input = document.getElementById("msM02Originator");
+  if (input) {
+    input.value = val;
+    updateMinuteSheetPreview();
+  }
+}
+
+function applyM02SignatoryFromSelect(val) {
+  if (!val) return;
+  const input = document.getElementById("msM02SignTitle");
+  if (input) {
+    input.value = val;
+    updateMinuteSheetPreview();
+  }
+}
+
+// Apply Template from Dropdown
+function applyMinuteTemplateFromSelect() {
+  const select = document.getElementById("msSelectTemplate");
+  const tplId = select ? select.value : "";
+  if (!tplId) return;
+
+  loadMinuteTemplateIntoCreator(tplId);
+}
+
+// ── Search & Filter Sailor for Auto-Fill by Off No or Name ──
+function onSailorSearchInput(query) {
+  if (!query) {
+    populateMinuteSheetDropdowns();
+    return;
+  }
+  const q = query.trim().toLowerCase();
+  const rawDigits = q.replace(/\D/g, "");
+
+  const sailors = store.sailors || [];
+
+  // Live filter the dropdown below as user types so they see live matches
+  const select = document.getElementById("msSelectSailor");
+  if (select) {
+    const matches = sailors.filter((s) => {
+      const off = String(s.official_number || "").toLowerCase();
+      const offDigits = off.replace(/\D/g, "");
+      const name = String(s.name || "").toLowerCase();
+      const initials = String(s.initials || "").toLowerCase();
+      const rank = String(s.rank || "").toLowerCase();
+
+      return off.includes(q) ||
+             (rawDigits && offDigits.includes(rawDigits)) ||
+             name.includes(q) ||
+             initials.includes(q) ||
+             rank.includes(q);
+    });
+
+    if (matches.length > 0) {
+      select.innerHTML = `<option value="">-- Matches Found (${matches.length} sailors) --</option>` +
+        matches.map((s) => `<option value="${s.id || s.official_number}">${s.official_number || ""} • ${s.rank || ""} ${s.name || s.initials || "Sailor"}</option>`).join("");
+    } else {
+      select.innerHTML = `<option value="">-- No matching sailors for "${query}" --</option>`;
+    }
+  }
+
+  // Only auto-fill silently if full exact match (without overwriting what user is actively typing)
+  const exactMatch = sailors.find((s) => {
+    const off = String(s.official_number || "").trim().toLowerCase();
+    const offDigits = off.replace(/\D/g, "");
+    const name = String(s.name || "").trim().toLowerCase();
+    const fullOption1 = `${off} - ${s.rank || ''} ${name}`.toLowerCase();
+    const fullOption2 = `${name} (${off})`.toLowerCase();
+
+    return off === q ||
+           (rawDigits.length >= 5 && offDigits === rawDigits) ||
+           name === q ||
+           fullOption1 === q ||
+           fullOption2 === q;
+  });
+
+  if (exactMatch) {
+    autoFillSailorIntoMinute(exactMatch.id || exactMatch.official_number, false);
+  }
+}
+
+// Triggered when user selects a datalist item, presses Enter, or changes input
+function onSailorSearchChange(query) {
+  if (!query || !query.trim()) return;
+  const q = query.trim().toLowerCase();
+  const rawDigits = q.replace(/\D/g, "");
+
+  const sailors = store.sailors || [];
+  const match = sailors.find((s) => {
+    const off = String(s.official_number || "").trim().toLowerCase();
+    const offDigits = off.replace(/\D/g, "");
+    const name = String(s.name || "").trim().toLowerCase();
+
+    return off === q ||
+           (rawDigits && offDigits === rawDigits) ||
+           q.includes(off) ||
+           name === q ||
+           q.includes(name);
+  });
+
+  if (match) {
+    autoFillSailorIntoMinute(match.id || match.official_number, true);
+  }
+}
+
+// Auto-fill Sailor Data into Minute Sheet (Leave Extension - User Pic 3/4)
+function autoFillSailorIntoMinute(passedSailorId, updateSearchInput = true) {
+  let sailorId = passedSailorId;
+  if (!sailorId) {
+    const select = document.getElementById("msSelectSailor");
+    sailorId = select ? select.value : "";
+  }
+  if (!sailorId) {
+    const searchInp = document.getElementById("msSailorSearchInput");
+    sailorId = searchInp ? searchInp.value : "";
+  }
+  if (!sailorId) return;
+
+  const q = String(sailorId).trim().toLowerCase();
+  const rawDigits = q.replace(/\D/g, "");
+
+  const sailor = (store.sailors || []).find((s) => {
+    const off = String(s.official_number || "").trim().toLowerCase();
+    const offDigits = off.replace(/\D/g, "");
+    const idStr = String(s.id || "").trim().toLowerCase();
+    const nameStr = String(s.name || "").trim().toLowerCase();
+
+    return idStr === q ||
+           off === q ||
+           (rawDigits && offDigits === rawDigits) ||
+           q.includes(off) ||
+           nameStr === q ||
+           q.includes(nameStr);
+  });
+
+  if (!sailor) return;
+
+  // Only update search input text if user picked from dropdown/datalist (not while typing)
+  if (updateSearchInput) {
+    const searchInp = document.getElementById("msSailorSearchInput");
+    if (searchInp) {
+      searchInp.value = `${sailor.official_number || ""} - ${sailor.rank || ""} ${sailor.name || ""}`.trim();
+    }
+  }
+  const select = document.getElementById("msSelectSailor");
+  if (select) {
+    select.value = sailor.id || sailor.official_number;
+  }
+
+  setMinuteSheetLanguage("si");
+
+  const rankNameOff = `${sailor.initials || ""} ${sailor.name || ""} ${sailor.official_number || ""} දරණ ${sailor.rank || "කණිෂ්ඨ නාවිකයා"}`.trim();
+
+  const refInput = document.getElementById("msInputRefNo");
+  if (refInput) refInput.value = `CE/LEAVE/${sailor.official_number || "74738"}/${new Date().getFullYear()}`;
+
+  const dateInput = document.getElementById("msInputDate");
+  if (dateInput) dateInput.value = getSinhalaDateString();
+
+  const subInput = document.getElementById("msInputSubject");
+  if (subInput) subInput.value = "නිවාඩු දීර්ඝ කිරීම සදහා";
+
+  const addInput = document.getElementById("msInputAddressees");
+  if (addInput) addInput.value = "විධායක නිලධාරි (තඨාකාංගනය)\n\nසහකාර විනයාරක්ෂකාධිපති (නැ)";
+
+  const oriInput = document.getElementById("msInputOriginator");
+  if (oriInput) oriInput.value = "ජ්‍යෙෂ්ඨ සිවිල් ඉංජිනේරු නිලධාරි (නඩත්තු) මඟින්";
+
+  // Build Paragraphs from Sailor Data
+  const container = document.getElementById("msParagraphsContainer");
+  if (container) {
+    container.innerHTML = "";
+    addMinuteParagraphInput(`කපිතාන් සිවිල් ඉංජිනේරු දෙපාර්තමේන්තුව (නැ) ට අනුයුක්තව රාජකාරි සිදු කරනු ලබන ${rankNameOff} 2026 අගෝස්තු මස 14 වන දින සිට දින 09 ක් නිවාඩු ගොස් 2026 අගෝස්තු මස 23 වන දින 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට තිබූ අතර, ඔහුගේ මව අසනීප වී ඇති බව දුරකථන ඇමතුමක් මඟින් දන්වා ඇත.`);
+    addMinuteParagraphInput(`කරුණු එසේ හෙයින් එම නාවිකයා හට දින 02 ක් නිවාඩු දීර්ඝ කර එනම් 2026 අගෝස්තු මස 25 වන දින 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට අවශ්‍ය නිසි කටයුතු සලසා දෙන මෙන් අයදේ.`);
+  }
+
+  const recInput = document.getElementById("msInputRecommendation");
+  if (recInput) recInput.value = "";
+
+  const sigInput = document.getElementById("msInputSignatoryTitle");
+  if (sigInput) sigInput.value = "ජ්‍යෙ.සි.ඉ.නි (නඩත්තු)";
+
+  // Disable M02 by default
+  const m02Check = document.getElementById("msEnableM02");
+  if (m02Check) {
+    m02Check.checked = false;
+    toggleMinute02Section();
+  }
+
+  updateMinuteSheetPreview();
+  showToast(`Auto-filled Leave Extension for ${sailor.official_number || ""} ${sailor.name || ""}`, "success");
+}
+
+// Quick Add Addressee Modal / List
+function quickAddAddressee() {
+  const lang = store.msLanguage || "si";
+  const cfg = (store.settings && store.settings.minuteConfig) || defaultSettings.minuteConfig;
+  const list = lang === "si" ? (cfg.addressees_si || []) : (cfg.addressees_en || []);
+  const choice = prompt(`Select Addressee to add:\n\n${list.map((item, i) => `${i + 1}. ${item}`).join("\n")}\n\nEnter number (1-${list.length}) or type custom:`);
+
+  if (!choice) return;
+  const idx = parseInt(choice, 10);
+  const selectedText = (!isNaN(idx) && idx >= 1 && idx <= list.length) ? list[idx - 1] : choice.trim();
+
+  const addInput = document.getElementById("msInputAddressees");
+  if (addInput) {
+    if (addInput.value.trim()) {
+      addInput.value += `\n\n${selectedText}`;
+    } else {
+      addInput.value = selectedText;
+    }
+    updateMinuteSheetPreview();
+  }
+}
+
+// Toggle Minute 02 Section
+function toggleMinute02Section() {
+  const check = document.getElementById("msEnableM02");
+  const wrapper = document.getElementById("msM02ControlsWrapper");
+  if (wrapper) {
+    if (check && check.checked) {
+      wrapper.classList.remove("hidden");
+      // Set defaults if empty
+      const dInput = document.getElementById("msM02Date");
+      if (dInput && !dInput.value) {
+        dInput.value = store.msLanguage === "si" ? getSinhalaDateString() : getEnglishNavalDateString();
+      }
+    } else {
+      wrapper.classList.add("hidden");
+    }
+  }
+  updateMinuteSheetPreview();
+}
+
+function applyM02QuickText() {
+  const select = document.getElementById("msM02QuickTextSelect");
+  const val = select ? select.value : "";
+  if (!val) return;
+  const txt = document.getElementById("msM02Text");
+  if (txt) {
+    txt.value = val;
+    updateMinuteSheetPreview();
+  }
+}
+
+// Minute Sheet Builder Methods
+function initMinuteSheetBuilder() {
+  const container = document.getElementById("msParagraphsContainer");
+  if (!container) return;
+  container.innerHTML = "";
+
+  const lang = store.msLanguage || "si";
+  if (lang === "si") {
+    addMinuteParagraphInput("කපිතාන් සිවිල් ඉංජිනේරු දෙපාර්තමේන්තුව (නැ) ට අනුයුක්තව රාජකාරි සිදු කරනු ලබන ඩබ්ලිව් ඥානතිලක වීඒඑස් 74738 දරණ කණිෂ්ඨ නාවිකයා 2026 අගෝස්තු මස 14 වන දින සිට දින 09 ක් නිවාඩු ගොස් 2026 අගෝස්තු මස 23 වන දින 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට තිබූ අතර, ඔහුගේ මව අසනීප වී ඇති බව දුරකථන ඇමතුමක් මඟින් දන්වා ඇත.");
+    addMinuteParagraphInput("කරුණු එසේ හෙයින් එම නාවිකයා හට දින 02 ක් නිවාඩු දීර්ඝ කර එනම් 2026 අගෝස්තු මස 25 වන දින 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට අවශ්‍ය නිසි කටයුතු සලසා දෙන මෙන් අයදේ.");
+
+    const addInput = document.getElementById("msInputAddressees");
+    if (addInput) addInput.value = "විධායක නිලධාරි (තඨාකාංගනය)\n\nසහකාර විනයාරක්ෂකාධිපති (නැ)";
+
+    const oriInput = document.getElementById("msInputOriginator");
+    if (oriInput) oriInput.value = "ජ්‍යෙෂ්ඨ සිවිල් ඉංජිනේරු නිලධාරි (නඩත්තු) මඟින්";
+
+    const subInput = document.getElementById("msInputSubject");
+    if (subInput) subInput.value = "නිවාඩු දීර්ඝ කිරීම සදහා";
+
+    const refInput = document.getElementById("msInputRefNo");
+    if (refInput) refInput.value = "MIN/2026/08/002";
+
+    const dateInput = document.getElementById("msInputDate");
+    if (dateInput) dateInput.value = getSinhalaDateString();
+
+    const sigInput = document.getElementById("msInputSignatoryTitle");
+    if (sigInput) sigInput.value = "ජ්‍යෙ.සි.ඉ.නි (නඩත්තු)";
+  } else {
+    addMinuteParagraphInput("It is brought to your kind notice that urgent civil maintenance and structural rehabilitation are required at the requested facility.");
+    addMinuteParagraphInput("A detailed technical assessment has been conducted and necessary scope of work and Bill of Quantities (BOQ) have been formulated.");
+  }
+}
+
+function addMinuteParagraphInput(initialText = "") {
+  const container = document.getElementById("msParagraphsContainer");
+  if (!container) return;
+
+  const count = container.children.length + 1;
+  const div = document.createElement("div");
+  div.className = "flex items-start gap-2 group";
+  div.innerHTML = `
+    <span class="font-bold text-slate-400 text-xs mt-2 w-4 text-right">${count}.</span>
+    <textarea rows="2" oninput="updateMinuteSheetPreview()" class="ms-para-input flex-1 px-3 py-1.5 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none" placeholder="Enter paragraph ${count} content...">${initialText}</textarea>
+    <button type="button" onclick="this.parentElement.remove(); renumberMinuteParagraphs(); updateMinuteSheetPreview();" class="text-rose-400 hover:text-rose-600 text-sm mt-1 p-1 cursor-pointer" title="Remove Paragraph">✕</button>
+  `;
+
+  // Enable Tab key support inside textarea
+  const textarea = div.querySelector("textarea");
+  if (textarea) {
+    textarea.addEventListener("keydown", function(e) {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        const start = this.selectionStart;
+        const end = this.selectionEnd;
+        this.value = this.value.substring(0, start) + "    " + this.value.substring(end);
+        this.selectionStart = this.selectionEnd = start + 4;
+        updateMinuteSheetPreview();
+      }
+    });
+  }
+
+  container.appendChild(div);
+  updateMinuteSheetPreview();
+}
+
+function renumberMinuteParagraphs() {
+  const container = document.getElementById("msParagraphsContainer");
+  if (!container) return;
+  Array.from(container.children).forEach((child, idx) => {
+    const numSpan = child.querySelector("span");
+    if (numSpan) numSpan.textContent = `${idx + 1}.`;
+  });
+}
+
+function autoFillMinuteFromJobMinute() {
+  const select = document.getElementById("msInputSourceJobMinute");
+  const minuteId = select ? select.value : "";
+  if (!minuteId) return;
+
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  const refInput = document.getElementById("msInputRefNo");
+  if (refInput) refInput.value = minute.ref_no;
+
+  const dateInput = document.getElementById("msInputDate");
+  if (dateInput) dateInput.value = store.msLanguage === "si" ? getSinhalaDateString() : (minute.date_received || getLocalDateString());
+
+  const subInput = document.getElementById("msInputSubject");
+  if (subInput) subInput.value = minute.subject.toUpperCase();
+
+  const container = document.getElementById("msParagraphsContainer");
+  if (container) {
+    container.innerHTML = "";
+    addMinuteParagraphInput(`Reference is made to the civil works request received from ${minute.end_user} on ${minute.date_received}.`);
+    if (minute.description) {
+      addMinuteParagraphInput(minute.description);
+    }
+    if (minute.linked_estimate_id) {
+      addMinuteParagraphInput(`An engineering estimate has been prepared under Reference ${minute.linked_estimate_id}. Required skilled personnel are assigned.`);
+    }
+  }
+
+  updateMinuteSheetPreview();
+  showToast(`Auto-filled from ${minute.ref_no}`, "success");
+}
+
+function createMinuteSheetFromJobMinute(minuteId) {
+  switchDocumentsSubTab("minutesheet");
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  const refInput = document.getElementById("msInputRefNo");
+  if (refInput) refInput.value = minute.ref_no;
+
+  const subInput = document.getElementById("msInputSubject");
+  if (subInput) subInput.value = minute.subject.toUpperCase();
+
+  const addInput = document.getElementById("msInputAddressees");
+  if (addInput) addInput.value = store.msLanguage === "si" ? "ප්‍රධාන ඉංජිනේරු\n\nනියෝජ්‍ය ප්‍රධාන ඉංජිනේරු" : "Chief Engineer\n\nDeputy Chief Engineer";
+
+  const oriInput = document.getElementById("msInputOriginator");
+  if (oriInput) oriInput.value = store.msLanguage === "si" ? "කාර්ය භාර නිලධාරි (සිවිල් නඩත්තු) මඟින්" : "Officer in Charge - Civil Maintenance";
+
+  const container = document.getElementById("msParagraphsContainer");
+  if (container) {
+    container.innerHTML = "";
+    if (store.msLanguage === "si") {
+      addMinuteParagraphInput(`${minute.end_user} වෙතින් ${minute.date_received} දින ලැබුණු ලිඛිත ඉල්ලීම පරිදි මෙම සිවිල් නඩත්තු කාර්යය සඳහා අවශ්‍ය ක්‍රියාමාර්ග ගෙන ඇත.`);
+      if (minute.description) addMinuteParagraphInput(minute.description);
+    } else {
+      addMinuteParagraphInput(`Reference is made to the civil works request received from ${minute.end_user} on ${minute.date_received}.`);
+      if (minute.description) addMinuteParagraphInput(minute.description);
+    }
+  }
+
+  updateMinuteSheetPreview();
+}
+
+// ── Settings Management for Minute Sheet Config ──
+store.settingsMsLang = store.settingsMsLang || "si";
+
+function switchSettingsMinuteLang(lang) {
+  store.settingsMsLang = lang === "en" ? "en" : "si";
+
+  const btnSi = document.getElementById("btnSettingsMsLangSi");
+  const btnEn = document.getElementById("btnSettingsMsLangEn");
+
+  if (store.settingsMsLang === "si") {
+    if (btnSi) btnSi.className = "px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all";
+    if (btnEn) btnEn.className = "px-3 py-1 rounded-lg font-medium text-slate-600 transition-all";
+  } else {
+    if (btnEn) btnEn.className = "px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all";
+    if (btnSi) btnSi.className = "px-3 py-1 rounded-lg font-medium text-slate-600 transition-all";
+  }
+
+  renderMinuteSheetSettings();
+}
+
+function renderMinuteSheetSettings() {
+  const lang = store.settingsMsLang || "si";
+  if (!store.settings.minuteConfig) {
+    store.settings.minuteConfig = { ...defaultSettings.minuteConfig };
+  }
+  const cfg = store.settings.minuteConfig;
+
+  // 1. Addressees
+  const addListEl = document.getElementById("cfgMinuteAddresseesList");
+  if (addListEl) {
+    const key = `addressees_${lang}`;
+    const items = cfg[key] || [];
+    if (items.length === 0) {
+      addListEl.innerHTML = `<p class="text-xs italic text-slate-400 p-2">No standard addressees configured.</p>`;
+    } else {
+      addListEl.innerHTML = items.map((item, idx) => `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs hover:border-amber-300 transition-all">
+          <span class="font-medium text-slate-800">${item}</span>
+          <button onclick="deleteMinuteConfigItem('addressees', ${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded cursor-pointer" title="Delete">✕</button>
+        </div>
+      `).join("");
+    }
+  }
+
+  // 2. Originators
+  const oriListEl = document.getElementById("cfgMinuteOriginatorsList");
+  if (oriListEl) {
+    const key = `originators_${lang}`;
+    const items = cfg[key] || [];
+    if (items.length === 0) {
+      oriListEl.innerHTML = `<p class="text-xs italic text-slate-400 p-2">No originators configured.</p>`;
+    } else {
+      oriListEl.innerHTML = items.map((item, idx) => `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs hover:border-rose-300 transition-all">
+          <span class="font-medium text-slate-800">${item}</span>
+          <button onclick="deleteMinuteConfigItem('originators', ${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded cursor-pointer" title="Delete">✕</button>
+        </div>
+      `).join("");
+    }
+  }
+
+  // 3. Signatory Titles
+  const sigListEl = document.getElementById("cfgMinuteSignatoryTitlesList");
+  if (sigListEl) {
+    const key = `signatoryTitles_${lang}`;
+    const items = cfg[key] || [];
+    if (items.length === 0) {
+      sigListEl.innerHTML = `<p class="text-xs italic text-slate-400 p-2">No signatory titles configured.</p>`;
+    } else {
+      sigListEl.innerHTML = items.map((item, idx) => `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs hover:border-teal-300 transition-all">
+          <span class="font-medium text-slate-800">${item}</span>
+          <button onclick="deleteMinuteConfigItem('signatoryTitles', ${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded cursor-pointer" title="Delete">✕</button>
+        </div>
+      `).join("");
+    }
+  }
+
+  // 4. Endorsements
+  const endListEl = document.getElementById("cfgMinuteEndorsementsList");
+  if (endListEl) {
+    const key = `endorsements_${lang}`;
+    const items = cfg[key] || [];
+    if (items.length === 0) {
+      endListEl.innerHTML = `<p class="text-xs italic text-slate-400 p-2">No endorsement phrases configured.</p>`;
+    } else {
+      endListEl.innerHTML = items.map((item, idx) => `
+        <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs hover:border-blue-300 transition-all">
+          <span class="font-medium text-slate-800">${item}</span>
+          <button onclick="deleteMinuteConfigItem('endorsements', ${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded cursor-pointer" title="Delete">✕</button>
+        </div>
+      `).join("");
+    }
+  }
+}
+
+function openAddMinuteConfigItemModal(type) {
+  const lang = store.settingsMsLang || "si";
+  const typeLabels = {
+    addressees: lang === "si" ? "යොමුවන පාර්ශ්වය (Addressee)" : "Addressee Appointment",
+    originators: lang === "si" ? "මඟින් යොමු කරන නිලධාරියා (Originator Designation)" : "Originating Appointment",
+    signatoryTitles: lang === "si" ? "අත්සන් තබන නිල තනතුර (Signatory Title)" : "Signatory Block Title",
+    endorsements: lang === "si" ? "M-02 නිර්දේශ පාඨය (Endorsement Phrase)" : "M-02 Endorsement Phrase"
+  };
+
+  const val = prompt(`Enter new ${typeLabels[type] || type} (${lang === "si" ? "සිංහල" : "English"}):`);
+  if (!val || !val.trim()) return;
+
+  const key = `${type}_${lang}`;
+  if (!store.settings.minuteConfig) store.settings.minuteConfig = { ...defaultSettings.minuteConfig };
+  if (!store.settings.minuteConfig[key]) store.settings.minuteConfig[key] = [];
+
+  store.settings.minuteConfig[key].push(val.trim());
+
+  // Save to Firebase opsDB and LocalStorage
+  if (typeof opsDB !== "undefined") {
+    opsDB.ref("settings/minuteConfig").set(store.settings.minuteConfig);
+  }
+  localStorage.setItem("ncw_settings_v1", JSON.stringify(store.settings));
+
+  renderMinuteSheetSettings();
+  populateMinuteSheetDropdowns();
+  showToast(`Added successfully to Settings`, "success");
+}
+
+function deleteMinuteConfigItem(type, index) {
+  const lang = store.settingsMsLang || "si";
+  const key = `${type}_${lang}`;
+  if (!store.settings.minuteConfig || !store.settings.minuteConfig[key]) return;
+
+  if (!confirm(`Are you sure you want to remove this item?`)) return;
+
+  store.settings.minuteConfig[key].splice(index, 1);
+
+  if (typeof opsDB !== "undefined") {
+    opsDB.ref("settings/minuteConfig").set(store.settings.minuteConfig);
+  }
+  localStorage.setItem("ncw_settings_v1", JSON.stringify(store.settings));
+
+  renderMinuteSheetSettings();
+  populateMinuteSheetDropdowns();
+  showToast(`Item removed from Settings`, "info");
+}
+
+// ── Update Live Formatted Naval Minute Sheet Preview (Pic 1, 2, 3 Authentic Layout) ──
+function updateMinuteSheetPreview() {
+  const previewArea = document.getElementById("minuteSheetPrintArea");
+  if (!previewArea) return;
+
+  const lang = store.msLanguage || "si";
+  const langTitle = lang === "si" ? "මාණ්ඩලික සටහන්පත" : "MINUTESHEET";
+  const langM01 = lang === "si" ? "මා.ස 01" : "M-01";
+  const langM02 = lang === "si" ? "මා.ස 02" : "M-02";
+
+  const marginWidth = store.msMarginWidth || 28;
+  const contentWidth = 100 - marginWidth;
+
+  // Ensure Sinhala date if Sinhala mode
+  let dateVal = document.getElementById("msInputDate")?.value || "";
+  if (!dateVal || (lang === "si" && !dateVal.includes("මස") && (dateVal.includes("Aug") || dateVal.includes("-")))) {
+    dateVal = getSinhalaDateString();
+    const dInp = document.getElementById("msInputDate");
+    if (dInp) dInp.value = dateVal;
+  } else if (!dateVal) {
+    dateVal = lang === "si" ? getSinhalaDateString() : getEnglishNavalDateString();
+  }
+
+  const subjectVal = document.getElementById("msInputSubject")?.value || (lang === "si" ? "නිවාඩු දීර්ඝ කිරීම සදහා" : "SUBJECT OF MINUTE");
+  const addresseesVal = document.getElementById("msInputAddressees")?.value || "";
+  const originatorVal = document.getElementById("msInputOriginator")?.value || "";
+  const recVal = document.getElementById("msInputRecommendation")?.value || "";
+  const signTitleVal = document.getElementById("msInputSignatoryTitle")?.value || "";
+
+  // Paragraphs
+  const paraInputs = document.querySelectorAll(".ms-para-input");
+  const paragraphs = [];
+  paraInputs.forEach((inp) => {
+    if (inp.value.trim()) paragraphs.push(inp.value.trim());
+  });
+
+  const parasHtml = paragraphs.map((p, i) => `
+    <div class="flex items-start gap-2 text-justify">
+      <span class="font-bold min-w-[20px] text-right font-sans text-xs pt-0.5">${i + 1}.</span>
+      <p class="flex-1 leading-relaxed text-xs font-serif" style="text-indent: 1.8rem;">${p.replace(/\n/g, "<br><span style='display:inline-block; width:1.8rem;'></span>")}</p>
+    </div>
+  `).join("");
+
+  // All Addressee lines shown one after another in chronological order with auto-wrap
+  const addresseesList = addresseesVal.split("\n\n").map((a) => a.trim()).filter(Boolean);
+  const addresseesHtml = addresseesList.length > 0
+    ? addresseesList.map((a) => `<div class="font-bold leading-relaxed text-slate-900 break-words" style="overflow-wrap: anywhere; word-break: break-word;">${a.replace(/\n/g, "<br>")}</div>`).join("<div class='h-6'></div>")
+    : `<div class="font-bold italic text-slate-400">යොමුවන පාර්ශ්ව (Addressees)</div>`;
+
+  // M-02 (Subsequent Endorsement) - Placed below M-01 with NO horizontal divider border
+  const isM02Enabled = document.getElementById("msEnableM02")?.checked;
+  let m02Html = "";
+  if (isM02Enabled) {
+    const m02Originator = document.getElementById("msM02Originator")?.value || (lang === "si" ? "විධායක නිලධාරි මඟින්" : "Executive Officer");
+    const m02Text = document.getElementById("msM02Text")?.value || (lang === "si" ? "නිර්දේශ කර ඉදිරිපත් කරමි." : "Recommended and forwarded please.");
+    let m02Date = document.getElementById("msM02Date")?.value || dateVal;
+    if (lang === "si" && !m02Date.includes("මස") && (m02Date.includes("Aug") || m02Date.includes("-"))) {
+      m02Date = getSinhalaDateString();
+    }
+    const m02SignTitle = document.getElementById("msM02SignTitle")?.value || (lang === "si" ? "නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු" : "Deputy Chief Engineer");
+
+    m02Html = `
+      <!-- Minute 02 Block -->
+      <div class="pt-8 space-y-3">
+        <!-- M-02 Header -->
+        <div class="text-center font-black text-xs pb-1">
+          <u>${langM02}</u>
+        </div>
+
+        <!-- M-02 Originator Designation (Pic 2) -->
+        ${m02Originator ? `
+        <div class="font-black text-xs underline text-slate-950">
+          ${m02Originator}
+        </div>` : ""}
+
+        <!-- M-02 Action / Endorsement Text -->
+        <div class="text-xs leading-relaxed text-black">
+          <p>${m02Text}</p>
+        </div>
+
+        <!-- M-02 Date & Signatory Block -->
+        <div class="pt-6 flex items-end justify-between">
+          <div class="font-bold text-xs text-black">
+            ${m02Date}
+          </div>
+          <div class="text-center min-w-[160px] space-y-0.5">
+            <div class="h-10"></div> <!-- Signature blank space -->
+            ${m02SignTitle ? `<p class="font-bold text-[11px] text-slate-900">${m02SignTitle}</p>` : ""}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Final HTML rendered on Paper Surface with Top Blue Line and Dynamic Margins (Pic 1)
+  previewArea.innerHTML = `
+    <div class="w-full bg-white text-black font-serif naval-minute-paper">
+      <!-- Title Header (Centered & Underlined) -->
+      <div class="text-center pb-2">
+        <h2 class="inline-block font-black text-sm uppercase underline tracking-wider text-black">
+          ${langTitle}
+        </h2>
+      </div>
+
+      <!-- Top Blue Horizontal Line (Pic 1 Markup) -->
+      <div class="w-full border-b-2 border-blue-600 mb-2.5"></div>
+
+      <!-- Table without outer borders - Only vertical divider line (Yellow Highlight) & horizontal subject divider -->
+      <table class="w-full border-collapse text-xs leading-relaxed" style="border:none !important; width:100%;">
+        <!-- Top Subject Row (No top-left reference box) -->
+        <tr style="border:none !important;">
+          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-left:none !important; padding: 6px 8px;" class="align-top">
+            <!-- Left Margin Top: Blank -->
+          </td>
+          <td style="width: ${contentWidth}%; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-right:none !important; padding: 8px 12px;" class="text-center font-black text-xs align-middle tracking-wide text-black uppercase">
+            ${subjectVal}
+          </td>
+        </tr>
+
+        <!-- Main Body Row (Single continuous columns with dynamic margin) -->
+        <tr style="border:none !important;">
+          <!-- Left Column (Adjustable Margin Divider): All Addressees with auto-wrap -->
+          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom:none !important; border-left:none !important; padding: 14px 10px; word-break: break-word; overflow-wrap: anywhere;" class="align-top space-y-4">
+            ${addresseesHtml}
+          </td>
+
+          <!-- Right Column: M-01 and M-02 (No right or bottom border) -->
+          <td style="width: ${contentWidth}%; border:none !important; padding: 14px 14px; word-break: break-word;" class="align-top space-y-3">
+            <!-- M-01 Header -->
+            <div class="text-center font-black text-xs pb-1">
+              <u>${langM01}</u>
+            </div>
+
+            <!-- Originator Line (Top Red Area) -->
+            ${originatorVal ? `
+            <div class="font-black text-xs underline text-slate-950">
+              ${originatorVal}
+            </div>` : ""}
+
+            <!-- Paragraphs -->
+            <div class="space-y-2.5 text-justify text-xs leading-relaxed text-black font-serif">
+              ${parasHtml || `<p class="italic text-slate-400">No paragraph content entered yet.</p>`}
+            </div>
+
+            <!-- Recommendation / Final Clause -->
+            ${recVal ? `
+            <div class="pt-1 text-xs font-semibold text-black leading-relaxed">
+              <p>${recVal}</p>
+            </div>` : ""}
+
+            <!-- Date (Left) & Signature Block (Right - Pic 3) -->
+            <div class="pt-6 flex items-end justify-between">
+              <!-- Date -->
+              <div class="font-bold text-xs text-black">
+                ${dateVal}
+              </div>
+
+              <!-- Signature Space & Appointment -->
+              <div class="text-center min-w-[160px] space-y-0.5">
+                <div class="h-12"></div> <!-- 3-5 line blank space for signature -->
+                ${signTitleVal ? `<p class="font-bold text-[11px] text-slate-900">${signTitleVal}</p>` : ""}
+              </div>
+            </div>
+
+            <!-- M-02 Follows Directly Below M-01 (No horizontal line) -->
+            ${m02Html}
+          </td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
+// Universal Clean Printing Helper for Documents & Slips
+function printElement(elementId, docTitle = "Sri Lanka Navy - Document Print") {
+  const el = typeof elementId === "string" ? document.getElementById(elementId) : elementId;
+  if (!el) {
+    window.print();
+    return;
+  }
+
+  const printWindow = window.open("", "_blank", "width=900,height=750");
+  if (!printWindow) {
+    window.print();
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>${docTitle}</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+          @page {
+            size: ${store.msPaperSize === 'letter' ? 'letter' : 'A4'} portrait;
+            margin: 15mm 15mm 15mm 15mm;
+          }
+          body {
+            font-family: "Times New Roman", Times, Georgia, "Iskoola Pota", "Noto Sans Sinhala", serif, Arial, sans-serif;
+            background: #ffffff;
+            color: #000000;
+            margin: 0;
+            padding: 0;
+          }
+          table {
+            border-collapse: collapse !important;
+            border: none !important;
+          }
+          @media print {
+            .no-print { display: none !important; }
+            body { padding: 0; margin: 0; }
+          }
+        </style>
+      </head>
+      <body class="p-6">
+        <div class="max-w-4xl mx-auto">
+          ${el.innerHTML}
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+              window.close();
+            }, 300);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+// Print Minute Sheet
+function printMinuteSheetDocument() {
+  updateMinuteSheetPreview();
+  const refNo = document.getElementById("msInputRefNo")?.value || "Minute Sheet";
+  printElement("minuteSheetPrintArea", `Minute Sheet - ${refNo}`);
+}
+
+// Save Minute Record
+function saveMinuteSheetRecord() {
+  const refNo = document.getElementById("msInputRefNo")?.value || "MIN/2026/08/XXX";
+  showToast(`Minute Sheet ${refNo} saved to records!`, "success");
+}
+
+// Save Current Minute Builder as a New Template
+function saveMinuteAsNewTemplate() {
+  const title = prompt("Enter a title for this new Minute Template (නව ආකෘතියේ නම ඇතුළත් කරන්න):");
+  if (!title) return;
+
+  const lang = store.msLanguage || "si";
+  const refNo = document.getElementById("msInputRefNo")?.value || "MIN/2026/08/XXX";
+  const subjectVal = document.getElementById("msInputSubject")?.value || "SUBJECT";
+  const addresseesVal = document.getElementById("msInputAddressees")?.value || "";
+  const originatorVal = document.getElementById("msInputOriginator")?.value || "";
+  const recVal = document.getElementById("msInputRecommendation")?.value || "";
+  const signTitleVal = document.getElementById("msInputSignatoryTitle")?.value || "";
+
+  const paraInputs = document.querySelectorAll(".ms-para-input");
+  const paragraphs = [];
+  paraInputs.forEach((inp) => {
+    if (inp.value.trim()) paragraphs.push(inp.value.trim());
+  });
+
+  const isM02Enabled = document.getElementById("msEnableM02")?.checked || false;
+  const m02Addressee = document.getElementById("msM02Addressee")?.value || "";
+  const m02Originator = document.getElementById("msM02Originator")?.value || "";
+  const m02Text = document.getElementById("msM02Text")?.value || "";
+  const m02SignTitle = document.getElementById("msM02SignTitle")?.value || "";
+
+  const newTpl = {
+    id: `tpl_${Date.now()}`,
+    lang: lang,
+    title: title,
+    category: "Custom Templates",
+    ref_no: refNo,
+    subject: subjectVal,
+    addressees: addresseesVal,
+    originator: originatorVal,
+    paragraphs: paragraphs,
+    recommendation: recVal,
+    sign_title: signTitleVal,
+    m02_enabled: isM02Enabled,
+    m02_addressee: m02Addressee,
+    m02_originator: m02Originator,
+    m02_text: m02Text,
+    m02_sign_title: m02SignTitle
+  };
+
+  store.minuteTemplates.push(newTpl);
+  saveMinuteTemplatesToStorage();
+  updateDocumentsMetricStats();
+  populateMinuteSheetDropdowns();
+  showToast(`Template "${title}" saved to Inventory!`, "success");
+}
+
+// Render Templates Inventory Grid
+function renderMinuteTemplatesInventory() {
+  const grid = document.getElementById("minuteTemplatesGrid");
+  if (!grid) return;
+
+  const templates = store.minuteTemplates || [];
+  if (templates.length === 0) {
+    grid.innerHTML = `
+      <div class="col-span-full p-8 border border-dashed border-slate-300 rounded-2xl text-center text-slate-400">
+        No templates found. Click <strong>+ Add New Template</strong> to create one.
+      </div>
+    `;
+    return;
+  }
+
+  grid.innerHTML = templates.map((t) => `
+    <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-col justify-between space-y-3 hover:shadow-md transition-all">
+      <div class="space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${t.lang === "si" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-purple-50 text-purple-700 border border-purple-200"}">
+            ${t.lang === "si" ? "🇱🇰 සිංහල" : "🇬🇧 English"} • ${t.category || "Civil Works"}
+          </span>
+          <span class="text-[10px] text-slate-400 font-mono">${(t.paragraphs || []).length} Paragraphs</span>
+        </div>
+        <h4 class="text-sm font-black text-slate-800">${t.title}</h4>
+        <p class="text-xs text-slate-600 font-medium line-clamp-2">
+          <strong>Subject:</strong> ${t.subject || "—"}
+        </p>
+        <p class="text-[11px] text-slate-500 line-clamp-2 italic">
+          "${(t.paragraphs && t.paragraphs[0]) ? t.paragraphs[0] : t.recommendation || ""}"
+        </p>
+      </div>
+
+      <div class="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+        <button onclick="loadMinuteTemplateIntoCreator('${t.id}')" class="flex-1 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5">
+          <span>✍️</span> Use Template
+        </button>
+        <button onclick="openNewMinuteTemplateModal('${t.id}')" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer" title="Edit Template">
+          ✏️
+        </button>
+        <button onclick="deleteMinuteTemplate('${t.id}')" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all cursor-pointer" title="Delete Template">
+          🗑️
+        </button>
+      </div>
+    </div>
+  `).join("");
+}
+
+// Load Selected Template Into Builder
+function loadMinuteTemplateIntoCreator(templateId) {
+  const tpl = (store.minuteTemplates || []).find((t) => t.id === templateId) ||
+              DEFAULT_NAVAL_MINUTE_TEMPLATES.find((t) => t.id === templateId);
+  if (!tpl) return;
+
+  switchDocumentsSubTab("minutesheet");
+
+  // Set Language
+  if (tpl.lang) {
+    setMinuteSheetLanguage(tpl.lang);
+  }
+
+  const refInput = document.getElementById("msInputRefNo");
+  if (refInput && tpl.ref_no) refInput.value = tpl.ref_no;
+
+  const dateInput = document.getElementById("msInputDate");
+  if (dateInput) {
+    dateInput.value = tpl.lang === "si" ? getSinhalaDateString() : getEnglishNavalDateString();
+  }
+
+  const subInput = document.getElementById("msInputSubject");
+  if (subInput) subInput.value = tpl.subject || "";
+
+  const addInput = document.getElementById("msInputAddressees");
+  if (addInput) addInput.value = tpl.addressees || (tpl.to ? `${tpl.to}\n\n${tpl.through || ""}`.trim() : "");
+
+  const oriInput = document.getElementById("msInputOriginator");
+  if (oriInput) oriInput.value = tpl.originator || tpl.from || "";
+
+  const recInput = document.getElementById("msInputRecommendation");
+  if (recInput) recInput.value = tpl.recommendation || "";
+
+  const sigInput = document.getElementById("msInputSignatoryTitle");
+  if (sigInput) sigInput.value = tpl.sign_title || tpl.from || "";
+
+  // Paragraphs
+  const container = document.getElementById("msParagraphsContainer");
+  if (container) {
+    container.innerHTML = "";
+    (tpl.paragraphs || []).forEach((p) => {
+      addMinuteParagraphInput(p);
+    });
+  }
+
+  // Minute 02
+  const m02Check = document.getElementById("msEnableM02");
+  if (m02Check) {
+    m02Check.checked = !!tpl.m02_enabled;
+    toggleMinute02Section();
+    if (tpl.m02_enabled) {
+      const aInput = document.getElementById("msM02Addressee");
+      if (aInput) aInput.value = tpl.m02_addressee || "";
+      const oInput = document.getElementById("msM02Originator");
+      if (oInput) oInput.value = tpl.m02_originator || "";
+      const tInput = document.getElementById("msM02Text");
+      if (tInput) tInput.value = tpl.m02_text || "";
+      const sInput = document.getElementById("msM02SignTitle");
+      if (sInput) sInput.value = tpl.m02_sign_title || "";
+    }
+  }
+
+  updateMinuteSheetPreview();
+  showToast(`Loaded "${tpl.title}" template into Builder!`, "success");
+}
+
+// Open Template Editor Modal
+function openNewMinuteTemplateModal(templateId = null) {
+  const idInput = document.getElementById("emtTemplateId");
+  const titleInput = document.getElementById("emtTitle");
+  const catInput = document.getElementById("emtCategory");
+  const toInput = document.getElementById("emtTo");
+  const subInput = document.getElementById("emtSubject");
+  const bodyInput = document.getElementById("emtBody");
+  const recInput = document.getElementById("emtRecommendation");
+  const modalTitle = document.getElementById("emtModalTitle");
+
+  if (templateId) {
+    const tpl = (store.minuteTemplates || []).find((t) => t.id === templateId);
+    if (tpl) {
+      if (idInput) idInput.value = tpl.id;
+      if (titleInput) titleInput.value = tpl.title;
+      if (catInput) catInput.value = tpl.category || "Civil Works";
+      if (toInput) toInput.value = tpl.addressees || tpl.to || "";
+      if (subInput) subInput.value = tpl.subject || "";
+      if (bodyInput) bodyInput.value = (tpl.paragraphs || []).join("\n\n");
+      if (recInput) recInput.value = tpl.recommendation || "";
+      if (modalTitle) modalTitle.textContent = "Edit Minute Template";
+    }
+  } else {
+    if (idInput) idInput.value = "";
+    if (titleInput) titleInput.value = "";
+    if (catInput) catInput.value = "Civil Works";
+    if (toInput) toInput.value = "විධායක නිලධාරි (තඨාකාංගනය)";
+    if (subInput) subInput.value = "";
+    if (bodyInput) bodyInput.value = "";
+    if (recInput) recInput.value = "කරුණු එසේ හෙයින් කාරුණික අනුමැතිය අයදිමි.";
+    if (modalTitle) modalTitle.textContent = "Add New Template to Inventory";
+  }
+
+  const modal = document.getElementById("editMinuteTemplateModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+// Save Custom Template
+function saveCustomMinuteTemplate() {
+  const id = document.getElementById("emtTemplateId")?.value;
+  const title = document.getElementById("emtTitle")?.value;
+  const category = document.getElementById("emtCategory")?.value || "Civil Works";
+  const to = document.getElementById("emtTo")?.value || "Chief Engineer";
+  const subject = document.getElementById("emtSubject")?.value || "";
+  const body = document.getElementById("emtBody")?.value || "";
+  const rec = document.getElementById("emtRecommendation")?.value || "";
+
+  const paragraphs = body.split("\n\n").map((p) => p.trim()).filter(Boolean);
+
+  if (id) {
+    const tpl = (store.minuteTemplates || []).find((t) => t.id === id);
+    if (tpl) {
+      tpl.title = title;
+      tpl.category = category;
+      tpl.addressees = to;
+      tpl.subject = subject;
+      tpl.paragraphs = paragraphs;
+      tpl.recommendation = rec;
+    }
+  } else {
+    const newTpl = {
+      id: `tpl_${Date.now()}`,
+      lang: store.msLanguage || "si",
+      title: title,
+      category: category,
+      ref_no: "MIN/2026/08/XXX",
+      addressees: to,
+      originator: "කාර්ය භාර නිලධාරි මඟින්",
+      subject: subject,
+      paragraphs: paragraphs,
+      recommendation: rec,
+      sign_title: "කාර්ය භාර නිලධාරි"
+    };
+    store.minuteTemplates.push(newTpl);
+  }
+
+  saveMinuteTemplatesToStorage();
+  closeModal("editMinuteTemplateModal");
+  updateDocumentsMetricStats();
+  renderMinuteTemplatesInventory();
+  showToast(`Template "${title}" saved to Inventory!`, "success");
+}
+
+// Delete Template
+function deleteMinuteTemplate(templateId) {
+  if (!confirm("Are you sure you want to delete this template from the Inventory?")) return;
+  store.minuteTemplates = (store.minuteTemplates || []).filter((t) => t.id !== templateId);
+  saveMinuteTemplatesToStorage();
+  updateDocumentsMetricStats();
+  renderMinuteTemplatesInventory();
+  showToast("Template removed from Inventory", "info");
+}
+

@@ -133,6 +133,30 @@
             color: var(--text-secondary) !important;
         }
 
+        /* Sailor Table Column Resizer Styles */
+        .sailor-th-cell {
+            position: relative;
+        }
+        .sailor-th-resizer {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 7px;
+            bottom: 0;
+            cursor: col-resize;
+            user-select: none;
+            z-index: 35;
+            background: transparent;
+            transition: background-color 0.15s ease;
+        }
+        .sailor-th-resizer:hover, .sailor-th-resizer.is-resizing {
+            background-color: #14b8a6 !important;
+        }
+        body.is-resizing-col {
+            cursor: col-resize !important;
+            user-select: none !important;
+        }
+
         html.dark .border-slate-100,
         html.dark .border-slate-200,
         html.dark .border-slate-300 {
@@ -580,9 +604,6 @@
                     <button onclick="switchView('maintenance')" id="tab-maintenance" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📍 </span>Locations & LMD
                     </button>
-                    <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
-                        <span class="hidden xl:inline">⚓ </span>Sailors
-                    </button>
                     <button onclick="switchView('reports')" id="tab-reports" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300">
                         <span class="hidden xl:inline">📈 </span>Reports
                     </button>
@@ -593,6 +614,18 @@
 
                 <!-- Right Controls -->
                 <div class="flex items-center gap-2.5">
+                    <!-- Isolated Documents Section Button -->
+                    <button onclick="switchView('documents')" id="tab-documents" class="nav-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Documents & Minute Sheet System">
+                        <span>📄</span>
+                        <span class="hidden xl:inline text-[11px]">Documents</span>
+                    </button>
+
+                    <!-- Isolated Sailors Section Button -->
+                    <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Sailors Operations & Performance">
+                        <span>⚓</span>
+                        <span class="hidden xl:inline text-[11px]">Sailors</span>
+                    </button>
+
                     <!-- Isolated Admin Settings Button -->
                     <button onclick="openSettingsView()" id="btn-admin-settings" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="System Settings (Admin Only)">
                         <span>⚙️</span>
@@ -1212,6 +1245,9 @@
                 </div>
             </div>
 
+            <!-- Incoming Job Minutes Banner for this Zone / Workshop -->
+            <div id="incomingMinutesJobCardsBanner" class="mb-6"></div>
+
             <!-- Job Cards Tabs -->
             <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
                 <div class="border-b border-slate-200 flex">
@@ -1480,7 +1516,8 @@
                             <option value="Balance Store">Balance Store</option>
                         </select>
                         <select id="inventorySort" onchange="filterInventory()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 font-medium">
-                            <option value="description">Sort: Name</option>
+                            <option value="category">Sort: Category</option>
+                            <option value="description">Sort: Name (A-Z)</option>
                             <option value="quantity">Sort: Qty</option>
                             <option value="cost">Sort: Cost</option>
                             <option value="date">Sort: Date</option>
@@ -1541,6 +1578,9 @@
                     </button>
                 </div>
             </div>
+
+            <!-- Incoming Job Minutes for Current Zone Banner -->
+            <div id="incomingMinutesEstimateBanner" class="mb-6"></div>
 
             <div class="grid grid-cols-1 md:grid-cols-12 gap-6">
                 <!-- Estimates List -->
@@ -1799,6 +1839,7 @@
                     <button onclick="switchSettingsTab('workorder')" id="stab-workorder" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📋 Work Orders</button>
                     <button onclick="switchSettingsTab('display')" id="stab-display" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🎨 Display</button>
                     <button onclick="switchSettingsTab('dateschedule')" id="stab-dateschedule" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📅 Date Schedule</button>
+                    <button onclick="switchSettingsTab('minutesheet')" id="stab-minutesheet" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-teal-800 bg-teal-50/70 border border-teal-200">📜 Minute Sheet Config</button>
                     <button onclick="switchSettingsTab('data')" id="stab-data" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-rose-600 bg-rose-50">🧹 Data Management</button>
                 </div>
 
@@ -2268,6 +2309,88 @@
                         </div>
                     </div>
                 </div>
+                <!-- ── Tab: Minute Sheet Config ── -->
+                <div id="stab-content-minutesheet" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                                    <span>📜</span> Naval Minute Sheet Designations & Addresses
+                                </h3>
+                                <p class="text-xs text-slate-500">Manage standard Addressees, Originators, and Signatory titles for Minute Sheet generation</p>
+                            </div>
+                            <div class="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs">
+                                <button type="button" id="btnSettingsMsLangSi" onclick="switchSettingsMinuteLang('si')" class="px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all">
+                                    🇱🇰 සිංහල
+                                </button>
+                                <button type="button" id="btnSettingsMsLangEn" onclick="switchSettingsMinuteLang('en')" class="px-3 py-1 rounded-lg font-medium text-slate-600 transition-all">
+                                    🇬🇧 English
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <!-- Card 1: Standard Addressees (යොමුවන පාර්ශ්ව) -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
+                                        <span>📍</span> Standard Addressees (යොමුවන පාර්ශ්ව)
+                                    </h4>
+                                    <button onclick="openAddMinuteConfigItemModal('addressees')" class="text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all">
+                                        + Add Addressee
+                                    </button>
+                                </div>
+                                <div id="cfgMinuteAddresseesList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <!-- Card 2: Originators (මඟින් යොමු කරන නිලධාරීන්) -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
+                                        <span>👔</span> Originators (M-01 & M-02 මඟින් යොමු කරන)
+                                    </h4>
+                                    <button onclick="openAddMinuteConfigItemModal('originators')" class="text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all">
+                                        + Add Originator
+                                    </button>
+                                </div>
+                                <div id="cfgMinuteOriginatorsList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <!-- Card 3: Signatory Block Titles (අත්සන් තබන තනතුරු) -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
+                                        <span>✍️</span> Signatory Titles (අත්සන් තබන තනතුරු)
+                                    </h4>
+                                    <button onclick="openAddMinuteConfigItemModal('signatoryTitles')" class="text-[11px] font-bold bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all">
+                                        + Add Title
+                                    </button>
+                                </div>
+                                <div id="cfgMinuteSignatoryTitlesList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
+                            <!-- Card 4: M-02 Endorsements (නිර්දේශ පාඨ) -->
+                            <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
+                                        <span>📝</span> M-02 Endorsements (නිර්දේශ / අනුමැති පාඨ)
+                                    </h4>
+                                    <button onclick="openAddMinuteConfigItemModal('endorsements')" class="text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all">
+                                        + Add Phrase
+                                    </button>
+                                </div>
+                                <div id="cfgMinuteEndorsementsList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
             </div>
@@ -2317,15 +2440,18 @@
 
                             <!-- Columns Customizer Dropdown -->
                             <div class="relative">
-                                <button type="button" onclick="toggleSailorColumnMenu(event)" class="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 shadow-sm">
+                                <button type="button" onclick="toggleSailorColumnMenu(event)" class="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 shadow-sm cursor-pointer">
                                     <span>👁️</span> Columns <span class="text-[10px]">▾</span>
                                 </button>
-                                <div id="sailorColumnMenu" class="hidden absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-2xl shadow-xl p-3 z-30 space-y-2 text-xs">
-                                    <p class="font-bold text-slate-700 pb-1 border-b border-slate-100">Toggle Columns</p>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked onchange="toggleSailorCol('col-city', this.checked)"> City / Hometown</label>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked onchange="toggleSailorCol('col-skills', this.checked)"> Special Skills</label>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked onchange="toggleSailorCol('col-zone', this.checked)"> Assigned Zone</label>
-                                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked onchange="toggleSailorCol('col-perf', this.checked)"> Performance</label>
+                                <div id="sailorColumnMenu" class="hidden absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 z-40 space-y-3 text-xs">
+                                    <div class="flex items-center justify-between pb-2 border-b border-slate-100">
+                                        <span class="font-bold text-slate-800 flex items-center gap-1"><span>⚙️</span> Columns (තීරු සැකසීම)</span>
+                                        <button type="button" onclick="resetSailorColumns()" class="text-[11px] text-teal-600 hover:text-teal-800 font-bold cursor-pointer">↺ Reset</button>
+                                    </div>
+                                    <p class="text-[10px] text-slate-400">Select columns to display & reorder using ⬆️ ⬇️</p>
+                                    <div id="sailorColumnList" class="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                                        <!-- Dynamically generated column selector & reorder items -->
+                                    </div>
                                 </div>
                             </div>
 
@@ -2403,38 +2529,10 @@
                 </div>
 
                 <!-- Table View Container with Fixed Height, Always-Visible Scrollbars & Frozen Header/Actions -->
-                <div id="directorySailorsTableView" class="sailors-table-container bg-white rounded-2xl border border-slate-200/80 shadow-sm relative">
-                    <table class="w-full text-left border-collapse min-w-[1150px]">
-                        <thead class="sticky top-0 z-30 shadow-md">
-                            <tr class="bg-slate-900 text-white text-[11px] font-bold uppercase tracking-wider select-none">
-                                <th class="py-3.5 px-4 cursor-pointer hover:bg-slate-800 transition-colors whitespace-nowrap bg-slate-900" onclick="sortSailorTable('off_no')">
-                                    OFF NO <span id="sort-icon-off_no" class="text-slate-400">↕</span>
-                                </th>
-                                <th class="py-3.5 px-4 cursor-pointer hover:bg-slate-800 transition-colors whitespace-nowrap min-w-[200px] bg-slate-900" onclick="sortSailorTable('name')">
-                                    SAILOR NAME & RANK <span id="sort-icon-name" class="text-slate-400">↕</span>
-                                </th>
-                                <th class="py-3.5 px-4 cursor-pointer hover:bg-slate-800 transition-colors whitespace-nowrap bg-slate-900" onclick="sortSailorTable('trade')">
-                                    TRADE <span id="sort-icon-trade" class="text-slate-400">↕</span>
-                                </th>
-                                <th class="py-3.5 px-4 col-city cursor-pointer hover:bg-slate-800 transition-colors whitespace-nowrap bg-slate-900" onclick="sortSailorTable('city')">
-                                    CITY / HOMETOWN <span id="sort-icon-city" class="text-slate-400">↕</span>
-                                </th>
-                                <th class="py-3.5 px-4 whitespace-nowrap bg-slate-900">
-                                    STATUS & CATEGORY
-                                </th>
-                                <th class="py-3.5 px-4 col-perf cursor-pointer hover:bg-slate-800 transition-colors whitespace-nowrap bg-slate-900" onclick="sortSailorTable('perf')">
-                                    PERFORMANCE (1-10) <span id="sort-icon-perf" class="text-amber-400">▾</span>
-                                </th>
-                                <th class="py-3.5 px-4 col-skills whitespace-nowrap bg-slate-900">
-                                    SPECIAL SKILLS
-                                </th>
-                                <th class="py-3.5 px-4 col-zone cursor-pointer hover:bg-slate-800 transition-colors whitespace-nowrap bg-slate-900" onclick="sortSailorTable('zone')">
-                                    ASSIGNED ZONE <span id="sort-icon-zone" class="text-slate-400">↕</span>
-                                </th>
-                                <th class="py-3.5 px-4 text-center sticky right-0 top-0 z-40 bg-slate-900 shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.4)] whitespace-nowrap">
-                                    ACTIONS
-                                </th>
-                            </tr>
+                <div id="directorySailorsTableView" class="sailors-table-container bg-white rounded-2xl border border-slate-200/80 shadow-sm relative overflow-x-auto">
+                    <table class="w-full text-left border-collapse min-w-[1150px]" id="sailorsMainTable">
+                        <thead class="sticky top-0 z-30 shadow-md" id="directorySailorsTableHead">
+                            <!-- Populated dynamically with customizable order, widths, and resizers -->
                         </thead>
                         <tbody id="directorySailorsTableBody" class="divide-y divide-slate-100 text-sm">
                             <!-- Dynamically populated rows -->
@@ -2892,6 +2990,411 @@
                 </div>
             </div>
         </div>
+
+        <!-- ==================== DOCUMENTS & MINUTE SHEETS VIEW ==================== -->
+        <div id="view-documents" class="view-content hidden space-y-6">
+            <!-- View Header -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 rounded-2xl text-white shadow-md border border-slate-700/50">
+                <div class="space-y-1">
+                    <div class="flex items-center gap-2.5">
+                        <span class="text-2xl p-2 bg-teal-500/20 rounded-xl border border-teal-500/30">📄</span>
+                        <div>
+                            <h2 class="text-xl font-black tracking-tight text-white flex items-center gap-2">
+                                DOCUMENT & MINUTE MANAGEMENT SYSTEM
+                            </h2>
+                            <p class="text-xs text-slate-300">
+                                Register incoming requests, track Present Positions throughout workflow, build formal Minute Sheets, and manage Template Inventory.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="openNewJobMinuteModal()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-500 hover:bg-teal-400 text-slate-950 flex items-center gap-1.5 shadow-sm transition-all cursor-pointer">
+                        <span>➕</span> Register Job Minute
+                    </button>
+                    <button onclick="switchDocumentsSubTab('minutesheet')" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-800 hover:bg-slate-700 text-white border border-slate-600/60 flex items-center gap-1.5 shadow-sm transition-all cursor-pointer">
+                        <span>✍️</span> Create Minute Sheet
+                    </button>
+                </div>
+            </div>
+
+            <!-- Documents Summary Metric Cards -->
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 text-lg font-black">
+                        📋
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total Registered</p>
+                        <p class="text-xl font-black text-slate-800 mt-0.5" id="docStatTotalMinutes">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-700 text-lg font-black">
+                        🔄
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">In Active Pipeline</p>
+                        <p class="text-xl font-black text-blue-700 mt-0.5" id="docStatActiveTracking">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700 text-lg font-black">
+                        ✅
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Completed / Handed Over</p>
+                        <p class="text-xl font-black text-emerald-700 mt-0.5" id="docStatCompleted">0</p>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs flex items-center gap-3.5">
+                    <div class="w-10 h-10 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-700 text-lg font-black">
+                        📚
+                    </div>
+                    <div>
+                        <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Minute Templates</p>
+                        <p class="text-xl font-black text-purple-700 mt-0.5" id="docStatTemplates">6</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sub-Navigation Tabs Bar -->
+            <div class="bg-white rounded-2xl border border-slate-200/90 p-1.5 shadow-xs flex flex-wrap gap-1">
+                <button onclick="switchDocumentsSubTab('jobminutes')" id="docTabBtn-jobminutes" class="px-4 py-2.5 rounded-xl text-xs font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer flex items-center gap-2">
+                    <span>📋</span> 1. Job Minute Sheets & Present Position Tracking
+                </button>
+                <button onclick="switchDocumentsSubTab('minutesheet')" id="docTabBtn-minutesheet" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-2">
+                    <span>✍️</span> 2. Minute Sheet Creator & Submissions
+                </button>
+                <button onclick="switchDocumentsSubTab('templates')" id="docTabBtn-templates" class="px-4 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all cursor-pointer flex items-center gap-2">
+                    <span>📚</span> 3. Inventory of Minute Templates
+                </button>
+            </div>
+
+            <!-- ==================== SUB-PANEL 1: JOB MINUTES & PRESENT POSITION TRACKING ==================== -->
+            <div id="docPanel-jobminutes" class="space-y-4">
+                <!-- Search & Filters Toolbar -->
+                <div class="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
+                    <div class="relative w-full md:w-80">
+                        <input type="text" id="docMinuteSearchInput" oninput="filterJobMinutesList()" placeholder="Search Ref No, End User, Subject..." class="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none focus:ring-2 focus:ring-teal-500">
+                        <span class="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
+                    </div>
+
+                    <div class="flex items-center gap-2 w-full md:w-auto flex-wrap">
+                        <select id="docMinuteDestinationFilter" onchange="filterJobMinutesList()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none">
+                            <option value="ALL">All Destinations (සියලු කලාප/වැඩපළ)</option>
+                        </select>
+
+                        <select id="docMinutePositionFilter" onchange="filterJobMinutesList()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none">
+                            <option value="ALL">All Positions (සියලු අදියර)</option>
+                            <option value="RECEIVED">📥 Received from End User</option>
+                            <option value="ESTIMATION">📐 Under Estimation</option>
+                            <option value="APPROVAL">✍️ Pending Recommendation / Approval</option>
+                            <option value="ASSIGNED">🔨 Assigned to Workshop (JC Generated)</option>
+                            <option value="WIP">⚙️ Work In Progress</option>
+                            <option value="COMPLETED">✅ Completed & Handed Over</option>
+                            <option value="ARCHIVED">🗄️ Archived</option>
+                        </select>
+
+                        <button onclick="openNewJobMinuteModal()" class="px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer ml-auto flex items-center gap-1.5">
+                            <span>➕</span> New Registration
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Job Minutes Registry Table -->
+                <div class="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead class="bg-slate-900 text-white text-[11px] font-bold uppercase tracking-wider">
+                                <tr>
+                                    <th class="py-3 px-4">Minute Ref # (Tracking No)</th>
+                                    <th class="py-3 px-3">Date Received</th>
+                                    <th class="py-3 px-4">End User / Unit</th>
+                                    <th class="py-3 px-4">Subject & Scope of Work</th>
+                                    <th class="py-3 px-3">Directed To (දිශාගත කිරීම)</th>
+                                    <th class="py-3 px-3">Linked Estimate</th>
+                                    <th class="py-3 px-3">Linked Job Card</th>
+                                    <th class="py-3 px-4">Present Position (ස්ථානය / අදියර)</th>
+                                    <th class="py-3 px-4 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobMinutesTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
+                                <!-- Dynamic rows loaded via renderJobMinutesTable() -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== SUB-PANEL 2: MINUTE SHEET CREATOR & SUBMISSIONS ==================== -->
+            <div id="docPanel-minutesheet" class="hidden space-y-4">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    <!-- Left: Minute Sheet Builder Form -->
+                    <div class="lg:col-span-6 bg-white p-5 rounded-2xl border border-slate-200 shadow-xs space-y-4 max-h-[88vh] overflow-y-auto">
+                        <div class="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+                            <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                                <span>✍️</span> Minute Sheet Builder
+                            </h3>
+                            <!-- Language Switcher -->
+                            <div class="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs">
+                                <button type="button" id="btnMsLangSinhala" onclick="setMinuteSheetLanguage('si')" class="px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer">
+                                    🇱🇰 සිංහල
+                                </button>
+                                <button type="button" id="btnMsLangEnglish" onclick="setMinuteSheetLanguage('en')" class="px-3 py-1 rounded-lg font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer">
+                                    🇬🇧 English
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Template & Sailor Quick Auto-Fill Pickers -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">Select Template</label>
+                                <select id="msSelectTemplate" onchange="applyMinuteTemplateFromSelect()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs bg-white focus:ring-1 focus:ring-teal-500 outline-none">
+                                    <option value="">-- Choose Template --</option>
+                                </select>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="block text-[10px] font-bold text-slate-700 uppercase flex items-center justify-between">
+                                    <span>Auto-Fill from Sailor</span>
+                                    <span class="text-[9px] text-teal-600 font-normal">Off No / Name Search</span>
+                                </label>
+                                <div class="relative">
+                                    <input type="text" id="msSailorSearchInput" list="msSailorsDatalist" oninput="onSailorSearchInput(this.value)" onchange="onSailorSearchChange(this.value)" placeholder="🔍 Type Off No (e.g. 118453) or Name..." class="w-full px-2.5 py-1.5 border border-teal-400 rounded-lg text-xs bg-white focus:ring-2 focus:ring-teal-500 outline-none">
+                                    <datalist id="msSailorsDatalist">
+                                        <!-- Dynamic options generated in populateMinuteSheetDropdowns -->
+                                    </datalist>
+                                </div>
+                                <select id="msSelectSailor" onchange="autoFillSailorIntoMinute(this.value)" class="w-full px-2 py-1 border border-slate-200 rounded-lg text-[11px] bg-slate-50 text-slate-600 outline-none">
+                                    <option value="">-- Or select from list --</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Page Setup & Adjustable Margin Line (Yellow Highlight in Pic 1) -->
+                        <div class="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2.5">
+                            <div class="flex items-center justify-between">
+                                <label class="text-[11px] font-bold text-amber-900 uppercase flex items-center gap-1.5">
+                                    <span>📏</span> Margin Divider Position (<span id="msMarginWidthDisplay" class="font-mono font-bold text-teal-800 bg-white px-1.5 py-0.5 rounded border border-amber-300">28%</span>)
+                                </label>
+                                <!-- Paper Size Selector -->
+                                <div class="flex items-center bg-white p-0.5 rounded-lg border border-amber-300 text-[10px] font-bold">
+                                    <button type="button" id="btnPaperA4" onclick="setMinutePaperSize('a4')" class="px-2 py-0.5 rounded bg-teal-600 text-white shadow-2xs">📄 A4</button>
+                                    <button type="button" id="btnPaperLetter" onclick="setMinutePaperSize('letter')" class="px-2 py-0.5 rounded text-slate-600 hover:text-slate-900">📄 Letter</button>
+                                </div>
+                            </div>
+                            <input type="range" id="msInputMarginWidth" min="15" max="45" value="28" oninput="setMinuteMarginWidth(this.value)" class="w-full accent-teal-600 cursor-pointer">
+                            <div class="flex items-center justify-between text-[10px]">
+                                <span class="text-slate-500 font-medium">Auto-wraps address text & expands body</span>
+                                <div class="flex items-center gap-1">
+                                    <button type="button" onclick="setMinuteMarginWidth(20)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">20%</button>
+                                    <button type="button" onclick="setMinuteMarginWidth(25)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">25%</button>
+                                    <button type="button" onclick="setMinuteMarginWidth(28)" class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-900 font-bold border border-teal-300">28% (Def)</button>
+                                    <button type="button" onclick="setMinuteMarginWidth(35)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">35%</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Date & Subject (Top Area) -->
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1" id="lblMsDate">Date (දිනය)</label>
+                                    <input type="text" id="msInputDate" placeholder="e.g. 2026 අගෝස්තු මස 23" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold text-slate-700 uppercase mb-1" id="lblMsRefNo">File Ref (Optional Tracking)</label>
+                                    <input type="text" id="msInputRefNo" placeholder="e.g. MIN/2026/08/002" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[11px] font-bold text-emerald-800 uppercase mb-1" id="lblMsSubject">Subject (විෂයය)</label>
+                                <input type="text" id="msInputSubject" placeholder="e.g. නිවාඩු දීර්ඝ කිරීම සදහා / CIVIL REPAIR WORK" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-emerald-300 rounded-xl text-xs font-bold text-slate-900 bg-emerald-50/40 focus:bg-white outline-none">
+                            </div>
+                        </div>
+
+                        <!-- MINUTE 01 (M-01 / මා.ස 01) -->
+                        <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                                <span class="text-xs font-black text-slate-800" id="lblMsM01Header">M-01 (මා.ස 01) Details</span>
+                                <span class="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.5 rounded">Originating Minute</span>
+                            </div>
+
+                            <!-- Addressee (Left Column) -->
+                            <div class="space-y-1.5">
+                                <div class="flex items-center justify-between flex-wrap gap-1">
+                                    <label class="text-[10px] font-bold text-amber-800 uppercase" id="lblMsAddressees">Addressee(s) (යොමුවන පාර්ශ්ව)</label>
+                                    <div class="flex items-center gap-1">
+                                        <select id="msAddresseeQuickSelect" onchange="addAddresseeFromDropdown(this.value)" class="px-2 py-0.5 border border-amber-300 rounded text-[11px] bg-white font-medium outline-none">
+                                            <option value="">+ Choose Address from Settings</option>
+                                        </select>
+                                        <button type="button" onclick="quickAddAddressee()" class="text-[10px] font-bold text-amber-700 hover:text-amber-900 cursor-pointer">+ Type</button>
+                                    </div>
+                                </div>
+                                <textarea id="msInputAddressees" rows="2" placeholder="විධායක නිලධාරි (තඨාකාංගනය)&#10;සහකාර විනයාරක්ෂකාධිපති (නැ)" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-amber-300 rounded-xl text-xs bg-amber-50/40 focus:bg-white outline-none" style="word-break: break-word; overflow-wrap: anywhere; white-space: pre-wrap;"></textarea>
+                            </div>
+
+                            <!-- Originator Line (Top Red Area) -->
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between flex-wrap gap-1">
+                                    <label class="text-[10px] font-bold text-rose-800 uppercase" id="lblMsOriginator">Originating Officer / Appointment (Red Area)</label>
+                                    <select id="msM01OriginatorSelect" onchange="applyM01OriginatorFromSelect(this.value)" class="px-2 py-0.5 border border-rose-300 rounded text-[11px] bg-white font-medium outline-none">
+                                        <option value="">-- Choose Originator from Settings --</option>
+                                    </select>
+                                </div>
+                                <input type="text" id="msInputOriginator" placeholder="ජ්‍යෙෂ්ඨ සිවිල් ඉංජිනේරු නිලධාරි (නඩත්තු) මඟින්" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-rose-300 rounded-xl text-xs font-bold text-slate-900 bg-rose-50/40 focus:bg-white outline-none">
+                            </div>
+
+                            <!-- Body Paragraphs (Blue Area) -->
+                            <div class="space-y-2">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold text-blue-800 uppercase" id="lblMsParagraphs">Minute Paragraphs (Blue Area)</label>
+                                    <button type="button" onclick="addMinuteParagraphInput()" class="text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 px-2 py-0.5 rounded border border-blue-200 cursor-pointer">
+                                        + Add Paragraph
+                                    </button>
+                                </div>
+                                <div id="msParagraphsContainer" class="space-y-2">
+                                    <!-- Dynamic paragraph inputs -->
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1" id="lblMsRecommendation">Recommendation / Final Clause</label>
+                                <textarea id="msInputRecommendation" rows="2" placeholder="කාරුණික අනුමැතිය සඳහා ඉදිරිපත් කරමි." oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-1 focus:ring-teal-500 outline-none"></textarea>
+                            </div>
+
+                            <!-- Signature Block (Pic 3) -->
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between flex-wrap gap-1">
+                                    <label class="text-[10px] font-bold text-rose-800 uppercase" id="lblMsSignature">Signature Block Appointment / Title (Optional if at top)</label>
+                                    <select id="msSignatorySelect" onchange="applySignatoryTitleFromSelect(this.value)" class="px-2 py-0.5 border border-rose-300 rounded text-[11px] bg-white font-medium outline-none">
+                                        <option value="">-- Choose Title from Settings --</option>
+                                    </select>
+                                </div>
+                                <input type="text" id="msInputSignatoryTitle" placeholder="ජ්‍යෙ.සි.ඉ.නි (නඩත්තු) හෝ හිස්ව තබන්න" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-1 focus:ring-teal-500 outline-none">
+                            </div>
+                        </div>
+
+                        <!-- MINUTE 02 (M-02 / මා.ස 02 - Optional Endorsement) -->
+                        <div class="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-2">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" id="msEnableM02" onchange="toggleMinute02Section()" class="w-4 h-4 text-teal-600 rounded">
+                                    <span class="text-xs font-black text-slate-800" id="lblMsM02Toggle">Include Minute 02 (මා.ස 02 Endorsement)</span>
+                                </label>
+                                <span class="text-[10px] font-bold bg-amber-100 text-amber-800 px-2 py-0.5 rounded border border-amber-200">Subsequent Endorsement</span>
+                            </div>
+
+                            <div id="msM02ControlsWrapper" class="hidden space-y-3 pt-1">
+                                <!-- M-02 Addressee (Pic 2) -->
+                                <div class="space-y-1">
+                                    <div class="flex items-center justify-between flex-wrap gap-1">
+                                        <label class="text-[10px] font-bold text-amber-800 uppercase">M-02 Addressee (යොමුවන පාර්ශ්වය)</label>
+                                        <select id="msM02AddresseeSelect" onchange="applyM02AddresseeFromSelect(this.value)" class="px-2 py-0.5 border border-amber-300 rounded text-[11px] bg-white font-medium outline-none">
+                                            <option value="">-- Choose from Settings --</option>
+                                        </select>
+                                    </div>
+                                    <input type="text" id="msM02Addressee" placeholder="සහකාර විනයාරක්ෂකාධිපති (නැ) / Commanding Officer" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white outline-none">
+                                </div>
+
+                                <!-- M-02 Originator Designation (Pic 2) -->
+                                <div class="space-y-1">
+                                    <div class="flex items-center justify-between flex-wrap gap-1">
+                                        <label class="text-[10px] font-bold text-rose-800 uppercase">M-02 Originator Designation</label>
+                                        <select id="msM02OriginatorSelect" onchange="applyM02OriginatorFromSelect(this.value)" class="px-2 py-0.5 border border-rose-300 rounded text-[11px] bg-white font-medium outline-none">
+                                            <option value="">-- Choose from Settings --</option>
+                                        </select>
+                                    </div>
+                                    <input type="text" id="msM02Originator" placeholder="විධායක නිලධාරි මඟින් / Executive Officer" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white outline-none">
+                                </div>
+
+                                <div>
+                                    <label class="block text-[10px] font-bold text-blue-800 uppercase mb-1">M-02 Endorsement / Action Text</label>
+                                    <select id="msM02QuickTextSelect" onchange="applyM02QuickText()" class="w-full mb-1.5 px-2 py-1 border border-slate-300 rounded-lg text-[11px] bg-slate-100 outline-none">
+                                        <!-- Dynamically populated from Settings -->
+                                    </select>
+                                    <textarea id="msM02Text" rows="2" placeholder="නිර්දේශ කර ඉදිරිපත් කරමි." oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white outline-none"></textarea>
+                                </div>
+                                <div class="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">M-02 Date</label>
+                                        <input type="text" id="msM02Date" placeholder="2026 අගෝස්තු මස 23" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white outline-none">
+                                    </div>
+                                    <div class="space-y-1">
+                                        <label class="block text-[10px] font-bold text-slate-600 uppercase">M-02 Signature Title</label>
+                                        <input type="text" id="msM02SignTitle" placeholder="විධායක නිලධාරි" oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white outline-none">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-2 flex-wrap">
+                            <button type="button" onclick="saveMinuteAsNewTemplate()" class="px-3 py-2 rounded-xl text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer">
+                                📋 Save as Template
+                            </button>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="saveMinuteSheetRecord()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all cursor-pointer">
+                                    💾 Save Minute Record
+                                </button>
+                                <button type="button" onclick="printMinuteSheetDocument()" class="px-3.5 py-2 rounded-xl text-xs font-bold bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition-all cursor-pointer flex items-center gap-1.5">
+                                    🖨️ Print Minute
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right: Live Scrollable Naval Minute Sheet Full Page Preview (Pic 1, 2, 3 Style) -->
+                    <div class="lg:col-span-6 bg-slate-300/80 p-4 rounded-2xl border border-slate-300 flex flex-col justify-between max-h-[88vh] overflow-hidden">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>📄</span> <span id="msPreviewPaperTitle">A4 Naval Minute Paper View</span>
+                            </span>
+                            <div class="flex items-center gap-2">
+                                <button onclick="printMinuteSheetDocument()" class="text-xs font-bold text-teal-800 bg-white px-3 py-1 rounded-lg border border-slate-300 shadow-2xs hover:bg-slate-50 cursor-pointer flex items-center gap-1">
+                                    🖨️ Quick Print
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Scrollable Full-Page Container -->
+                        <div class="flex-1 overflow-y-auto p-1 sm:p-3 flex justify-center bg-slate-400/30 rounded-xl border border-slate-300">
+                            <!-- Minute Sheet Paper Surface (Pic 1, 2, 3 Authentic Layout) -->
+                            <div id="minuteSheetPrintArea" class="w-full max-w-[760px] bg-white p-8 sm:p-10 shadow-2xl rounded-sm border border-slate-400 text-black text-xs font-serif leading-relaxed min-h-[1020px]">
+                                <!-- Populated dynamically via updateMinuteSheetPreview() -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== SUB-PANEL 3: INVENTORY OF MINUTE TEMPLATES ==================== -->
+            <div id="docPanel-templates" class="hidden space-y-4">
+                <div class="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs">
+                    <div>
+                        <h3 class="text-sm font-black text-slate-800 uppercase tracking-wider">
+                            📚 Inventory of Minute Sheet Templates
+                        </h3>
+                        <p class="text-xs text-slate-500">
+                            Select standard minute templates, customize dynamic fields, and print or submit directly.
+                        </p>
+                    </div>
+                    <button onclick="openNewMinuteTemplateModal()" class="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs cursor-pointer flex items-center gap-1.5">
+                        <span>➕</span> Add New Template to Inventory
+                    </button>
+                </div>
+
+                <!-- Template Cards Grid -->
+                <div id="minuteTemplatesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Dynamic template cards rendered via renderMinuteTemplatesInventory() -->
+                </div>
+            </div>
+        </div>
     </main>
 
     <!-- ==================== MODALS ==================== -->
@@ -3142,6 +3645,19 @@
                     <label class="block text-xs font-bold text-teal-800 mb-1">Job Card Target Zone <span class="font-normal text-teal-600">(Job Card will be managed by selected zone)</span></label>
                     <select id="woTargetJobCardZone" class="w-full px-3 py-2 border border-teal-300 rounded-lg bg-white text-xs font-medium focus:ring-2 focus:ring-teal-500">
                         <option value="">-- Maintain under Current Workshop Zone --</option>
+                    </select>
+                </div>
+
+                <!-- Link to Incoming Job Minute Sheet for this Zone / Workshop -->
+                <div id="woIncomingMinuteWrapper" class="p-3 bg-purple-50/90 border border-purple-200 rounded-xl space-y-1.5">
+                    <div class="flex items-center justify-between flex-wrap gap-1">
+                        <label class="block text-xs font-bold text-purple-900 uppercase flex items-center gap-1.5">
+                            <span>📜</span> Incoming Job Minute (Directed to this Zone/Shop)
+                        </label>
+                        <span class="text-[10px] text-purple-700 font-semibold bg-purple-100 px-2 py-0.5 rounded">Auto-fills Reference & Description</span>
+                    </div>
+                    <select id="woIncomingMinuteSelect" onchange="autoFillWorkOrderFromMinute(this.value)" class="w-full px-3 py-2 border border-purple-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-purple-500 outline-none">
+                        <option value="">-- Choose Incoming Minute Sheet (Optional) --</option>
                     </select>
                 </div>
 
@@ -4104,7 +4620,7 @@
                 <h2 class="font-bold text-lg">Add Inventory Item</h2>
                 <button onclick="closeModal('inventoryModal')" class="text-green-200 hover:text-white">✕</button>
             </div>
-            <form onsubmit="saveInventoryItem(event)" class="p-6 space-y-4">
+            <form id="inventoryForm" onsubmit="saveInventoryItem(event)" class="p-6 space-y-4">
                 <input type="hidden" id="invId">
                 
                 <div class="grid grid-cols-2 gap-4">
@@ -4139,21 +4655,30 @@
                 <div class="grid grid-cols-3 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Deno (Unit)</label>
-                        <select id="invDeno" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <select id="invDeno" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
                             <option value="Nos">Nos</option>
+                            <option value="lft">lft (Length Feet)</option>
+                            <option value="Cube">Cube</option>
                             <option value="Kg">Kg</option>
                             <option value="g">g (Gram)</option>
-                            <option value="lft">lft (Length Feet)</option>
                             <option value="Ft">Ft</option>
                             <option value="Meters">Meters</option>
                             <option value="Ltr">Ltr</option>
                             <option value="Bags">Bags</option>
                             <option value="Sheets">Sheets</option>
                             <option value="Cubic M">Cubic M</option>
+                            <option value="Sq.ft">Sq.ft</option>
+                            <option value="Sq.m">Sq.m</option>
                             <option value="Rolls">Rolls</option>
                             <option value="Sets">Sets</option>
                             <option value="Pkts">Pkts</option>
                             <option value="Pairs">Pairs</option>
+                            <option value="Bundles">Bundles</option>
+                            <option value="Boxes">Boxes</option>
+                            <option value="Bottles">Bottles</option>
+                            <option value="Tins">Tins</option>
+                            <option value="Tons">Tons</option>
+                            <option value="Yds">Yds</option>
                         </select>
                     </div>
                     <div>
@@ -4320,6 +4845,19 @@
             <form onsubmit="saveEstimate(event)" class="p-6 space-y-4">
                 <input type="hidden" id="estId">
                 
+                <!-- Link to Incoming Job Minute (Directed to this Zone/Workshop) -->
+                <div id="estIncomingMinuteSelectWrapper" class="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <span class="text-xs font-black text-teal-900 flex items-center gap-1.5">
+                            <span>📥</span> Auto-fill from Incoming Job Minute
+                        </span>
+                        <span class="text-[11px] text-teal-700 font-medium">Directed to this zone/workshop for maintenance / estimation</span>
+                    </div>
+                    <select id="estLinkJobMinuteSelect" onchange="autoFillEstimateFromMinute(this.value)" class="px-3 py-1.5 border border-teal-300 rounded-lg text-xs bg-white focus:ring-1 focus:ring-teal-500 font-medium outline-none max-w-sm">
+                        <option value="">-- Select Incoming Job Minute to Auto-fill --</option>
+                    </select>
+                </div>
+
                 <div class="grid grid-cols-12 gap-3">
                     <div class="col-span-12">
                         <label class="block text-xs font-semibold text-slate-700 mb-1">Description *</label>
@@ -5356,9 +5894,75 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- PHYSICAL FITNESS & BMI STATUS CARD -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-4" id="profHealthFitnessCard">
+                            <div class="flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                    <span>🏥</span> PHYSICAL FITNESS & MEDICAL STATUS
+                                </h3>
+                                <span id="profMedFitBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200">Checking...</span>
+                            </div>
+
+                            <!-- Live BMI Calculator & Measurements -->
+                            <div class="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <span class="text-xs font-bold text-slate-800 flex items-center gap-1.5"><span>⚖️</span> Body Measurements & BMI</span>
+                                    <span id="profBmiCategoryBadge" class="px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300">Optimal Weight</span>
+                                </div>
+
+                                <div class="grid grid-cols-2 gap-2 text-xs">
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Weight (kg)</label>
+                                        <div class="flex items-center gap-1">
+                                            <input type="number" step="0.1" id="profInputWeight" placeholder="e.g. 68.5" oninput="calculateSailorLiveBMI()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-teal-500 outline-none">
+                                            <span class="text-[10px] font-bold text-slate-500">kg</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label class="block text-[10px] font-bold text-slate-500 uppercase mb-1">Height (cm)</label>
+                                        <div class="flex items-center gap-1">
+                                            <input type="number" step="0.5" id="profInputHeight" placeholder="e.g. 172" oninput="calculateSailorLiveBMI()" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-800 bg-white focus:ring-2 focus:ring-teal-500 outline-none">
+                                            <span class="text-[10px] font-bold text-slate-500">cm</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="pt-2 border-t border-slate-200 flex items-center justify-between">
+                                    <div>
+                                        <span class="text-[10px] font-bold text-slate-400 uppercase block">Calculated BMI Score</span>
+                                        <span id="profBmiScoreDisplay" class="text-lg font-black text-slate-800 font-mono">22.8</span>
+                                        <span class="text-[10px] text-slate-500 font-medium ml-1" id="profBmiFormulaNote">(Weight / Height²)</span>
+                                    </div>
+                                    <button type="button" onclick="saveSailorMeasurements()" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-teal-600 hover:bg-teal-700 text-white shadow-xs transition-all cursor-pointer flex items-center gap-1">
+                                        <span>💾</span> Save
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Real Medical & Naval Service Health Records (No Fabricated Data) -->
+                            <div class="divide-y divide-slate-100 text-xs pt-1">
+                                <div class="py-2 flex justify-between gap-4">
+                                    <span class="text-slate-400 font-medium">Naval Med Category</span>
+                                    <span id="profMedCategory" class="font-bold text-slate-800 font-mono">—</span>
+                                </div>
+                                <div class="py-2 flex justify-between gap-4">
+                                    <span class="text-slate-400 font-medium">Current Status</span>
+                                    <span id="profHealthCondition" class="font-semibold text-slate-700">—</span>
+                                </div>
+                                <div class="py-2 flex justify-between gap-4">
+                                    <span class="text-slate-400 font-medium">Duty Restrictions</span>
+                                    <span id="profDutyRestrictions" class="font-semibold text-slate-700">—</span>
+                                </div>
+                                <div class="py-2 flex justify-between gap-4">
+                                    <span class="text-slate-400 font-medium">Blood Group</span>
+                                    <span id="profBloodDonorReady" class="font-bold text-rose-600 font-mono">—</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <!-- Right Column: Performance, Insights, Attachments & Leave History -->
+                    <!-- Right Column: Performance, Insights, Calendar, Attachments & Leave History -->
                     <div class="space-y-6">
                         <!-- PERFORMANCE SCORE & INSIGHTS CARD -->
                         <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-4">
@@ -5421,6 +6025,123 @@
                                     <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
                                         <div id="profBarDiscipline" class="h-full bg-indigo-500 rounded-full" style="width: 85%"></div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- ATTENDANCE, PERFORMANCE CALENDAR & SICK HISTORY CARD -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-4" id="profCalendarCard">
+                            <!-- Top Header with Period Filter Mode Selector -->
+                            <div class="border-b border-slate-100 pb-3 space-y-3">
+                                <div class="flex items-center justify-between flex-wrap gap-2">
+                                    <h3 class="text-xs font-black text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                                        <span>📅</span> ATTENDANCE, PERFORMANCE & SICK HISTORY
+                                    </h3>
+                                    <!-- Period View Selector -->
+                                    <div class="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200 text-xs">
+                                        <button type="button" id="btnProfPeriodMonthly" onclick="setSailorProfilePeriodMode('monthly')" class="px-2.5 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer">
+                                            Monthly
+                                        </button>
+                                        <button type="button" id="btnProfPeriodJoined" onclick="setSailorProfilePeriodMode('since_joined')" class="px-2.5 py-1 rounded-lg font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer">
+                                            Since Joined Base
+                                        </button>
+                                        <button type="button" id="btnProfPeriodCustom" onclick="setSailorProfilePeriodMode('custom')" class="px-2.5 py-1 rounded-lg font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer">
+                                            Custom Period
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Period Controls Row -->
+                                <div class="flex items-center justify-between flex-wrap gap-2 text-xs pt-1">
+                                    <!-- Monthly Navigation (Shown when Monthly mode is active) -->
+                                    <div id="profPeriodMonthlyControls" class="flex items-center gap-1.5">
+                                        <button type="button" onclick="navigateSailorProfileMonth(-1)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer">◀</button>
+                                        <span id="profCalMonthYear" class="text-xs font-black text-slate-800 px-2 min-w-[110px] text-center font-mono">August 2026</span>
+                                        <button type="button" onclick="navigateSailorProfileMonth(1)" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all cursor-pointer">▶</button>
+                                        <button type="button" onclick="navigateSailorProfileMonth(0)" class="px-2 py-1 rounded-lg text-[10px] font-bold bg-teal-50 hover:bg-teal-100 text-teal-700 transition-all cursor-pointer border border-teal-200">Today</button>
+                                    </div>
+
+                                    <!-- Custom Date Range Controls (Shown when Custom mode is active) -->
+                                    <div id="profPeriodCustomControls" class="hidden flex items-center gap-1.5 flex-wrap">
+                                        <span class="text-[11px] font-bold text-slate-500">From:</span>
+                                        <input type="date" id="profPeriodDateFrom" onchange="refreshSailorProfilePeriodData()" class="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:bg-white outline-none">
+                                        <span class="text-[11px] font-bold text-slate-500">To:</span>
+                                        <input type="date" id="profPeriodDateTo" onchange="refreshSailorProfilePeriodData()" class="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:bg-white outline-none">
+                                        <button type="button" onclick="refreshSailorProfilePeriodData()" class="px-2.5 py-1 bg-teal-600 text-white rounded-lg text-xs font-bold shadow-xs cursor-pointer">Filter</button>
+                                    </div>
+
+                                    <!-- Since Joined Base Label (Shown when Since Joined is active) -->
+                                    <div id="profPeriodJoinedInfo" class="hidden text-xs text-slate-600 font-medium">
+                                        Drafted / Joined Base: <span id="profPeriodJoinedDate" class="font-bold text-slate-900 font-mono">—</span>
+                                    </div>
+
+                                    <!-- Active Period Badge -->
+                                    <span id="profActivePeriodLabel" class="text-[11px] font-bold bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200">
+                                        Period: August 2026
+                                    </span>
+                                </div>
+                            </div>
+
+                            <!-- Performance & Attendance Stats Summary for Selected Period -->
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-[11px] font-bold">
+                                <div class="p-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
+                                    <span class="block text-[10px] text-amber-600">🏖️ Leave Days</span>
+                                    <span id="profCalLeaveCount" class="text-sm font-black">0</span>
+                                </div>
+                                <div class="p-2 rounded-lg bg-rose-50 border border-rose-200 text-rose-800">
+                                    <span class="block text-[10px] text-rose-600">🏥 Sick Days</span>
+                                    <span id="profCalSickCount" class="text-sm font-black">0</span>
+                                </div>
+                                <div class="p-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-800">
+                                    <span class="block text-[10px] text-blue-600">🏗️ Task / Duty Days</span>
+                                    <span id="profCalDutyCount" class="text-sm font-black">0</span>
+                                </div>
+                                <div class="p-2 rounded-lg bg-teal-50 border border-teal-200 text-teal-800">
+                                    <span class="block text-[10px] text-teal-600">⭐ Period Avg Score</span>
+                                    <span id="profCalMonthAvgScore" class="text-sm font-black">7.0</span>
+                                </div>
+                            </div>
+
+                            <!-- Monthly Calendar View Container (Visible in Monthly Mode) -->
+                            <div id="profCalendarGridWrapper" class="space-y-2">
+                                <div class="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                                    <div class="grid grid-cols-7 bg-slate-900 text-white text-[10px] font-bold text-center py-1.5 uppercase tracking-wider">
+                                        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span class="text-amber-300">Sat</span><span class="text-rose-300">Sun</span>
+                                    </div>
+                                    <div id="profCalendarGrid" class="grid grid-cols-7 gap-px bg-slate-200 text-xs">
+                                        <!-- Populated dynamically with calendar day cells -->
+                                    </div>
+                                </div>
+                                <div class="flex items-center justify-between text-[10px] text-slate-500 pt-0.5 flex-wrap gap-1">
+                                    <div class="flex items-center gap-3">
+                                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-amber-400 inline-block"></span> Leave</span>
+                                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-rose-400 inline-block"></span> Sick</span>
+                                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-blue-400 inline-block"></span> On Duty</span>
+                                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-xs bg-emerald-400 inline-block"></span> Evaluated (⭐)</span>
+                                    </div>
+                                    <span class="italic font-mono">Daily rating shown on evaluated task days</span>
+                                </div>
+                            </div>
+
+                            <!-- SICK & HEALTH CONDITION HISTORY SECTION (With Sick Categories) -->
+                            <div class="border-t border-slate-100 pt-3 space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <h4 class="text-xs font-black text-rose-900 uppercase tracking-wider flex items-center gap-1.5">
+                                        <span>🏥</span> SICK & MEDICAL INCIDENTS HISTORY (ගිලන් වාර්තා සහ කාණ්ඩය)
+                                    </h4>
+                                    <span id="profSickIncidentsBadge" class="text-[10px] font-bold bg-rose-50 text-rose-700 px-2 py-0.5 rounded border border-rose-200">
+                                        0 Incidents Recorded
+                                    </span>
+                                </div>
+
+                                <!-- Sick Categories Summary Pills -->
+                                <div id="profSickCategoriesPills" class="flex flex-wrap gap-1.5 text-[10px]">
+                                    <!-- Dynamic pills e.g. SIQ: 2d, S/R: 1d, ADM: 0d -->
+                                </div>
+
+                                <!-- Detailed Sick Incidents List -->
+                                <div id="profSickHistoryList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                    <!-- Dynamic records -->
                                 </div>
                             </div>
                         </div>
@@ -5496,6 +6217,272 @@
                     <button type="button" onclick="saveGoogleConfigFromModal()" class="flex-1 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg font-medium">Save & Proceed</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- ==================== DOCUMENTS & MINUTE SYSTEM MODALS ==================== -->
+
+    <!-- Modal 1: Register New Job Minute & Tracking Number -->
+    <div id="newJobMinuteModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 modal-overlay no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div class="bg-gradient-to-r from-slate-900 to-teal-900 text-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-xl">📋</span>
+                    <div>
+                        <h3 class="font-bold text-base">Register Incoming Job Minute</h3>
+                        <p class="text-xs text-teal-200">Generate Tracking Ref Number & Initiate Document Workflow</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('newJobMinuteModal')" class="text-slate-300 hover:text-white text-lg font-bold">✕</button>
+            </div>
+
+            <form onsubmit="event.preventDefault(); saveNewJobMinuteRecord();" class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <div class="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between">
+                    <div>
+                        <span class="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">Generated Minute Tracking Ref #</span>
+                        <span id="njmRefNumberDisplay" class="text-base font-black text-teal-900 font-mono">MIN/2026/08/001</span>
+                    </div>
+                    <span class="text-[10px] bg-teal-200/80 text-teal-900 px-2 py-0.5 rounded font-bold">Carried through JC completion</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Date Received <span class="text-rose-500">*</span></label>
+                        <input type="date" id="njmDateReceived" required class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">End User / Department / Base <span class="text-rose-500">*</span></label>
+                        <input type="text" id="njmEndUser" required placeholder="e.g. Wardroom, MT, Supply School..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Subject & Scope of Request <span class="text-rose-500">*</span></label>
+                    <input type="text" id="njmSubject" required placeholder="e.g. Roof leakage & rainwater gutter repairs at Block B" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-semibold text-slate-800 bg-slate-50 focus:bg-white outline-none">
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Detailed Description / Instructions from Minute</label>
+                    <textarea id="njmDescription" rows="2" placeholder="Enter full details, end-user remarks, or reference file notes..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none"></textarea>
+                </div>
+
+                <!-- Directed To: Zone / Workshop / Admin Officer Routing -->
+                <div class="grid grid-cols-2 gap-3 p-3 bg-amber-50/70 border border-amber-200 rounded-xl">
+                    <div>
+                        <label class="block font-bold text-amber-900 uppercase mb-1">Direct To (දිශාගත කිරීමේ වර්ගය) <span class="text-rose-500">*</span></label>
+                        <select id="njmDirectedType" onchange="onDirectedTypeChange()" class="w-full px-3 py-2 border border-amber-300 rounded-xl bg-white focus:ring-1 focus:ring-amber-500 outline-none font-medium">
+                            <option value="Zone for Maintenance">📍 Zone for Maintenance (නඩත්තු කලාපය)</option>
+                            <option value="Workshop for Job">🔨 Workshop for Job (වැඩපළ කාර්යය)</option>
+                            <option value="Admin Officer">👔 Admin Officer (පරිපාලන නිලධාරි)</option>
+                            <option value="Relevant Officer / Desk">📑 Relevant Officer / Desk (අදාළ අංශය)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-amber-900 uppercase mb-1" id="lblNjmDirectedTarget">Target Zone / Workshop <span class="text-rose-500">*</span></label>
+                        <select id="njmDirectedTarget" class="w-full px-3 py-2 border border-amber-300 rounded-xl bg-white focus:ring-1 focus:ring-amber-500 outline-none font-bold text-slate-800">
+                            <!-- Populated dynamically via onDirectedTypeChange() -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Priority</label>
+                        <select id="njmPriority" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                            <option value="Normal">🟢 Normal (සාමාන්‍ය)</option>
+                            <option value="High">🟡 High / Urgent</option>
+                            <option value="Emergency">🔴 Critical / Emergency</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Initial Present Position</label>
+                        <select id="njmPosition" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                            <option value="RECEIVED">📥 Received from End User</option>
+                            <option value="ESTIMATION">📐 Forwarded for Estimation</option>
+                            <option value="APPROVAL">✍️ Pending Recommendation / Approval</option>
+                            <option value="ASSIGNED">🔨 Assigned to Workshop / JC</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Link to Existing Estimate (Optional)</label>
+                        <select id="njmLinkEstimate" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                            <option value="">-- No Linked Estimate Yet --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Link to Existing Job Card (Optional)</label>
+                        <select id="njmLinkJobCard" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                            <option value="">-- No Linked Job Card Yet --</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <button type="button" onclick="closeModal('newJobMinuteModal')" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-100 transition-all font-bold">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5">
+                        <span>💾</span> Register & Generate Slip
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 2: Update Present Position & Activity Trail -->
+    <div id="updatePositionModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 modal-overlay no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <div>
+                    <h3 class="font-bold text-base flex items-center gap-2">
+                        <span>🔄</span> Update Present Position (ස්ථානය / අදියර)
+                    </h3>
+                    <p class="text-xs text-slate-300 font-mono" id="uppMinuteRefTitle">MIN/2026/08/001</p>
+                </div>
+                <button onclick="closeModal('updatePositionModal')" class="text-slate-300 hover:text-white font-bold">✕</button>
+            </div>
+
+            <div class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <input type="hidden" id="uppMinuteId">
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">New Present Position / Workflow Stage <span class="text-rose-500">*</span></label>
+                    <select id="uppNewPosition" class="w-full px-3 py-2 border border-slate-300 rounded-xl font-bold text-slate-800 bg-slate-50 focus:bg-white outline-none">
+                        <option value="RECEIVED">📥 Received from End User</option>
+                        <option value="ESTIMATION">📐 Under Estimation / Scope Assessment</option>
+                        <option value="APPROVAL">✍️ Forwarded for Recommendation / Approval (DCE/CE/OIC)</option>
+                        <option value="ASSIGNED">🔨 Assigned to Workshop / Job Card Generated</option>
+                        <option value="WIP">⚙️ Work In Progress</option>
+                        <option value="COMPLETED">✅ Completed & Handed Over to End User</option>
+                        <option value="ARCHIVED">🗄️ Minute Archived / Recorded</option>
+                    </select>
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Date & Time</label>
+                        <input type="date" id="uppDate" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Current Officer / Location</label>
+                        <input type="text" id="uppOfficer" placeholder="e.g. Planning Section, Workshop 02, DCE..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Action Taken / Remarks</label>
+                    <textarea id="uppRemarks" rows="3" placeholder="Enter details of action taken, movement note, or handover details..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none"></textarea>
+                </div>
+
+                <!-- Previous Trail Log -->
+                <div class="space-y-1.5 pt-2 border-t border-slate-100">
+                    <p class="font-bold text-slate-500 uppercase text-[10px]">Position History Trail:</p>
+                    <div id="uppTrailContainer" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <button type="button" onclick="closeModal('updatePositionModal')" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-bold">
+                        Cancel
+                    </button>
+                    <button type="button" onclick="saveUpdatedPresentPosition()" class="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md cursor-pointer">
+                        Update Position
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 3: Printable End-User Slip & Acknowledgement -->
+    <div id="minuteSlipModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 modal-overlay no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div class="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <span>🧾</span> End-User Minute Tracking Slip
+                </h3>
+                <button onclick="closeModal('minuteSlipModal')" class="text-slate-300 hover:text-white font-bold">✕</button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div id="minuteSlipPrintArea" class="p-6 border-2 border-dashed border-slate-300 rounded-xl bg-slate-50 space-y-3 text-slate-900 font-sans text-xs">
+                    <!-- Dynamic Slip Content -->
+                </div>
+
+                <div class="flex items-center justify-between pt-2">
+                    <button onclick="closeModal('minuteSlipModal')" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-bold text-xs">
+                        Close
+                    </button>
+                    <button onclick="printElement('minuteSlipPrintArea')" class="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold text-xs shadow-md flex items-center gap-1.5 cursor-pointer">
+                        🖨️ Print Slip for End-User
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 4: Add / Edit Minute Template -->
+    <div id="editMinuteTemplateModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 modal-overlay no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div class="bg-purple-900 text-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <h3 class="font-bold text-base flex items-center gap-2">
+                    <span>📚</span> <span id="emtModalTitle">Add Template to Inventory</span>
+                </h3>
+                <button onclick="closeModal('editMinuteTemplateModal')" class="text-purple-200 hover:text-white font-bold">✕</button>
+            </div>
+
+            <form onsubmit="event.preventDefault(); saveCustomMinuteTemplate();" class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <input type="hidden" id="emtTemplateId">
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Template Title <span class="text-rose-500">*</span></label>
+                    <input type="text" id="emtTitle" required placeholder="e.g. Urgent Material Procurement Minute" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                </div>
+
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Category</label>
+                        <select id="emtCategory" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                            <option value="Civil Works">Civil Works</option>
+                            <option value="Material & Stores">Material & Stores</option>
+                            <option value="Financial & Estimates">Financial & Estimates</option>
+                            <option value="Handing Over">Handing Over</option>
+                            <option value="General Admin">General Admin</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Default Addressee (To)</label>
+                        <input type="text" id="emtTo" placeholder="e.g. Chief Engineer" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Default Subject Template</label>
+                    <input type="text" id="emtSubject" placeholder="e.g. APPROVAL FOR CIVIL MAINTENANCE WORK AT [LOCATION]" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Template Body (Standard Paragraphs)</label>
+                    <textarea id="emtBody" rows="5" placeholder="Enter standard paragraphs with [PLACEHOLDERS]..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none"></textarea>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Default Recommendation / Submission Clause</label>
+                    <input type="text" id="emtRecommendation" placeholder="e.g. Forwarded for your kind approval please." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <button type="button" onclick="closeModal('editMinuteTemplateModal')" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-bold">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-md cursor-pointer">
+                        Save to Inventory
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 
