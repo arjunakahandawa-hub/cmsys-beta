@@ -23494,10 +23494,10 @@ function updateMinuteSheetPreview() {
 
       <!-- Table without outer borders - Only vertical divider line (Yellow Highlight) & horizontal subject divider -->
       <table class="w-full border-collapse text-xs leading-relaxed" style="border:none !important; width:100%;">
-        <!-- Top Subject Row (No top-left reference box) -->
+        <!-- Top Subject Row (With Top-Left Reference: "යොමුව" / "Ref") -->
         <tr style="border:none !important;">
-          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-left:none !important; padding: 6px 8px;" class="align-top">
-            <!-- Left Margin Top: Blank -->
+          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-left:none !important; padding: 8px 10px;" class="align-middle font-bold text-xs text-black">
+            <u>${lang === "si" ? "යොමුව" : "Ref"}</u>
           </td>
           <td style="width: ${contentWidth}%; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-right:none !important; padding: 8px 12px;" class="text-center font-black text-xs align-middle tracking-wide text-black uppercase">
             ${subjectVal}
@@ -23506,9 +23506,15 @@ function updateMinuteSheetPreview() {
 
         <!-- Main Body Row (Single continuous columns with dynamic margin) -->
         <tr style="border:none !important;">
-          <!-- Left Column (Adjustable Margin Divider): All Addressees with auto-wrap -->
-          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom:none !important; border-left:none !important; padding: 14px 10px; word-break: break-word; overflow-wrap: anywhere;" class="align-top space-y-4">
-            ${addresseesHtml}
+          <!-- Left Column (Adjustable Margin Divider): All Addressees aligned with Originator -->
+          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom:none !important; border-left:none !important; padding: 14px 10px; word-break: break-word; overflow-wrap: anywhere;" class="align-top">
+            <!-- Invisible Header Spacer exactly matching M-01 header height to align Addressee with Originator -->
+            <div class="text-center font-black text-xs pb-1 invisible select-none" aria-hidden="true">
+              <u>${langM01}</u>
+            </div>
+            <div class="space-y-4 pt-0">
+              ${addresseesHtml}
+            </div>
           </td>
 
           <!-- Right Column: M-01 and M-02 (No right or bottom border) -->
