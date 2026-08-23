@@ -19012,6 +19012,66 @@ function getSailorLiveDailyStatus(sailor, dateVal) {
   };
 }
 
+// Helper to count evaluated days vs non-evaluated days for a sailor (Global Scope)
+function getSailorEvaluationStats(sailor) {
+  if (!sailor) return { evaluatedDays: 0, pendingDays: 0, totalDutyDays: 0, history: [], avgScore: 7.0 };
+  const sId = String(sailor.id !== undefined && sailor.id !== null ? sailor.id : "");
+  const sFbKey = String(sailor._fbKey || "");
+  const offNo = String(sailor.official_number || sailor.offNo || "");
+
+  const allocs = (store.dailyAllocations || []).filter((a) => {
+    const aSailorId = String(a.sailor_id || "");
+    return (
+      (sId && aSailorId === sId) ||
+      (sFbKey && aSailorId === sFbKey) ||
+      (offNo && aSailorId === offNo)
+    );
+  });
+
+  let evaluatedDays = 0;
+  let pendingDays = 0;
+  const history = [];
+  let scoreSum = 0;
+
+  const dateMap = new Map();
+  allocs.forEach((a) => {
+    if (a.date) {
+      if (!dateMap.has(a.date) || a.evaluated) {
+        dateMap.set(a.date, a);
+      }
+    }
+  });
+
+  dateMap.forEach((a, dt) => {
+    const isEval = a.evaluated === true || (typeof a.score === "number" && a.score > 0);
+    if (isEval) {
+      evaluatedDays++;
+      const sc = typeof a.score === "number" ? a.score : parseFloat(sailor.avgScore || 7.0);
+      scoreSum += sc;
+      history.push({ date: dt, evaluated: true, score: sc, workOrderId: a.work_order_id });
+    } else {
+      pendingDays++;
+      history.push({ date: dt, evaluated: false, score: null, workOrderId: a.work_order_id });
+    }
+  });
+
+  history.sort((a, b) => b.date.localeCompare(a.date));
+
+  if (evaluatedDays === 0 && sailor.evaluated) {
+    evaluatedDays = 1;
+  }
+
+  const avg = evaluatedDays > 0 ? scoreSum / evaluatedDays : parseFloat(sailor.avgScore || 7.0);
+
+  return {
+    evaluatedDays,
+    pendingDays,
+    totalDutyDays: evaluatedDays + pendingDays,
+    avgScore: avg,
+    history,
+  };
+}
+
 // Render Sailor Operations & Performance Center View
 function renderSailorsView() {
   populateSailorDropdownFilters();
@@ -19130,66 +19190,6 @@ function renderSailorsView() {
   if (totalCountBadge) {
     totalCountBadge.textContent = `Total: ${mapped.length} Sailors`;
   }
-
-// Helper to count evaluated days vs non-evaluated days for a sailor
-function getSailorEvaluationStats(sailor) {
-  if (!sailor) return { evaluatedDays: 0, pendingDays: 0, totalDutyDays: 0, history: [], avgScore: 7.0 };
-  const sId = String(sailor.id !== undefined && sailor.id !== null ? sailor.id : "");
-  const sFbKey = String(sailor._fbKey || "");
-  const offNo = String(sailor.official_number || sailor.offNo || "");
-
-  const allocs = (store.dailyAllocations || []).filter((a) => {
-    const aSailorId = String(a.sailor_id || "");
-    return (
-      (sId && aSailorId === sId) ||
-      (sFbKey && aSailorId === sFbKey) ||
-      (offNo && aSailorId === offNo)
-    );
-  });
-
-  let evaluatedDays = 0;
-  let pendingDays = 0;
-  const history = [];
-  let scoreSum = 0;
-
-  const dateMap = new Map();
-  allocs.forEach((a) => {
-    if (a.date) {
-      if (!dateMap.has(a.date) || a.evaluated) {
-        dateMap.set(a.date, a);
-      }
-    }
-  });
-
-  dateMap.forEach((a, dt) => {
-    const isEval = a.evaluated === true || (typeof a.score === "number" && a.score > 0);
-    if (isEval) {
-      evaluatedDays++;
-      const sc = typeof a.score === "number" ? a.score : parseFloat(sailor.avgScore || 7.0);
-      scoreSum += sc;
-      history.push({ date: dt, evaluated: true, score: sc, workOrderId: a.work_order_id });
-    } else {
-      pendingDays++;
-      history.push({ date: dt, evaluated: false, score: null, workOrderId: a.work_order_id });
-    }
-  });
-
-  history.sort((a, b) => b.date.localeCompare(a.date));
-
-  if (evaluatedDays === 0 && sailor.evaluated) {
-    evaluatedDays = 1;
-  }
-
-  const avg = evaluatedDays > 0 ? scoreSum / evaluatedDays : parseFloat(sailor.avgScore || 7.0);
-
-  return {
-    evaluatedDays,
-    pendingDays,
-    totalDutyDays: evaluatedDays + pendingDays,
-    avgScore: avg,
-    history,
-  };
-}
 
   // Render Table View Rows
   const tableBody = document.getElementById("directorySailorsTableBody");
