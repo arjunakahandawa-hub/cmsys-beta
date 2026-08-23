@@ -172,6 +172,8 @@ const store = {
   estimates: [],
   approvedPendingJobs: [],
   approvedProjects: [],
+  precastBatches: [],
+  nav254Vouchers: [],
   selectedJobCardsForMerge: new Set(),
   isJobCardMergeMode: false,
   dailyAllocations: [],
@@ -927,7 +929,24 @@ function initOpsListeners() {
     if (typeof populateApprovedProjectsDropdown === "function") {
       populateApprovedProjectsDropdown();
     }
-  }); // ── Daily Allocations ──
+  });
+
+  // ── Pre-Cast Batches ──
+  opsDB.ref("precast_batches").on("value", (snapshot) => {
+    store.precastBatches = snapshotToArray(snapshot);
+    console.log(`🧱 DB#2: ${store.precastBatches.length} precast batches loaded`);
+  });
+
+  // ── NAV 254 Issue Vouchers ──
+  opsDB.ref("nav254_vouchers").on("value", (snapshot) => {
+    store.nav254Vouchers = snapshotToArray(snapshot);
+    console.log(`📜 DB#2: ${store.nav254Vouchers.length} NAV 254 vouchers loaded`);
+    if (typeof renderNav254HistoryTable === "function") {
+      renderNav254HistoryTable();
+    }
+  });
+
+  // ── Daily Allocations ──
   opsDB.ref("daily_allocations").on("value", (snapshot) => {
     const arr = snapshotToArray(snapshot);
     store.dailyAllocations = arr;
@@ -8151,6 +8170,7 @@ function renderInventoryCategories() {
   const container = document.getElementById("inventoryCategoryTabsContainer");
   if (!container) return; // Default categories that should always appear
   const defaultCats = [
+    "Pre-Cast Products",
     "BMS",
     "Plumbing",
     "Metal",
@@ -15030,6 +15050,714 @@ function executeJobCardMerge(primaryJc, secondaryJcKeys) {
     "success",
     7000
   );
+}
+
+// =============================================
+// CEMENT PRE-CAST WORKSHOP & NAV 254 SYSTEM (G ZONE)
+// =============================================
+
+function openPrecastProductionModal() {
+  const modal = document.getElementById("precastProductionModal");
+  if (!modal) return;
+
+  const today = getLocalDateString();
+  const serialNo = `BATCH/${new Date().getFullYear()}/${String(Date.now()).slice(-4)}`;
+
+  document.getElementById("pcBatchNo").value = serialNo;
+  document.getElementById("pcDate").value = today;
+  document.getElementById("pcShift").value = "Day Shift (0800 - 1630)";
+  document.getElementById("pcProductSelect").value = "4 inch Cement Solid Block";
+  document.getElementById("pcCustomProduct").classList.add("hidden");
+  document.getElementById("pcCustomProduct").value = "";
+  document.getElementById("pcQuantity").value = "";
+  document.getElementById("pcUnit").value = "Nos";
+  document.getElementById("pcSupervisor").value = store.currentUser?.name || "";
+  document.getElementById("pcRemarks").value = "";
+
+  // Reset material fields
+  document.getElementById("pcMatCement").value = "";
+  document.getElementById("pcMatQuarryDust").value = "";
+  document.getElementById("pcMatChipMetal").value = "";
+  document.getElementById("pcMatMetal34").value = "";
+  document.getElementById("pcMatTorSteel").value = "";
+  document.getElementById("pcMatAdmixture").value = "";
+
+  // Load and display current raw material balances in G Zone
+  updatePrecastStockBadges();
+
+  modal.classList.remove("hidden");
+}
+
+function updatePrecastStockBadges() {
+  const findStock = (term) => {
+    const item = (store.inventory || []).find((i) =>
+      (i.description || "").toLowerCase().includes(term.toLowerCase())
+    );
+    return item ? `${item.quantity || 0} ${item.deno || ""}` : "0";
+  };
+
+  const cementEl = document.getElementById("pcStockCement");
+  if (cementEl) cementEl.textContent = `Stock: ${findStock("Cement")}`;
+
+  const qdEl = document.getElementById("pcStockQuarryDust");
+  if (qdEl) qdEl.textContent = `Stock: ${findStock("Quarry") || findStock("Dust")}`;
+
+  const chipEl = document.getElementById("pcStockChipMetal");
+  if (chipEl) chipEl.textContent = `Stock: ${findStock("Chip") || findStock("1/4")}`;
+
+  const m34El = document.getElementById("pcStockMetal34");
+  if (m34El) m34El.textContent = `Stock: ${findStock("3/4") || findStock("Metal")}`;
+
+  const torEl = document.getElementById("pcStockTorSteel");
+  if (torEl) torEl.textContent = `Stock: ${findStock("TOR") || findStock("Steel") || findStock("Iron")}`;
+}
+
+function handlePrecastProductSelect(val) {
+  const customEl = document.getElementById("pcCustomProduct");
+  if (val === "CUSTOM") {
+    customEl.classList.remove("hidden");
+    customEl.required = true;
+  } else {
+    customEl.classList.add("hidden");
+    customEl.required = false;
+  }
+  autoCalculatePrecastRawMaterials();
+}
+
+function autoCalculatePrecastRawMaterials(force = false) {
+  const product = document.getElementById("pcProductSelect").value;
+  const qty = parseFloat(document.getElementById("pcQuantity").value) || 0;
+
+  if (qty <= 0) return;
+
+  // Recipe ratios per 100 units or standard batch
+  let cement = 0, quarryDust = 0, chipMetal = 0, metal34 = 0, torSteel = 0, admixture = 0;
+
+  if (product.includes("4 inch")) {
+    cement = (qty / 100) * 1.5;
+    quarryDust = (qty / 100) * 0.12;
+    chipMetal = (qty / 100) * 0.08;
+  } else if (product.includes("6 inch")) {
+    cement = (qty / 100) * 2.2;
+    quarryDust = (qty / 100) * 0.18;
+    chipMetal = (qty / 100) * 0.12;
+  } else if (product.includes("8 inch")) {
+    cement = (qty / 100) * 2.0;
+    quarryDust = (qty / 100) * 0.20;
+    chipMetal = (qty / 100) * 0.10;
+  } else if (product.includes("Paving") || product.includes("Unipave") || product.includes("Zigzag")) {
+    cement = (qty / 100) * 1.8;
+    quarryDust = (qty / 100) * 0.10;
+    chipMetal = (qty / 100) * 0.12;
+    admixture = (qty / 100) * 0.5;
+  } else if (product.includes("Curb Stone")) {
+    cement = (qty / 10) * 1.5;
+    quarryDust = (qty / 10) * 0.08;
+    metal34 = (qty / 10) * 0.10;
+  } else if (product.includes("Lintel")) {
+    cement = (qty / 10) * 1.5;
+    quarryDust = (qty / 10) * 0.08;
+    metal34 = (qty / 10) * 0.10;
+    torSteel = qty * 1.6;
+  } else if (product.includes("Fence Post")) {
+    cement = (qty / 10) * 1.2;
+    quarryDust = (qty / 10) * 0.06;
+    metal34 = (qty / 10) * 0.08;
+    torSteel = qty * 1.2;
+  } else if (product.includes("Cover Slab") || product.includes("Drain")) {
+    cement = (qty / 10) * 2.0;
+    quarryDust = (qty / 10) * 0.10;
+    metal34 = (qty / 10) * 0.12;
+    torSteel = qty * 1.8;
+  } else if (product.includes("Gabion")) {
+    cement = (qty / 10) * 1.8;
+    quarryDust = (qty / 10) * 0.12;
+    chipMetal = (qty / 10) * 0.14;
+  }
+
+  // Set calculated values (rounded to 2 decimal places)
+  if (cement > 0 || force) document.getElementById("pcMatCement").value = Math.round(cement * 10) / 10 || "";
+  if (quarryDust > 0 || force) document.getElementById("pcMatQuarryDust").value = Math.round(quarryDust * 100) / 100 || "";
+  if (chipMetal > 0 || force) document.getElementById("pcMatChipMetal").value = Math.round(chipMetal * 100) / 100 || "";
+  if (metal34 > 0 || force) document.getElementById("pcMatMetal34").value = Math.round(metal34 * 100) / 100 || "";
+  if (torSteel > 0 || force) document.getElementById("pcMatTorSteel").value = Math.round(torSteel * 10) / 10 || "";
+  if (admixture > 0 || force) document.getElementById("pcMatAdmixture").value = Math.round(admixture * 10) / 10 || "";
+}
+
+function submitPrecastProduction(event) {
+  event.preventDefault();
+
+  const batchNo = document.getElementById("pcBatchNo").value.trim();
+  const date = document.getElementById("pcDate").value;
+  const shift = document.getElementById("pcShift").value;
+  let product = document.getElementById("pcProductSelect").value;
+  if (product === "CUSTOM") {
+    product = document.getElementById("pcCustomProduct").value.trim();
+  }
+  const qty = parseFloat(document.getElementById("pcQuantity").value) || 0;
+  const unit = document.getElementById("pcUnit").value.trim() || "Nos";
+  const supervisor = document.getElementById("pcSupervisor").value.trim();
+  const remarks = document.getElementById("pcRemarks").value.trim();
+
+  if (!product || qty <= 0) {
+    showToast("Please enter a valid product and quantity", "error");
+    return;
+  }
+
+  // Raw materials consumed
+  const rawConsumed = {
+    cement: parseFloat(document.getElementById("pcMatCement").value) || 0,
+    quarry_dust: parseFloat(document.getElementById("pcMatQuarryDust").value) || 0,
+    chip_metal: parseFloat(document.getElementById("pcMatChipMetal").value) || 0,
+    metal_34: parseFloat(document.getElementById("pcMatMetal34").value) || 0,
+    tor_steel: parseFloat(document.getElementById("pcMatTorSteel").value) || 0,
+    admixture: parseFloat(document.getElementById("pcMatAdmixture").value) || 0
+  };
+
+  // 1. Deduct raw materials from G Zone inventory
+  const deductHelper = (term, amount, unitName) => {
+    if (amount <= 0) return;
+    const inv = (store.inventory || []).find((i) =>
+      (i.description || "").toLowerCase().includes(term.toLowerCase())
+    );
+    if (inv) {
+      inv.quantity = Math.max(0, Math.round(((parseFloat(inv.quantity) || 0) - amount) * 100) / 100);
+      if (!inv.off_charge_records) inv.off_charge_records = [];
+      inv.off_charge_records.push({
+        ref: `Batch: ${batchNo}`,
+        qty: amount,
+        date: date,
+        dest: `Pre-Cast WS: ${product} (${qty} ${unit})`,
+        remarks: `Consumed for ${qty} ${unit} ${product}`
+      });
+      fbSaveInventoryItem(inv);
+    }
+  };
+
+  deductHelper("Cement", rawConsumed.cement, "Bags");
+  deductHelper("Quarry", rawConsumed.quarry_dust, "Cubes");
+  deductHelper("Chip", rawConsumed.chip_metal, "Cubes");
+  deductHelper("3/4", rawConsumed.metal_34, "Cubes");
+  deductHelper("TOR", rawConsumed.tor_steel, "kg");
+  deductHelper("Admixture", rawConsumed.admixture, "L");
+
+  // 2. On-charge finished precast product to inventory
+  let finishedItem = (store.inventory || []).find(
+    (i) => (i.description || "").toLowerCase().trim() === product.toLowerCase().trim()
+  );
+
+  if (finishedItem) {
+    finishedItem.quantity = (parseFloat(finishedItem.quantity) || 0) + qty;
+    if (!finishedItem.on_charge_records) finishedItem.on_charge_records = [];
+    finishedItem.on_charge_records.push({
+      date: date,
+      quantity: qty,
+      source: `Pre-Cast Production Batch ${batchNo}`,
+      timestamp: Date.now()
+    });
+    fbSaveInventoryItem(finishedItem);
+  } else {
+    const newItem = {
+      description: product,
+      category: "Pre-Cast Products",
+      deno: unit,
+      quantity: qty,
+      cost_per_unit: 0,
+      location: "G Zone - Pre-Cast Yard",
+      date_added: date,
+      on_charge_ref: batchNo,
+      on_charge_records: [
+        {
+          date: date,
+          quantity: qty,
+          source: `Pre-Cast Production Batch ${batchNo}`,
+          timestamp: Date.now()
+        }
+      ]
+    };
+    fbSaveInventoryItem(newItem);
+  }
+
+  // 3. Save Production Batch Log to Firebase
+  const batchData = {
+    batch_no: batchNo,
+    date: date,
+    shift: shift,
+    product: product,
+    quantity_produced: qty,
+    unit: unit,
+    raw_materials: rawConsumed,
+    supervisor: supervisor,
+    remarks: remarks,
+    created_at: Date.now()
+  };
+
+  opsDB.ref("precast_batches").push(batchData).then(() => {
+    closeModal("precastProductionModal");
+    renderInventoryTable();
+    showToast(`✅ Production Batch "${batchNo}" recorded! (+${qty} ${unit} ${product})`, "success", 6000);
+  }).catch((err) => {
+    console.error("Error saving precast batch:", err);
+    showToast("Error saving production batch", "error");
+  });
+}
+
+// ─────────────────────────────────────────────
+// NAV 254 ISSUE VOUCHER ENGINE
+// ─────────────────────────────────────────────
+
+function openNav254Modal(targetZone = "", preselectedItemId = "") {
+  const modal = document.getElementById("nav254IssueModal");
+  if (!modal) return;
+
+  const today = getLocalDateString();
+  const serialNo = `NAV254/${new Date().getFullYear()}/G-${String(Date.now()).slice(-4)}`;
+
+  document.getElementById("nav254Serial").value = serialNo;
+  document.getElementById("nav254Date").value = today;
+  document.getElementById("nav254IssuingUnit").value = "G Zone (Cement Pre-Cast WS)";
+  document.getElementById("nav254ReceivingUnit").value = targetZone || "";
+  document.getElementById("nav254CustomDest").classList.add("hidden");
+  document.getElementById("nav254CustomDest").value = "";
+  document.getElementById("nav254Authority").value = "";
+  document.getElementById("nav254IssuedBy").value = store.currentUser?.name || "";
+  document.getElementById("nav254ReceivedBy").value = "";
+
+  // Populate CE Officers dropdown
+  const authSelect = document.getElementById("nav254AuthOfficer");
+  if (authSelect) {
+    let opts = '<option value="">-- Select Authorizing CE Officer --</option>';
+    CE_OFFICERS_PRESET.forEach((off) => {
+      opts += `<option value="${off.rank} ${off.name} (${off.desig})">${off.rank} ${off.name} - ${off.desig}</option>`;
+    });
+    authSelect.innerHTML = opts;
+  }
+
+  // Clear and add first item row
+  const tbody = document.getElementById("nav254ItemsTableBody");
+  if (tbody) {
+    tbody.innerHTML = "";
+    addNav254ItemRow(preselectedItemId);
+  }
+
+  modal.classList.remove("hidden");
+}
+
+function handleNav254DestChange(val) {
+  const customEl = document.getElementById("nav254CustomDest");
+  if (val === "CUSTOM") {
+    customEl.classList.remove("hidden");
+    customEl.required = true;
+  } else {
+    customEl.classList.add("hidden");
+    customEl.required = false;
+  }
+}
+
+function addNav254ItemRow(preselectedItemId = "") {
+  const tbody = document.getElementById("nav254ItemsTableBody");
+  if (!tbody) return;
+
+  const items = store.inventory || [];
+  let itemOptions = '<option value="">-- Select Store / Pre-Cast Item --</option>';
+  items.forEach((item) => {
+    const iKey = item._fbKey || item.id;
+    const isSelected = String(iKey) === String(preselectedItemId) ? "selected" : "";
+    itemOptions += `<option value="${iKey}" data-deno="${item.deno || 'Nos'}" data-avail="${item.quantity || 0}" data-cost="${item.cost_per_unit || 0}" ${isSelected}>${item.description} (Stock: ${item.quantity || 0} ${item.deno || 'Nos'})</option>`;
+  });
+
+  const row = document.createElement("tr");
+  row.className = "hover:bg-slate-50 nav254-item-row";
+  row.innerHTML = `
+    <td class="p-2">
+      <select onchange="handleNav254ItemSelect(this)" required class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-xs font-medium text-slate-800 bg-white nav254-item-select">
+        ${itemOptions}
+      </select>
+    </td>
+    <td class="p-2 text-center">
+      <input type="text" readonly class="w-full px-1.5 py-1.5 border border-slate-200 rounded-lg text-center bg-slate-100 font-semibold nav254-item-deno" value="Nos">
+    </td>
+    <td class="p-2 text-center">
+      <input type="number" step="1" min="1" placeholder="0" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-center nav254-item-demanded">
+    </td>
+    <td class="p-2 text-center">
+      <input type="number" step="0.01" min="0.01" required placeholder="Qty" class="w-full px-2 py-1.5 border border-slate-300 rounded-lg text-center font-bold text-blue-700 nav254-item-issued">
+    </td>
+    <td class="p-2 text-center">
+      <button type="button" onclick="removeNav254ItemRow(this)" class="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded" title="Remove Row">✕</button>
+    </td>
+  `;
+
+  tbody.appendChild(row);
+
+  if (preselectedItemId) {
+    const sel = row.querySelector(".nav254-item-select");
+    if (sel) handleNav254ItemSelect(sel);
+  }
+}
+
+function removeNav254ItemRow(btn) {
+  const row = btn.closest("tr");
+  const tbody = document.getElementById("nav254ItemsTableBody");
+  if (tbody && tbody.children.length > 1) {
+    row.remove();
+  } else {
+    showToast("At least one item row is required", "error");
+  }
+}
+
+function handleNav254ItemSelect(selectEl) {
+  const opt = selectEl.options[selectEl.selectedIndex];
+  const row = selectEl.closest("tr");
+  if (!row) return;
+
+  const deno = opt.getAttribute("data-deno") || "Nos";
+  const avail = parseFloat(opt.getAttribute("data-avail")) || 0;
+
+  const denoInput = row.querySelector(".nav254-item-deno");
+  const issuedInput = row.querySelector(".nav254-item-issued");
+
+  if (denoInput) denoInput.value = deno;
+  if (issuedInput) {
+    issuedInput.max = avail;
+    issuedInput.placeholder = `Max ${avail}`;
+  }
+}
+
+let _currentNav254Voucher = null;
+
+function submitNav254Voucher(event) {
+  event.preventDefault();
+
+  const serialNo = document.getElementById("nav254Serial").value.trim();
+  const date = document.getElementById("nav254Date").value;
+  const issuingUnit = document.getElementById("nav254IssuingUnit").value.trim();
+  let receivingUnit = document.getElementById("nav254ReceivingUnit").value;
+  if (receivingUnit === "CUSTOM") {
+    receivingUnit = document.getElementById("nav254CustomDest").value.trim();
+  }
+  const authority = document.getElementById("nav254Authority").value.trim();
+  const authOfficer = document.getElementById("nav254AuthOfficer").value.trim();
+  const issuedBy = document.getElementById("nav254IssuedBy").value.trim();
+  const receivedBy = document.getElementById("nav254ReceivedBy").value.trim();
+
+  const rows = document.querySelectorAll(".nav254-item-row");
+  const items = [];
+
+  for (let row of rows) {
+    const sel = row.querySelector(".nav254-item-select");
+    const itemKey = sel ? sel.value : "";
+    const demanded = parseFloat(row.querySelector(".nav254-item-demanded")?.value) || 0;
+    const issued = parseFloat(row.querySelector(".nav254-item-issued")?.value) || 0;
+    const deno = row.querySelector(".nav254-item-deno")?.value || "Nos";
+
+    if (!itemKey || issued <= 0) {
+      showToast("Please select valid items and enter issued quantities", "error");
+      return;
+    }
+
+    const invItem = (store.inventory || []).find(
+      (i) => String(i._fbKey) === String(itemKey) || String(i.id) === String(itemKey)
+    );
+
+    if (invItem && issued > (parseFloat(invItem.quantity) || 0)) {
+      showToast(`Cannot issue ${issued} ${deno} of "${invItem.description}" (Stock available: ${invItem.quantity})`, "error");
+      return;
+    }
+
+    items.push({
+      inventory_id: itemKey,
+      description: invItem ? invItem.description : "Material Item",
+      deno: deno,
+      quantity_demanded: demanded || issued,
+      quantity_issued: issued,
+      unit_cost: invItem ? (invItem.cost_per_unit || 0) : 0,
+      total_value: (invItem ? (invItem.cost_per_unit || 0) : 0) * issued
+    });
+  }
+
+  if (items.length === 0) {
+    showToast("No items added to voucher", "error");
+    return;
+  }
+
+  // 1. Off-charge each issued item from inventory
+  items.forEach((it) => {
+    const invItem = (store.inventory || []).find(
+      (i) => String(i._fbKey) === String(it.inventory_id) || String(i.id) === String(it.inventory_id)
+    );
+    if (invItem) {
+      invItem.quantity = Math.max(0, Math.round(((parseFloat(invItem.quantity) || 0) - it.quantity_issued) * 100) / 100);
+      if (!invItem.off_charge_records) invItem.off_charge_records = [];
+      invItem.off_charge_records.push({
+        ref: serialNo,
+        qty: it.quantity_issued,
+        date: date,
+        dest: receivingUnit,
+        remarks: `Issued via NAV 254 (${authority})`
+      });
+      invItem.off_charge_ref = serialNo;
+      fbSaveInventoryItem(invItem);
+    }
+  });
+
+  // 2. Save NAV 254 Voucher record to Firebase
+  const voucherData = {
+    voucher_no: serialNo,
+    date: date,
+    issuing_unit: issuingUnit,
+    receiving_unit: receivingUnit,
+    authority: authority,
+    authorized_by: authOfficer,
+    issued_by: issuedBy,
+    received_by: receivedBy,
+    items: items,
+    created_at: Date.now()
+  };
+
+  const voucherKey = opsDB.ref("nav254_vouchers").push().key;
+
+  opsDB.ref(`nav254_vouchers/${voucherKey}`).set(voucherData).then(() => {
+    closeModal("nav254IssueModal");
+    renderInventoryTable();
+    showToast(`📜 NAV 254 Voucher "${serialNo}" generated successfully!`, "success");
+    
+    // Open printable NAV 254 view
+    voucherData.id = voucherKey;
+    _currentNav254Voucher = voucherData;
+    renderNav254PrintDocument(voucherData);
+    document.getElementById("nav254PrintModal").classList.remove("hidden");
+  }).catch((err) => {
+    console.error("Error saving NAV 254 voucher:", err);
+    showToast("Error saving NAV 254 voucher", "error");
+  });
+}
+
+function openNav254HistoryModal() {
+  renderNav254HistoryTable();
+  document.getElementById("nav254HistoryModal").classList.remove("hidden");
+}
+
+function renderNav254HistoryTable() {
+  const tbody = document.getElementById("nav254HistoryTableBody");
+  if (!tbody) return;
+
+  const search = (document.getElementById("nav254HistorySearch")?.value || "").toLowerCase().trim();
+  let vouchers = store.nav254Vouchers || [];
+
+  if (search) {
+    vouchers = vouchers.filter(
+      (v) =>
+        (v.voucher_no || "").toLowerCase().includes(search) ||
+        (v.receiving_unit || "").toLowerCase().includes(search) ||
+        (v.authority || "").toLowerCase().includes(search) ||
+        (v.items || []).some((it) => (it.description || "").toLowerCase().includes(search))
+    );
+  }
+
+  if (vouchers.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" class="p-8 text-center text-slate-400">
+          <span class="text-2xl block mb-1">📜</span>
+          No NAV 254 vouchers found. Click "New NAV 254" to issue materials to other zones.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // Sort descending by date
+  vouchers.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+  tbody.innerHTML = vouchers
+    .map((v) => {
+      const vKey = v._fbKey || v.id;
+      const itemsSummary = (v.items || [])
+        .map((it) => `<span class="inline-block bg-slate-100 px-1.5 py-0.5 rounded text-[11px] font-semibold text-slate-700 mr-1 mb-1">${it.quantity_issued} ${it.deno} ${it.description}</span>`)
+        .join("");
+
+      return `
+        <tr class="hover:bg-slate-50 transition-colors">
+          <td class="p-3 font-mono font-bold text-blue-700">${v.voucher_no}</td>
+          <td class="p-3 text-center text-slate-600 font-medium">${v.date}</td>
+          <td class="p-3 font-semibold text-slate-800">
+            <span class="text-xs">🏢 ${v.receiving_unit}</span>
+          </td>
+          <td class="p-3 max-w-xs">
+            ${itemsSummary}
+          </td>
+          <td class="p-3 text-slate-600 font-medium">${v.authority || "—"}</td>
+          <td class="p-3 text-center whitespace-nowrap">
+            <button onclick="printNav254Voucher('${vKey}')" class="p-1.5 hover:bg-blue-50 text-blue-600 rounded font-semibold text-xs mr-1" title="Print NAV 254">
+              🖨️ Print
+            </button>
+            <button onclick="deleteNav254Voucher('${vKey}')" class="p-1.5 hover:bg-rose-50 text-rose-500 rounded font-semibold text-xs" title="Delete Voucher">
+              🗑️
+            </button>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function printNav254Voucher(voucherId) {
+  const v = (store.nav254Vouchers || []).find(
+    (x) => String(x.id) === String(voucherId) || String(x._fbKey) === String(voucherId)
+  );
+  if (!v) {
+    showToast("Voucher not found", "error");
+    return;
+  }
+  _currentNav254Voucher = v;
+  renderNav254PrintDocument(v);
+  document.getElementById("nav254PrintModal").classList.remove("hidden");
+}
+
+function renderNav254PrintDocument(v) {
+  const container = document.getElementById("nav254PrintDocument");
+  if (!container || !v) return;
+
+  const itemsRows = (v.items || [])
+    .map((it, idx) => `
+      <tr style="border-bottom: 1px solid #cbd5e1;">
+        <td style="padding: 8px; text-align: center; font-weight: bold;">${idx + 1}</td>
+        <td style="padding: 8px; font-weight: 600;">${it.description}</td>
+        <td style="padding: 8px; text-align: center;">${it.deno}</td>
+        <td style="padding: 8px; text-align: center;">${it.quantity_demanded || it.quantity_issued}</td>
+        <td style="padding: 8px; text-align: center; font-weight: bold; color: #1e3a8a;">${it.quantity_issued}</td>
+        <td style="padding: 8px; text-align: right;">${it.unit_cost > 0 ? formatCurrency(it.unit_cost) : "—"}</td>
+        <td style="padding: 8px; text-align: right; font-weight: bold;">${it.total_value > 0 ? formatCurrency(it.total_value) : "—"}</td>
+        <td style="padding: 8px; text-align: center;">Serviceable</td>
+      </tr>
+    `)
+    .join("");
+
+  const totalValue = (v.items || []).reduce((sum, i) => sum + (parseFloat(i.total_value) || 0), 0);
+
+  container.innerHTML = `
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a; max-width: 800px; margin: 0 auto; background: #fff; padding: 24px; border: 2px solid #0f172a; border-radius: 8px;">
+      <!-- Naval Header -->
+      <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="text-align: left;">
+            <p style="font-size: 11px; font-weight: bold; margin: 0;">SRI LANKA NAVY</p>
+            <p style="font-size: 10px; color: #475569; margin: 0;">CIVIL ENGINEERING DEPT</p>
+          </div>
+          <div style="text-align: center;">
+            <h1 style="font-size: 18px; font-weight: 900; margin: 0; letter-spacing: 1px; color: #1e3a8a;">NAV 254</h1>
+            <p style="font-size: 11px; font-weight: bold; margin: 2px 0 0 0; text-transform: uppercase;">DEMAND AND ISSUE VOUCHER</p>
+          </div>
+          <div style="text-align: right;">
+            <p style="font-size: 10px; font-weight: bold; margin: 0; color: #dc2626;">ORIGINAL</p>
+            <p style="font-size: 11px; font-family: monospace; font-weight: bold; margin: 0;">${v.voucher_no}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metadata Box -->
+      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; font-size: 12px; background: #f8fafc; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px;">
+        <div>
+          <p style="margin: 0 0 4px 0;"><strong>Issuing Unit / Section:</strong> ${v.issuing_unit || "G Zone (Cement Pre-Cast WS)"}</p>
+          <p style="margin: 0;"><strong>Demanding / Receiving Unit:</strong> <span style="font-weight: bold; color: #1e3a8a;">${v.receiving_unit}</span></p>
+        </div>
+        <div>
+          <p style="margin: 0 0 4px 0;"><strong>Date of Issue:</strong> ${v.date}</p>
+          <p style="margin: 0;"><strong>Authority / Reference:</strong> ${v.authority || "Official Naval Requirement"}</p>
+        </div>
+      </div>
+
+      <!-- Items Table -->
+      <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
+        <thead>
+          <tr style="background: #0f172a; color: #ffffff;">
+            <th style="padding: 8px; border: 1px solid #0f172a; width: 5%;">No</th>
+            <th style="padding: 8px; border: 1px solid #0f172a; text-align: left; width: 40%;">Description of Stores</th>
+            <th style="padding: 8px; border: 1px solid #0f172a; width: 8%;">Deno</th>
+            <th style="padding: 8px; border: 1px solid #0f172a; width: 10%;">Demanded</th>
+            <th style="padding: 8px; border: 1px solid #0f172a; width: 10%;">Issued</th>
+            <th style="padding: 8px; border: 1px solid #0f172a; width: 12%;">Unit Rate</th>
+            <th style="padding: 8px; border: 1px solid #0f172a; width: 15%;">Total Value</th>
+            <th style="padding: 8px; border: 1px solid #0f172a; width: 10%;">Condition</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${itemsRows}
+          ${totalValue > 0 ? `
+            <tr style="background: #f1f5f9; font-weight: bold;">
+              <td colspan="6" style="padding: 8px; text-align: right;">GRAND TOTAL:</td>
+              <td style="padding: 8px; text-align: right; color: #047857;">${formatCurrency(totalValue)}</td>
+              <td></td>
+            </tr>
+          ` : ""}
+        </tbody>
+      </table>
+
+      <!-- Signatures Block -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 36px; padding-top: 16px; border-top: 1px dashed #94a3b8; font-size: 11px;">
+        <div style="text-align: center;">
+          <div style="border-bottom: 1px solid #0f172a; min-height: 40px; margin-bottom: 4px;"></div>
+          <p style="margin: 0; font-weight: bold;">Issued By (Storekeeper)</p>
+          <p style="margin: 0; font-size: 10px; color: #64748b;">${v.issued_by || "Store In-Charge"}</p>
+        </div>
+        <div style="text-align: center;">
+          <div style="border-bottom: 1px solid #0f172a; min-height: 40px; margin-bottom: 4px;"></div>
+          <p style="margin: 0; font-weight: bold;">Authorized By (CE Officer)</p>
+          <p style="margin: 0; font-size: 10px; color: #64748b;">${v.authorized_by || "CE Officer"}</p>
+        </div>
+        <div style="text-align: center;">
+          <div style="border-bottom: 1px solid #0f172a; min-height: 40px; margin-bottom: 4px;"></div>
+          <p style="margin: 0; font-weight: bold;">Received By (Consignee)</p>
+          <p style="margin: 0; font-size: 10px; color: #64748b;">${v.received_by || "Signature & Date"}</p>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function printCurrentNav254() {
+  const content = document.getElementById("nav254PrintDocument");
+  if (!content) return;
+
+  const printWindow = window.open("", "_blank");
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>NAV 254 - ${_currentNav254Voucher?.voucher_no || "Voucher"}</title>
+        <style>
+          @page { size: A4; margin: 15mm; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; color: #000; }
+        </style>
+      </head>
+      <body>
+        ${content.innerHTML}
+        <script>
+          window.onload = function() { window.print(); window.close(); }
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+function deleteNav254Voucher(voucherId) {
+  const v = (store.nav254Vouchers || []).find(
+    (x) => String(x.id) === String(voucherId) || String(x._fbKey) === String(voucherId)
+  );
+  if (!v) return;
+
+  if (confirm(`Are you sure you want to delete / void NAV 254 Voucher "${v.voucher_no}"?`)) {
+    const vKey = v._fbKey || v.id;
+    opsDB.ref(`nav254_vouchers/${vKey}`).remove().then(() => {
+      showToast("NAV 254 Voucher deleted", "info");
+      renderNav254HistoryTable();
+    }).catch((err) => {
+      console.error("Error deleting NAV 254:", err);
+      showToast("Failed to delete voucher", "error");
+    });
+  }
 }
 
 // =============================================

@@ -1349,6 +1349,33 @@
                 </div>
             </div>
 
+            <!-- Cement Pre-Cast Workshop Banner (Shown in G Zone / Workshop) -->
+            <div id="cementPrecastWorkshopBanner" class="mb-4 p-4 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-2xl">
+                        🧱
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="font-bold text-sm text-white">Cement Pre-Cast Workshop (G Zone)</h3>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Production & Dispatch</span>
+                        </div>
+                        <p class="text-xs text-indigo-200 mt-0.5">Produce Cement/Paving blocks, lintels & fence posts • Off-charge raw materials & issue to other Zones via NAV 254</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
+                    <button onclick="openPrecastProductionModal()" class="flex-1 md:flex-initial bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5">
+                        <span>➕ Log Production Batch</span>
+                    </button>
+                    <button onclick="openNav254Modal()" class="flex-1 md:flex-initial bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5">
+                        <span>📜 Issue via NAV 254</span>
+                    </button>
+                    <button onclick="openNav254HistoryModal()" class="flex-1 md:flex-initial bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1">
+                        <span>📋 NAV 254 History</span>
+                    </button>
+                </div>
+            </div>
+
             <!-- Inventory Category Tabs -->
             <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-4">
                 <div id="inventoryCategoryTabsContainer" class="border-b border-slate-200 flex overflow-x-auto"></div>
@@ -4474,6 +4501,327 @@
         </div>
     </div>
 
+    <!-- ==================== CEMENT PRE-CAST PRODUCTION MODAL ==================== -->
+    <div id="precastProductionModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col my-auto">
+            <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">🧱</span>
+                    <div>
+                        <h2 class="font-bold text-base text-white">Log Pre-Cast Production Batch</h2>
+                        <p class="text-[11px] text-indigo-200">G Zone (Cement Pre-Cast Workshop)</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('precastProductionModal')" class="text-indigo-300 hover:text-white text-lg">✕</button>
+            </div>
+            
+            <form onsubmit="submitPrecastProduction(event)" class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <!-- Batch Info & Date -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Batch Number *</label>
+                        <input type="text" id="pcBatchNo" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-indigo-700 bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Production Date *</label>
+                        <input type="date" id="pcDate" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Production Shift / Team</label>
+                        <select id="pcShift" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                            <option value="Day Shift (0800 - 1630)">Day Shift (0800 - 1630)</option>
+                            <option value="Special Batch">Special Batch</option>
+                            <option value="Overtime Production">Overtime Production</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Finished Product Section -->
+                <div class="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-indigo-900 flex items-center gap-1.5">
+                            <span>📦</span> Finished Pre-Cast Product Output
+                        </span>
+                        <span class="text-[10px] text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full font-semibold">Auto On-charges to Stock</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div class="sm:col-span-2">
+                            <label class="block font-semibold text-slate-700 mb-1">Product Item *</label>
+                            <select id="pcProductSelect" required onchange="handlePrecastProductSelect(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-slate-800 bg-white">
+                                <option value="">-- Select Pre-Cast Item --</option>
+                                <option value="4 inch Cement Solid Block">4" Cement Solid Block</option>
+                                <option value="6 inch Cement Solid Block">6" Cement Solid Block</option>
+                                <option value="8 inch Cement Hollow Block">8" Cement Hollow Block</option>
+                                <option value="Interlocking Paving Block (Unipave)">Interlocking Paving Block (Unipave)</option>
+                                <option value="Paving Block (Zigzag)">Paving Block (Zigzag)</option>
+                                <option value="Concrete Curb Stone (Standard)">Concrete Curb Stone (Standard)</option>
+                                <option value="Pre-Cast Concrete Lintel 6ft">Pre-Cast Concrete Lintel 6ft</option>
+                                <option value="Pre-Cast Concrete Lintel 8ft">Pre-Cast Concrete Lintel 8ft</option>
+                                <option value="Pre-Cast Fence Post 6ft">Pre-Cast Fence Post 6ft</option>
+                                <option value="Concrete Drain Cover Slab (2x2)">Concrete Drain Cover Slab (2x2)</option>
+                                <option value="Gabion Box Concrete Block">Gabion Box Concrete Block</option>
+                                <option value="CUSTOM">➕ Other / Custom Item...</option>
+                            </select>
+                            <input type="text" id="pcCustomProduct" placeholder="Enter custom item name..." class="hidden w-full px-3 py-2 mt-2 border border-slate-300 rounded-lg">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Quantity Produced *</label>
+                            <div class="flex gap-1.5">
+                                <input type="number" id="pcQuantity" required step="1" min="1" placeholder="e.g. 500" oninput="autoCalculatePrecastRawMaterials()" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-emerald-700">
+                                <input type="text" id="pcUnit" value="Nos" class="w-16 px-2 py-2 border border-slate-300 rounded-lg text-center font-semibold bg-slate-100">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Raw Materials Consumed (Deduction / Off-Charge) -->
+                <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-3">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-amber-950 flex items-center gap-1.5">
+                            <span>🧪</span> Raw Materials Consumed (Deductions)
+                        </span>
+                        <button type="button" onclick="autoCalculatePrecastRawMaterials(true)" class="text-[10px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-200 px-2 py-0.5 rounded font-bold transition-colors">
+                            ⚡ Auto-Estimate Ratio
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-0.5">Cement 50kg (Bags)</label>
+                            <input type="number" id="pcMatCement" step="0.1" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
+                            <span id="pcStockCement" class="text-[10px] text-slate-400 font-mono">Stock: 0 Bags</span>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-0.5">Quarry Dust (Cubes)</label>
+                            <input type="number" id="pcMatQuarryDust" step="0.01" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
+                            <span id="pcStockQuarryDust" class="text-[10px] text-slate-400 font-mono">Stock: 0 Cubes</span>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-0.5">1/4" Chip Metal (Cubes)</label>
+                            <input type="number" id="pcMatChipMetal" step="0.01" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
+                            <span id="pcStockChipMetal" class="text-[10px] text-slate-400 font-mono">Stock: 0 Cubes</span>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-0.5">3/4" Metal (Cubes)</label>
+                            <input type="number" id="pcMatMetal34" step="0.01" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
+                            <span id="pcStockMetal34" class="text-[10px] text-slate-400 font-mono">Stock: 0 Cubes</span>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-0.5">TOR Steel (kg / lft)</label>
+                            <input type="number" id="pcMatTorSteel" step="0.1" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
+                            <span id="pcStockTorSteel" class="text-[10px] text-slate-400 font-mono">Stock: 0 kg</span>
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-0.5">Admixture / Chem (L)</label>
+                            <input type="number" id="pcMatAdmixture" step="0.1" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
+                            <span class="text-[10px] text-slate-400 font-mono">Chemical Additive</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Supervisor & Remarks -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Production Supervisor / Artificer</label>
+                        <input type="text" id="pcSupervisor" placeholder="Rank & Name of In-Charge" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Remarks / Location Produced</label>
+                        <input type="text" id="pcRemarks" placeholder="e.g. Yard Casting Bed No 02" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-3 pt-3 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('precastProductionModal')" class="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="flex-2 px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl font-bold shadow-md">
+                        💾 Save Batch & Update Stock
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== NAV 254 ISSUE VOUCHER MODAL ==================== -->
+    <div id="nav254IssueModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[92vh] flex flex-col my-auto">
+            <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-2xl">📜</span>
+                    <div>
+                        <h2 class="font-bold text-base text-white">Sri Lanka Navy - NAV 254 Voucher</h2>
+                        <p class="text-[11px] text-blue-200">Demand & Issue Voucher • Off-Charge from G Zone Store to Other Zones/Bases</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('nav254IssueModal')" class="text-blue-300 hover:text-white text-lg">✕</button>
+            </div>
+
+            <form onsubmit="submitNav254Voucher(event)" class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <!-- Voucher Header Metadata -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">NAV 254 Serial No *</label>
+                        <input type="text" id="nav254Serial" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono font-bold text-blue-700 bg-slate-50">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Date of Issue *</label>
+                        <input type="date" id="nav254Date" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Issuing Section</label>
+                        <input type="text" id="nav254IssuingUnit" value="G Zone (Cement Pre-Cast WS)" readonly class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-slate-100 font-semibold text-slate-700">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Demanding / Receiving Zone or Base *</label>
+                        <select id="nav254ReceivingUnit" required onchange="handleNav254DestChange(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-semibold text-slate-800 bg-white">
+                            <option value="">-- Select Receiving Zone / Base --</option>
+                            <option value="A Zone">A Zone</option>
+                            <option value="B Zone">B Zone</option>
+                            <option value="C Zone">C Zone</option>
+                            <option value="D Zone">D Zone</option>
+                            <option value="E Zone">E Zone</option>
+                            <option value="F Zone">F Zone</option>
+                            <option value="Civil Engineering Dept">Civil Engineering Dept (HQ)</option>
+                            <option value="Naval Dockyard (General)">Naval Dockyard (General)</option>
+                            <option value="Carpentry Workshop">Carpentry Workshop</option>
+                            <option value="Aluminium Workshop">Aluminium Workshop</option>
+                            <option value="SLNS TISSA">SLNS TISSA</option>
+                            <option value="SLNS DAKSHINA">SLNS DAKSHINA</option>
+                            <option value="SLNS VIJAYA">SLNS VIJAYA</option>
+                            <option value="Base Maintenance">Base Maintenance Store</option>
+                            <option value="CUSTOM">➕ Other / Custom Destination...</option>
+                        </select>
+                        <input type="text" id="nav254CustomDest" placeholder="Enter custom receiving unit/base..." class="hidden w-full px-3 py-2 mt-2 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Authority / Work Order / Project Ref *</label>
+                        <input type="text" id="nav254Authority" required placeholder="e.g., WO/2026/014, Signal Ref, Directive" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <!-- Multi-Item Table -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <div class="bg-slate-100 px-4 py-2.5 flex items-center justify-between">
+                        <span class="font-bold text-slate-800 flex items-center gap-1.5">
+                            <span>📦</span> Stores / Pre-Cast Items to Issue
+                        </span>
+                        <button type="button" onclick="addNav254ItemRow()" class="bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg text-[11px] font-bold shadow-xs transition-all flex items-center gap-1">
+                            ➕ Add Item
+                        </button>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-xs">
+                            <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                                <tr>
+                                    <th class="p-2.5 text-left w-6/12">Item Description</th>
+                                    <th class="p-2.5 text-center w-2/12">Deno</th>
+                                    <th class="p-2.5 text-center w-2/12">Demanded</th>
+                                    <th class="p-2.5 text-center w-2/12">Issued Qty *</th>
+                                    <th class="p-2.5 text-center w-1/12">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="nav254ItemsTableBody" class="divide-y divide-slate-100">
+                                <!-- Dynamic item rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Sign-off Metadata -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Authorizing CE Officer</label>
+                        <select id="nav254AuthOfficer" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs">
+                            <option value="">-- Select CE Officer --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Issued By (Storekeeper / OIC)</label>
+                        <input type="text" id="nav254IssuedBy" placeholder="Rank & Name" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs">
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Received By / Vehicle No</label>
+                        <input type="text" id="nav254ReceivedBy" placeholder="Driver / Rep Name & No" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white text-xs">
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('nav254IssueModal')" class="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-slate-700 font-semibold hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="flex-2 px-6 py-2.5 bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-blue-800 hover:to-indigo-800 text-white rounded-xl font-bold shadow-md flex items-center justify-center gap-1.5">
+                        <span>📜 Save & Issue (NAV 254)</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== NAV 254 VOUCHERS HISTORY MODAL ==================== -->
+    <div id="nav254HistoryModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col my-auto">
+            <div class="bg-gradient-to-r from-slate-900 via-blue-950 to-slate-900 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">📋</span>
+                    <div>
+                        <h2 class="font-bold text-base text-white">NAV 254 Demand & Issue Vouchers Log</h2>
+                        <p class="text-[11px] text-blue-200">History of all cross-zone material dispatches</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('nav254HistoryModal')" class="text-blue-300 hover:text-white text-lg">✕</button>
+            </div>
+            <div class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <div class="flex items-center justify-between gap-3">
+                    <input type="text" id="nav254HistorySearch" placeholder="Search by Voucher No, Receiving Zone, Item..." onkeyup="renderNav254HistoryTable()" class="flex-1 px-3.5 py-2 border border-slate-300 rounded-xl text-xs">
+                    <button onclick="openNav254Modal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl font-bold text-xs flex items-center gap-1">
+                        ➕ New NAV 254
+                    </button>
+                </div>
+                <div class="border border-slate-200 rounded-xl overflow-hidden shadow-xs">
+                    <table class="w-full text-xs">
+                        <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                            <tr>
+                                <th class="p-3 text-left">Voucher No</th>
+                                <th class="p-3 text-center">Date</th>
+                                <th class="p-3 text-left">Receiving Zone / Base</th>
+                                <th class="p-3 text-left">Items Issued</th>
+                                <th class="p-3 text-left">Authority Ref</th>
+                                <th class="p-3 text-center">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="nav254HistoryTableBody" class="divide-y divide-slate-100">
+                            <!-- Populated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== NAV 254 PRINT / PDF MODAL ==================== -->
+    <div id="nav254PrintModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-4 modal-overlay overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[95vh] flex flex-col my-auto">
+            <div class="bg-slate-900 text-white px-6 py-3.5 rounded-t-2xl flex items-center justify-between no-print">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">🖨️</span>
+                    <h2 class="font-bold text-sm text-white">Official NAV 254 Demand & Issue Voucher</h2>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button onclick="printCurrentNav254()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+                        🖨️ Print Voucher
+                    </button>
+                    <button onclick="closeModal('nav254PrintModal')" class="text-slate-400 hover:text-white text-lg ml-2">✕</button>
+                </div>
+            </div>
+            <div class="p-6 overflow-y-auto flex-1" id="nav254PrintDocument">
+                <!-- High-fidelity Sri Lanka Navy NAV 254 printable layout generated by JS -->
+            </div>
+        </div>
+    </div>
+
     <!-- ==================== ZONE MANAGER MODAL (req 10) ==================== -->
     <div id="zoneManagerModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
@@ -4601,10 +4949,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.17
+        App Version: v5.18
     </div>
 
-    <script src="app.js?v=5.17"></script>
+    <script src="app.js?v=5.18"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
