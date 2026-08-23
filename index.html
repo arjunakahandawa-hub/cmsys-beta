@@ -1115,8 +1115,14 @@
                     <h2 class="text-2xl font-bold" style="color:#0a1628">Job Cards Management</h2>
                     <p class="text-slate-500 text-sm">Track materials and labor • Send feedback links for completed jobs</p>
                 </div>
-                <div class="flex gap-3">
-                    <button onclick="exportJobCardReport()" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                <div class="flex gap-2 flex-wrap items-center">
+                    <button id="btnToggleMergeJobCards" onclick="toggleJobCardMergeMode()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                        <span>🔀</span> <span id="mergeBtnText">Merge Job Cards</span>
+                    </button>
+                    <button id="btnProceedMergeModal" onclick="openMergeJobCardsModal()" class="hidden bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                        <span>⚡</span> Merge Selected (<span id="mergeSelectedCount">0</span>)
+                    </button>
+                    <button onclick="exportJobCardReport()" class="bg-slate-600 hover:bg-slate-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium flex items-center gap-1.5">
                         📥 Export Report
                     </button>
                 </div>
@@ -1555,6 +1561,7 @@
                 <!-- Settings Tabs -->
                 <div class="flex gap-2 mb-6 flex-wrap">
                     <button onclick="switchSettingsTab('identity')" id="stab-identity" class="settings-tab-btn active-stab px-4 py-2 rounded-lg text-sm font-medium">⚙️ System Identity</button>
+                    <button onclick="switchSettingsTab('projects')" id="stab-projects" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-indigo-700 bg-indigo-50/70 border border-indigo-200">🏗️ Approved Projects</button>
                     <button onclick="switchSettingsTab('user')" id="stab-user" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">👤 User Profile</button>
                     <button onclick="switchSettingsTab('zones')" id="stab-zones" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🗺️ Zones</button>
                     <button onclick="switchSettingsTab('offcharge')" id="stab-offcharge" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🚢 Off-Charge</button>
@@ -1562,7 +1569,6 @@
                     <button onclick="switchSettingsTab('display')" id="stab-display" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🎨 Display</button>
                     <button onclick="switchSettingsTab('dateschedule')" id="stab-dateschedule" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📅 Date Schedule</button>
                     <button onclick="switchSettingsTab('data')" id="stab-data" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-rose-600 bg-rose-50">🧹 Data Management</button>
-                    
                 </div>
 
                 <!-- ── Tab: System Identity ── -->
@@ -1972,6 +1978,62 @@
                                     Clear Details
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Tab: Approved Projects ── -->
+                <div id="stab-content-projects" class="settings-tab-content hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-6">
+                        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                            <div>
+                                <h3 class="font-bold text-slate-800 text-lg flex items-center gap-2">
+                                    <span>🏗️</span> Approved Projects Database
+                                </h3>
+                                <p class="text-sm text-slate-500 mt-0.5">Manage all approved projects, references, cost allocations, and project engineers</p>
+                            </div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <button onclick="openApprovedProjectModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
+                                    <span>➕</span> Add Approved Project
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Search & Filters -->
+                        <div class="flex flex-col sm:flex-row gap-3 items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-200/80">
+                            <div class="relative flex-1 w-full">
+                                <span class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-sm">🔍</span>
+                                <input type="text" id="approvedProjectsSearch" oninput="renderApprovedProjectsSettings()" placeholder="Search project name, ref no, engineer, or scope..." class="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            </div>
+                            <div class="flex items-center gap-2 w-full sm:w-auto">
+                                <select id="approvedProjectsStatusFilter" onchange="renderApprovedProjectsSettings()" class="bg-white border border-slate-200 text-xs rounded-lg px-3 py-2 text-slate-600 focus:outline-none">
+                                    <option value="all">All Statuses</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="In Progress">In Progress</option>
+                                    <option value="Completed">Completed</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Projects Table -->
+                        <div class="overflow-x-auto rounded-xl border border-slate-200">
+                            <table class="w-full text-left text-xs border-collapse">
+                                <thead class="bg-slate-100/80 text-slate-600 font-semibold border-b border-slate-200">
+                                    <tr>
+                                        <th class="p-3.5">Project Name</th>
+                                        <th class="p-3.5">Reference</th>
+                                        <th class="p-3.5 text-right">Approved Cost</th>
+                                        <th class="p-3.5 text-center">Duration</th>
+                                        <th class="p-3.5">Project Engineer</th>
+                                        <th class="p-3.5">Work Scope</th>
+                                        <th class="p-3.5 text-center">Status</th>
+                                        <th class="p-3.5 text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="approvedProjectsTableBody" class="divide-y divide-slate-100 bg-white">
+                                    <!-- Populated dynamically by JS -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -2804,7 +2866,7 @@
                 <div id="woTypePriorityWrapper" class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Type *</label>
-                        <select id="woType" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <select id="woType" required onchange="handleWoTypeChange(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                             <option value="PROJECT">Project (Type P)</option>
                             <option value="JOB">Job (Type J)</option>
                             <option value="TASK">Task (Type T)</option>
@@ -2820,6 +2882,38 @@
                     </div>
                 </div>
 
+                <!-- Project Selector (when Type = PROJECT) -->
+                <div id="woProjectWrapper">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="block text-sm font-medium text-slate-700">Select Approved Project *</label>
+                        <span class="text-xs text-indigo-600 font-medium">📋 Abstracted from Settings</span>
+                    </div>
+                    <select id="woProjectSelect" onchange="autofillFromApprovedProject(this.value)" class="w-full px-3 py-2 border border-indigo-300 rounded-lg bg-indigo-50/40 text-slate-800 font-medium focus:ring-2 focus:ring-indigo-500">
+                        <option value="">-- Select Approved Project --</option>
+                    </select>
+                    <input type="hidden" id="woProjectId">
+                </div>
+
+                <!-- Task Job Card Checkbox (when Type = TASK) -->
+                <div id="woTaskJobCardWrapper" class="hidden p-3 bg-amber-50/70 border border-amber-200 rounded-xl flex items-center justify-between">
+                    <div>
+                        <p class="text-xs font-bold text-amber-800">Create Job Card (Optional)</p>
+                        <p class="text-[11px] text-amber-600">Uncheck if task is complete without materials (1-day lifecycle)</p>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="woTaskCreateJobCard" class="sr-only peer">
+                        <div class="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-amber-600"></div>
+                    </label>
+                </div>
+
+                <!-- Workshop Target Zone for Job Card (when in Workshop) -->
+                <div id="woTargetJobCardWrapper" class="hidden p-3 bg-teal-50/80 border border-teal-200 rounded-xl">
+                    <label class="block text-xs font-bold text-teal-800 mb-1">Job Card Target Zone <span class="font-normal text-teal-600">(Job Card will be managed by selected zone)</span></label>
+                    <select id="woTargetJobCardZone" class="w-full px-3 py-2 border border-teal-300 rounded-lg bg-white text-xs font-medium focus:ring-2 focus:ring-teal-500">
+                        <option value="">-- Maintain under Current Workshop Zone --</option>
+                    </select>
+                </div>
+
                 <div id="woReferenceWrapper" class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Reference Type</label>
@@ -2827,6 +2921,7 @@
                             <option value="Minute Sheet">Minute Sheet</option>
                             <option value="Signal">Signal</option>
                             <option value="Letter">Letter</option>
+                            <option value="Directive">Directive</option>
                             <option value="Verbal">Verbal Order</option>
                         </select>
                     </div>
@@ -2842,7 +2937,7 @@
                     </div>
                 </div>
 
-                <div id="woEstimateWrapper">
+                <div id="woEstimateWrapper" class="hidden">
                     <label class="block text-sm font-medium text-slate-700 mb-1">Link Approved Estimate</label>
                     <select id="woEstimateSelect" onchange="autofillFromEstimate(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
                         <option value="">-- Select Approved Estimate (Optional) --</option>
@@ -2850,7 +2945,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-slate-700 mb-1">Description *</label>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">Description / Workscope *</label>
                     <textarea id="woDescription" required rows="3" placeholder="Describe the work..."
                         class="w-full px-3 py-2 border border-slate-300 rounded-lg"></textarea>
                 </div>
@@ -3478,7 +3573,191 @@
         </div>
     </div>
 
-    <!-- Add Inventory Item Modal -->
+    <!-- ==================== APPROVED PROJECT MODAL ==================== -->
+    <div id="approvedProjectModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-indigo-700 to-indigo-600 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
+                <div>
+                    <h2 class="font-bold text-lg" id="apModalTitle">Add Approved Project</h2>
+                    <p class="text-xs text-indigo-200">Official approved project details, reference, budget and engineer</p>
+                </div>
+                <button onclick="closeModal('approvedProjectModal')" class="text-indigo-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="saveApprovedProject(event)" class="p-6 space-y-4">
+                <input type="hidden" id="apId">
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Project Name / Title *</label>
+                    <input type="text" id="apName" required placeholder="e.g., Construction of New Senior Sailors Mess" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-indigo-500">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Reference Type *</label>
+                        <select id="apRefType" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                            <option value="Minute Sheet">Minute Sheet</option>
+                            <option value="Signal">Signal</option>
+                            <option value="Letter">Letter</option>
+                            <option value="Directive">Directive</option>
+                            <option value="NHQ Approval">NHQ Approval</option>
+                            <option value="Verbal">Verbal Order</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Reference No / Document Ref *</label>
+                        <input type="text" id="apRefNo" required placeholder="e.g., NHQ/CE/2026/04/PROJ-01" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Approved Cost (Rs) *</label>
+                        <input type="number" id="apCost" required step="0.01" placeholder="0.00" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm font-bold text-emerald-700">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Estimated Duration</label>
+                        <input type="text" id="apDuration" placeholder="e.g., 60 Days / 2 Months" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Target Zone / Base</label>
+                        <select id="apZone" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                            <option value="All Zones">All Zones (Global)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Project Engineer (CE Officers selector) -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Project Engineer (Select CE Officer) *</label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <select id="apEngineerSelect" onchange="handleApEngineerSelect(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                            <option value="">-- Select CE Officer --</option>
+                        </select>
+                        <input type="text" id="apEngineerCustom" placeholder="Or type Officer Name / Rank / Post" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    </div>
+                </div>
+
+                <!-- Detailed Work Scope -->
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Detailed Work Scope & Breakdown *</label>
+                    <textarea id="apWorkscope" required rows="4" placeholder="Detailed workscope (Civil, Electrical, Plumbing, Metal, Carpentry works)..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs leading-relaxed"></textarea>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Project Status</label>
+                        <select id="apStatus" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
+                            <option value="Approved">Approved</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Completed">Completed</option>
+                            <option value="On Hold">On Hold</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Approval Date</label>
+                        <input type="date" id="apDate" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeModal('approvedProjectModal')" class="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-slate-700 font-semibold text-xs hover:bg-slate-50">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-md">Save Approved Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== BULK UPLOAD PROJECT ESTIMATE MODAL ==================== -->
+    <div id="bulkUploadProjectEstimateModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 text-white px-6 py-4 flex items-center justify-between">
+                <div>
+                    <h3 class="font-bold text-base">📤 Bulk Upload Project Estimate</h3>
+                    <p class="text-xs text-emerald-100" id="buProjectName">—</p>
+                </div>
+                <button onclick="closeModal('bulkUploadProjectEstimateModal')" class="text-emerald-200 hover:text-white">✕</button>
+            </div>
+            <form onsubmit="submitBulkUploadProjectEstimate(event)" class="p-6 space-y-4">
+                <input type="hidden" id="buProjectId">
+                <div class="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
+                    <p class="font-bold text-slate-700">CSV Header Format:</p>
+                    <code class="block bg-white p-2 rounded border border-slate-200 text-[11px] font-mono text-emerald-700">Item, Description, Unit, Qty, Unit Price, Amount</code>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Paste CSV / Tab-Delimited Data</label>
+                    <textarea id="buProjectCsvData" rows="6" placeholder="Paste Excel/CSV rows here..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs font-mono"></textarea>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Or Upload CSV File</label>
+                    <input type="file" id="buProjectCsvFile" accept=".csv, .txt" onchange="handleProjectCsvFile(this)" class="w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100">
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('bulkUploadProjectEstimateModal')" class="flex-1 px-4 py-2 border border-slate-300 rounded-lg text-xs font-medium">Cancel</button>
+                    <button type="submit" class="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow">Import Estimate Items</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- ==================== MERGE MULTI-JOB CARDS MODAL ==================== -->
+    <div id="mergeJobCardsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="bg-gradient-to-r from-indigo-800 to-blue-700 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
+                <div class="flex items-center gap-2">
+                    <span class="text-xl">🔀</span>
+                    <div>
+                        <h2 class="font-bold text-lg">Merge Selected Job Cards</h2>
+                        <p class="text-xs text-indigo-200">Consolidate multiple duplicate or sub-job cards into 1 Master Job Card</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('mergeJobCardsModal')" class="text-indigo-200 hover:text-white">✕</button>
+            </div>
+            <div class="p-6 space-y-5">
+                <div class="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800">
+                    <p class="font-bold mb-1">📌 How Merging Works:</p>
+                    <ul class="list-disc pl-4 space-y-0.5 text-blue-700">
+                        <li>Choose <strong>1 Master (Primary) Job Card</strong> using the radio buttons below.</li>
+                        <li>All materials & labor logs from the other selected cards will be transferred into the Master Job Card.</li>
+                        <li>The secondary job cards will be archived/marked as <code>Merged</code> with a link pointing to the Master card.</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 class="text-xs font-bold uppercase tracking-wider text-slate-600 mb-2">Select Primary (Master) Job Card:</h3>
+                    <div id="mergeJobCardsRadioList" class="space-y-2.5">
+                        <!-- Populated dynamically by JS -->
+                    </div>
+                </div>
+
+                <!-- Preview of combined materials & labor -->
+                <div class="border border-slate-200 rounded-xl p-4 bg-slate-50">
+                    <h4 class="font-bold text-xs text-slate-700 mb-2">Merged Summary Preview</h4>
+                    <div class="grid grid-cols-3 gap-3 text-center">
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <p class="text-[11px] text-slate-500">Selected Cards</p>
+                            <p class="font-extrabold text-indigo-700 text-base" id="mergePreviewCardsCount">0</p>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <p class="text-[11px] text-slate-500">Total Materials</p>
+                            <p class="font-extrabold text-emerald-700 text-base" id="mergePreviewMaterialsCount">0 Items</p>
+                        </div>
+                        <div class="bg-white p-2.5 rounded-lg border border-slate-200">
+                            <p class="text-[11px] text-slate-500">Total Labor Logs</p>
+                            <p class="font-extrabold text-blue-700 text-base" id="mergePreviewLaborCount">0 Logs</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeModal('mergeJobCardsModal')" class="flex-1 px-4 py-2.5 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50">Cancel</button>
+                    <button type="button" onclick="submitExecuteJobCardMerge()" class="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-md">
+                        🔀 Execute Merge Now
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Password Verification Modal -->
     <div id="passwordModal" class="fixed inset-0 bg-black/50 z-[60] hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm transform transition-all duration-300 scale-95 opacity-0" id="passwordModalContent">
@@ -4209,10 +4488,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.15
+        App Version: v5.16
     </div>
 
-    <script src="app.js?v=5.15"></script>
+    <script src="app.js?v=5.16"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

@@ -171,6 +171,9 @@ const store = {
   maintenanceRecords: [],
   estimates: [],
   approvedPendingJobs: [],
+  approvedProjects: [],
+  selectedJobCardsForMerge: new Set(),
+  isJobCardMergeMode: false,
   dailyAllocations: [],
   availableSailorsLimit: 40,
   dailyAllocationsMap: {}, // Static config (not stored in Firebase)
@@ -908,15 +911,22 @@ function initOpsListeners() {
     });
     refreshCurrentView();
     console.log(`📐 DB#2: ${store.estimates.length} estimates loaded`);
-  }); // ── Approved Pending Jobs ──
-  opsDB.ref("approved_pending_jobs").on("value", (snapshot) => {
-    store.approvedPendingJobs = snapshotToArray(snapshot).map((j) => {
-      var _j$id;
+  }); // ── Approved Projects ──
+  opsDB.ref("approved_projects").on("value", (snapshot) => {
+    store.approvedProjects = snapshotToArray(snapshot).map((p) => {
+      var _p$id;
       return {
-        ...j,
-        id: (_j$id = j.id) !== null && _j$id !== void 0 ? _j$id : j._fbKey,
+        ...p,
+        id: (_p$id = p.id) !== null && _p$id !== void 0 ? _p$id : p._fbKey,
       };
     });
+    console.log(`🏗️ DB#2: ${store.approvedProjects.length} approved projects loaded`);
+    if (_currentSettingsTab === "projects" && typeof renderApprovedProjectsSettings === "function") {
+      renderApprovedProjectsSettings();
+    }
+    if (typeof populateApprovedProjectsDropdown === "function") {
+      populateApprovedProjectsDropdown();
+    }
   }); // ── Daily Allocations ──
   opsDB.ref("daily_allocations").on("value", (snapshot) => {
     const arr = snapshotToArray(snapshot);
@@ -1821,6 +1831,21 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
     (a) => a.date === dateStr && String(a.work_order_id) === String(wo.id),
   );
   if (hasAllocations) return true;
+
+  // 1-Day Lifecycle for Tasks: Tasks created on previous days do not persist to subsequent dates without active allocations
+  if (wo.type === "TASK" && !wo.assign_type) {
+    if (wo.created_at) {
+      try {
+        const cd = new Date(wo.created_at);
+        if (!isNaN(cd.getTime())) {
+          const createdDate = cd.toISOString().split("T")[0];
+          if (createdDate < dateStr && !hasAllocations) {
+            return false;
+          }
+        }
+      } catch (e) {}
+    }
+  }
 
   if (wo.created_at) {
     try {
@@ -3503,6 +3528,7 @@ function openNewWorkOrderModal() {
   const typePriorityWrapper = document.getElementById("woTypePriorityWrapper");
   const referenceWrapper = document.getElementById("woReferenceWrapper");
   const estimateWrapper = document.getElementById("woEstimateWrapper");
+  const projectWrapper = document.getElementById("woProjectWrapper");
   const costDurationWrapper = document.getElementById("woCostDurationWrapper");
   const supervisorWrapper = document.getElementById("woSupervisorWrapper");
   const artificerWrapper = document.getElementById("woArtificerWrapper");
@@ -3512,6 +3538,7 @@ function openNewWorkOrderModal() {
   if (referenceWrapper)
     referenceWrapper.classList.toggle("hidden", isAdminStaff);
   if (estimateWrapper) estimateWrapper.classList.toggle("hidden", isAdminStaff);
+  if (projectWrapper) projectWrapper.classList.toggle("hidden", isAdminStaff);
   if (costDurationWrapper)
     costDurationWrapper.classList.toggle("hidden", isAdminStaff);
   if (supervisorWrapper)
@@ -3527,7 +3554,149 @@ function openNewWorkOrderModal() {
       staffWrapper.classList.add("grid-cols-3");
     }
   }
+
+  // Workshop Job Card delegation setup
+  const isWs = isWorkshopZone(store.currentZone);
+  const targetJobCardWrapper = document.getElementById("woTargetJobCardWrapper");
+  const targetJobCardSelect = document.getElementById("woTargetJobCardZone");
+  if (targetJobCardWrapper && targetJobCardSelect) {
+    targetJobCardWrapper.classList.toggle("hidden", !isWs || isAdminStaff);
+    if (isWs) {
+      targetJobCardSelect.innerHTML =
+        '<option value="">-- Current Workshop (' + store.currentZone + ') --</option>' +
+        (store.zones || [])
+          .filter((z) => !isWorkshopZone(z.id) && z.id !== "Admin-&-Staff-Duties")
+          .map((z) => `<option value="${z.id}">🎯 Target Zone: ${z.name}</option>`)
+          .join("");
+      targetJobCardSelect.value = "";
+    }
+  }
+
+  // Task Job Card toggle reset
+  const taskJobCardCb = document.getElementById("woTaskCreateJobCard");
+  if (taskJobCardCb) taskJobCardCb.checked = false;
+
+  const currentType = document.getElementById("woType").value || "PROJECT";
+  handleWoTypeChange(currentType);
+
   document.getElementById("workOrderModal").classList.remove("hidden");
+}
+
+function isWorkshopZone(zoneId) {
+  if (!zoneId) return false;
+  const zid = zoneId.toLowerCase();
+  return (
+    zid.includes("shop") ||
+    zid.includes("carpentry") ||
+    zid.includes("aluminium") ||
+    zid.includes("aluminum") ||
+    zid.includes("cement") ||
+    zid.includes("signwriter") ||
+    zid.includes("welding") ||
+    zid.includes("masonry") ||
+    zid.includes("plumbing") ||
+    zid.includes("pump-house")
+  );
+}
+
+function handleWoTypeChange(type) {
+  const isAdminStaff = isAdminStaffDuties(store.currentZone);
+  const projectWrapper = document.getElementById("woProjectWrapper");
+  const estimateWrapper = document.getElementById("woEstimateWrapper");
+  const taskJobCardWrapper = document.getElementById("woTaskJobCardWrapper");
+
+  if (isAdminStaff) {
+    if (projectWrapper) projectWrapper.classList.add("hidden");
+    if (estimateWrapper) estimateWrapper.classList.add("hidden");
+    if (taskJobCardWrapper) taskJobCardWrapper.classList.add("hidden");
+    return;
+  }
+
+  if (type === "PROJECT") {
+    if (projectWrapper) projectWrapper.classList.remove("hidden");
+    if (estimateWrapper) estimateWrapper.classList.add("hidden");
+    if (taskJobCardWrapper) taskJobCardWrapper.classList.add("hidden");
+    populateApprovedProjectsDropdown();
+  } else if (type === "TASK") {
+    if (projectWrapper) projectWrapper.classList.add("hidden");
+    if (estimateWrapper) estimateWrapper.classList.remove("hidden");
+    if (taskJobCardWrapper) taskJobCardWrapper.classList.remove("hidden");
+  } else {
+    // JOB
+    if (projectWrapper) projectWrapper.classList.add("hidden");
+    if (estimateWrapper) estimateWrapper.classList.remove("hidden");
+    if (taskJobCardWrapper) taskJobCardWrapper.classList.add("hidden");
+  }
+}
+
+function populateApprovedProjectsDropdown() {
+  const select = document.getElementById("woProjectSelect");
+  if (!select) return;
+  const projects = store.approvedProjects || [];
+  let html = '<option value="">-- Select Approved Project --</option>';
+  projects.forEach((p) => {
+    const costStr = p.approved_cost
+      ? ` (Rs. ${Number(p.approved_cost).toLocaleString("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: 2,
+        })})`
+      : "";
+    const engStr = p.project_engineer ? ` • Eng: ${p.project_engineer}` : "";
+    html += `<option value="${p.id || p._fbKey}">${p.project_name || p.name} [Ref: ${p.reference_no || "—"}]${costStr}${engStr}</option>`;
+  });
+  select.innerHTML = html;
+}
+
+function autofillFromApprovedProject(projId) {
+  if (!projId) {
+    document.getElementById("woProjectId").value = "";
+    return;
+  }
+  const proj = (store.approvedProjects || []).find(
+    (p) => String(p.id) === String(projId) || String(p._fbKey) === String(projId),
+  );
+  if (!proj) return;
+
+  document.getElementById("woProjectId").value = proj.id || proj._fbKey;
+
+  // 1. Reference Type
+  if (proj.reference_type) {
+    const refType = document.getElementById("woRefType");
+    if (refType) refType.value = proj.reference_type;
+  }
+
+  // 2. Reference No
+  if (proj.reference_no) {
+    const refNo = document.getElementById("woReference");
+    if (refNo) refNo.value = proj.reference_no;
+  }
+
+  // 3. Approved Cost / Budget
+  if (proj.approved_cost) {
+    const budget = document.getElementById("woBudget");
+    if (budget) budget.value = proj.approved_cost;
+  }
+
+  // 4. Duration
+  if (proj.duration) {
+    const dur = document.getElementById("woDuration");
+    const numDur = parseInt(proj.duration, 10);
+    if (dur && !isNaN(numDur)) dur.value = numDur;
+  }
+
+  // 5. Workscope / Description
+  if (proj.workscope) {
+    const desc = document.getElementById("woDescription");
+    if (desc && !desc.value.trim()) {
+      desc.value = proj.workscope;
+    }
+  }
+
+  // 6. Authority (default to CCED(E) or project engineer)
+  const auth = document.getElementById("woAuthority");
+  if (auth && !auth.value.trim()) {
+    auth.value = "CCED(E)";
+  }
 }
 function autofillFromEstimate(estimateId) {
   if (!estimateId) {
@@ -3938,8 +4107,11 @@ function createWorkOrder(event) {
   }
   
   const estimateId = document.getElementById("woEstimateSelect").value || null;
+  const woType = document.getElementById("woType").value;
+  const approvedProjectId = document.getElementById("woProjectId") ? document.getElementById("woProjectId").value : null;
+
   const newOrder = {
-    type: document.getElementById("woType").value,
+    type: woType,
     reference_no: document.getElementById("woReference").value || null,
     description: document.getElementById("woDescription").value,
     status: "Pending",
@@ -3957,6 +4129,7 @@ function createWorkOrder(event) {
     supervisor: document.getElementById("woSupervisor").value || null,
     project_artificer: document.getElementById("woArtificer").value || null,
     estimate_id: estimateId,
+    approved_project_id: approvedProjectId || null,
   }; // Mark selected sailors as Assigned in store (optimistic update)
   _woSelectedSailors.forEach((id) => {
     const s = store.sailors.find((s) => {
@@ -3976,29 +4149,53 @@ function createWorkOrder(event) {
   // Save Work Order to Firebase DB#2 (realtime listener updates store automatically)
   fbSaveWorkOrder(newOrder)
     .then((ref) => {
-      const fbKey = ref ? ref.key : null; // Also create a Job Card automatically
-      const jobNumber = `JC/${new Date().getFullYear()}/${String(Date.now()).slice(-4).padStart(4, "0")}`;
-      const newJobCard = {
-        job_number: jobNumber,
-        work_order_id: fbKey, // link to the Firebase key
-        description: newOrder.description,
-        location: newOrder.location,
-        zone_id: store.currentZone,
-        status: "Active",
-        start_date: getLocalDateString(),
-        total_material_cost: 0,
-        feedbackSent: false,
-        feedbackReceived: false,
-        estimate_id: estimateId,
-      };
-      fbSaveJobCard(newJobCard).then((jcRef) => {
-        const jcKey = jcRef ? jcRef.key : null;
+      const fbKey = ref ? ref.key : null;
+
+      // Determine if Job Card should be created
+      let shouldCreateJobCard = true;
+      if (woType === "TASK") {
+        const taskJobCardCb = document.getElementById("woTaskCreateJobCard");
+        shouldCreateJobCard = taskJobCardCb ? taskJobCardCb.checked : false;
+      }
+
+      // Workshop Target Zone delegation
+      const targetJobCardSelect = document.getElementById("woTargetJobCardZone");
+      const targetJobCardZone = (targetJobCardSelect && targetJobCardSelect.value) ? targetJobCardSelect.value : store.currentZone;
+
+      let jobNumber = null;
+      if (shouldCreateJobCard) {
+        jobNumber = `JC/${new Date().getFullYear()}/${String(Date.now()).slice(-4).padStart(4, "0")}`;
+        const newJobCard = {
+          job_number: jobNumber,
+          work_order_id: fbKey, // link to the Firebase key
+          description: newOrder.description,
+          location: newOrder.location,
+          zone_id: targetJobCardZone, // Saved under the target zone (or current zone)
+          origin_workshop_zone: (targetJobCardZone !== store.currentZone) ? store.currentZone : null,
+          status: "Active",
+          start_date: getLocalDateString(),
+          total_material_cost: 0,
+          feedbackSent: false,
+          feedbackReceived: false,
+          estimate_id: estimateId,
+          approved_project_id: approvedProjectId || null,
+        };
+        fbSaveJobCard(newJobCard).then((jcRef) => {
+          const jcKey = jcRef ? jcRef.key : null;
+          _lastCreatedWorkOrder = {
+            fbKey: fbKey,
+            jobCardFbKey: jcKey,
+            assignedSailors: newOrder.assigned
+          };
+        });
+      } else {
         _lastCreatedWorkOrder = {
           fbKey: fbKey,
-          jobCardFbKey: jcKey,
+          jobCardFbKey: null,
           assignedSailors: newOrder.assigned
         };
-      });
+      }
+
       if (estimateId) {
         const est = store.estimates.find(
           (e) => String(e.id) === String(estimateId),
@@ -4010,8 +4207,11 @@ function createWorkOrder(event) {
         }
       }
       closeModal("workOrderModal");
+      const msg = shouldCreateJobCard
+        ? `Work order & Job Card ${jobNumber} created! (Zone: ${targetJobCardZone})`
+        : `Work order created! (No Job Card)`;
       showToast(
-        `Work order & Job Card ${jobNumber} created! <button onclick="undoCreateWorkOrder()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+        `${msg} <button onclick="undoCreateWorkOrder()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
         "success",
         6000
       );
@@ -4385,27 +4585,11 @@ function createAssignment(event) {
     }
   });
   _asSelectedSailors = new Set(); // reset
-  // Save Work Order to Firebase DB#2
+  // Save Work Order to Firebase DB#2 (No Job Card created for Assign)
   fbSaveWorkOrder(newOrder)
     .then((ref) => {
-      const fbKey = ref ? ref.key : null; // Also create a Job Card automatically
-      const jobNumber = `JC/${new Date().getFullYear()}/${String(Date.now()).slice(-4).padStart(4, "0")}`;
-      const newJobCard = {
-        job_number: jobNumber,
-        work_order_id: fbKey,
-        description: newOrder.description,
-        location: "",
-        zone_id: store.currentZone,
-        status: "Active",
-        start_date: getLocalDateString(),
-        total_material_cost: 0,
-        feedbackSent: false,
-        feedbackReceived: false,
-        estimate_id: null,
-      };
-      fbSaveJobCard(newJobCard);
       closeModal("assignModal");
-      showToast(`Assignment and Job Card ${jobNumber} created! 🔥`);
+      showToast(`Assign created successfully! 🔥`);
       event.target.reset();
     })
     .catch((err) => {
@@ -4558,9 +4742,16 @@ function openWorkOrderDetail(workOrderId) {
     toggleCompleteButton(wo.progress || 0); // Live Job Card cost (req 2)
   const jc = getJobCardForWorkOrder(wo.id);
   const cost = computeJobCardCost(jc);
-  document.getElementById("woJobCardNo").textContent = jc
-    ? jc.job_number
-    : "No linked job card";
+  const jcNoEl = document.getElementById("woJobCardNo");
+  if (jc) {
+    jcNoEl.innerHTML = `<span class="font-mono font-bold text-indigo-600">${jc.job_number}</span>`;
+  } else {
+    if (!isAssignmentOrAdminStaff) {
+      jcNoEl.innerHTML = `<span class="text-slate-400 italic">No job card</span> <button type="button" onclick="openJobCardForTask('${wo._fbKey || wo.id}')" class="ml-2 bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded text-[11px] font-bold shadow-sm">➕ Create Job Card</button>`;
+    } else {
+      jcNoEl.textContent = "Not required";
+    }
+  }
   document.getElementById("woJobCardCost").textContent = formatCurrency(
     cost.total,
   ); // Load assignable sailors (exclude already assigned)
@@ -4783,6 +4974,32 @@ function openWorkOrderDetail(workOrderId) {
   }
   document.getElementById("workOrderDetailModal").classList.remove("hidden");
 }
+
+function openJobCardForTask(workOrderId) {
+  const wo = store.workOrders.find(
+    (w) => String(w.id) === String(workOrderId) || String(w._fbKey) === String(workOrderId)
+  );
+  if (!wo) return;
+
+  const jobNumber = `JC/${new Date().getFullYear()}/${String(Date.now()).slice(-4).padStart(4, "0")}`;
+  const newJobCard = {
+    job_number: jobNumber,
+    work_order_id: wo._fbKey || wo.id,
+    description: wo.description,
+    location: wo.location || "",
+    zone_id: wo.zone_id || store.currentZone,
+    status: "Active",
+    start_date: getLocalDateString(),
+    total_material_cost: 0,
+    feedbackSent: false,
+    feedbackReceived: false,
+  };
+  fbSaveJobCard(newJobCard).then(() => {
+    showToast(`Job Card ${jobNumber} created for this Task! 🛠️`);
+    openWorkOrderDetail(wo._fbKey || wo.id);
+  });
+}
+
 let _detailCurrentTrade = "ALL";
 function filterDetailTrade(trade) {
   _detailCurrentTrade = trade;
@@ -5784,18 +6001,38 @@ function renderJobCardsList() {
     jobCards
       .map((jc) => {
         var _jc$feedback;
+        const jcKey = jc._fbKey || jc.id;
+        const isChecked = store.selectedJobCardsForMerge.has(String(jcKey));
+        const checkHtml = store.isJobCardMergeMode
+          ? `<div class="mr-3 flex items-center" onclick="event.stopPropagation(); toggleSelectJobCardForMerge('${jcKey}')">
+               <input type="checkbox" ${isChecked ? "checked" : ""} class="w-4 h-4 text-indigo-600 rounded cursor-pointer pointer-events-none">
+             </div>`
+          : "";
+        const clickHandler = store.isJobCardMergeMode
+          ? `toggleSelectJobCardForMerge('${jcKey}')`
+          : `selectJobCard('${jcKey}')`;
+        const selectedCls = store.isJobCardMergeMode
+          ? isChecked ? "bg-indigo-50/80 border-l-4 border-indigo-600" : ""
+          : String(store.selectedJobCard) === String(jc.id) ? "bg-blue-50 border-l-4 border-blue-500" : "";
+
         return `
-        <div class="p-4 hover:bg-slate-50 cursor-pointer ${String(store.selectedJobCard) === String(jc.id) ? "bg-blue-50 border-l-4 border-blue-500" : ""}"
-            onclick="selectJobCard('${jc._fbKey || jc.id}')">
-            <div class="flex items-center justify-between mb-1">
-                <span class="font-mono text-sm font-medium text-blue-600">${jc.job_number}</span>
-                <span class="text-xs px-2 py-0.5 rounded ${jc.status === "Active" ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-600"}">${jc.status}</span>
-            </div>
-            <p class="text-sm text-slate-700 truncate">${jc.description}</p>
-            <div class="flex justify-between mt-2 text-xs text-slate-500">
-                <span>📍 ${jc.location}</span>
-                <span class="font-medium text-amber-600">${formatCurrency(jc.total_material_cost)}</span>
-            </div>
+        <div class="p-4 hover:bg-slate-50 cursor-pointer ${selectedCls} flex items-start"
+            onclick="${clickHandler}">
+            ${checkHtml}
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between mb-1">
+                  <span class="font-mono text-sm font-medium text-blue-600">${jc.job_number}</span>
+                  <div class="flex items-center gap-1">
+                    ${jc.origin_workshop_zone ? `<span class="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-semibold border border-teal-200" title="Created by Workshop">🔨 ${jc.origin_workshop_zone}</span>` : ""}
+                    <span class="text-xs px-2 py-0.5 rounded ${jc.status === "Active" ? "bg-green-100 text-green-700" : jc.status === "Merged" ? "bg-purple-100 text-purple-700 font-bold" : "bg-slate-100 text-slate-600"}">${jc.status}</span>
+                  </div>
+              </div>
+              <p class="text-sm text-slate-700 truncate">${jc.description}</p>
+              ${jc.merged_into_job_number ? `<p class="text-[11px] text-purple-600 font-semibold">🔀 Merged into ${jc.merged_into_job_number}</p>` : ""}
+              <div class="flex justify-between mt-2 text-xs text-slate-500">
+                  <span>📍 ${jc.location}</span>
+                  <span class="font-medium text-amber-600">${formatCurrency(jc.total_material_cost)}</span>
+              </div>
             ${
               jc.estimate_id
                 ? (() => {
@@ -5833,6 +6070,7 @@ function renderJobCardsList() {
             `
                 : ""
             }
+            </div>
         </div>
     `;
       })
@@ -6257,15 +6495,87 @@ function deleteSingleJobCardLabor(laborId) {
     });
 }
 
+function returnJobCardMaterialToInventory(mat, jcNumber = "") {
+  if (!mat) return null;
+  const qtyToReturn = parseFloat(mat.quantity) || 0;
+  if (qtyToReturn <= 0) return null;
+
+  const matName = (mat.material_name || mat.description || "").trim();
+  const stdName = typeof standardizeInventoryDescription === "function"
+    ? standardizeInventoryDescription(matName)
+    : matName;
+
+  // 1. Try finding inventory item by direct ID
+  let invItem = null;
+  if (mat.inventory_id && store.inventory) {
+    invItem = store.inventory.find(
+      (i) =>
+        String(i.id) === String(mat.inventory_id) ||
+        String(i._fbKey) === String(mat.inventory_id),
+    );
+  }
+
+  // 2. If not found by ID, match by standardized description
+  if (!invItem && matName && store.inventory) {
+    invItem = store.inventory.find(
+      (i) => (i.description || "").trim().toLowerCase() === stdName.toLowerCase(),
+    );
+  }
+
+  // 3. Fallback: match by raw description
+  if (!invItem && matName && store.inventory) {
+    invItem = store.inventory.find(
+      (i) => (i.description || "").trim().toLowerCase() === matName.toLowerCase(),
+    );
+  }
+
+  if (invItem) {
+    const prevQty = parseFloat(invItem.quantity) || 0;
+    const newQty = prevQty + qtyToReturn;
+    invItem.quantity = Math.round(newQty * 1000) / 1000;
+
+    const onChargeRecord = {
+      date: getLocalDateString(),
+      quantity: qtyToReturn,
+      source: jcNumber
+        ? `Returned from deleted Job Card ${jcNumber}`
+        : "Returned from Job Card material deletion",
+      return_date: getLocalDateString(),
+      timestamp: Date.now(),
+    };
+
+    if (!invItem.on_charge_records) invItem.on_charge_records = [];
+    if (Array.isArray(invItem.on_charge_records)) {
+      invItem.on_charge_records.push(onChargeRecord);
+    }
+
+    fbSaveInventoryItem(invItem);
+    console.log(
+      `📦 Returned ${qtyToReturn} ${invItem.deno || "units"} of "${invItem.description}" back to inventory. New balance: ${invItem.quantity}`,
+    );
+    return {
+      name: invItem.description,
+      qty: qtyToReturn,
+      unit: invItem.deno || mat.unit || "",
+    };
+  }
+
+  return null;
+}
+
 function deleteJobCardMaterial(materialId) {
   if (!materialId) return;
-  if (!confirm("Are you sure you want to remove this material entry?")) return;
+  if (!confirm("Are you sure you want to remove this material entry?\n\nThe material quantity will be re-allocated back to the Inventory.")) return;
   const mat = store.jobCardMaterials.find(
     (m) =>
       String(m.id) === String(materialId) ||
       String(m._fbKey) === String(materialId),
   );
   const targetKey = mat && mat._fbKey ? mat._fbKey : materialId;
+
+  // Re-allocate material back to inventory
+  const ret = returnJobCardMaterialToInventory(mat);
+
   opsDB
     .ref(`job_card_materials/${targetKey}`)
     .remove()
@@ -6278,7 +6588,10 @@ function deleteJobCardMaterial(materialId) {
       if (store.selectedJobCard) {
         selectJobCard(store.selectedJobCard);
       }
-      showToast("Material entry removed.");
+      const retMsg = ret
+        ? ` (Returned ${ret.qty} ${ret.unit} of "${ret.name}" to Inventory)`
+        : "";
+      showToast(`Material entry removed${retMsg}.`);
     })
     .catch((err) => {
       console.error("Error deleting material:", err);
@@ -6295,7 +6608,7 @@ function deleteJobCard() {
   if (!jc) return;
   if (
     confirm(
-      `⚠️ Are you sure you want to delete Job Card "${jc.job_number}" (${jc.description})?\n\nThis will also delete all logged materials and labor logs for this job card. This action cannot be undone.`,
+      `⚠️ Are you sure you want to delete Job Card "${jc.job_number}" (${jc.description})?\n\nAny materials on-charge will be automatically re-allocated back to the Inventory. This action cannot be undone.`,
     )
   ) {
     const targetFbKey = jc._fbKey;
@@ -6307,17 +6620,25 @@ function deleteJobCard() {
       .ref(`job_cards/${targetFbKey}`)
       .remove()
       .then(() => {
-        // 2. Delete linked materials logs
+        // 2. Delete linked materials logs and return quantities to inventory
         const linkedMaterials = store.jobCardMaterials.filter(
-          (m) => String(m.job_card_id) === String(jcId),
+          (m) =>
+            String(m.job_card_id) === String(jcId) ||
+            String(m.work_order_id) === String(jc.work_order_id) ||
+            (jc.job_number && String(m.job_number) === String(jc.job_number)),
         );
+        let returnedCount = 0;
         linkedMaterials.forEach((m) => {
+          const ret = returnJobCardMaterialToInventory(m, jc.job_number);
+          if (ret) returnedCount++;
           if (m._fbKey) {
             opsDB.ref(`job_card_materials/${m._fbKey}`).remove();
           }
         }); // 3. Delete linked labor logs
         const linkedLabor = store.jobCardLabor.filter(
-          (l) => String(l.job_card_id) === String(jcId),
+          (l) =>
+            String(l.job_card_id) === String(jcId) ||
+            String(l.work_order_id) === String(jc.work_order_id),
         );
         linkedLabor.forEach((l) => {
           if (l._fbKey) {
@@ -6326,7 +6647,10 @@ function deleteJobCard() {
         });
         store.selectedJobCard = null;
         renderJobCardsView();
-        showToast("Job Card deleted successfully.");
+        const retMsg = returnedCount > 0
+          ? ` and ${returnedCount} material item(s) re-allocated to Inventory`
+          : "";
+        showToast(`Job Card "${jc.job_number}" deleted${retMsg}.`);
       })
       .catch((err) => {
         console.error("Error deleting Job Card:", err);
@@ -7211,6 +7535,8 @@ function addMaterialToJob(event) {
       ? getLocalDateString()
       : new Date().toISOString().split("T")[0]);
 
+  const invId = (document.getElementById("matFromInventory") || {}).value || null;
+
   const newMaterial = {
     job_card_id: jobCardId,
     material_name: document.getElementById("matName").value,
@@ -7224,6 +7550,7 @@ function addMaterialToJob(event) {
     sig_ref: sigRef,
     work_date: customDate,
     logged_at: customDate,
+    inventory_id: invId || null,
   }; // Save to Firebase (Realtime Database listener will automatically update store.jobCardMaterials)
 
   // If Sailors Records included
@@ -7279,7 +7606,6 @@ function addMaterialToJob(event) {
     jc.include_sailors = includeSailors;
     fbSaveJobCard(jc);
   } // Deduct from inventory in Firebase if selected
-  const invId = document.getElementById("matFromInventory").value;
   if (invId) {
     const inv = store.inventory.find(
       (i) =>
@@ -12295,6 +12621,8 @@ function switchSettingsTab(tab) {
     setValue("cfg-lowStockLevel", s.lowStockLevel || 10);
   } else if (tab === "dateschedule") {
     renderDateScheduleCalendar();
+  } else if (tab === "projects") {
+    renderApprovedProjectsSettings();
   }
 }
 function setValue(id, val) {
@@ -13779,8 +14107,572 @@ function removePriorityLevel(i) {
   const arr = [...(store.settings.priorityLevels || [])];
   arr.splice(i, 1);
   saveSettingsArray("priorityLevels", arr);
-  renderSettingsPriorityList();
-} // =============================================
+}
+
+// =============================================
+// APPROVED PROJECTS MANAGEMENT (SETTINGS)
+// =============================================
+
+const CE_OFFICERS_PRESET = [
+  { rank: "CAPTAIN (CE)", name: "BGL BALASURIYA", svc: "NRC 1843", desig: "CCED(E)" },
+  { rank: "CDR (CE)", name: "TM VITHARANA", svc: "NRC 2541", desig: "CCEO(E)" },
+  { rank: "LCDR (CE)", name: "JAJD SENARATHNA", svc: "NRC 3068", desig: "SCE(M)" },
+  { rank: "LCDR (CE)", name: "JATK JAYAKODI", svc: "NRC 3542", desig: "SCE(P&P)" },
+  { rank: "LCDR (CE)", name: "KMAU KAHANDAWA", svc: "NRC 3576", desig: "SCE(W/W)" },
+  { rank: "LCDR (CE)", name: "HMMI JAYATHUNGA", svc: "NRC 3977", desig: "CE (W/W), CE (P&P)" },
+  { rank: "LT (CE)", name: "WP DARSHANA", svc: "NRC 4126", desig: "QS (E)" },
+  { rank: "LT (CE)", name: "JADU JAYASINGHE", svc: "NRC 4310", desig: "CE(M)I" },
+  { rank: "LT (CE)", name: "DMRK DISSANAYAKE", svc: "NRC 4496", desig: "CE(W/W) II" },
+  { rank: "LT (CE)", name: "WGPD WIJETHUNGA", svc: "NRC 4519", desig: "CE (M) II" },
+  { rank: "SLT (CE)", name: "KCS KORALA", svc: "NRC 4652", desig: "CE (P&P) II" },
+  { rank: "SLT (CE)", name: "SD RAJAPAKSHA", svc: "NRC 4843", desig: "CE (E)" }
+];
+
+function renderApprovedProjectsSettings() {
+  const tbody = document.getElementById("approvedProjectsTableBody");
+  if (!tbody) return;
+
+  const searchInput = document.getElementById("approvedProjectsSearch");
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
+  const statusFilter = document.getElementById("approvedProjectsStatusFilter");
+  const filterVal = statusFilter ? statusFilter.value : "all";
+
+  let projects = store.approvedProjects || [];
+
+  if (filterVal !== "all") {
+    projects = projects.filter((p) => (p.status || "Approved") === filterVal);
+  }
+
+  if (query) {
+    projects = projects.filter(
+      (p) =>
+        (p.project_name || p.name || "").toLowerCase().includes(query) ||
+        (p.reference_no || "").toLowerCase().includes(query) ||
+        (p.project_engineer || "").toLowerCase().includes(query) ||
+        (p.workscope || "").toLowerCase().includes(query)
+    );
+  }
+
+  if (projects.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="8" class="p-8 text-center text-slate-400">
+          <span class="text-2xl block mb-1">🏗️</span>
+          No approved projects found. Click "Add Approved Project" to register a new project.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = projects
+    .map((p) => {
+      const pid = p.id || p._fbKey;
+      const statusColors = {
+        Approved: "bg-emerald-100 text-emerald-800 border-emerald-200",
+        "In Progress": "bg-blue-100 text-blue-800 border-blue-200",
+        Completed: "bg-teal-100 text-teal-800 border-teal-200",
+        "On Hold": "bg-amber-100 text-amber-800 border-amber-200"
+      };
+      const badgeCls = statusColors[p.status] || "bg-slate-100 text-slate-700 border-slate-200";
+
+      // Count linked work orders
+      const linkedWos = (store.workOrders || []).filter(
+        (w) => String(w.approved_project_id) === String(pid)
+      ).length;
+
+      return `
+        <tr class="hover:bg-slate-50/80 transition-colors">
+          <td class="p-3.5 font-semibold text-slate-800">
+            <div class="flex items-center gap-2">
+              <span class="text-indigo-600">🏛️</span>
+              <div>
+                <p class="font-bold text-xs">${p.project_name || p.name || "Untitled Project"}</p>
+                <p class="text-[10px] text-slate-400">${p.approval_date ? "Approved: " + p.approval_date : ""} ${linkedWos > 0 ? `• <span class="text-indigo-600 font-bold">${linkedWos} Work Orders</span>` : ""}</p>
+              </div>
+            </div>
+          </td>
+          <td class="p-3.5 text-slate-600">
+            <span class="text-[10px] font-semibold text-slate-500 block">${p.reference_type || "Ref"}</span>
+            <span class="font-mono text-xs font-bold text-slate-700">${p.reference_no || "—"}</span>
+          </td>
+          <td class="p-3.5 text-right font-mono font-bold text-emerald-700">
+            ${formatCurrency(p.approved_cost || 0)}
+          </td>
+          <td class="p-3.5 text-center text-slate-600 font-medium">
+            ${p.duration || "—"}
+          </td>
+          <td class="p-3.5 text-slate-700">
+            <span class="text-xs font-semibold block">${p.project_engineer || "—"}</span>
+            <span class="text-[10px] text-slate-400">${p.zone_id || "All Zones"}</span>
+          </td>
+          <td class="p-3.5 text-slate-600 max-w-xs truncate" title="${(p.workscope || "").replace(/"/g, '&quot;')}">
+            ${p.workscope || "—"}
+          </td>
+          <td class="p-3.5 text-center">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold border ${badgeCls}">${p.status || "Approved"}</span>
+          </td>
+          <td class="p-3.5 text-center whitespace-nowrap">
+            <div class="flex items-center justify-center gap-1">
+              <button onclick="openApprovedProjectModal('${pid}')" class="p-1.5 hover:bg-slate-100 rounded text-slate-600 hover:text-indigo-600 text-xs font-semibold" title="Edit Project">
+                ✏️
+              </button>
+              <button onclick="openBulkUploadProjectEstimateModal('${pid}')" class="p-1.5 hover:bg-emerald-50 rounded text-emerald-600 text-xs font-semibold" title="Bulk Upload Estimate">
+                📤
+              </button>
+              <button onclick="deleteApprovedProject('${pid}')" class="p-1.5 hover:bg-rose-50 rounded text-rose-500 hover:text-rose-700 text-xs font-semibold" title="Delete Project">
+                🗑️
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
+function openApprovedProjectModal(projId = null) {
+  const modal = document.getElementById("approvedProjectModal");
+  if (!modal) return;
+
+  // Populate CE Officers dropdown
+  const engSelect = document.getElementById("apEngineerSelect");
+  if (engSelect) {
+    let opts = '<option value="">-- Select CE Officer --</option>';
+    CE_OFFICERS_PRESET.forEach((off) => {
+      opts += `<option value="${off.rank} ${off.name} (${off.desig})">${off.rank} ${off.name} - ${off.desig}</option>`;
+    });
+    engSelect.innerHTML = opts;
+  }
+
+  // Populate Zone dropdown
+  const zoneSelect = document.getElementById("apZone");
+  if (zoneSelect) {
+    let zopts = '<option value="All Zones">All Zones (Global)</option>';
+    (store.zones || []).forEach((z) => {
+      zopts += `<option value="${z.id}">${z.name}</option>`;
+    });
+    zoneSelect.innerHTML = zopts;
+  }
+
+  if (projId) {
+    const p = (store.approvedProjects || []).find(
+      (x) => String(x.id) === String(projId) || String(x._fbKey) === String(projId)
+    );
+    if (p) {
+      document.getElementById("apModalTitle").textContent = "Edit Approved Project";
+      document.getElementById("apId").value = p.id || p._fbKey;
+      document.getElementById("apName").value = p.project_name || p.name || "";
+      document.getElementById("apRefType").value = p.reference_type || "Minute Sheet";
+      document.getElementById("apRefNo").value = p.reference_no || "";
+      document.getElementById("apCost").value = p.approved_cost || "";
+      document.getElementById("apDuration").value = p.duration || "";
+      document.getElementById("apZone").value = p.zone_id || "All Zones";
+      document.getElementById("apEngineerCustom").value = p.project_engineer || "";
+      if (engSelect) engSelect.value = "";
+      document.getElementById("apWorkscope").value = p.workscope || "";
+      document.getElementById("apStatus").value = p.status || "Approved";
+      document.getElementById("apDate").value = p.approval_date || getLocalDateString();
+    }
+  } else {
+    document.getElementById("apModalTitle").textContent = "Add Approved Project";
+    document.getElementById("apId").value = "";
+    document.getElementById("apName").value = "";
+    document.getElementById("apRefType").value = "Minute Sheet";
+    document.getElementById("apRefNo").value = "";
+    document.getElementById("apCost").value = "";
+    document.getElementById("apDuration").value = "";
+    document.getElementById("apZone").value = "All Zones";
+    document.getElementById("apEngineerCustom").value = "";
+    if (engSelect) engSelect.value = "";
+    document.getElementById("apWorkscope").value = "";
+    document.getElementById("apStatus").value = "Approved";
+    document.getElementById("apDate").value = getLocalDateString();
+  }
+
+  modal.classList.remove("hidden");
+}
+
+function handleApEngineerSelect(val) {
+  if (val) {
+    document.getElementById("apEngineerCustom").value = val;
+  }
+}
+
+function saveApprovedProject(event) {
+  event.preventDefault();
+  const id = document.getElementById("apId").value.trim();
+  const name = document.getElementById("apName").value.trim();
+  const refType = document.getElementById("apRefType").value;
+  const refNo = document.getElementById("apRefNo").value.trim();
+  const cost = parseFloat(document.getElementById("apCost").value) || 0;
+  const duration = document.getElementById("apDuration").value.trim();
+  const zone = document.getElementById("apZone").value;
+  const engineer =
+    document.getElementById("apEngineerCustom").value.trim() ||
+    document.getElementById("apEngineerSelect").value.trim();
+  const workscope = document.getElementById("apWorkscope").value.trim();
+  const status = document.getElementById("apStatus").value;
+  const date = document.getElementById("apDate").value || getLocalDateString();
+
+  const projectData = {
+    project_name: name,
+    name: name,
+    reference_type: refType,
+    reference_no: refNo,
+    approved_cost: cost,
+    duration: duration,
+    zone_id: zone,
+    project_engineer: engineer,
+    workscope: workscope,
+    status: status,
+    approval_date: date,
+    updated_at: new Date().toISOString()
+  };
+
+  const projectKey = id || opsDB.ref("approved_projects").push().key;
+
+  opsDB
+    .ref(`approved_projects/${projectKey}`)
+    .update(projectData)
+    .then(() => {
+      closeModal("approvedProjectModal");
+      showToast(`Approved project "${name}" saved successfully! 🏗️`);
+    })
+    .catch((err) => {
+      console.error("Error saving approved project:", err);
+      showToast("Failed to save approved project", "error");
+    });
+}
+
+function deleteApprovedProject(projId) {
+  const p = (store.approvedProjects || []).find(
+    (x) => String(x.id) === String(projId) || String(x._fbKey) === String(projId)
+  );
+  if (!p) return;
+
+  if (
+    confirm(
+      `Are you sure you want to delete the approved project "${p.project_name || p.name}"?`
+    )
+  ) {
+    const key = p._fbKey || p.id;
+    opsDB
+      .ref(`approved_projects/${key}`)
+      .remove()
+      .then(() => {
+        showToast("Approved project deleted", "info");
+      })
+      .catch((err) => {
+        console.error("Error deleting project:", err);
+        showToast("Failed to delete project", "error");
+      });
+  }
+}
+
+function openBulkUploadProjectEstimateModal(projId) {
+  const p = (store.approvedProjects || []).find(
+    (x) => String(x.id) === String(projId) || String(x._fbKey) === String(projId)
+  );
+  if (!p) return;
+
+  document.getElementById("buProjectId").value = p._fbKey || p.id;
+  document.getElementById("buProjectName").textContent = `${p.project_name || p.name} (Ref: ${p.reference_no || "—"})`;
+  document.getElementById("buProjectCsvData").value = "";
+  const fileInput = document.getElementById("buProjectCsvFile");
+  if (fileInput) fileInput.value = "";
+
+  document.getElementById("bulkUploadProjectEstimateModal").classList.remove("hidden");
+}
+
+function handleProjectCsvFile(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      document.getElementById("buProjectCsvData").value = e.target.result;
+    };
+    reader.readAsText(input.files[0]);
+  }
+}
+
+function submitBulkUploadProjectEstimate(event) {
+  event.preventDefault();
+  const projId = document.getElementById("buProjectId").value;
+  const rawData = document.getElementById("buProjectCsvData").value.trim();
+  if (!rawData) {
+    showToast("Please provide CSV data or choose a file", "error");
+    return;
+  }
+
+  const lines = rawData.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  const items = [];
+  lines.forEach((line, idx) => {
+    // Skip header line if detected
+    if (idx === 0 && (line.toLowerCase().includes("item") || line.toLowerCase().includes("description"))) {
+      return;
+    }
+    const cols = line.split(/[,\t]/).map((c) => c.trim().replace(/^["']|["']$/g, ""));
+    if (cols.length >= 2) {
+      items.push({
+        item_no: cols[0] || String(idx),
+        description: cols[1] || "",
+        unit: cols[2] || "Nos",
+        quantity: parseFloat(cols[3]) || 1,
+        unit_price: parseFloat(cols[4]) || 0,
+        amount: parseFloat(cols[5]) || (parseFloat(cols[3]) || 1) * (parseFloat(cols[4]) || 0)
+      });
+    }
+  });
+
+  if (items.length === 0) {
+    showToast("No valid items parsed from CSV", "error");
+    return;
+  }
+
+  opsDB
+    .ref(`approved_projects/${projId}/estimate_items`)
+    .set(items)
+    .then(() => {
+      closeModal("bulkUploadProjectEstimateModal");
+      showToast(`Successfully imported ${items.length} estimate items! 📊`);
+    })
+    .catch((err) => {
+      console.error("Failed to import estimate items:", err);
+      showToast("Error importing estimate items", "error");
+    });
+}
+
+// =============================================
+// JOB CARDS MULTI-MERGE WORKFLOW
+// =============================================
+
+function toggleJobCardMergeMode() {
+  store.isJobCardMergeMode = !store.isJobCardMergeMode;
+  store.selectedJobCardsForMerge.clear();
+
+  const btn = document.getElementById("btnToggleMergeJobCards");
+  const textEl = document.getElementById("mergeBtnText");
+  const proceedBtn = document.getElementById("btnProceedMergeModal");
+
+  if (btn && textEl) {
+    if (store.isJobCardMergeMode) {
+      btn.className = "bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all";
+      textEl.textContent = "Cancel Merge Mode";
+      showToast("Merge Mode Active: Select 2 or more Job Cards with checkboxes to merge.", "info");
+    } else {
+      btn.className = "bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all";
+      textEl.textContent = "Merge Job Cards";
+    }
+  }
+
+  if (proceedBtn) proceedBtn.classList.add("hidden");
+  renderJobCardsList();
+}
+
+function toggleSelectJobCardForMerge(jcId) {
+  const idStr = String(jcId);
+  if (store.selectedJobCardsForMerge.has(idStr)) {
+    store.selectedJobCardsForMerge.delete(idStr);
+  } else {
+    store.selectedJobCardsForMerge.add(idStr);
+  }
+
+  const count = store.selectedJobCardsForMerge.size;
+  const countEl = document.getElementById("mergeSelectedCount");
+  const proceedBtn = document.getElementById("btnProceedMergeModal");
+
+  if (countEl) countEl.textContent = count;
+  if (proceedBtn) {
+    proceedBtn.classList.toggle("hidden", count < 2);
+  }
+
+  renderJobCardsList();
+}
+
+function openMergeJobCardsModal() {
+  if (store.selectedJobCardsForMerge.size < 2) {
+    showToast("Please select at least 2 Job Cards to merge", "error");
+    return;
+  }
+
+  const selectedCards = store.jobCards.filter((j) =>
+    store.selectedJobCardsForMerge.has(String(j._fbKey || j.id))
+  );
+
+  if (selectedCards.length < 2) {
+    showToast("Selected cards could not be loaded", "error");
+    return;
+  }
+
+  const container = document.getElementById("mergeJobCardsRadioList");
+  if (!container) return;
+
+  // Calculate preview statistics
+  let totalMaterials = 0;
+  let totalLabor = 0;
+
+  selectedCards.forEach((jc) => {
+    const jcKey = jc._fbKey || jc.id;
+    const mats = (store.jobCardMaterials || []).filter(
+      (m) =>
+        String(m.job_card_id) === String(jcKey) ||
+        String(m.work_order_id) === String(jc.work_order_id) ||
+        (jc.job_number && String(m.job_number) === String(jc.job_number))
+    );
+    totalMaterials += mats.length;
+
+    const labors = (store.jobCardLabor || []).filter(
+      (l) =>
+        String(l.job_card_id) === String(jcKey) ||
+        String(l.work_order_id) === String(jc.work_order_id)
+    );
+    totalLabor += labors.length;
+  });
+
+  document.getElementById("mergePreviewCardsCount").textContent = selectedCards.length;
+  document.getElementById("mergePreviewMaterialsCount").textContent = `${totalMaterials} Items`;
+  document.getElementById("mergePreviewLaborCount").textContent = `${totalLabor} Logs`;
+
+  container.innerHTML = selectedCards
+    .map((jc, idx) => {
+      const jcKey = jc._fbKey || jc.id;
+      const isFirst = idx === 0;
+      return `
+        <label class="flex items-start gap-3 p-3.5 rounded-xl border border-slate-200 bg-white hover:bg-indigo-50/50 cursor-pointer transition-all">
+          <input type="radio" name="primaryMasterJobCard" value="${jcKey}" ${isFirst ? "checked" : ""} class="mt-1 text-indigo-600 focus:ring-indigo-500">
+          <div class="flex-1">
+            <div class="flex items-center justify-between">
+              <span class="font-mono font-bold text-sm text-indigo-700">${jc.job_number}</span>
+              <span class="text-xs px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-700">${jc.status}</span>
+            </div>
+            <p class="text-xs font-semibold text-slate-800 mt-0.5">${jc.description || "No description"}</p>
+            <div class="flex items-center gap-4 text-[11px] text-slate-500 mt-1">
+              <span>📍 ${jc.location || "No location"}</span>
+              <span class="text-emerald-700 font-bold">Cost: ${formatCurrency(jc.total_material_cost || 0)}</span>
+              <span>Zone: ${jc.zone_id || "—"}</span>
+            </div>
+          </div>
+        </label>
+      `;
+    })
+    .join("");
+
+  document.getElementById("mergeJobCardsModal").classList.remove("hidden");
+}
+
+function submitExecuteJobCardMerge() {
+  const radio = document.querySelector('input[name="primaryMasterJobCard"]:checked');
+  if (!radio) {
+    showToast("Please pick a Primary (Master) Job Card", "error");
+    return;
+  }
+
+  const primaryJcKey = radio.value;
+  const secondaryJcKeys = [...store.selectedJobCardsForMerge].filter(
+    (id) => String(id) !== String(primaryJcKey)
+  );
+
+  if (secondaryJcKeys.length === 0) {
+    showToast("No secondary job cards to merge", "error");
+    return;
+  }
+
+  const primaryJc = store.jobCards.find(
+    (j) => String(j._fbKey || j.id) === String(primaryJcKey)
+  );
+  if (!primaryJc) {
+    showToast("Primary Job Card not found", "error");
+    return;
+  }
+
+  executeJobCardMerge(primaryJc, secondaryJcKeys);
+}
+
+function executeJobCardMerge(primaryJc, secondaryJcKeys) {
+  const primaryKey = primaryJc._fbKey || primaryJc.id;
+  const primaryWoId = primaryJc.work_order_id;
+  const primaryJobNum = primaryJc.job_number;
+
+  let migratedMaterialsCount = 0;
+  let migratedLaborCount = 0;
+  let addedMaterialCost = 0;
+
+  // 1. Migrate materials from secondary cards
+  secondaryJcKeys.forEach((secKey) => {
+    const secJc = store.jobCards.find(
+      (j) => String(j._fbKey || j.id) === String(secKey)
+    );
+    if (!secJc) return;
+
+    (store.jobCardMaterials || []).forEach((m) => {
+      const belongs =
+        String(m.job_card_id) === String(secKey) ||
+        (secJc.work_order_id && String(m.work_order_id) === String(secJc.work_order_id)) ||
+        (secJc.job_number && String(m.job_number) === String(secJc.job_number));
+
+      if (belongs) {
+        migratedMaterialsCount++;
+        addedMaterialCost += (parseFloat(m.total_cost) || (parseFloat(m.quantity) * parseFloat(m.cost_per_unit)) || 0);
+        if (m._fbKey) {
+          opsDB.ref(`job_card_materials/${m._fbKey}`).update({
+            job_card_id: primaryKey,
+            work_order_id: primaryWoId,
+            job_number: primaryJobNum,
+            original_job_number: secJc.job_number || null,
+            merged_at: new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    // 2. Migrate labor from secondary cards
+    (store.jobCardLabor || []).forEach((l) => {
+      const belongs =
+        String(l.job_card_id) === String(secKey) ||
+        (secJc.work_order_id && String(l.work_order_id) === String(secJc.work_order_id));
+
+      if (belongs) {
+        migratedLaborCount++;
+        if (l._fbKey) {
+          opsDB.ref(`job_card_labor/${l._fbKey}`).update({
+            job_card_id: primaryKey,
+            work_order_id: primaryWoId,
+            job_number: primaryJobNum,
+            original_job_number: secJc.job_number || null,
+            merged_at: new Date().toISOString()
+          });
+        }
+      }
+    });
+
+    // 3. Mark secondary Job Card as Merged in Firebase
+    opsDB.ref(`job_cards/${secKey}`).update({
+      status: "Merged",
+      merged_into_job_number: primaryJobNum,
+      merged_into_id: primaryKey,
+      merged_at: new Date().toISOString(),
+      notes: `Merged into ${primaryJobNum}`
+    });
+  });
+
+  // 4. Update primary Job Card with updated totals
+  const newTotalMatCost = (parseFloat(primaryJc.total_material_cost) || 0) + addedMaterialCost;
+  opsDB.ref(`job_cards/${primaryKey}`).update({
+    total_material_cost: newTotalMatCost,
+    merged_sub_cards_count: (primaryJc.merged_sub_cards_count || 0) + secondaryJcKeys.length,
+    last_updated: new Date().toISOString()
+  });
+
+  closeModal("mergeJobCardsModal");
+  toggleJobCardMergeMode(); // Turn off merge mode
+  showToast(
+    `✅ Successfully merged ${secondaryJcKeys.length} Job Cards into ${primaryJobNum}! (${migratedMaterialsCount} materials, ${migratedLaborCount} labor logs migrated)`,
+    "success",
+    7000
+  );
+}
+
+// =============================================
 // INITIALIZATION
 // =============================================
 document.addEventListener("DOMContentLoaded", () => {
