@@ -8258,7 +8258,11 @@ function renderInventoryTable() {
       : _document$getElementB5.value) || "";
   let items = []; // Filter by current zone or allow cross-zone query if ALL_ZONES is selected
   if (location === "ALL_ZONES") {
-    items = [...store.inventory];
+    if (store.currentUser && store.currentUser.permAllInvZones === false && Array.isArray(store.currentUser.allowedInvZones)) {
+      items = store.inventory.filter((i) => store.currentUser.allowedInvZones.includes(i.zone_id));
+    } else {
+      items = [...store.inventory];
+    }
   } else {
     items = store.inventory.filter(
       (i) => !i.zone_id || i.zone_id === store.currentZone,
@@ -12991,9 +12995,25 @@ function saveSettingsArray(key, arr) {
 } // ── Render Settings Page ──
 let _currentSettingsTab = "identity";
 function renderSettings() {
+  const isMaster = isCurrentMasterAdmin();
+  const stabIdentity = document.getElementById("stab-identity");
+  if (stabIdentity) {
+    if (isMaster) {
+      stabIdentity.classList.remove("hidden");
+    } else {
+      stabIdentity.classList.add("hidden");
+      if (_currentSettingsTab === "identity") {
+        _currentSettingsTab = "projects";
+      }
+    }
+  }
   switchSettingsTab(_currentSettingsTab);
 }
 function switchSettingsTab(tab) {
+  const isMaster = isCurrentMasterAdmin();
+  if (tab === "identity" && !isMaster) {
+    tab = "projects";
+  }
   _currentSettingsTab = tab;
   document
     .querySelectorAll(".settings-tab-content")
@@ -13414,7 +13434,82 @@ function getEcSailors() {
     const cleanOffNo = offNo.replace(/^[^a-zA-Z0-9]+/, "");
     return cleanOffNo.toUpperCase().startsWith("EC");
   });
-} // Helper to retrieve all OIC profiles
+}
+
+// Master Admin and Authority Helpers
+function isMasterAdmin(userOrProfile) {
+  if (!userOrProfile) {
+    userOrProfile = store.currentUser;
+  }
+  if (!userOrProfile && store.activeProfileType === "OIC" && store.activeOicProfileId) {
+    userOrProfile = (typeof getOicProfiles === "function" ? getOicProfiles() : []).find(
+      (p) => p.id === store.activeOicProfileId
+    );
+  }
+  if (!userOrProfile) {
+    const savedServiceNo = localStorage.getItem("ncw_logged_officer_no") || "";
+    return savedServiceNo.includes("3576");
+  }
+  const svc = String(userOrProfile.serviceNo || userOrProfile.service_no || userOrProfile.svc || "");
+  const auth = String(userOrProfile.authority || userOrProfile.authorityRole || "");
+  return svc.includes("3576") || auth === "master_admin";
+}
+
+function isCurrentMasterAdmin() {
+  if (isMainAdminLoggedIn()) return true;
+  if (store.currentUser && isMasterAdmin(store.currentUser)) return true;
+  if (store.activeProfileType === "OIC" && store.activeOicProfileId) {
+    const p = (typeof getOicProfiles === "function" ? getOicProfiles() : []).find(
+      (prof) => prof.id === store.activeOicProfileId
+    );
+    if (p && isMasterAdmin(p)) return true;
+  }
+  return false;
+}
+
+function getAuthorityBadge(authKey, serviceNo = "") {
+  if (authKey === "master_admin" || (serviceNo && serviceNo.includes("3576"))) {
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 shadow-xs">👑 MASTER ADMIN</span>`;
+  }
+  if (authKey === "oic_1") {
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-300 shadow-xs">⭐ 1st OIC (In-Charge)</span>`;
+  }
+  if (authKey === "oic_2") {
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-300 shadow-xs">🎖️ 2nd OIC (2IC)</span>`;
+  }
+  if (authKey === "oic_3") {
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300 shadow-xs">🛡️ 3rd OIC (3IC)</span>`;
+  }
+  if (authKey === "proj_eng") {
+    return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border border-blue-300 shadow-xs">📋 Project Engineer</span>`;
+  }
+  return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-700 border border-slate-200">👤 General Officer</span>`;
+}
+
+function openSettingsView() {
+  const isMaster = isCurrentMasterAdmin();
+  const hasSettingsPerm = isMaster || (store.currentUser && store.currentUser.permSettings === true);
+  if (!hasSettingsPerm) {
+    showToast("Access Denied: Settings are restricted to System Administrators only.", "error");
+    return;
+  }
+  switchView("settings");
+}
+
+function toggleOicPasswordVisibility() {
+  const pwdInput = document.getElementById("oicProfPassword");
+  const eyeIcon = document.getElementById("oicPwdEyeIcon");
+  if (!pwdInput) return;
+  if (pwdInput.type === "password") {
+    pwdInput.type = "text";
+    if (eyeIcon) eyeIcon.textContent = "🙈";
+  } else {
+    pwdInput.type = "password";
+    if (eyeIcon) eyeIcon.textContent = "👁️";
+  }
+}
+
+// Helper to retrieve all OIC profiles
 function getOicProfiles() {
   const s = store.settings || {};
   let profiles = [];
@@ -13422,41 +13517,63 @@ function getOicProfiles() {
     profiles = Object.entries(s.oicProfiles).map(([k, v]) => Object.assign({id: k}, v)).filter(
       (p) => p !== null && p !== undefined,
     );
-  } // Backward compatibility for the legacy single OIC
-  if (profiles.length === 0 && (s.oicName || s.oicServiceNo)) {
-    profiles.push({
-      id: "legacy_oic",
-      name: s.oicName || "",
-      rank: s.oicRank || "",
-      serviceNo: s.oicServiceNo || "",
-      password: s.oicPassword || "",
-      permSettings: true,
-      permAllZones: true,
-    });
   }
+
+  // Ensure Master Admin (LCDR KMAU Kahandawa - NRC 3576) is always present and marked as master_admin
+  let masterProf = profiles.find((p) => (p.serviceNo || "").includes("3576"));
+  if (masterProf) {
+    masterProf.authority = "master_admin";
+    masterProf.permSettings = true;
+    masterProf.permAllZones = true;
+    masterProf.permAllInvZones = true;
+  } else {
+    // If not present in stored oicProfiles, create default master admin
+    const defaultMaster = {
+      id: "oic_master_3576",
+      name: "KMAU KAHANDAWA",
+      rank: "LCDR (CE)",
+      serviceNo: "NRC 3576",
+      authority: "master_admin",
+      password: "",
+      permSettings: true,
+      permDashboard: true,
+      permJobCards: true,
+      permInventory: true,
+      permEstimates: true,
+      permLMD: true,
+      permSailors: true,
+      permReports: true,
+      permAllZones: true,
+      permAllInvZones: true,
+      allowedZones: store.zones ? store.zones.map((z) => z.id) : [],
+      allowedInvZones: store.zones ? store.zones.map((z) => z.id) : [],
+    };
+    profiles.unshift(defaultMaster);
+  }
+
   return profiles;
-} // Render OIC Profiles Management List
+}
+
+// Render OIC Profiles Management List
 function renderSettingsOicProfilesList() {
-  var _store$currentUser;
   const listEl = document.getElementById("cfg-oicProfilesList");
   if (!listEl) return;
-  const profiles = getOicProfiles(); // Check if logged-in user is the main administrator (NRC 3576)
-  const isMain = (
-    ((_store$currentUser = store.currentUser) === null ||
-    _store$currentUser === void 0
-      ? void 0
-      : _store$currentUser.serviceNo) || ""
-  ).includes("3576"); // Show/hide Add Officer button
+  const profiles = getOicProfiles();
+  const isMaster = isCurrentMasterAdmin();
+
+  // Show/hide Add Officer button (Master Admin only)
   const addBtn = document.querySelector(
     'button[onclick="openOicProfileModal()"]',
   );
   if (addBtn) {
-    addBtn.style.display = isMain ? "" : "none";
+    addBtn.style.display = isMaster ? "" : "none";
   }
+
   if (profiles.length === 0) {
     listEl.innerHTML = `<div class="p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">No Officer-In-Charge profiles added yet.</div>`;
     return;
   }
+
   listEl.innerHTML = profiles
     .map((p) => {
       const cleanNo = p.serviceNo
@@ -13465,36 +13582,53 @@ function renderSettingsOicProfilesList() {
       const shortRank = p.rank
         ? p.rank.replace(/[a-z\s()]/gi, "").substring(0, 3)
         : "OIC";
-      const fallbackText = `<div class="w-8 h-8 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
+      const fallbackText = `<div class="w-9 h-9 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
       const avatarHtml = cleanNo
-        ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">`
+        ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-9 h-9 rounded-full object-cover flex-shrink-0 border border-slate-200" onerror="handleProfilePicError(this, '${cleanNo}')">`
         : fallbackText;
-      const isProfileMain = (p.serviceNo || "").includes("3576");
+      
+      const isProfileMaster = (p.serviceNo || "").includes("3576") || p.authority === "master_admin";
+      const authBadge = getAuthorityBadge(p.authority, p.serviceNo);
+      
+      // Perm summary
       const permList = [];
-      if (p.permSettings || isProfileMain) permList.push("Settings");
-      if (p.permAllZones || isProfileMain) permList.push("All Zones");
-      const permText =
-        permList.length > 0 ? `Access: ${permList.join(", ")}` : "Access: None";
-      const actionsHtml = isMain
+      if (p.permSettings || isProfileMaster) permList.push("Settings");
+      if (p.permAllZones || isProfileMaster) permList.push("All Zones Control");
+      else if (p.allowedZones && p.allowedZones.length > 0) permList.push(`${p.allowedZones.length} Zones Delegated`);
+      
+      if (p.permAllInvZones || isProfileMaster) permList.push("All Inventory");
+      else if (p.allowedInvZones && p.allowedInvZones.length > 0) permList.push(`${p.allowedInvZones.length} Inv Stores`);
+
+      const permText = permList.length > 0 ? `Access: ${permList.join(" • ")}` : "Access: None";
+      
+      const actionsHtml = isMaster
         ? `
             <div class="flex items-center gap-1">
-                <button onclick="editOicProfile('${p.id}')" class="text-blue-500 hover:text-blue-700 p-1.5 rounded hover:bg-blue-50" title="Edit">
+                <button onclick="editOicProfile('${p.id}')" class="text-blue-500 hover:text-blue-700 p-1.5 rounded-lg hover:bg-blue-50 transition-all cursor-pointer" title="Edit Profile">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                 </button>
-                <button onclick="deleteOicProfile('${p.id}')" class="text-red-500 hover:text-red-700 p-1.5 rounded hover:bg-red-50" title="Delete">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                </button>
+                ${
+                  !isProfileMaster
+                    ? `<button onclick="deleteOicProfile('${p.id}')" class="text-red-500 hover:text-red-700 p-1.5 rounded-lg hover:bg-red-50 transition-all cursor-pointer" title="Delete Profile">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>`
+                    : ""
+                }
             </div>
         `
         : "";
+
       return `
-            <div class="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+            <div class="flex items-center justify-between p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 hover:bg-slate-100/60 transition-all">
                 <div class="flex items-center gap-3 min-w-0">
                     ${avatarHtml}
                     <div class="min-w-0 text-left">
-                        <p class="text-sm font-bold text-slate-800 truncate">${p.rank} ${p.name}</p>
-                        <p class="text-[11px] text-slate-400 font-semibold font-mono">${p.serviceNo} ${p.password ? "• 🔒 Password Protected" : "• 🔓 No Password"}</p>
-                        <p class="text-[10px] text-teal-650 font-semibold mt-0.5">${permText}</p>
+                        <div class="flex items-center gap-2 flex-wrap">
+                            <p class="text-sm font-bold text-slate-800 truncate">${p.rank} ${p.name}</p>
+                            ${authBadge}
+                        </div>
+                        <p class="text-[11px] text-slate-500 font-semibold font-mono mt-0.5">${p.serviceNo} ${p.password ? `• 🔒 Password: <span class="font-mono text-slate-700">${p.password}</span>` : "• 🔓 No Password"}</p>
+                        <p class="text-[10px] text-teal-700 font-semibold mt-0.5">${permText}</p>
                     </div>
                 </div>
                 ${actionsHtml}
@@ -13503,106 +13637,116 @@ function renderSettingsOicProfilesList() {
     })
     .join("");
 }
+
 function openOicProfileModal() {
-  console.log("openOicProfileModal clicked");
   try {
-  document.getElementById("oicProfileModalTitle").textContent =
-    "Add Officer Profile";
-  document.getElementById("oicProfId").value = "";
-  document.getElementById("oicProfName").value = "";
-  document.getElementById("oicProfRank").value = "";
-  document.getElementById("oicProfServiceNo").value = "";
-  document.getElementById("oicProfPassword").value = "";
-  document.getElementById("oicPermSettings").checked = false;
-  document.getElementById("oicPermDashboard").checked = true;
-  document.getElementById("oicPermJobCards").checked = true;
-  document.getElementById("oicPermInventory").checked = true;
-  document.getElementById("oicPermEstimates").checked = true;
-  document.getElementById("oicPermLMD").checked = true;
-  document.getElementById("oicPermSailors").checked = true;
-  document.getElementById("oicPermReports").checked = true;
-  document.getElementById("oicPermAllZones").checked = true;
-  renderOicZonesPermissionCheckboxes(store.zones.map((z) => z.id));
-  toggleSelectAllZonesPerm(true);
-  if (document.getElementById("oicProfileModal")) {
+    document.getElementById("oicProfileModalTitle").textContent = "Add Officer Profile";
+    document.getElementById("oicProfId").value = "";
+    document.getElementById("oicProfName").value = "";
+    document.getElementById("oicProfRank").value = "";
+    document.getElementById("oicProfServiceNo").value = "";
+    document.getElementById("oicProfPassword").value = "";
+    document.getElementById("oicProfPassword").type = "password";
+    const eyeIcon = document.getElementById("oicPwdEyeIcon");
+    if (eyeIcon) eyeIcon.textContent = "👁️";
+    
+    document.getElementById("oicProfAuthority").value = "oic_1";
+    document.getElementById("oicPermSettings").checked = false;
+    document.getElementById("oicPermDashboard").checked = true;
+    document.getElementById("oicPermJobCards").checked = true;
+    document.getElementById("oicPermInventory").checked = true;
+    document.getElementById("oicPermEstimates").checked = true;
+    document.getElementById("oicPermLMD").checked = true;
+    document.getElementById("oicPermSailors").checked = true;
+    document.getElementById("oicPermReports").checked = true;
+    
+    document.getElementById("oicPermAllZones").checked = true;
+    renderOicZonesPermissionCheckboxes(store.zones.map((z) => z.id));
+    toggleSelectAllZonesPerm(true);
+
+    document.getElementById("oicPermAllInvZones").checked = true;
+    renderOicInvZonesPermissionCheckboxes(store.zones.map((z) => z.id));
+    toggleSelectAllInvZonesPerm(true);
+
     const modal = document.getElementById("oicProfileModal");
-    modal.classList.remove("hidden");
-    modal.style.setProperty("display", "flex", "important");
-    modal.style.setProperty("opacity", "1", "important");
-    modal.style.setProperty("visibility", "visible", "important");
-    modal.style.setProperty("z-index", "999999", "important");
-    modal.classList.remove("modal-overlay"); // Remove animation class!
-    console.log("Forced modal to show using inline styles and removed modal-overlay");
-    
-    // Diagnostics
-    setTimeout(() => {
-        console.log("Computed display:", window.getComputedStyle(modal).display);
-        console.log("Inner Div opacity:", window.getComputedStyle(modal.firstElementChild).opacity);
-        console.log("Modal HTML:", modal.outerHTML.substring(0, 300));
-    }, 100);
-    
-  } else {
-    alert("CRITICAL ERROR: oicProfileModal not found in DOM!");
-  }
+    if (modal) {
+      modal.classList.remove("hidden");
+      modal.style.setProperty("display", "flex", "important");
+      modal.style.setProperty("opacity", "1", "important");
+      modal.style.setProperty("visibility", "visible", "important");
+      modal.style.setProperty("z-index", "999999", "important");
+    }
   } catch (err) {
     alert("Error in openOicProfileModal: " + err.message);
     console.error(err);
   }
 }
+
 function editOicProfile(id) {
-  console.log("editOicProfile clicked with id:", id);
   try {
     const profiles = getOicProfiles();
-    console.log("Available profiles:", profiles);
     const profile = profiles.find((p) => String(p.id) === String(id));
     if (!profile) {
-        console.error("Profile not found! ID:", id);
-        alert("Error: Profile not found in store! ID: " + id);
-        return;
+      alert("Error: Profile not found in store! ID: " + id);
+      return;
     }
-  document.getElementById("oicProfileModalTitle").textContent =
-    "Edit Officer Profile";
-  document.getElementById("oicProfId").value = profile.id;
-  document.getElementById("oicProfName").value = profile.name;
-  document.getElementById("oicProfRank").value = profile.rank;
-  document.getElementById("oicProfServiceNo").value = profile.serviceNo;
-  document.getElementById("oicProfPassword").value = profile.password || ""; // Tab permissions
-  document.getElementById("oicPermSettings").checked =
-    profile.permSettings === true;
-  document.getElementById("oicPermDashboard").checked =
-    profile.permDashboard !== false;
-  document.getElementById("oicPermJobCards").checked =
-    profile.permJobCards !== false;
-  document.getElementById("oicPermInventory").checked =
-    profile.permInventory !== false;
-  document.getElementById("oicPermEstimates").checked =
-    profile.permEstimates !== false;
-  document.getElementById("oicPermLMD").checked = profile.permLMD !== false;
-  document.getElementById("oicPermSailors").checked =
-    profile.permSailors !== false;
-  document.getElementById("oicPermReports").checked =
-    profile.permReports !== false; // Zone permissions
-  const allZonesChecked = profile.permAllZones === true;
-  document.getElementById("oicPermAllZones").checked = allZonesChecked;
-  const allowedZones = profile.allowedZones || [];
-  renderOicZonesPermissionCheckboxes(allowedZones);
-  if (allZonesChecked) {
-    toggleSelectAllZonesPerm(true);
-  }
-  
-  const modal = document.getElementById("oicProfileModal");
-  modal.classList.remove("hidden");
-  modal.style.setProperty("display", "flex", "important");
-  modal.style.setProperty("opacity", "1", "important");
-  modal.style.setProperty("visibility", "visible", "important");
-  modal.style.setProperty("z-index", "999999", "important");
-  modal.classList.remove("modal-overlay"); // Remove animation class!
-  
+
+    document.getElementById("oicProfileModalTitle").textContent = "Edit Officer Profile";
+    document.getElementById("oicProfId").value = profile.id;
+    document.getElementById("oicProfName").value = profile.name;
+    document.getElementById("oicProfRank").value = profile.rank;
+    document.getElementById("oicProfServiceNo").value = profile.serviceNo;
+    document.getElementById("oicProfPassword").value = profile.password || "";
+    document.getElementById("oicProfPassword").type = "password";
+    const eyeIcon = document.getElementById("oicPwdEyeIcon");
+    if (eyeIcon) eyeIcon.textContent = "👁️";
+
+    // Authority
+    const isMaster = (profile.serviceNo || "").includes("3576") || profile.authority === "master_admin";
+    document.getElementById("oicProfAuthority").value = isMaster ? "master_admin" : (profile.authority || "oic_1");
+
+    // Tab permissions
+    document.getElementById("oicPermSettings").checked = profile.permSettings === true || isMaster;
+    document.getElementById("oicPermDashboard").checked = profile.permDashboard !== false;
+    document.getElementById("oicPermJobCards").checked = profile.permJobCards !== false;
+    document.getElementById("oicPermInventory").checked = profile.permInventory !== false;
+    document.getElementById("oicPermEstimates").checked = profile.permEstimates !== false;
+    document.getElementById("oicPermLMD").checked = profile.permLMD !== false;
+    document.getElementById("oicPermSailors").checked = profile.permSailors !== false;
+    document.getElementById("oicPermReports").checked = profile.permReports !== false;
+
+    // Zone permissions (Delegated Control)
+    const allZonesChecked = profile.permAllZones === true || isMaster;
+    document.getElementById("oicPermAllZones").checked = allZonesChecked;
+    const allowedZones = profile.allowedZones || [];
+    renderOicZonesPermissionCheckboxes(allowedZones);
+    if (allZonesChecked) {
+      toggleSelectAllZonesPerm(true);
+    }
+
+    // Inventory Scope permissions
+    const allInvZonesChecked = profile.permAllInvZones !== false || isMaster;
+    document.getElementById("oicPermAllInvZones").checked = allInvZonesChecked;
+    const allowedInvZones = profile.allowedInvZones || [];
+    renderOicInvZonesPermissionCheckboxes(allowedInvZones);
+    if (allInvZonesChecked) {
+      toggleSelectAllInvZonesPerm(true);
+    }
+
+    const modal = document.getElementById("oicProfileModal");
+    if (modal) {
+      modal.classList.remove("hidden");
+      modal.style.setProperty("display", "flex", "important");
+      modal.style.setProperty("opacity", "1", "important");
+      modal.style.setProperty("visibility", "visible", "important");
+      modal.style.setProperty("z-index", "999999", "important");
+    }
   } catch (err) {
     alert("Error opening edit modal: " + err.message);
     console.error(err);
   }
 }
+
 function saveOicProfile(event) {
   event.preventDefault();
   const id = document.getElementById("oicProfId").value;
@@ -13610,7 +13754,11 @@ function saveOicProfile(event) {
   const rank = document.getElementById("oicProfRank").value.trim();
   const serviceNo = document.getElementById("oicProfServiceNo").value.trim();
   const password = document.getElementById("oicProfPassword").value;
-  const permSettings = document.getElementById("oicPermSettings").checked;
+  const authority = document.getElementById("oicProfAuthority").value;
+
+  const isMaster = serviceNo.includes("3576") || authority === "master_admin";
+
+  const permSettings = isMaster || document.getElementById("oicPermSettings").checked;
   const permDashboard = document.getElementById("oicPermDashboard").checked;
   const permJobCards = document.getElementById("oicPermJobCards").checked;
   const permInventory = document.getElementById("oicPermInventory").checked;
@@ -13618,7 +13766,8 @@ function saveOicProfile(event) {
   const permLMD = document.getElementById("oicPermLMD").checked;
   const permSailors = document.getElementById("oicPermSailors").checked;
   const permReports = document.getElementById("oicPermReports").checked;
-  const permAllZones = document.getElementById("oicPermAllZones").checked; // Collect allowed zones
+  
+  const permAllZones = isMaster || document.getElementById("oicPermAllZones").checked;
   let allowedZones = [];
   if (permAllZones) {
     allowedZones = store.zones.map((z) => z.id);
@@ -13629,12 +13778,26 @@ function saveOicProfile(event) {
         allowedZones.push(cb.value);
       });
   }
-  const profileId = id || "oic_" + Date.now();
+
+  const permAllInvZones = isMaster || document.getElementById("oicPermAllInvZones").checked;
+  let allowedInvZones = [];
+  if (permAllInvZones) {
+    allowedInvZones = store.zones.map((z) => z.id);
+  } else {
+    document
+      .querySelectorAll('input[name="oicInvZonePermCheckbox"]:checked')
+      .forEach((cb) => {
+        allowedInvZones.push(cb.value);
+      });
+  }
+
+  const profileId = id || (serviceNo.includes("3576") ? "oic_master_3576" : "oic_" + Date.now());
   const profileData = {
     id: profileId,
     name,
     rank,
     serviceNo,
+    authority,
     password,
     permSettings,
     permDashboard,
@@ -13646,7 +13809,10 @@ function saveOicProfile(event) {
     permReports,
     permAllZones,
     allowedZones,
+    permAllInvZones,
+    allowedInvZones,
   };
+
   if (!store.settings.oicProfiles) store.settings.oicProfiles = {};
   store.settings.oicProfiles[profileId] = profileData;
   opsDB
@@ -13662,7 +13828,12 @@ function saveOicProfile(event) {
       }
     });
 }
+
 function deleteOicProfile(id) {
+  if (id === "oic_master_3576" || String(id).includes("3576")) {
+    showToast("Master Admin profile cannot be deleted!", "error");
+    return;
+  }
   if (!confirm("Are you sure you want to delete this officer profile?")) return;
   if (store.settings.oicProfiles) {
     delete store.settings.oicProfiles[id];
@@ -13676,9 +13847,10 @@ function deleteOicProfile(id) {
       showToast("Officer Profile deleted");
     });
 }
+
 function renderOicZonesPermissionCheckboxes(selectedZones = []) {
   const listEl = document.getElementById("oicZonesPermissionList");
-  if (!listEl) return; // Sort zones by name for cleaner display
+  if (!listEl) return;
   const sortedZones = [...store.zones].sort((a, b) =>
     (a.name || "").localeCompare(b.name || ""),
   );
@@ -13696,6 +13868,7 @@ function renderOicZonesPermissionCheckboxes(selectedZones = []) {
       .join("") ||
     '<div class="col-span-2 text-center text-xs text-slate-400 italic">No zones configured yet</div>';
 }
+
 function toggleSelectAllZonesPerm(checked) {
   document
     .querySelectorAll('input[name="oicZonePermCheckbox"]')
@@ -13704,14 +13877,54 @@ function toggleSelectAllZonesPerm(checked) {
       cb.disabled = checked;
     });
 }
+
 function onOicZoneCheckboxChange() {
-  // If any individual zone checkbox is unchecked, make sure 'All Zones Access' is unchecked
   const allChecked = Array.from(
     document.querySelectorAll('input[name="oicZonePermCheckbox"]'),
   ).every((cb) => cb.checked);
   const allZonesCheckbox = document.getElementById("oicPermAllZones");
   if (allZonesCheckbox && !allChecked) {
     allZonesCheckbox.checked = false;
+  }
+}
+
+function renderOicInvZonesPermissionCheckboxes(selectedZones = []) {
+  const listEl = document.getElementById("oicInvZonesPermissionList");
+  if (!listEl) return;
+  const sortedZones = [...store.zones].sort((a, b) =>
+    (a.name || "").localeCompare(b.name || ""),
+  );
+  listEl.innerHTML =
+    sortedZones
+      .map((z) => {
+        const checked = selectedZones.includes(z.id) ? "checked" : "";
+        return `
+            <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer truncate" title="${z.name}">
+                <input type="checkbox" name="oicInvZonePermCheckbox" value="${z.id}" ${checked} onchange="onOicInvZoneCheckboxChange()" class="rounded border-slate-300 text-teal-600 focus:ring-teal-500">
+                <span class="truncate">${z.name}</span>
+            </label>
+        `;
+      })
+      .join("") ||
+    '<div class="col-span-2 text-center text-xs text-slate-400 italic">No zones configured yet</div>';
+}
+
+function toggleSelectAllInvZonesPerm(checked) {
+  document
+    .querySelectorAll('input[name="oicInvZonePermCheckbox"]')
+    .forEach((cb) => {
+      cb.checked = checked;
+      cb.disabled = checked;
+    });
+}
+
+function onOicInvZoneCheckboxChange() {
+  const allChecked = Array.from(
+    document.querySelectorAll('input[name="oicInvZonePermCheckbox"]'),
+  ).every((cb) => cb.checked);
+  const allInvCheckbox = document.getElementById("oicPermAllInvZones");
+  if (allInvCheckbox && !allChecked) {
+    allInvCheckbox.checked = false;
   }
 }
 function showSettingsSailorResults() {
@@ -15912,12 +16125,16 @@ function renderProfileDropdown() {
     const avatarHtml = cleanNo
       ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-8 h-8 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">`
       : fallbackText;
+    const authBadge = getAuthorityBadge(p.authority, p.serviceNo);
     html += `
             <div onclick="switchActiveProfile('OIC', '', '${p.id}')" class="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center gap-3 ${isThisOicActive ? "bg-teal-50/50" : ""}">
                 ${avatarHtml}
                 <div class="text-left flex-1 min-w-0">
                     <p class="text-xs font-bold text-slate-800">${p.rank} ${p.name}</p>
-                    <p class="text-[10px] text-slate-400">Officer Profile • View All Zones</p>
+                    <div class="flex items-center gap-1 mt-0.5 flex-wrap">
+                        ${authBadge}
+                        <span class="text-[10px] text-slate-400 font-mono">${p.serviceNo}</span>
+                    </div>
                 </div>
                 ${isThisOicActive ? '<span class="text-teal-600 font-bold">✓</span>' : ""}
             </div>
@@ -15998,8 +16215,8 @@ function renderProfileDropdown() {
     html += `
             <div class="border-t border-slate-100 mt-1">
                 <div onclick="triggerPwaInstall()" class="px-4 py-2.5 hover:bg-teal-50 text-teal-600 font-semibold cursor-pointer transition-colors text-xs flex items-center gap-3">
-                    <span class="text-sm">📥</span>
-                    <span>Install CMSys App</span>
+                    <span class="text-base">🖥️</span>
+                    <span>Install App on PC / Mobile</span>
                 </div>
             </div>
         `;
@@ -16013,6 +16230,34 @@ function renderProfileDropdown() {
         </div>
     `;
   list.innerHTML = html;
+}
+function editPassword(type, zoneId = "") {
+  const s = store.settings || {};
+  let currentPwd = "";
+  if (type === "OIC") {
+    currentPwd = s.oicPassword || "";
+  } else if (zoneId && s.zoneInCharges && s.zoneInCharges[zoneId]) {
+    currentPwd = s.zoneInCharges[zoneId].password || "";
+  }
+  const newPwd = prompt(
+    `Enter new password for ${type === "OIC" ? "Command / OIC" : zoneId + " In-Charge"}:`,
+    currentPwd,
+  );
+  if (newPwd === null) return;
+  if (type === "OIC") {
+    saveSettingField("oicPassword", newPwd);
+    showToast("Password for Command / OIC updated");
+    return;
+  }
+  if (!s.zoneInCharges) s.zoneInCharges = {};
+  if (!s.zoneInCharges[zoneId]) s.zoneInCharges[zoneId] = {};
+  s.zoneInCharges[zoneId].password = newPwd;
+  opsDB
+    .ref(`settings/zoneInCharges/${zoneId}/password`)
+    .set(newPwd)
+    .then(() => {
+      showToast(`Password for ${zoneId} In-Charge updated`);
+    });
 }
 function saveSettingsUserPassword(password) {
   const zoneId = document.getElementById("cfg-userZone").value;
@@ -16198,12 +16443,22 @@ function applyActiveProfile() {
           name: inc.subName,
           rank: inc.subRank,
           serviceNo: inc.subServiceNo,
+          permSettings: false,
+          permAllZones: false,
+          allowedZones: [zoneId],
+          permAllInvZones: false,
+          allowedInvZones: [zoneId],
         };
       } else {
         store.currentUser = {
           name: inc.name,
           rank: inc.rank,
           serviceNo: inc.serviceNo,
+          permSettings: false,
+          permAllZones: false,
+          allowedZones: [zoneId],
+          permAllInvZones: false,
+          allowedInvZones: [zoneId],
         };
       }
     } else {
@@ -16212,11 +16467,14 @@ function applyActiveProfile() {
         name: s.userName,
         rank: s.userRank,
         serviceNo: s.userServiceNo,
+        permSettings: false,
+        permAllZones: false,
+        allowedZones: [zoneId],
       };
-    } // Hide settings tab for Zone In-Charges
-    const settingsTabBtn = document.getElementById("tab-settings");
-    if (settingsTabBtn) {
-      settingsTabBtn.classList.add("hidden");
+    } // Hide settings tab / button for Zone In-Charges
+    const btnAdminSettings = document.getElementById("btn-admin-settings");
+    if (btnAdminSettings) {
+      btnAdminSettings.classList.add("hidden");
     }
     const mobileSettingsTabBtn = document.getElementById("mobile-tab-settings");
     if (mobileSettingsTabBtn) {
@@ -16259,6 +16517,7 @@ function applyActiveProfile() {
     let oicName = s.oicName || s.userName;
     let oicRank = s.oicRank || s.userRank;
     let oicServiceNo = s.oicServiceNo || s.userServiceNo;
+    let oicAuthority = "oic_1";
     let permSettings = true;
     let permDashboard = true;
     let permJobCards = true;
@@ -16268,16 +16527,19 @@ function applyActiveProfile() {
     let permSailors = true;
     let permReports = true;
     let permAllZones = true;
-    let allowedZones = store.zones.map((z) => z.id);
+    let permAllInvZones = true;
+    let allowedZones = store.zones ? store.zones.map((z) => z.id) : [];
+    let allowedInvZones = store.zones ? store.zones.map((z) => z.id) : [];
     const oicProfileId = store.activeOicProfileId;
     if (oicProfileId) {
       const profile = getOicProfiles().find((p) => p.id === oicProfileId);
       if (profile) {
         oicName = profile.name;
         oicRank = profile.rank;
-        oicServiceNo = profile.serviceNo; // If it is NOT the main administrator (3576), apply permissions
-        const isMain = (profile.serviceNo || "").includes("3576");
-        if (!isMain) {
+        oicServiceNo = profile.serviceNo;
+        oicAuthority = profile.authority || "oic_1";
+        const isMaster = (profile.serviceNo || "").includes("3576") || profile.authority === "master_admin";
+        if (!isMaster) {
           permSettings = profile.permSettings === true;
           permDashboard = profile.permDashboard !== false;
           permJobCards = profile.permJobCards !== false;
@@ -16288,6 +16550,8 @@ function applyActiveProfile() {
           permReports = profile.permReports !== false;
           permAllZones = profile.permAllZones === true;
           allowedZones = profile.allowedZones || [];
+          permAllInvZones = profile.permAllInvZones !== false;
+          allowedInvZones = profile.allowedInvZones || [];
         }
       }
     }
@@ -16295,6 +16559,7 @@ function applyActiveProfile() {
       name: oicName,
       rank: oicRank,
       serviceNo: oicServiceNo,
+      authority: oicAuthority,
       permSettings: permSettings,
       permDashboard: permDashboard,
       permJobCards: permJobCards,
@@ -16305,9 +16570,19 @@ function applyActiveProfile() {
       permReports: permReports,
       permAllZones: permAllZones,
       allowedZones: allowedZones,
-    }; // Show/hide main navigation tabs based on user permissions
+      permAllInvZones: permAllInvZones,
+      allowedInvZones: allowedInvZones,
+    };
+
+    // Toggle isolated settings button visibility
+    const btnAdminSettings = document.getElementById("btn-admin-settings");
+    if (btnAdminSettings) {
+      if (permSettings) btnAdminSettings.classList.remove("hidden");
+      else btnAdminSettings.classList.add("hidden");
+    }
+
+    // Show/hide main navigation tabs based on user permissions
     const tabPermissions = {
-      settings: permSettings,
       dashboard: permDashboard,
       jobcards: permJobCards,
       inventory: permInventory,
