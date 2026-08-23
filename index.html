@@ -5040,10 +5040,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.21
+        App Version: v5.22
     </div>
 
-    <script src="app.js?v=5.21"></script>
+    <script src="app.js?v=5.22"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
@@ -5275,103 +5275,204 @@
         </div>
     </div>
 
-    <!-- Sailor Profile Modal -->
-    <div id="sailorProfileModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div class="bg-gradient-to-r from-slate-900 to-indigo-950 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
-                <div class="flex items-center gap-2">
-                    <span class="text-lg">⚓</span>
-                    <h2 class="font-bold text-lg sinhala">නාවික පැතිකඩ (Sailor Profile)</h2>
-                </div>
-                <button onclick="closeModal('sailorProfileModal')" class="text-slate-300 hover:text-white">✕</button>
-            </div>
-            
-            <div class="p-6 space-y-6">
-                <!-- Header Bio Block -->
-                <div class="flex flex-col sm:flex-row items-center gap-5 p-4 bg-slate-50 border border-slate-150 rounded-2xl">
-                    <!-- Profile Picture container -->
-                    <div class="w-24 h-24 rounded-full overflow-hidden border-2 border-teal-500 shadow-md flex-shrink-0 bg-slate-200 relative" id="profPicContainer">
-                        <!-- Image populated dynamically, with fallback -->
-                    </div>
-                    <!-- Details -->
-                    <div class="text-center sm:text-left flex-1 min-w-0">
-                        <div class="flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                            <span class="text-xs bg-slate-800 text-teal-300 px-2 py-0.5 rounded font-extrabold" id="profTradeBadge">MA</span>
-                            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded font-bold" id="profCategory">Regular</span>
-                            <span class="text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1" id="profStatusBadge">
-                                <span class="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>Available
-                            </span>
-                        </div>
-                        <h3 class="text-lg font-bold text-slate-800 mt-2" id="profName">Kamal Perera</h3>
-                        <p class="text-sm text-slate-500 font-medium mt-0.5" id="profRankOffNo">Able Seaman (MA) · Official No: EC124913</p>
-                        <p class="text-xs text-slate-400 mt-1" id="profActiveZone">Assigned Zone: A-Zone</p>
+    <!-- Sailor Profile Modal (Comprehensive Military Record View) -->
+    <div id="sailorProfileModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-3 sm:p-5 modal-overlay">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+            <!-- Dark Naval Header Banner (Pic 2 Style) -->
+            <div class="bg-[#1e293b] text-white p-5 sm:p-6 flex items-start justify-between relative flex-shrink-0">
+                <div class="space-y-1 min-w-0 pr-4">
+                    <h2 id="profModalName" class="text-xl sm:text-2xl font-black tracking-wide text-white truncate uppercase">MD HAPUTHANTHRI</h2>
+                    <p id="profModalSubtitle" class="text-xs sm:text-sm font-semibold text-slate-300 font-mono">LME | VAS 75228</p>
+                    <div class="pt-1 flex items-center gap-2 flex-wrap">
+                        <span id="profModalUnit" class="inline-block px-2.5 py-0.5 rounded text-[11px] font-bold bg-[#0f172a] text-teal-300 border border-slate-700">UNIT: CE(W/W)</span>
+                        <span id="profModalTrade" class="inline-block px-2 py-0.5 rounded text-[11px] font-extrabold bg-teal-600 text-white">PA</span>
+                        <span id="profModalLiveStatus" class="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Available</span>
                     </div>
                 </div>
 
-                <!-- Points & Leave Stats Grid -->
-                <div class="grid grid-cols-2 gap-4">
-                    <!-- Points Box -->
-                    <div class="p-4 rounded-xl border border-teal-500/20 bg-teal-50/30 flex flex-col justify-between">
-                        <div>
-                            <span class="text-xs font-bold text-teal-700 tracking-wide uppercase">Past 30 Days' Points</span>
-                            <p class="text-xs text-slate-400 mt-0.5 sinhala">පසුගිය දින 30 ක්‍රියාකාරී ලකුණු</p>
-                        </div>
-                        <div class="flex items-baseline gap-1 mt-4">
-                            <span class="text-3xl font-extrabold text-teal-600" id="profTotalPoints">124</span>
-                            <span class="text-xs text-teal-500 font-bold">Points</span>
-                        </div>
-                    </div>
-                    <!-- Leave Days Box -->
-                    <div class="p-4 rounded-xl border border-indigo-500/20 bg-indigo-50/30 flex flex-col justify-between">
-                        <div>
-                            <span class="text-xs font-bold text-indigo-700 tracking-wide uppercase">Leave Days Earned</span>
-                            <p class="text-xs text-slate-400 mt-0.5 sinhala">හිමිවන නිවාඩු දින ගණන</p>
-                        </div>
-                        <div class="flex items-baseline gap-1 mt-4">
-                            <span class="text-3xl font-extrabold text-indigo-600" id="profLeaveDays">12</span>
-                            <span class="text-xs text-indigo-500 font-bold">Days</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Progress to Next Leave Day -->
-                <div class="space-y-2 border border-slate-100 p-4 rounded-xl bg-slate-50/50">
-                    <div class="flex justify-between text-xs font-bold text-slate-500">
-                        <span class="sinhala">ඊළඟ නිවාඩු දිනයට ප්‍රගතිය</span>
-                        <span id="profNextLeaveProgressText">4 / 10 Points</span>
-                    </div>
-                    <div class="w-full bg-slate-200 rounded-full h-3 overflow-hidden shadow-inner">
-                        <div class="bg-gradient-to-r from-teal-500 to-indigo-600 h-full rounded-full transition-all duration-500" id="profNextLeaveProgressBar" style="width: 40%"></div>
-                    </div>
-                    <p class="text-[10px] text-slate-400 italic">Formula: 1 Day of Leave earned for every 10 Performance/Operational points accrued.</p>
-                </div>
-
-                <!-- Rating Breakdowns -->
-                <div class="space-y-3">
-                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Performance Rating Summary</h4>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-white border rounded-xl p-3 flex items-center justify-between">
-                            <span class="text-xs text-slate-500">Rolling Avg Rating</span>
-                            <span class="text-sm font-extrabold text-slate-800" id="profAvgRating">7.8 / 10</span>
-                        </div>
-                        <div class="bg-white border rounded-xl p-3 flex items-center justify-between">
-                            <span class="text-xs text-slate-500">Yesterday's Rating</span>
-                            <span class="text-sm font-extrabold text-slate-800" id="profYesterdayRating">8.5 / 10</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Recent Duties Log -->
-                <div class="space-y-3">
-                    <h4 class="text-xs font-bold text-slate-500 uppercase tracking-wider">Recent Operational Duties</h4>
-                    <div id="profDutyLog" class="max-h-40 overflow-y-auto divide-y divide-slate-100 border rounded-xl bg-white scrollbar-thin">
+                <div class="flex items-start gap-4 flex-shrink-0">
+                    <!-- Photo container -->
+                    <div id="profModalPhotoContainer" class="w-18 h-22 sm:w-20 sm:h-24 rounded-lg overflow-hidden border-2 border-white/90 shadow-lg bg-slate-700 flex items-center justify-center">
                         <!-- Populated dynamically -->
                     </div>
+                    <!-- Close Button -->
+                    <button onclick="closeModal('sailorProfileModal')" class="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors text-xl font-bold cursor-pointer" title="Close">✕</button>
                 </div>
             </div>
-            
-            <div class="flex justify-end gap-3 p-6 border-t border-slate-100 bg-slate-50 rounded-b-2xl">
-                <button onclick="closeModal('sailorProfileModal')" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-lg font-medium">Close</button>
+
+            <!-- Scrollable Body (Two-Column Layout like Pic 2) -->
+            <div class="p-4 sm:p-6 overflow-y-auto space-y-6 bg-slate-50/60 flex-1">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                    <!-- Left Column: Detail Summary & Other Info -->
+                    <div class="space-y-6">
+                        <!-- DETAIL SUMMARY -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+                            <h3 class="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                                <span>ℹ️</span> DETAIL SUMMARY
+                            </h3>
+                            <div class="divide-y divide-slate-100 text-xs">
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Name</span><span id="profDetName" class="font-bold text-slate-800 text-right uppercase">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Rank</span><span id="profDetRank" class="font-bold text-slate-800 text-right">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Off No</span><span id="profDetOffNo" class="font-bold text-slate-800 text-right font-mono">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Contact No</span><span id="profDetContact" class="font-bold text-slate-800 text-right font-mono">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Trade</span><span id="profDetTrade" class="font-bold text-slate-800 text-right">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Roll</span><span id="profDetRoll" class="font-bold text-slate-800 text-right">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Blood Group</span><span id="profDetBlood" class="font-bold text-slate-800 text-right">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">NOK Name</span><span id="profDetNok" class="font-bold text-slate-800 text-right uppercase">—</span></div>
+                                <div class="py-2.5 flex flex-col gap-1">
+                                    <span class="text-slate-400 font-medium">Special Skill</span>
+                                    <p id="profDetSkill" class="font-semibold text-slate-800 text-[11px] leading-relaxed uppercase bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">—</p>
+                                </div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Join Date</span><span id="profDetJoinDate" class="font-bold text-slate-800 text-right font-mono">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">ID Expiry</span><span id="profDetIdExpiry" class="font-bold text-rose-600 text-right font-mono">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Next B Medical Date</span><span id="profDetBMed" class="font-semibold text-slate-600 text-right font-mono">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Next GCB Date</span><span id="profDetGCB" class="font-semibold text-slate-600 text-right font-mono">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Next NAV3 Date</span><span id="profDetNAV3" class="font-semibold text-slate-600 text-right font-mono">—</span></div>
+                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Next R Medical Date</span><span id="profDetRMed" class="font-semibold text-slate-600 text-right font-mono">—</span></div>
+                            </div>
+                        </div>
+
+                        <!-- OTHER INFORMATION -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+                            <h3 class="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                                <span>📋</span> OTHER INFORMATION
+                            </h3>
+                            <div class="divide-y divide-slate-100 text-xs">
+                                <div class="py-2 flex flex-col gap-0.5">
+                                    <span class="text-slate-400 font-medium">Address</span>
+                                    <span id="profOtherAddress" class="font-bold text-slate-800 uppercase">—</span>
+                                </div>
+                                <div class="py-2 flex flex-col gap-0.5">
+                                    <span class="text-slate-400 font-medium">Address Line</span>
+                                    <span id="profOtherAddressLine" class="font-bold text-slate-800 uppercase">—</span>
+                                </div>
+                                <div class="py-2 flex justify-between gap-4">
+                                    <span class="text-slate-400 font-medium">District</span>
+                                    <span id="profOtherDistrict" class="font-bold text-slate-800 uppercase">—</span>
+                                </div>
+                                <div class="py-2 flex justify-between gap-4">
+                                    <span class="text-slate-400 font-medium">Police Station</span>
+                                    <span id="profOtherPolice" class="font-bold text-slate-800 uppercase">—</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Performance, Insights, Attachments & Leave History -->
+                    <div class="space-y-6">
+                        <!-- PERFORMANCE SCORE & INSIGHTS CARD -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-4">
+                            <h3 class="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                <span class="flex items-center gap-2"><span>⭐</span> PERFORMANCE & INSIGHTS</span>
+                                <span id="profPerfGradeBadge" class="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-200">High Performer</span>
+                            </h3>
+
+                            <!-- Score & Evaluation Days Summary -->
+                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                <div class="bg-amber-50/70 border border-amber-200 rounded-xl p-3 text-center">
+                                    <p class="text-[10px] font-bold text-amber-800 uppercase">Performance Score</p>
+                                    <p class="text-xl font-black text-amber-700 mt-0.5" id="profScoreNumber">7.80 <span class="text-xs font-normal text-amber-500">/ 10</span></p>
+                                </div>
+                                <div class="bg-emerald-50/70 border border-emerald-200 rounded-xl p-3 text-center">
+                                    <p class="text-[10px] font-bold text-emerald-800 uppercase">Evaluated Days</p>
+                                    <p class="text-xl font-black text-emerald-700 mt-0.5" id="profEvalDaysBadge">0 D</p>
+                                </div>
+                                <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 text-center col-span-2 sm:col-span-1">
+                                    <p class="text-[10px] font-bold text-slate-500 uppercase">Non-Evaluated Days</p>
+                                    <p class="text-xl font-black text-slate-700 mt-0.5" id="profNonEvalDaysBadge">0 D</p>
+                                </div>
+                            </div>
+
+                            <!-- Performance Development Insights Note -->
+                            <div class="p-3.5 bg-gradient-to-br from-teal-50/80 to-blue-50/60 border border-teal-200/80 rounded-xl space-y-1.5">
+                                <p class="text-[11px] font-bold text-teal-900 flex items-center gap-1.5">
+                                    <span>💡</span> Performance Development Insights:
+                                </p>
+                                <p id="profPerfInsightText" class="text-xs text-slate-700 leading-relaxed font-medium">
+                                    Regular performer with high punctuality and steady workmanship in daily assignments.
+                                </p>
+                            </div>
+
+                            <!-- Competency Breakdown Progress Bars -->
+                            <div class="space-y-2.5 pt-1">
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-[11px] font-bold text-slate-600">
+                                        <span>Work Quality & Craftsmanship</span>
+                                        <span id="profQualityVal">8.0 / 10</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div id="profBarQuality" class="h-full bg-teal-500 rounded-full" style="width: 80%"></div>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-[11px] font-bold text-slate-600">
+                                        <span>Operational Efficiency & Speed</span>
+                                        <span id="profEfficiencyVal">7.5 / 10</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div id="profBarEfficiency" class="h-full bg-blue-500 rounded-full" style="width: 75%"></div>
+                                    </div>
+                                </div>
+                                <div class="space-y-1">
+                                    <div class="flex justify-between text-[11px] font-bold text-slate-600">
+                                        <span>Discipline, Punctuality & Teamwork</span>
+                                        <span id="profDisciplineVal">8.5 / 10</span>
+                                    </div>
+                                    <div class="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                                        <div id="profBarDiscipline" class="h-full bg-indigo-500 rounded-full" style="width: 85%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- SPECIAL RECORDS -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+                            <h3 class="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                                <span>📑</span> SPECIAL RECORDS
+                            </h3>
+                            <div id="profSpecialRecords" class="p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">
+                                No special records found.
+                            </div>
+                        </div>
+
+                        <!-- ATTACHMENTS & PROJECTS -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+                            <h3 class="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                                <span>📍</span> ATTACHMENTS & PROJECTS
+                            </h3>
+                            <div id="profAttachments" class="p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">
+                                Not attached to any project or base.
+                            </div>
+                        </div>
+
+                        <!-- PAST ATTACHMENTS -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+                            <h3 class="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                                <span>⏱️</span> PAST ATTACHMENTS
+                            </h3>
+                            <div id="profPastAttachments" class="p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic">
+                                No past attachment history found.
+                            </div>
+                        </div>
+
+                        <!-- LEAVE HISTORY (Pic 2 Style Cards) -->
+                        <div class="bg-white rounded-xl p-5 border border-slate-200/80 shadow-xs space-y-3">
+                            <h3 class="text-xs font-black text-slate-600 uppercase tracking-wider flex items-center justify-between border-b border-slate-100 pb-2.5">
+                                <span class="flex items-center gap-2"><span>📅</span> LEAVE HISTORY</span>
+                                <span id="profLeaveEarnedTotal" class="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">Earned: 0 Days</span>
+                            </h3>
+                            <div id="profLeaveHistoryList" class="space-y-2.5">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between flex-shrink-0">
+                <p class="text-xs text-slate-400 italic font-mono">Civil Engineering Directorate • Naval Headquarters</p>
+                <button onclick="closeModal('sailorProfileModal')" class="bg-slate-800 hover:bg-slate-900 text-white px-6 py-2 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer">Close Profile</button>
             </div>
         </div>
     </div>

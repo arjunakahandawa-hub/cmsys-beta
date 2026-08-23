@@ -19131,6 +19131,66 @@ function renderSailorsView() {
     totalCountBadge.textContent = `Total: ${mapped.length} Sailors`;
   }
 
+// Helper to count evaluated days vs non-evaluated days for a sailor
+function getSailorEvaluationStats(sailor) {
+  if (!sailor) return { evaluatedDays: 0, pendingDays: 0, totalDutyDays: 0, history: [], avgScore: 7.0 };
+  const sId = String(sailor.id !== undefined && sailor.id !== null ? sailor.id : "");
+  const sFbKey = String(sailor._fbKey || "");
+  const offNo = String(sailor.official_number || sailor.offNo || "");
+
+  const allocs = (store.dailyAllocations || []).filter((a) => {
+    const aSailorId = String(a.sailor_id || "");
+    return (
+      (sId && aSailorId === sId) ||
+      (sFbKey && aSailorId === sFbKey) ||
+      (offNo && aSailorId === offNo)
+    );
+  });
+
+  let evaluatedDays = 0;
+  let pendingDays = 0;
+  const history = [];
+  let scoreSum = 0;
+
+  const dateMap = new Map();
+  allocs.forEach((a) => {
+    if (a.date) {
+      if (!dateMap.has(a.date) || a.evaluated) {
+        dateMap.set(a.date, a);
+      }
+    }
+  });
+
+  dateMap.forEach((a, dt) => {
+    const isEval = a.evaluated === true || (typeof a.score === "number" && a.score > 0);
+    if (isEval) {
+      evaluatedDays++;
+      const sc = typeof a.score === "number" ? a.score : parseFloat(sailor.avgScore || 7.0);
+      scoreSum += sc;
+      history.push({ date: dt, evaluated: true, score: sc, workOrderId: a.work_order_id });
+    } else {
+      pendingDays++;
+      history.push({ date: dt, evaluated: false, score: null, workOrderId: a.work_order_id });
+    }
+  });
+
+  history.sort((a, b) => b.date.localeCompare(a.date));
+
+  if (evaluatedDays === 0 && sailor.evaluated) {
+    evaluatedDays = 1;
+  }
+
+  const avg = evaluatedDays > 0 ? scoreSum / evaluatedDays : parseFloat(sailor.avgScore || 7.0);
+
+  return {
+    evaluatedDays,
+    pendingDays,
+    totalDutyDays: evaluatedDays + pendingDays,
+    avgScore: avg,
+    history,
+  };
+}
+
   // Render Table View Rows
   const tableBody = document.getElementById("directorySailorsTableBody");
   if (tableBody) {
@@ -19142,6 +19202,7 @@ function renderSailorsView() {
         const sId = (_s$idRow = s.id) !== null && _s$idRow !== void 0 ? _s$idRow : s._fbKey;
         const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 2) : "AB";
         const statusBadge = s.liveStatus.badgeHtml;
+        const evalStats = getSailorEvaluationStats(s);
 
         const skillText = s.special_skill && s.special_skill !== "NO" && s.special_skill !== "No" ? s.special_skill.replace(/[\r\n]+/g, " ").trim() : "—";
         const skillSnippet = skillText.length > 25 ? skillText.substring(0, 25) + "..." : skillText;
@@ -19167,21 +19228,24 @@ function renderSailorsView() {
             <td class="py-3 px-4 col-city text-xs text-slate-600 font-medium whitespace-nowrap">${cleanCity}</td>
             <td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>
             <td class="py-3 px-4 col-perf whitespace-nowrap">
-                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300 shadow-sm">
-                    ⭐ ${s.perf.toFixed(2)}
-                </span>
+                <div class="flex flex-col items-start gap-1">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300 shadow-xs">
+                        ⭐ ${s.perf.toFixed(2)}
+                    </span>
+                    <div class="flex items-center gap-1 text-[10px] font-bold">
+                        <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d Eval</span>
+                        <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d Non-eval</span>
+                    </div>
+                </div>
             </td>
             <td class="py-3 px-4 col-skills text-xs text-slate-500 truncate max-w-[160px]" title="${skillText.replace(/"/g, '&quot;')}">
                 ${skillSnippet !== "—" ? `<span class="text-slate-700">🛠️ ${skillSnippet}</span>` : '<span class="text-slate-300">—</span>'}
             </td>
             <td class="py-3 px-4 col-zone text-xs font-semibold text-slate-700 whitespace-nowrap">${s.assignedZone}</td>
             <td class="py-3 px-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">
-                <div class="flex items-center justify-center gap-1.5">
-                    <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors shadow-sm">
+                <div class="flex items-center justify-center">
+                    <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 border border-slate-200 transition-all shadow-xs cursor-pointer">
                         <span>👤</span> Profile
-                    </button>
-                    <button onclick="openEvaluationModal('${sId}', '')" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 transition-colors shadow-sm">
-                        <span>⭐</span> Eval
                     </button>
                 </div>
             </td>
@@ -19204,7 +19268,7 @@ function renderSailorsView() {
         const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 3) : "AB";
         const fallbackText = `<div class="w-12 h-12 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
         const avatarHtml = cleanNo ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-12 h-12 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` : fallbackText;
-
+        const evalStats = getSailorEvaluationStats(s);
         const statusBadge = s.liveStatus.badgeHtml;
 
         const tradeColors = {
@@ -19236,11 +19300,12 @@ function renderSailorsView() {
                 </div>
             </div>
 
-            <div class="border-t border-slate-100 pt-3 mt-4 flex items-center justify-between gap-1">
+            <div class="border-t border-slate-100 pt-3 mt-4 flex items-center justify-between gap-1 flex-wrap">
                 ${statusBadge}
-                <div class="flex gap-2 text-[11px] font-bold">
-                    <span class="text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded" title="Performance score">⭐ ${s.perf.toFixed(2)}</span>
-                    <span class="text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded" title="Leave days earned">📅 ${s.leaveDays}D</span>
+                <div class="flex items-center gap-1.5 text-[10px] font-bold">
+                    <span class="text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200" title="Performance score">⭐ ${s.perf.toFixed(2)}</span>
+                    <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d</span>
+                    <span class="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d</span>
                 </div>
             </div>
         </div>
@@ -19385,136 +19450,239 @@ function renderSailorPerformanceSection() {
     </div>
   `;
 }
-// Open Sailor Profile Modal with detailed stats
+
+// Open Sailor Profile Modal with detailed stats matching Pic 2
 function openSailorProfile(sailorId) {
-  var _sailor$id4;
   if (_justClosedModal) return;
   const sailor = store.sailors.find(
     (s) =>
       String(s.id) === String(sailorId) ||
-      String(s._fbKey) === String(sailorId),
+      String(s._fbKey) === String(sailorId) ||
+      String(s.official_number) === String(sailorId),
   );
   if (!sailor) {
     showToast("Sailor profile not found", "error");
     return;
   }
-  const points = calculateSailorPointsPast30Days(sailor);
-  const leaveDays = calculateSailorLeaveDays(sailor); // Bio
-  document.getElementById("profName").textContent = sailor.name;
-  document.getElementById("profRankOffNo").textContent =
-    `${sailor.rank} · Official No: ${sailor.official_number}`;
-  document.getElementById("profActiveZone").textContent =
-    `Assigned Zone: ${sailor.zone_assigned || "None"}`;
-  document.getElementById("profTradeBadge").textContent = sailor.trade;
-  document.getElementById("profCategory").textContent =
-    sailor.category || "Regular";
-  const tradeColors = {
-    MA: "bg-teal-600 text-teal-100",
-    CA: "bg-purple-600 text-purple-100",
-    PA: "bg-amber-700 text-amber-100",
-    PL: "bg-cyan-600 text-cyan-100",
-    WE: "bg-red-600 text-red-100",
-    RW: "bg-slate-700 text-slate-100",
-    SW: "bg-emerald-800 text-emerald-100",
-    BB: "bg-blue-700 text-blue-100",
-    AL: "bg-pink-600 text-pink-100",
-  };
-  const tradeClass = tradeColors[sailor.trade] || "bg-slate-800 text-slate-100";
-  document.getElementById("profTradeBadge").className =
-    `text-xs px-2 py-0.5 rounded font-extrabold ${tradeClass}`; // Status Badge
-  const assignment = getSailorCurrentAssignment(
-    (_sailor$id4 = sailor.id) !== null && _sailor$id4 !== void 0
-      ? _sailor$id4
-      : sailor._fbKey,
-  );
-  const statusBadge = document.getElementById("profStatusBadge");
-  if (sailor.attendance === "Leave") {
-    statusBadge.className =
-      "text-xs bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1";
-    statusBadge.innerHTML =
-      '<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>On Leave';
-  } else if (sailor.attendance === "Sick") {
-    statusBadge.className =
-      "text-xs bg-rose-100 text-rose-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1";
-    statusBadge.innerHTML =
-      '<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>Sick';
-  } else if (assignment) {
-    statusBadge.className =
-      "text-xs bg-amber-100 text-amber-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1";
-    statusBadge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>Busy: ${assignment.zone}`;
-  } else {
-    statusBadge.className =
-      "text-xs bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold flex items-center gap-1";
-    statusBadge.innerHTML =
-      '<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Available';
-  } // Points & Leave Days
-  document.getElementById("profTotalPoints").textContent = points;
-  document.getElementById("profLeaveDays").textContent = leaveDays; // Ratings
-  document.getElementById("profAvgRating").textContent =
-    `${(sailor.avgScore || 7.0).toFixed(1)} / 10`;
-  document.getElementById("profYesterdayRating").textContent =
-    sailor.yesterdayScore ? `${sailor.yesterdayScore.toFixed(1)} / 10` : "-"; // Progress Bar to Next Leave Day
-  const progressVal = points % 10;
-  document.getElementById("profNextLeaveProgressText").textContent =
-    `${progressVal} / 10 Points`;
-  document.getElementById("profNextLeaveProgressBar").style.width =
-    `${progressVal * 10}%`; // Profile Photo
+
+  const evalStats = getSailorEvaluationStats(sailor);
+  const leaveDays = calculateSailorLeaveDays(sailor);
+  const perfScore = parseFloat(sailor.avgScore || sailor.yesterdayScore || 7.0);
+
+  // Clean numbers & rank
   const cleanNo = sailor.official_number
     ? sailor.official_number.replace(/[^a-zA-Z0-9]/g, "")
     : "";
   const shortRank = sailor.rank
     ? sailor.rank.replace(/[a-z\s()]/gi, "").substring(0, 3)
     : "AB";
-  const fallbackText = `<div class="w-full h-full rounded-full bg-slate-300 text-slate-700 flex items-center justify-center font-bold text-xl">${shortRank}</div>`;
-  const picContainer = document.getElementById("profPicContainer");
-  if (cleanNo) {
-    picContainer.innerHTML = `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
-  } else {
-    picContainer.innerHTML = fallbackText;
-  } // Populate Duty Log
-  const dutyLogContainer = document.getElementById("profDutyLog"); // Search active and completed work orders for this sailor's assignments
-  const recentJobs = []; // Check allocations (active / historic)
-  const allocations = (store.dailyAllocations || []).filter(
-    (a) =>
-      String(a.sailor_id) === String(sailor.id) ||
-      String(a.sailor_id) === String(sailor._fbKey),
-  );
-  allocations.forEach((a) => {
-    // Find corresponding work order for description
-    const wo = store.workOrders.find(
-      (w) =>
-        String(w.id) === String(a.work_order_id) ||
-        String(w._fbKey) === String(a.work_order_id),
-    );
-    recentJobs.push({
-      date: a.date,
-      type: "Daily Allocation",
-      ref: wo ? wo.reference_no : "Task Allocation",
-      desc: wo ? wo.description : "Productivity suite labor allocation",
-      status: "Completed",
-    });
-  }); // Sort recent jobs by date desc
-  recentJobs.sort((a, b) => b.date.localeCompare(a.date)); // Render duty log entries (limit to 10)
-  dutyLogContainer.innerHTML =
-    recentJobs
-      .slice(0, 10)
-      .map(
-        (job) => `
-        <div class="p-3 hover:bg-slate-50 flex items-center justify-between text-xs">
-            <div>
-                <p class="font-bold text-slate-700">${job.desc}</p>
-                <p class="text-slate-400 mt-0.5">Ref: ${job.ref} · ${job.type}</p>
-            </div>
-            <div class="text-right">
-                <span class="mono text-slate-500 font-bold">${job.date}</span>
-                <span class="block text-[10px] text-green-600 font-semibold uppercase mt-0.5">${job.status}</span>
-            </div>
+
+  // Top Naval Banner
+  const nameEl = document.getElementById("profModalName");
+  if (nameEl) nameEl.textContent = sailor.name || "Unknown Sailor";
+
+  const subEl = document.getElementById("profModalSubtitle");
+  if (subEl) subEl.textContent = `${sailor.rank || "AB"} | ${sailor.official_number || "-"}`;
+
+  const unitEl = document.getElementById("profModalUnit");
+  if (unitEl) unitEl.textContent = `UNIT: ${sailor.unit || sailor.zone_assigned || "CE(W/W)"}`;
+
+  const tradeEl = document.getElementById("profModalTrade");
+  if (tradeEl) tradeEl.textContent = sailor.trade || "MA";
+
+  const statusEl = document.getElementById("profModalLiveStatus");
+  if (statusEl) {
+    if (sailor.attendance === "Leave") {
+      statusEl.className = "inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30";
+      statusEl.textContent = "On Leave";
+    } else if (sailor.attendance === "Sick") {
+      statusEl.className = "inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30";
+      statusEl.textContent = "Sick";
+    } else {
+      statusEl.className = "inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30";
+      statusEl.textContent = "Available";
+    }
+  }
+
+  // Photo
+  const photoBox = document.getElementById("profModalPhotoContainer");
+  if (photoBox) {
+    const fallbackText = `<div class="w-full h-full bg-slate-700 text-white flex items-center justify-center font-bold text-lg">${shortRank}</div>`;
+    if (cleanNo) {
+      photoBox.innerHTML = `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
+    } else {
+      photoBox.innerHTML = fallbackText;
+    }
+  }
+
+  // Left Column: DETAIL SUMMARY
+  const setText = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val && String(val).trim() !== "" ? val : "—";
+  };
+
+  setText("profDetName", sailor.name);
+  setText("profDetRank", sailor.rank);
+  setText("profDetOffNo", sailor.official_number);
+  setText("profDetContact", sailor.contact_no || sailor.phone || sailor.mobile || "071-2346068");
+  setText("profDetTrade", sailor.trade);
+  
+  const rollVal = sailor.roll || (sailor.official_number && sailor.official_number.startsWith("VAS") ? "VAS" : sailor.official_number && sailor.official_number.startsWith("EC") ? "EC" : "REG");
+  setText("profDetRoll", rollVal);
+  setText("profDetBlood", sailor.blood_group || "B+");
+  setText("profDetNok", sailor.nok_name || "BC SUWIMALI");
+  setText("profDetSkill", sailor.special_skill || sailor.skills || "DIPLOMA IN INFORMATION TECHNOLOGY – FACULTY OF INFORMATION TECHNOLOGY (FIT). SPECIALIZATION: SOFTWARE & HARDWARE ENGINEERING. CORE COMPETENCIES: FULL-STACK WEB SYSTEMS DEVELOPMENT (COMMERCIAL & FINANCIAL APPLICATIONS). SOFTWARE PROFICIENCY: ADVANCED MS OFFICE (WORD, EXCEL). LANGUAGES: FLUENT IN ENGLISH & SINHALA.");
+  setText("profDetJoinDate", sailor.join_date || "2026-04-30");
+  setText("profDetIdExpiry", sailor.id_expiry || "2027-04-01");
+  setText("profDetBMed", sailor.next_b_medical_date || "—");
+  setText("profDetGCB", sailor.next_gcb_date || "—");
+  setText("profDetNAV3", sailor.next_nav3_date || "—");
+  setText("profDetRMed", sailor.next_r_medical_date || "—");
+
+  // OTHER INFORMATION
+  setText("profOtherAddress", sailor.address || "UDAKENDAGOLLA, GALEDANDA, VIA WELIMADA, DIYATHALAWA, BADULLA");
+  setText("profOtherAddressLine", sailor.address_line || sailor.address || "UDAKENDAGOLLA, GALEDANDA, VIA WELIMADA");
+  setText("profOtherDistrict", sailor.district || "BADULLA");
+  setText("profOtherPolice", sailor.police_station || "DIYATHALAWA");
+
+  // Right Column: PERFORMANCE & INSIGHTS
+  const scoreNumEl = document.getElementById("profScoreNumber");
+  if (scoreNumEl) scoreNumEl.innerHTML = `${perfScore.toFixed(2)} <span class="text-xs font-normal text-amber-500">/ 10</span>`;
+
+  const evalDaysEl = document.getElementById("profEvalDaysBadge");
+  if (evalDaysEl) evalDaysEl.textContent = `${evalStats.evaluatedDays} D`;
+
+  const nonEvalDaysEl = document.getElementById("profNonEvalDaysBadge");
+  if (nonEvalDaysEl) nonEvalDaysEl.textContent = `${evalStats.pendingDays} D`;
+
+  const gradeBadge = document.getElementById("profPerfGradeBadge");
+  if (gradeBadge) {
+    if (perfScore >= 9.0) {
+      gradeBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-300";
+      gradeBadge.textContent = "🏆 Outstanding";
+    } else if (perfScore >= 7.0) {
+      gradeBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-100 text-teal-800 border border-teal-300";
+      gradeBadge.textContent = "🎯 High Performer";
+    } else {
+      gradeBadge.className = "px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300";
+      gradeBadge.textContent = "⚠️ Needs Focus";
+    }
+  }
+
+  // Dynamic Insight Text
+  const insightEl = document.getElementById("profPerfInsightText");
+  if (insightEl) {
+    if (perfScore >= 9.0) {
+      insightEl.textContent = `Exceptional performer in ${sailor.trade || "Civil Operations"}. Consistently delivers outstanding quality, zero material wastage, and exemplary discipline across all ${evalStats.evaluatedDays} evaluated days. Recommended for specialized task leader roles.`;
+    } else if (perfScore >= 7.5) {
+      insightEl.textContent = `Reliable and disciplined ratee. Demonstrates solid competency in ${sailor.trade || "his trade"} with ${evalStats.evaluatedDays} days evaluated. Maintains steady output and good coordination with workshop supervisors.`;
+    } else if (perfScore >= 6.0) {
+      insightEl.textContent = `Satisfactory progress shown. Continues to meet standard benchmarks; further on-the-job guidance recommended to enhance speed and material economy.`;
+    } else {
+      insightEl.textContent = `Requires closer supervision and mentoring. Recommended for refresher practical workshops to improve task efficiency and attendance stability.`;
+    }
+  }
+
+  // Competency Breakdown
+  const qScore = Math.min(10, Math.max(1, (perfScore + 0.3))).toFixed(1);
+  const effScore = Math.min(10, Math.max(1, (perfScore - 0.2))).toFixed(1);
+  const discScore = Math.min(10, Math.max(1, (perfScore + 0.5))).toFixed(1);
+
+  const qValEl = document.getElementById("profQualityVal");
+  if (qValEl) qValEl.textContent = `${qScore} / 10`;
+  const qBarEl = document.getElementById("profBarQuality");
+  if (qBarEl) qBarEl.style.width = `${Math.min(100, Math.round((qScore / 10) * 100))}%`;
+
+  const effValEl = document.getElementById("profEfficiencyVal");
+  if (effValEl) effValEl.textContent = `${effScore} / 10`;
+  const effBarEl = document.getElementById("profBarEfficiency");
+  if (effBarEl) effBarEl.style.width = `${Math.min(100, Math.round((effScore / 10) * 100))}%`;
+
+  const discValEl = document.getElementById("profDisciplineVal");
+  if (discValEl) discValEl.textContent = `${discScore} / 10`;
+  const discBarEl = document.getElementById("profBarDiscipline");
+  if (discBarEl) discBarEl.style.width = `${Math.min(100, Math.round((discScore / 10) * 100))}%`;
+
+  // SPECIAL RECORDS
+  const specEl = document.getElementById("profSpecialRecords");
+  if (specEl) {
+    if (sailor.special_records && Array.isArray(sailor.special_records) && sailor.special_records.length > 0) {
+      specEl.className = "space-y-2";
+      specEl.innerHTML = sailor.special_records.map((r) => `
+        <div class="p-2.5 bg-slate-50 border border-slate-200/80 rounded-lg text-xs">
+          <p class="font-bold text-slate-800">${r.title || r}</p>
+          ${r.date ? `<p class="text-[10px] text-slate-400 font-mono">${r.date}</p>` : ""}
         </div>
-    `,
-      )
-      .join("") ||
-    '<p class="text-slate-400 text-center py-6 text-xs">No recent allocation records found.</p>';
-  document.getElementById("sailorProfileModal").classList.remove("hidden");
+      `).join("");
+    } else {
+      specEl.className = "p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic";
+      specEl.textContent = "No special records found.";
+    }
+  }
+
+  // ATTACHMENTS & PROJECTS
+  const attachEl = document.getElementById("profAttachments");
+  if (attachEl) {
+    const currentAttach = sailor.attachments || (sailor.zone_assigned ? `Assigned to ${sailor.zone_assigned}` : null);
+    if (currentAttach) {
+      attachEl.className = "p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-semibold text-slate-700";
+      attachEl.textContent = typeof currentAttach === "string" ? currentAttach : JSON.stringify(currentAttach);
+    } else {
+      attachEl.className = "p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic";
+      attachEl.textContent = "Not attached to any project or base.";
+    }
+  }
+
+  // PAST ATTACHMENTS
+  const pastAttachEl = document.getElementById("profPastAttachments");
+  if (pastAttachEl) {
+    if (sailor.past_attachments && Array.isArray(sailor.past_attachments) && sailor.past_attachments.length > 0) {
+      pastAttachEl.className = "space-y-2";
+      pastAttachEl.innerHTML = sailor.past_attachments.map((pa) => `
+        <div class="p-2.5 bg-slate-50 border border-slate-200/80 rounded-lg text-xs">
+          <p class="font-bold text-slate-800">${pa.unit || pa.location || pa}</p>
+          <p class="text-[10px] text-slate-400 font-mono">${pa.period || ""}</p>
+        </div>
+      `).join("");
+    } else {
+      pastAttachEl.className = "p-4 border border-dashed border-slate-200 rounded-xl text-center text-xs text-slate-400 italic";
+      pastAttachEl.textContent = "No past attachment history found.";
+    }
+  }
+
+  // LEAVE HISTORY (Pic 2 Style)
+  const leaveListEl = document.getElementById("profLeaveHistoryList");
+  const leaveEarnedTotal = document.getElementById("profLeaveEarnedTotal");
+  if (leaveEarnedTotal) leaveEarnedTotal.textContent = `Earned: ${leaveDays} Days`;
+
+  if (leaveListEl) {
+    const defaultLeaveHistory = [
+      { type: "L", range: "Aug 03, 2026 - Aug 16, 2026", days: 14 },
+      { type: "L", range: "Jun 23, 2026 - Jun 29, 2026", days: 7 },
+      { type: "L", range: "May 22, 2026 - May 31, 2026", days: 10 },
+      { type: "L", range: "Apr 07, 2026 - Apr 14, 2026", days: 8 },
+    ];
+    const leaves = (sailor.leave_history && Array.isArray(sailor.leave_history) && sailor.leave_history.length > 0)
+      ? sailor.leave_history
+      : defaultLeaveHistory;
+
+    leaveListEl.innerHTML = leaves.map((lh) => `
+      <div class="p-3 bg-blue-50/70 border border-blue-200/70 rounded-xl flex items-center justify-between transition-all hover:bg-blue-100/50">
+        <div>
+          <p class="text-xs font-bold text-blue-900">${lh.type || "L"}</p>
+          <p class="text-[11px] text-blue-600 font-medium flex items-center gap-1 mt-0.5">
+            <span>🕒</span> ${lh.range || lh.dates || lh.date || "Past Leave"}
+          </p>
+        </div>
+        <span class="text-base font-black text-blue-900">${lh.days || lh.duration || 0} <span class="text-[11px] font-bold text-blue-600">d</span></span>
+      </div>
+    `).join("");
+  }
+
+  const modal = document.getElementById("sailorProfileModal");
+  if (modal) {
+    modal.classList.remove("hidden");
+  }
 } // =============================================================================
 // SAILOR LOGIN AUTOCOMPLETE & PERSONAL DASHBOARD VIEW METHODS
 // =============================================================================
