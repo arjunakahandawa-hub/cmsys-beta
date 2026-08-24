@@ -174,6 +174,7 @@ const store = {
   approvedProjects: [],
   precastBatches: [],
   nav254Vouchers: [],
+  tempIssues: [],
   selectedJobCardsForMerge: new Set(),
   isJobCardMergeMode: false,
   dailyAllocations: [],
@@ -972,6 +973,22 @@ function initOpsListeners() {
     }
   });
 
+  // ── Temporary Issue Book (TIB) ──
+  opsDB.ref("temp_issues").on("value", (snapshot) => {
+    const arr = snapshotToArray(snapshot);
+    if (arr && arr.length > 0) {
+      store.tempIssues = arr;
+    } else {
+      const local = localStorage.getItem("ncw_temp_issues_v1");
+      store.tempIssues = local ? JSON.parse(local) : (typeof DEFAULT_TEMP_ISSUES_DATA !== "undefined" ? [...DEFAULT_TEMP_ISSUES_DATA] : []);
+    }
+    saveTempIssuesToStorage();
+    console.log(`📑 DB#2: ${store.tempIssues.length} temporary issues loaded`);
+    if (store.currentView === "tempissues") {
+      renderTempIssuesView();
+    }
+  });
+
   // ── Daily Allocations ──
   opsDB.ref("daily_allocations").on("value", (snapshot) => {
     const arr = snapshotToArray(snapshot);
@@ -1327,6 +1344,7 @@ function refreshCurrentViewImmediately() {
       break;
     case "inventory":
       renderInventory();
+      switchInventorySubTab(store.inventorySubTab || "stock");
       break;
     case "estimates":
       renderEstimates();
@@ -1348,6 +1366,13 @@ function refreshCurrentViewImmediately() {
       break;
     case "sailordashboard":
       renderSailorDashboardView();
+      break;
+    case "documents":
+      renderDocumentsView();
+      break;
+    case "tempissues":
+      switchView("inventory");
+      switchInventorySubTab("tempissues");
       break;
   }
 } // =============================================
@@ -1557,6 +1582,9 @@ function switchView(view, preventPushState = false) {
       break;
     case "documents":
       renderDocumentsView();
+      break;
+    case "tempissues":
+      renderTempIssuesView();
       break;
   }
 }
@@ -1965,7 +1993,7 @@ function getSailorAssignmentOnDate(sailorId, dateVal) {
     }
 
     const activeJc = (store.jobCards || []).find((j) => {
-      if (j.status !== "Active") return false;
+      if (j.status !== "Active" && j.status !== "Pending") return false;
       return (j.assigned || []).some((id) => idsToMatch.has(String(id)));
     });
     if (activeJc) {
@@ -1989,6 +2017,13 @@ function getSailorAssignmentOnDate(sailorId, dateVal) {
       (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id)
     );
     if (wo) {
+      if (isToday) {
+        const isInactive = wo.status === "Completed" || wo.status === "Hold" || wo.status === "Cancelled" || wo.status === "Draft";
+        const isStillAssigned = (wo.assigned || []).some((id) => idsToMatch.has(String(id)));
+        if (isInactive || !isStillAssigned) {
+          return null;
+        }
+      }
       const cleanZone = String(wo.zone_id || alloc.zone_id || "Active WO").replace(/-/g, " ").trim();
       return {
         ref: wo.reference_no || "Active WO",
@@ -2001,6 +2036,13 @@ function getSailorAssignmentOnDate(sailorId, dateVal) {
       (j) => String(j.id) === String(alloc.work_order_id) || String(j._fbKey) === String(alloc.work_order_id)
     );
     if (jc) {
+      if (isToday) {
+        const isInactive = jc.status === "Completed" || jc.status === "Hold" || jc.status === "Cancelled";
+        const isStillAssigned = (jc.assigned || []).some((id) => idsToMatch.has(String(id)));
+        if (isInactive || !isStillAssigned) {
+          return null;
+        }
+      }
       const cleanZone = String(jc.zone_id || alloc.zone_id || "Job Card").replace(/-/g, " ").trim();
       return {
         ref: jc.job_card_no || "Job Card",
@@ -2050,7 +2092,12 @@ function renderAvailableSailors() {
     });
     (store.dailyAllocations || []).forEach((alloc) => {
       if (alloc.date === today) {
-        assignedIds.add(String(alloc.sailor_id));
+        const wo = (store.workOrders || []).find(
+          (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id)
+        );
+        if (wo && (wo.status === "Active" || wo.status === "Pending") && (wo.assigned || []).some(id => String(id) === String(alloc.sailor_id))) {
+          assignedIds.add(String(alloc.sailor_id));
+        }
       }
     });
   } else {
@@ -2435,6 +2482,9 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
   const isToday = dateVal === today;
 
   if (isToday) {
+    if (wo.status === "Completed" || wo.status === "Hold" || wo.status === "Cancelled" || wo.status === "Draft") {
+      return { sailors: [], source: "completed" };
+    }
     const assignedIds = new Set((wo.assigned || []).map(String));
     (store.dailyAllocations || []).forEach((a) => {
       if (
@@ -3219,6 +3269,9 @@ function removeSailorFromOrder(sailorId, workOrderId) {
     );
     sailor.status = "Available";
     workOrder.last_assigned_date = today;
+    store.dailyAllocations = (store.dailyAllocations || []).filter(
+      (a) => !(a.date === today && idsToRemove.has(String(a.sailor_id)))
+    );
     idsToRemove.forEach((id) => {
       if (id) opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(id)}`).remove();
     });
@@ -5312,24 +5365,67 @@ function updateWorkOrderStatus() {
     const jc = getJobCardForWorkOrder(wo._fbKey || wo.id);
     if (jc) {
       jc.status = wo.status;
-      if (window.fbSaveJobCard) fbSaveJobCard(jc);
-    } // Clear today's daily allocations if putting on hold/completed/pending
+    } 
+    
+    // Clear today's daily allocations and free up sailors if putting on hold/completed/pending/cancelled
     if (
       newStatus === "Hold" ||
       newStatus === "Completed" ||
-      newStatus === "Pending"
+      newStatus === "Pending" ||
+      newStatus === "Cancelled"
     ) {
       const today = getLocalDateString();
+      const woIdStr = String(wo.id);
+      const woFbKeyStr = String(wo._fbKey || "");
+      
+      const assignedIds = (wo.assigned || []).map(String);
+      (store.dailyAllocations || []).forEach((a) => {
+        if (a.date === today && (String(a.work_order_id) === woIdStr || String(a.work_order_id) === woFbKeyStr)) {
+          if (a.sailor_id) assignedIds.push(String(a.sailor_id));
+        }
+      });
+
+      // Free sailors in memory
+      if (store.sailors && assignedIds.length > 0) {
+        store.sailors.forEach((s) => {
+          if (assignedIds.includes(String(s.id)) || assignedIds.includes(String(s._fbKey))) {
+            if (s.status === "Assigned") s.status = "Available";
+          }
+        });
+      }
+
+      // Remove from daily allocations memory and Firebase
       const allocationsToDelete = (store.dailyAllocations || []).filter(
-        (a) => a.date === today && String(a.work_order_id) === String(wo.id),
+        (a) => a.date === today && (String(a.work_order_id) === woIdStr || String(a.work_order_id) === woFbKeyStr),
       );
+      store.dailyAllocations = (store.dailyAllocations || []).filter(
+        (a) => !(a.date === today && (String(a.work_order_id) === woIdStr || String(a.work_order_id) === woFbKeyStr)),
+      );
+
       allocationsToDelete.forEach((a) => {
         opsDB
           .ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`)
           .remove()
           .catch((e) => console.warn(e));
       });
+
+      // If Hold or Completed or Cancelled, clear assigned array
+      if (newStatus === "Hold" || newStatus === "Completed" || newStatus === "Cancelled") {
+        wo.assigned = [];
+        if (wo._fbKey) {
+          opsDB.ref(`work_orders/${wo._fbKey}/assigned`).set(null);
+        }
+        if (jc) {
+          jc.assigned = [];
+          if (jc._fbKey) opsDB.ref(`job_cards/${jc._fbKey}/assigned`).set(null);
+        }
+      }
     }
+
+    if (jc && window.fbSaveJobCard) {
+      fbSaveJobCard(jc);
+    }
+
     if (wo._fbKey) {
       opsDB.ref(`work_orders/${wo._fbKey}`).update({ status: newStatus });
     } else if (window.fbSaveWorkOrder) {
@@ -5521,23 +5617,65 @@ function saveWorkOrderChanges(autoClose = true) {
     const jc = getJobCardForWorkOrder(wo._fbKey || wo.id);
     if (jc) {
       jc.status = wo.status;
-      if (window.fbSaveJobCard) fbSaveJobCard(jc);
-    } // Clear today's daily allocations if putting on hold/completed/pending
+    } 
+    
+    // Clear today's daily allocations and free up sailors if putting on hold/completed/pending/cancelled
     if (
       newStatus === "Hold" ||
       newStatus === "Completed" ||
-      newStatus === "Pending"
+      newStatus === "Pending" ||
+      newStatus === "Cancelled"
     ) {
       const today = getLocalDateString();
+      const woIdStr = String(wo.id);
+      const woFbKeyStr = String(wo._fbKey || "");
+      
+      const assignedIds = (wo.assigned || []).map(String);
+      (store.dailyAllocations || []).forEach((a) => {
+        if (a.date === today && (String(a.work_order_id) === woIdStr || String(a.work_order_id) === woFbKeyStr)) {
+          if (a.sailor_id) assignedIds.push(String(a.sailor_id));
+        }
+      });
+
+      // Free sailors in memory
+      if (store.sailors && assignedIds.length > 0) {
+        store.sailors.forEach((s) => {
+          if (assignedIds.includes(String(s.id)) || assignedIds.includes(String(s._fbKey))) {
+            if (s.status === "Assigned") s.status = "Available";
+          }
+        });
+      }
+
+      // Remove from daily allocations memory and Firebase
       const allocationsToDelete = (store.dailyAllocations || []).filter(
-        (a) => a.date === today && String(a.work_order_id) === String(wo.id),
+        (a) => a.date === today && (String(a.work_order_id) === woIdStr || String(a.work_order_id) === woFbKeyStr),
       );
+      store.dailyAllocations = (store.dailyAllocations || []).filter(
+        (a) => !(a.date === today && (String(a.work_order_id) === woIdStr || String(a.work_order_id) === woFbKeyStr)),
+      );
+
       allocationsToDelete.forEach((a) => {
         opsDB
           .ref(`daily_allocations/${today}_${sanitizeFbKey(a.sailor_id)}`)
           .remove()
           .catch((e) => console.warn(e));
       });
+
+      // If Hold or Completed or Cancelled, clear assigned array
+      if (newStatus === "Hold" || newStatus === "Completed" || newStatus === "Cancelled") {
+        wo.assigned = [];
+        if (wo._fbKey) {
+          opsDB.ref(`work_orders/${wo._fbKey}/assigned`).set(null);
+        }
+        if (jc) {
+          jc.assigned = [];
+          if (jc._fbKey) opsDB.ref(`job_cards/${jc._fbKey}/assigned`).set(null);
+        }
+      }
+    }
+
+    if (jc && window.fbSaveJobCard) {
+      fbSaveJobCard(jc);
     }
     if (wo._fbKey) {
       opsDB.ref(`work_orders/${wo._fbKey}`).update({
@@ -5707,7 +5845,16 @@ function forwardToComplete() {
       jc.assigned = []; // Remove sailors from job card
       if (window.fbSaveJobCard) fbSaveJobCard(jc);
     }
-    if (window.fbSaveWorkOrder) fbSaveWorkOrder(wo);
+    if (wo._fbKey) {
+      opsDB.ref(`work_orders/${wo._fbKey}`).update({
+        status: "Completed",
+        progress: 100,
+        completed_date: today,
+        assigned: null
+      });
+    } else if (window.fbSaveWorkOrder) {
+      fbSaveWorkOrder(wo);
+    }
     
     // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
     setTimeout(() => {
@@ -8184,6 +8331,9 @@ function renderInventory() {
   renderInventoryCategories();
   renderInventoryTable();
   populateProjectDropdown();
+  if (typeof updateTibPendingBadge === "function") {
+    updateTibPendingBadge();
+  }
 }
 function populateProjectDropdown() {
   const projects = store.workOrders.filter(
@@ -13050,10 +13200,16 @@ function initSettingsListener() {
       store.settings.oicProfiles = saved.oicProfiles || {};
       store.settings.holidays = saved.holidays || {};
     }
-    applySettings();
-    renderZoneSelectors();
-    if (_currentSettingsTab === "identity") {
-      renderSettingsOicProfilesList();
+    // If user is currently editing or staying in Settings, do NOT reset active view or redirect
+    if (store.currentView !== "settings") {
+      applySettings();
+      renderZoneSelectors();
+    } else {
+      const s = store.settings;
+      store.zones = s.zones || defaultSettings.zones;
+      if (typeof _currentSettingsTab !== "undefined" && _currentSettingsTab === "identity") {
+        renderSettingsOicProfilesList();
+      }
     }
   });
 } // ── Apply loaded settings to the live UI ──
@@ -16389,26 +16545,48 @@ function editPassword(type, zoneId = "") {
       showToast(`Password for ${zoneId} In-Charge updated`);
     });
 }
+function togglePasswordVisibility(inputId, btn) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  if (input.type === "password") {
+    input.type = "text";
+    if (btn) btn.textContent = "🙈";
+  } else {
+    input.type = "password";
+    if (btn) btn.textContent = "👁️";
+  }
+}
+
 function saveSettingsUserPassword(password) {
-  const zoneId = document.getElementById("cfg-userZone").value;
+  const zoneId = document.getElementById("cfg-userZone") ? document.getElementById("cfg-userZone").value : "";
   if (!zoneId) {
     showToast("Please select a Zone first", "error");
-    document.getElementById("cfg-userPassword").value = "";
     return;
   }
   if (!store.settings.zoneInCharges) store.settings.zoneInCharges = {};
   if (!store.settings.zoneInCharges[zoneId]) {
-    showToast("Please select a Sailor first", "error");
-    document.getElementById("cfg-userPassword").value = "";
-    return;
+    store.settings.zoneInCharges[zoneId] = {};
   }
+  
+  // If unchanged, return
+  if (store.settings.zoneInCharges[zoneId].password === password) return;
+  
   store.settings.zoneInCharges[zoneId].password = password;
-  opsDB
-    .ref(`settings/zoneInCharges/${zoneId}/password`)
-    .set(password)
-    .then(() => {
-      showToast(`Password for ${zoneId} In-Charge updated`);
-    });
+  try {
+    localStorage.setItem("ncw_settings_v1", JSON.stringify(store.settings));
+  } catch (e) {}
+
+  if (typeof opsDB !== "undefined") {
+    opsDB
+      .ref(`settings/zoneInCharges/${zoneId}/password`)
+      .set(password)
+      .then(() => {
+        showToast(`Password for ${zoneId} In-Charge saved`, "success");
+      })
+      .catch((err) => {
+        console.warn("Error saving password:", err);
+      });
+  }
 }
 function switchActiveProfile(type, zoneId = "", oicProfileId = "") {
   const s = store.settings || {};
@@ -17035,11 +17213,17 @@ function toggleViewsBasedOnZone() {
   ].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.style.display = "";
-  }); // If currently on a hidden view, switch to dashboard
+  });
+
+  // If currently on an administrative/global view (settings, documents, reports), never redirect away
   const currentView = store.currentView || "dashboard";
+  if (currentView === "settings" || currentView === "documents" || currentView === "reports") {
+    return;
+  }
+
   if (
     isSpecialZone &&
-    ["jobcards", "inventory", "estimates", "maintenance", "settings"].includes(
+    ["jobcards", "inventory", "estimates", "maintenance"].includes(
       currentView,
     )
   ) {
@@ -21829,7 +22013,7 @@ function renderDocumentsView() {
 function switchDocumentsSubTab(subTab) {
   store.currentDocSubTab = subTab;
 
-  const tabs = ["jobminutes", "minutesheet", "templates"];
+  const tabs = ["jobminutes", "minutesheet", "templates", "config"];
   tabs.forEach((t) => {
     const btn = document.getElementById(`docTabBtn-${t}`);
     const panel = document.getElementById(`docPanel-${t}`);
@@ -21859,6 +22043,8 @@ function switchDocumentsSubTab(subTab) {
     updateMinuteSheetPreview();
   } else if (subTab === "templates") {
     renderMinuteTemplatesInventory();
+  } else if (subTab === "config") {
+    renderMinuteSheetSettings();
   }
 }
 
@@ -22811,18 +22997,83 @@ function populateMinuteSheetDropdowns() {
   }
 }
 
-// ── Dropdown Handlers in Builder Form ──
+// ── Dropdown & Multi-Box Handlers in Builder Form ──
+function addMinuteAddresseeInput(initialText = "") {
+  const container = document.getElementById("msAddresseesContainer");
+  if (!container) return;
+
+  const lang = store.msLanguage || "si";
+  const cfg = (store.settings && store.settings.minuteConfig) || defaultSettings.minuteConfig;
+  const list = lang === "si" ? (cfg.addressees_si || []) : (cfg.addressees_en || []);
+
+  const div = document.createElement("div");
+  div.className = "flex items-center gap-2 group ms-addressee-row";
+
+  let optionsHtml = `<option value="">-- Choose Addressee / Designation --</option>`;
+  let isCustom = false;
+  let isMatched = false;
+
+  list.forEach((item) => {
+    const selected = (item === initialText) ? "selected" : "";
+    if (item === initialText) isMatched = true;
+    optionsHtml += `<option value="${item.replace(/"/g, '&quot;')}" ${selected}>${item}</option>`;
+  });
+
+  if (initialText && !isMatched) {
+    isCustom = true;
+    optionsHtml += `<option value="__custom__" selected>✍️ Custom: ${initialText.replace(/"/g, '&quot;')}</option>`;
+  } else {
+    optionsHtml += `<option value="__custom__">✍️ + Type Custom Designation...</option>`;
+  }
+
+  div.innerHTML = `
+    <span class="font-bold text-amber-800 text-xs w-4 text-center">📍</span>
+    <div class="flex-1 flex items-center gap-1.5">
+      <select onchange="onMinuteAddresseeSelectChange(this)" class="ms-addressee-select flex-1 px-3 py-2 border border-amber-300 rounded-xl text-xs bg-amber-50/50 font-bold text-slate-800 focus:bg-white outline-none">
+        ${optionsHtml}
+      </select>
+      <input type="text" value="${(initialText || "").replace(/"/g, '&quot;')}" placeholder="Type custom address..." oninput="updateMinuteSheetPreview()" class="ms-addressee-custom-input ${isCustom ? '' : 'hidden'} flex-1 px-3 py-2 border border-amber-300 rounded-xl text-xs bg-white text-slate-800 font-bold outline-none">
+    </div>
+    <button type="button" onclick="removeMinuteAddresseeRow(this, event)" class="text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg p-1.5 text-sm font-bold cursor-pointer transition-all" title="Remove Addressee">✕</button>
+  `;
+  container.appendChild(div);
+  updateMinuteSheetPreview();
+}
+
+function onMinuteAddresseeSelectChange(selectEl) {
+  const row = selectEl.closest(".ms-addressee-row") || selectEl.parentElement.parentElement;
+  if (!row) return;
+
+  const customInput = row.querySelector(".ms-addressee-custom-input");
+  if (selectEl.value === "__custom__") {
+    if (customInput) {
+      customInput.classList.remove("hidden");
+      customInput.focus();
+    }
+  } else {
+    if (customInput) {
+      customInput.classList.add("hidden");
+      customInput.value = selectEl.value;
+    }
+  }
+  updateMinuteSheetPreview();
+}
+
+function removeMinuteAddresseeRow(btn, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const row = btn.closest(".ms-addressee-row") || btn.parentElement;
+  if (row) {
+    row.remove();
+  }
+  updateMinuteSheetPreview();
+}
+
 function addAddresseeFromDropdown(val) {
   if (!val) return;
-  const input = document.getElementById("msInputAddressees");
-  if (input) {
-    if (input.value.trim()) {
-      input.value += `\n\n${val}`;
-    } else {
-      input.value = val;
-    }
-    updateMinuteSheetPreview();
-  }
+  addMinuteAddresseeInput(val);
   const sel = document.getElementById("msAddresseeQuickSelect");
   if (sel) sel.value = "";
 }
@@ -23018,8 +23269,12 @@ function autoFillSailorIntoMinute(passedSailorId, updateSearchInput = true) {
   const subInput = document.getElementById("msInputSubject");
   if (subInput) subInput.value = "නිවාඩු දීර්ඝ කිරීම සදහා";
 
-  const addInput = document.getElementById("msInputAddressees");
-  if (addInput) addInput.value = "විධායක නිලධාරි (තඨාකාංගනය)\n\nසහකාර විනයාරක්ෂකාධිපති (නැ)";
+  const addContainer = document.getElementById("msAddresseesContainer");
+  if (addContainer) {
+    addContainer.innerHTML = "";
+    addMinuteAddresseeInput("විධායක නිලධාරි (තඨාකාංගනය)");
+    addMinuteAddresseeInput("සහකාර විනයාරක්ෂකාධිපති (නැ)");
+  }
 
   const oriInput = document.getElementById("msInputOriginator");
   if (oriInput) oriInput.value = "ජ්‍යෙෂ්ඨ සිවිල් ඉංජිනේරු නිලධාරි (නඩත්තු) මඟින්";
@@ -23060,15 +23315,7 @@ function quickAddAddressee() {
   const idx = parseInt(choice, 10);
   const selectedText = (!isNaN(idx) && idx >= 1 && idx <= list.length) ? list[idx - 1] : choice.trim();
 
-  const addInput = document.getElementById("msInputAddressees");
-  if (addInput) {
-    if (addInput.value.trim()) {
-      addInput.value += `\n\n${selectedText}`;
-    } else {
-      addInput.value = selectedText;
-    }
-    updateMinuteSheetPreview();
-  }
+  addMinuteAddresseeInput(selectedText);
 }
 
 // Toggle Minute 02 Section
@@ -23104,16 +23351,18 @@ function applyM02QuickText() {
 // Minute Sheet Builder Methods
 function initMinuteSheetBuilder() {
   const container = document.getElementById("msParagraphsContainer");
-  if (!container) return;
-  container.innerHTML = "";
+  if (container) container.innerHTML = "";
+
+  const addContainer = document.getElementById("msAddresseesContainer");
+  if (addContainer) addContainer.innerHTML = "";
 
   const lang = store.msLanguage || "si";
   if (lang === "si") {
     addMinuteParagraphInput("කපිතාන් සිවිල් ඉංජිනේරු දෙපාර්තමේන්තුව (නැ) ට අනුයුක්තව රාජකාරි සිදු කරනු ලබන ඩබ්ලිව් ඥානතිලක වීඒඑස් 74738 දරණ කණිෂ්ඨ නාවිකයා 2026 අගෝස්තු මස 14 වන දින සිට දින 09 ක් නිවාඩු ගොස් 2026 අගෝස්තු මස 23 වන දින 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට තිබූ අතර, ඔහුගේ මව අසනීප වී ඇති බව දුරකථන ඇමතුමක් මඟින් දන්වා ඇත.");
     addMinuteParagraphInput("කරුණු එසේ හෙයින් එම නාවිකයා හට දින 02 ක් නිවාඩු දීර්ඝ කර එනම් 2026 අගෝස්තු මස 25 වන දින 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට අවශ්‍ය නිසි කටයුතු සලසා දෙන මෙන් අයදේ.");
 
-    const addInput = document.getElementById("msInputAddressees");
-    if (addInput) addInput.value = "විධායක නිලධාරි (තඨාකාංගනය)\n\nසහකාර විනයාරක්ෂකාධිපති (නැ)";
+    addMinuteAddresseeInput("විධායක නිලධාරි (තඨාකාංගනය)");
+    addMinuteAddresseeInput("සහකාර විනයාරක්ෂකාධිපති (නැ)");
 
     const oriInput = document.getElementById("msInputOriginator");
     if (oriInput) oriInput.value = "ජ්‍යෙෂ්ඨ සිවිල් ඉංජිනේරු නිලධාරි (නඩත්තු) මඟින්";
@@ -23132,6 +23381,9 @@ function initMinuteSheetBuilder() {
   } else {
     addMinuteParagraphInput("It is brought to your kind notice that urgent civil maintenance and structural rehabilitation are required at the requested facility.");
     addMinuteParagraphInput("A detailed technical assessment has been conducted and necessary scope of work and Bill of Quantities (BOQ) have been formulated.");
+
+    addMinuteAddresseeInput("Executive Officer (Dockyard)");
+    addMinuteAddresseeInput("Assistant Provost Marshal (E)");
   }
 }
 
@@ -23220,8 +23472,17 @@ function createMinuteSheetFromJobMinute(minuteId) {
   const subInput = document.getElementById("msInputSubject");
   if (subInput) subInput.value = minute.subject.toUpperCase();
 
-  const addInput = document.getElementById("msInputAddressees");
-  if (addInput) addInput.value = store.msLanguage === "si" ? "ප්‍රධාන ඉංජිනේරු\n\nනියෝජ්‍ය ප්‍රධාන ඉංජිනේරු" : "Chief Engineer\n\nDeputy Chief Engineer";
+  const addContainer = document.getElementById("msAddresseesContainer");
+  if (addContainer) {
+    addContainer.innerHTML = "";
+    if (store.msLanguage === "si") {
+      addMinuteAddresseeInput("ප්‍රධාන ඉංජිනේරු");
+      addMinuteAddresseeInput("නියෝජ්‍ය ප්‍රධාන ඉංජිනේරු");
+    } else {
+      addMinuteAddresseeInput("Chief Engineer");
+      addMinuteAddresseeInput("Deputy Chief Engineer");
+    }
+  }
 
   const oriInput = document.getElementById("msInputOriginator");
   if (oriInput) oriInput.value = store.msLanguage === "si" ? "කාර්ය භාර නිලධාරි (සිවිල් නඩත්තු) මඟින්" : "Officer in Charge - Civil Maintenance";
@@ -23249,14 +23510,15 @@ function switchSettingsMinuteLang(lang) {
 
   const btnSi = document.getElementById("btnSettingsMsLangSi");
   const btnEn = document.getElementById("btnSettingsMsLangEn");
+  const docBtnSi = document.getElementById("btnDocMsLangSi");
+  const docBtnEn = document.getElementById("btnDocMsLangEn");
 
-  if (store.settingsMsLang === "si") {
-    if (btnSi) btnSi.className = "px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all";
-    if (btnEn) btnEn.className = "px-3 py-1 rounded-lg font-medium text-slate-600 transition-all";
-  } else {
-    if (btnEn) btnEn.className = "px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all";
-    if (btnSi) btnSi.className = "px-3 py-1 rounded-lg font-medium text-slate-600 transition-all";
-  }
+  [btnSi, docBtnSi].forEach((btn) => {
+    if (btn) btn.className = store.settingsMsLang === "si" ? "px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer" : "px-3 py-1 rounded-lg font-medium text-slate-600 transition-all cursor-pointer";
+  });
+  [btnEn, docBtnEn].forEach((btn) => {
+    if (btn) btn.className = store.settingsMsLang === "en" ? "px-3 py-1 rounded-lg font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer" : "px-3 py-1 rounded-lg font-medium text-slate-600 transition-all cursor-pointer";
+  });
 
   renderMinuteSheetSettings();
 }
@@ -23269,75 +23531,75 @@ function renderMinuteSheetSettings() {
   const cfg = store.settings.minuteConfig;
 
   // 1. Addressees
-  const addListEl = document.getElementById("cfgMinuteAddresseesList");
-  if (addListEl) {
+  const addListEls = [document.getElementById("cfgMinuteAddresseesList"), document.getElementById("docMinuteAddresseesList")].filter(Boolean);
+  if (addListEls.length) {
     const key = `addressees_${lang}`;
     const items = cfg[key] || [];
-    if (items.length === 0) {
-      addListEl.innerHTML = `<p class="text-xs italic text-slate-400 p-2">No standard addressees configured.</p>`;
-    } else {
-      addListEl.innerHTML = items.map((item, idx) => `
+    const html = items.length === 0
+      ? `<p class="text-xs italic text-slate-400 p-2">No standard addressees configured.</p>`
+      : items.map((item, idx) => `
         <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs hover:border-amber-300 transition-all">
           <span class="font-medium text-slate-800">${item}</span>
-          <button onclick="deleteMinuteConfigItem('addressees', ${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded cursor-pointer" title="Delete">✕</button>
+          <button type="button" onclick="deleteMinuteConfigItem('addressees', ${idx}, event)" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded hover:bg-rose-50 cursor-pointer" title="Delete">✕</button>
         </div>
       `).join("");
-    }
+    addListEls.forEach((el) => el.innerHTML = html);
   }
 
   // 2. Originators
-  const oriListEl = document.getElementById("cfgMinuteOriginatorsList");
-  if (oriListEl) {
+  const oriListEls = [document.getElementById("cfgMinuteOriginatorsList"), document.getElementById("docMinuteOriginatorsList")].filter(Boolean);
+  if (oriListEls.length) {
     const key = `originators_${lang}`;
     const items = cfg[key] || [];
-    if (items.length === 0) {
-      oriListEl.innerHTML = `<p class="text-xs italic text-slate-400 p-2">No originators configured.</p>`;
-    } else {
-      oriListEl.innerHTML = items.map((item, idx) => `
+    const html = items.length === 0
+      ? `<p class="text-xs italic text-slate-400 p-2">No originators configured.</p>`
+      : items.map((item, idx) => `
         <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs hover:border-rose-300 transition-all">
           <span class="font-medium text-slate-800">${item}</span>
-          <button onclick="deleteMinuteConfigItem('originators', ${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded cursor-pointer" title="Delete">✕</button>
+          <button type="button" onclick="deleteMinuteConfigItem('originators', ${idx}, event)" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded hover:bg-rose-50 cursor-pointer" title="Delete">✕</button>
         </div>
       `).join("");
-    }
+    oriListEls.forEach((el) => el.innerHTML = html);
   }
 
   // 3. Signatory Titles
-  const sigListEl = document.getElementById("cfgMinuteSignatoryTitlesList");
-  if (sigListEl) {
+  const sigListEls = [document.getElementById("cfgMinuteSignatoryTitlesList"), document.getElementById("docMinuteSignatoryTitlesList")].filter(Boolean);
+  if (sigListEls.length) {
     const key = `signatoryTitles_${lang}`;
     const items = cfg[key] || [];
-    if (items.length === 0) {
-      sigListEl.innerHTML = `<p class="text-xs italic text-slate-400 p-2">No signatory titles configured.</p>`;
-    } else {
-      sigListEl.innerHTML = items.map((item, idx) => `
+    const html = items.length === 0
+      ? `<p class="text-xs italic text-slate-400 p-2">No signatory titles configured.</p>`
+      : items.map((item, idx) => `
         <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs hover:border-teal-300 transition-all">
           <span class="font-medium text-slate-800">${item}</span>
-          <button onclick="deleteMinuteConfigItem('signatoryTitles', ${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded cursor-pointer" title="Delete">✕</button>
+          <button type="button" onclick="deleteMinuteConfigItem('signatoryTitles', ${idx}, event)" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded hover:bg-rose-50 cursor-pointer" title="Delete">✕</button>
         </div>
       `).join("");
-    }
+    sigListEls.forEach((el) => el.innerHTML = html);
   }
 
   // 4. Endorsements
-  const endListEl = document.getElementById("cfgMinuteEndorsementsList");
-  if (endListEl) {
+  const endListEls = [document.getElementById("cfgMinuteEndorsementsList"), document.getElementById("docMinuteEndorsementsList")].filter(Boolean);
+  if (endListEls.length) {
     const key = `endorsements_${lang}`;
     const items = cfg[key] || [];
-    if (items.length === 0) {
-      endListEl.innerHTML = `<p class="text-xs italic text-slate-400 p-2">No endorsement phrases configured.</p>`;
-    } else {
-      endListEl.innerHTML = items.map((item, idx) => `
+    const html = items.length === 0
+      ? `<p class="text-xs italic text-slate-400 p-2">No endorsement phrases configured.</p>`
+      : items.map((item, idx) => `
         <div class="flex items-center justify-between p-2 bg-white rounded-lg border border-slate-200 text-xs hover:border-blue-300 transition-all">
           <span class="font-medium text-slate-800">${item}</span>
-          <button onclick="deleteMinuteConfigItem('endorsements', ${idx})" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded cursor-pointer" title="Delete">✕</button>
+          <button type="button" onclick="deleteMinuteConfigItem('endorsements', ${idx}, event)" class="text-rose-500 hover:text-rose-700 font-bold px-1.5 py-0.5 rounded hover:bg-rose-50 cursor-pointer" title="Delete">✕</button>
         </div>
       `).join("");
-    }
+    endListEls.forEach((el) => el.innerHTML = html);
   }
 }
 
-function openAddMinuteConfigItemModal(type) {
+function openAddMinuteConfigItemModal(type, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
   const lang = store.settingsMsLang || "si";
   const typeLabels = {
     addressees: lang === "si" ? "යොමුවන පාර්ශ්වය (Addressee)" : "Addressee Appointment",
@@ -23355,18 +23617,22 @@ function openAddMinuteConfigItemModal(type) {
 
   store.settings.minuteConfig[key].push(val.trim());
 
-  // Save to Firebase opsDB and LocalStorage
-  if (typeof opsDB !== "undefined") {
-    opsDB.ref("settings/minuteConfig").set(store.settings.minuteConfig);
-  }
   localStorage.setItem("ncw_settings_v1", JSON.stringify(store.settings));
+
+  if (typeof opsDB !== "undefined") {
+    opsDB.ref(`settings/minuteConfig/${key}`).set(store.settings.minuteConfig[key]);
+  }
 
   renderMinuteSheetSettings();
   populateMinuteSheetDropdowns();
   showToast(`Added successfully to Settings`, "success");
 }
 
-function deleteMinuteConfigItem(type, index) {
+function deleteMinuteConfigItem(type, index, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
   const lang = store.settingsMsLang || "si";
   const key = `${type}_${lang}`;
   if (!store.settings.minuteConfig || !store.settings.minuteConfig[key]) return;
@@ -23375,14 +23641,90 @@ function deleteMinuteConfigItem(type, index) {
 
   store.settings.minuteConfig[key].splice(index, 1);
 
-  if (typeof opsDB !== "undefined") {
-    opsDB.ref("settings/minuteConfig").set(store.settings.minuteConfig);
-  }
   localStorage.setItem("ncw_settings_v1", JSON.stringify(store.settings));
+
+  if (typeof opsDB !== "undefined") {
+    opsDB.ref(`settings/minuteConfig/${key}`).set(store.settings.minuteConfig[key]);
+  }
 
   renderMinuteSheetSettings();
   populateMinuteSheetDropdowns();
   showToast(`Item removed from Settings`, "info");
+}
+
+function setMinutePaperSize(size) {
+  store.msPaperSize = size === "letter" ? "letter" : "a4";
+
+  const btnA4 = document.getElementById("btnMsPaperA4");
+  const btnLetter = document.getElementById("btnMsPaperLetter");
+  const btnSetupA4 = document.getElementById("btnPrintSetupA4");
+  const btnSetupLetter = document.getElementById("btnPrintSetupLetter");
+  const titleEl = document.getElementById("msPreviewPaperTitle");
+
+  if (store.msPaperSize === "a4") {
+    [btnA4, btnSetupA4].forEach((b) => {
+      if (b) b.className = "px-3 py-2 rounded-lg text-xs font-bold bg-teal-600 text-white border border-teal-600 shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+    });
+    [btnLetter, btnSetupLetter].forEach((b) => {
+      if (b) b.className = "px-3 py-2 rounded-lg text-xs font-bold text-slate-600 bg-slate-50 border border-slate-300 hover:bg-slate-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+    });
+    if (titleEl) titleEl.textContent = "A4 Naval Minute Paper View (210 × 297 mm)";
+  } else {
+    [btnLetter, btnSetupLetter].forEach((b) => {
+      if (b) b.className = "px-3 py-2 rounded-lg text-xs font-bold bg-teal-600 text-white border border-teal-600 shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+    });
+    [btnA4, btnSetupA4].forEach((b) => {
+      if (b) b.className = "px-3 py-2 rounded-lg text-xs font-bold text-slate-600 bg-slate-50 border border-slate-300 hover:bg-slate-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+    });
+    if (titleEl) titleEl.textContent = "Letter Naval Minute Paper View (8.5 × 11 in)";
+  }
+
+  updateMinuteSheetPreview();
+}
+
+store.msColorMode = store.msColorMode || "bw";
+
+function setPrintColorMode(mode) {
+  store.msColorMode = mode === "color" ? "color" : "bw";
+
+  const btnBw = document.getElementById("btnPrintColorModeBW");
+  const btnColor = document.getElementById("btnPrintColorModeColor");
+
+  if (store.msColorMode === "bw") {
+    if (btnBw) btnBw.className = "px-3 py-2 rounded-lg text-xs font-bold bg-slate-900 text-white border border-slate-900 shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+    if (btnColor) btnColor.className = "px-3 py-2 rounded-lg text-xs font-bold text-slate-600 bg-slate-50 border border-slate-300 hover:bg-slate-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+  } else {
+    if (btnColor) btnColor.className = "px-3 py-2 rounded-lg text-xs font-bold bg-teal-600 text-white border border-teal-600 shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+    if (btnBw) btnBw.className = "px-3 py-2 rounded-lg text-xs font-bold text-slate-600 bg-slate-50 border border-slate-300 hover:bg-slate-100 transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+  }
+
+  updateMinuteSheetPreview();
+}
+
+function openMinutePrintSetupModal() {
+  updateMinuteSheetPreview();
+  setMinutePaperSize(store.msPaperSize || "a4");
+  setPrintColorMode(store.msColorMode || "bw");
+
+  const slider = document.getElementById("printMarginSlider");
+  const display = document.getElementById("printMarginDisplay");
+  if (slider) slider.value = store.msMarginWidth || 28;
+  if (display) display.textContent = `${store.msMarginWidth || 28}%`;
+
+  const modal = document.getElementById("printMinuteSheetModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function executeMinutePrint() {
+  updateMinuteSheetPreview();
+  const refNo = document.getElementById("msInputRefNo")?.value || "Minute Sheet";
+  printElement("minuteSheetPrintArea", `Minute Sheet - ${refNo}`);
+}
+
+function publishMinuteToPdf() {
+  updateMinuteSheetPreview();
+  const refNo = document.getElementById("msInputRefNo")?.value || "Minute_Sheet";
+  printElement("minuteSheetPrintArea", `Minute_Sheet_${refNo.replace(/[^a-zA-Z0-9_-]/g, "_")}`);
 }
 
 // ── Update Live Formatted Naval Minute Sheet Preview (Pic 1, 2, 3 Authentic Layout) ──
@@ -23398,6 +23740,12 @@ function updateMinuteSheetPreview() {
   const marginWidth = store.msMarginWidth || 28;
   const contentWidth = 100 - marginWidth;
 
+  // Sync margin displays
+  const marginDisplay1 = document.getElementById("msMarginWidthDisplay");
+  const marginDisplay2 = document.getElementById("printMarginDisplay");
+  if (marginDisplay1) marginDisplay1.textContent = `${marginWidth}%`;
+  if (marginDisplay2) marginDisplay2.textContent = `${marginWidth}%`;
+
   // Ensure Sinhala date if Sinhala mode
   let dateVal = document.getElementById("msInputDate")?.value || "";
   if (!dateVal || (lang === "si" && !dateVal.includes("මස") && (dateVal.includes("Aug") || dateVal.includes("-")))) {
@@ -23409,27 +23757,54 @@ function updateMinuteSheetPreview() {
   }
 
   const subjectVal = document.getElementById("msInputSubject")?.value || (lang === "si" ? "නිවාඩු දීර්ඝ කිරීම සදහා" : "SUBJECT OF MINUTE");
-  const addresseesVal = document.getElementById("msInputAddressees")?.value || "";
   const originatorVal = document.getElementById("msInputOriginator")?.value || "";
   const recVal = document.getElementById("msInputRecommendation")?.value || "";
   const signTitleVal = document.getElementById("msInputSignatoryTitle")?.value || "";
 
-  // Paragraphs
+  // Paragraphs (Pic 1 Layout: Wrapped lines align flush left with paragraph number 1.)
   const paraInputs = document.querySelectorAll(".ms-para-input");
   const paragraphs = [];
   paraInputs.forEach((inp) => {
     if (inp.value.trim()) paragraphs.push(inp.value.trim());
   });
 
-  const parasHtml = paragraphs.map((p, i) => `
-    <div class="flex items-start gap-2 text-justify">
-      <span class="font-bold min-w-[20px] text-right font-sans text-xs pt-0.5">${i + 1}.</span>
-      <p class="flex-1 leading-relaxed text-xs font-serif" style="text-indent: 1.8rem;">${p.replace(/\n/g, "<br><span style='display:inline-block; width:1.8rem;'></span>")}</p>
-    </div>
-  `).join("");
+  const parasHtml = paragraphs.map((p, i) => {
+    const cleanP = p.replace(/\n/g, "<br>&emsp;&emsp;");
+    return `
+      <div class="text-justify text-xs leading-relaxed text-black font-serif mb-2.5">
+        <span class="font-bold font-sans">${i + 1}.</span>&emsp;&emsp;${cleanP}
+      </div>
+    `;
+  }).join("");
 
-  // All Addressee lines shown one after another in chronological order with auto-wrap
-  const addresseesList = addresseesVal.split("\n\n").map((a) => a.trim()).filter(Boolean);
+  // All Addressee lines from multiple dropdown/custom boxes shown one after another
+  const addRows = document.querySelectorAll(".ms-addressee-row");
+  const addresseesList = [];
+  if (addRows.length > 0) {
+    addRows.forEach((row) => {
+      const select = row.querySelector(".ms-addressee-select");
+      const customInp = row.querySelector(".ms-addressee-custom-input");
+      if (select && select.value === "__custom__" && customInp && customInp.value.trim()) {
+        addresseesList.push(customInp.value.trim());
+      } else if (select && select.value && select.value !== "__custom__") {
+        addresseesList.push(select.value.trim());
+      } else if (customInp && customInp.value.trim()) {
+        addresseesList.push(customInp.value.trim());
+      }
+    });
+  } else {
+    const addInputs = document.querySelectorAll(".ms-addressee-input");
+    addInputs.forEach((inp) => {
+      if (inp.value.trim()) addresseesList.push(inp.value.trim());
+    });
+  }
+  if (addresseesList.length === 0) {
+    const legacy = document.getElementById("msInputAddressees")?.value;
+    if (legacy && legacy.trim()) {
+      addresseesList.push(...legacy.split("\n\n").map((a) => a.trim()).filter(Boolean));
+    }
+  }
+
   const addresseesHtml = addresseesList.length > 0
     ? addresseesList.map((a) => `<div class="font-bold leading-relaxed text-slate-900 break-words" style="overflow-wrap: anywhere; word-break: break-word;">${a.replace(/\n/g, "<br>")}</div>`).join("<div class='h-6'></div>")
     : `<div class="font-bold italic text-slate-400">යොමුවන පාර්ශ්ව (Addressees)</div>`;
@@ -23479,21 +23854,18 @@ function updateMinuteSheetPreview() {
     `;
   }
 
-  // Final HTML rendered on Paper Surface with Top Blue Line and Dynamic Margins (Pic 1)
-  previewArea.innerHTML = `
+  // Final HTML rendered on Paper Surface with Top Black Connected Line (Pic 2)
+  const renderedContent = `
     <div class="w-full bg-white text-black font-serif naval-minute-paper">
       <!-- Title Header (Centered & Underlined) -->
-      <div class="text-center pb-2">
+      <div class="text-center pb-3">
         <h2 class="inline-block font-black text-sm uppercase underline tracking-wider text-black">
           ${langTitle}
         </h2>
       </div>
 
-      <!-- Top Blue Horizontal Line (Pic 1 Markup) -->
-      <div class="w-full border-b-2 border-blue-600 mb-2.5"></div>
-
-      <!-- Table without outer borders - Only vertical divider line (Yellow Highlight) & horizontal subject divider -->
-      <table class="w-full border-collapse text-xs leading-relaxed" style="border:none !important; width:100%;">
+      <!-- Table without outer borders - Top black horizontal line intersects with vertical divider line (Pic 2) -->
+      <table class="w-full border-collapse text-xs leading-relaxed" style="border:none !important; border-top: 1.5px solid #000 !important; width:100%;">
         <!-- Top Subject Row (With Top-Left Reference: "යොමුව" / "Ref") -->
         <tr style="border:none !important;">
           <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-left:none !important; padding: 8px 10px;" class="align-middle font-bold text-xs text-black">
@@ -23530,8 +23902,8 @@ function updateMinuteSheetPreview() {
               ${originatorVal}
             </div>` : ""}
 
-            <!-- Paragraphs -->
-            <div class="space-y-2.5 text-justify text-xs leading-relaxed text-black font-serif">
+            <!-- Paragraphs (Pic 1 Style) -->
+            <div class="space-y-2 text-justify text-xs leading-relaxed text-black font-serif">
               ${parasHtml || `<p class="italic text-slate-400">No paragraph content entered yet.</p>`}
             </div>
 
@@ -23562,6 +23934,14 @@ function updateMinuteSheetPreview() {
       </table>
     </div>
   `;
+
+  previewArea.innerHTML = renderedContent;
+
+  // Mirror to Modal Preview if open
+  const modalPreviewArea = document.getElementById("minuteSheetModalPrintArea");
+  if (modalPreviewArea) {
+    modalPreviewArea.innerHTML = renderedContent;
+  }
 }
 
 // Universal Clean Printing Helper for Documents & Slips
@@ -23578,6 +23958,9 @@ function printElement(elementId, docTitle = "Sri Lanka Navy - Document Print") {
     return;
   }
 
+  const isBw = store.msColorMode === "bw";
+  const paperSize = store.msPaperSize === "letter" ? "letter" : "A4";
+
   printWindow.document.write(`
     <!DOCTYPE html>
     <html>
@@ -23586,7 +23969,7 @@ function printElement(elementId, docTitle = "Sri Lanka Navy - Document Print") {
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
           @page {
-            size: ${store.msPaperSize === 'letter' ? 'letter' : 'A4'} portrait;
+            size: ${paperSize} portrait;
             margin: 15mm 15mm 15mm 15mm;
           }
           body {
@@ -23595,6 +23978,7 @@ function printElement(elementId, docTitle = "Sri Lanka Navy - Document Print") {
             color: #000000;
             margin: 0;
             padding: 0;
+            ${isBw ? "filter: grayscale(100%);" : ""}
           }
           table {
             border-collapse: collapse !important;
@@ -23624,11 +24008,9 @@ function printElement(elementId, docTitle = "Sri Lanka Navy - Document Print") {
   printWindow.document.close();
 }
 
-// Print Minute Sheet
+// Print Minute Sheet Shortcut
 function printMinuteSheetDocument() {
-  updateMinuteSheetPreview();
-  const refNo = document.getElementById("msInputRefNo")?.value || "Minute Sheet";
-  printElement("minuteSheetPrintArea", `Minute Sheet - ${refNo}`);
+  openMinutePrintSetupModal();
 }
 
 // Save Minute Record
@@ -23645,7 +24027,29 @@ function saveMinuteAsNewTemplate() {
   const lang = store.msLanguage || "si";
   const refNo = document.getElementById("msInputRefNo")?.value || "MIN/2026/08/XXX";
   const subjectVal = document.getElementById("msInputSubject")?.value || "SUBJECT";
-  const addresseesVal = document.getElementById("msInputAddressees")?.value || "";
+  
+  const addRows = document.querySelectorAll(".ms-addressee-row");
+  const addresseesList = [];
+  if (addRows.length > 0) {
+    addRows.forEach((row) => {
+      const select = row.querySelector(".ms-addressee-select");
+      const customInp = row.querySelector(".ms-addressee-custom-input");
+      if (select && select.value === "__custom__" && customInp && customInp.value.trim()) {
+        addresseesList.push(customInp.value.trim());
+      } else if (select && select.value && select.value !== "__custom__") {
+        addresseesList.push(select.value.trim());
+      } else if (customInp && customInp.value.trim()) {
+        addresseesList.push(customInp.value.trim());
+      }
+    });
+  } else {
+    const addInputs = document.querySelectorAll(".ms-addressee-input");
+    addInputs.forEach((inp) => {
+      if (inp.value.trim()) addresseesList.push(inp.value.trim());
+    });
+  }
+  const addresseesVal = addresseesList.join("\n\n");
+
   const originatorVal = document.getElementById("msInputOriginator")?.value || "";
   const recVal = document.getElementById("msInputRecommendation")?.value || "";
   const signTitleVal = document.getElementById("msInputSignatoryTitle")?.value || "";
@@ -23728,7 +24132,7 @@ function renderMinuteTemplatesInventory() {
         <button onclick="openNewMinuteTemplateModal('${t.id}')" class="px-2.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer" title="Edit Template">
           ✏️
         </button>
-        <button onclick="deleteMinuteTemplate('${t.id}')" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all cursor-pointer" title="Delete Template">
+        <button type="button" onclick="deleteMinuteTemplate('${t.id}', event)" class="px-2.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-bold transition-all cursor-pointer" title="Delete Template">
           🗑️
         </button>
       </div>
@@ -23760,8 +24164,16 @@ function loadMinuteTemplateIntoCreator(templateId) {
   const subInput = document.getElementById("msInputSubject");
   if (subInput) subInput.value = tpl.subject || "";
 
-  const addInput = document.getElementById("msInputAddressees");
-  if (addInput) addInput.value = tpl.addressees || (tpl.to ? `${tpl.to}\n\n${tpl.through || ""}`.trim() : "");
+  const addContainer = document.getElementById("msAddresseesContainer");
+  if (addContainer) {
+    addContainer.innerHTML = "";
+    const rawAdd = tpl.addressees || (tpl.to ? `${tpl.to}\n\n${tpl.through || ""}`.trim() : "");
+    if (rawAdd) {
+      rawAdd.split("\n\n").join("\n").split("\n").map((a) => a.trim()).filter(Boolean).forEach((a) => {
+        addMinuteAddresseeInput(a);
+      });
+    }
+  }
 
   const oriInput = document.getElementById("msInputOriginator");
   if (oriInput) oriInput.value = tpl.originator || tpl.from || "";
@@ -23783,7 +24195,7 @@ function loadMinuteTemplateIntoCreator(templateId) {
 
   // Minute 02
   const m02Check = document.getElementById("msEnableM02");
-  if (m02Check) {
+if (m02Check) {
     m02Check.checked = !!tpl.m02_enabled;
     toggleMinute02Section();
     if (tpl.m02_enabled) {
@@ -23887,12 +24299,1244 @@ function saveCustomMinuteTemplate() {
 }
 
 // Delete Template
-function deleteMinuteTemplate(templateId) {
+function deleteMinuteTemplate(templateId, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
   if (!confirm("Are you sure you want to delete this template from the Inventory?")) return;
   store.minuteTemplates = (store.minuteTemplates || []).filter((t) => t.id !== templateId);
   saveMinuteTemplatesToStorage();
   updateDocumentsMetricStats();
   renderMinuteTemplatesInventory();
   showToast("Template removed from Inventory", "info");
+}
+
+
+// ============================================================================
+// ==================== TEMPORARY ISSUE BOOK (TIB) MODULE =====================
+// ============================================================================
+
+store.inventorySubTab = store.inventorySubTab || "stock";
+
+// Sub-Tab Switcher in Inventory
+function switchInventorySubTab(subTab) {
+  store.inventorySubTab = subTab;
+  const tabStock = document.getElementById("invSubTab-stock");
+  const tabTIB = document.getElementById("invSubTab-tempissues");
+  const panelStock = document.getElementById("invPanel-stock");
+  const panelTIB = document.getElementById("invPanel-tempissues");
+  const mainStockActions = document.getElementById("invMainStockActions");
+
+  if (subTab === "tempissues") {
+    if (tabStock) tabStock.className = "px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer";
+    if (tabTIB) tabTIB.className = "px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
+    if (panelStock) panelStock.classList.add("hidden");
+    if (panelTIB) panelTIB.classList.remove("hidden");
+    if (mainStockActions) mainStockActions.classList.add("hidden");
+
+    renderTempIssuesDashboard();
+    renderTempIssuesTable();
+  } else {
+    if (tabStock) tabStock.className = "px-4 py-2 rounded-xl text-xs font-bold bg-teal-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
+    if (tabTIB) tabTIB.className = "px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer";
+    if (panelStock) panelStock.classList.remove("hidden");
+    if (panelTIB) panelTIB.classList.add("hidden");
+    if (mainStockActions) mainStockActions.classList.remove("hidden");
+  }
+
+  updateTibPendingBadge();
+}
+
+// Inward Pending Receipt Badge and Notification Alert updater
+function updateTibPendingBadge() {
+  const allIssues = store.tempIssues || [];
+  const curZone = store.currentZone;
+  
+  // Pending receipt items for this zone or workshop or project
+  const pendingForZone = allIssues.filter((i) => {
+    const isPending = i.status === "pending_receipt" || (!i.received_date && !i.actual_return_date && i.status !== "returned" && i.status !== "active");
+    if (!isPending) return false;
+    if (!curZone) return true;
+    return i.zone_id === curZone || i.target_destination === curZone;
+  });
+
+  const badgeEl = document.getElementById("tibPendingReceiptBadge");
+  if (badgeEl) {
+    if (pendingForZone.length > 0) {
+      badgeEl.textContent = `${pendingForZone.length} Pending`;
+      badgeEl.classList.remove("hidden");
+    } else {
+      badgeEl.classList.add("hidden");
+    }
+  }
+
+  const alertBanner = document.getElementById("tibInwardAlertBanner");
+  const alertCountEl = document.getElementById("tibInwardAlertCount");
+  if (alertBanner && alertCountEl) {
+    if (pendingForZone.length > 0) {
+      alertCountEl.textContent = `${pendingForZone.length} Pending Receipt`;
+      alertBanner.classList.remove("hidden");
+    } else {
+      alertBanner.classList.add("hidden");
+    }
+  }
+}
+
+const DEFAULT_TEMP_ISSUES_DATA = [
+  {
+    id: "tib_001",
+    ref_no: "TIB/2026/08/001",
+    date: "2026-08-15",
+    zone_id: "A-Zone",
+    origin_zone: "Main Store",
+    target_destination: "A-Zone",
+    item_name: "Bosch Rotary Hammer Drill 800W",
+    category: "Tools & Machinery",
+    qty: 2,
+    deno: "Nos",
+    unit_cost: 38500,
+    total_value: 77000,
+    issued_to: "74738 W Gnanathilake VAS",
+    trade: "Carpentry",
+    purpose: "WO-2026-089 / Wardroom ceiling repair",
+    issued_by: "Storekeeper (Civil)",
+    expected_return_date: "2026-08-22",
+    actual_return_date: "2026-08-22",
+    qty_returned: 2,
+    condition_on_return: "Good Condition",
+    status: "returned",
+    remarks: "Serial #DRL-9982 • Returned clean in case"
+  },
+  {
+    id: "tib_002",
+    ref_no: "TIB/2026/08/002",
+    date: "2026-08-20",
+    zone_id: "A-Zone",
+    origin_zone: "Main Store",
+    target_destination: "A-Zone",
+    item_name: "Full Body Safety Harness & Lanyard Set",
+    category: "Safety Gear",
+    qty: 4,
+    deno: "Sets",
+    unit_cost: 14500,
+    total_value: 58000,
+    issued_to: "118453 Silva KHM (Masonry Team)",
+    trade: "Masonry",
+    purpose: "External plastering at SLNS Tissa HQ",
+    issued_by: "Safety Supervisor",
+    expected_return_date: "2026-08-28",
+    received_date: "2026-08-20",
+    received_by: "Silva KHM",
+    receipt_condition: "Good Working Condition",
+    status: "active",
+    remarks: "High-altitude safety clearance granted"
+  },
+  {
+    id: "tib_003",
+    ref_no: "TIB/2026/08/003",
+    date: "2026-08-23",
+    zone_id: "Carpentry WS",
+    origin_zone: "Main Store",
+    target_destination: "Carpentry WS",
+    item_name: "Makita Heavy Duty Circular Saw 185mm",
+    category: "Tools & Machinery",
+    qty: 1,
+    deno: "Nos",
+    unit_cost: 46000,
+    total_value: 46000,
+    issued_to: "98234 Perera TK (Carpentry Section)",
+    trade: "Carpentry",
+    purpose: "Timber frame fabrication for Officers Mess",
+    issued_by: "Main Storekeeper",
+    expected_return_date: "2026-08-30",
+    status: "pending_receipt",
+    remarks: "Dispatched to Carpentry WS • Pending recipient acknowledgment"
+  },
+  {
+    id: "tib_004",
+    ref_no: "TIB/2026/08/004",
+    date: "2026-08-22",
+    zone_id: "B-Zone",
+    origin_zone: "Main Store",
+    target_destination: "B-Zone",
+    item_name: "Heavy Duty Scaffolding Pipe & Coupler Set (20ft)",
+    category: "Scaffolding & Props",
+    qty: 12,
+    deno: "Sets",
+    unit_cost: 8500,
+    total_value: 102000,
+    issued_to: "Civil Maintenance Team - B Zone",
+    trade: "Building Maintenance",
+    purpose: "Quarterdeck facade painting and gutter replacement",
+    issued_by: "Storekeeper (Civil)",
+    expected_return_date: "2026-08-29",
+    received_date: "2026-08-22",
+    received_by: "OIC (B-Zone)",
+    receipt_condition: "Good Working Condition",
+    status: "active",
+    remarks: "Gate pass issued • Inspected on site"
+  }
+];
+
+function initTempIssuesData() {
+  const cached = localStorage.getItem("ncw_temp_issues_v1");
+  if (cached) {
+    try {
+      store.tempIssues = JSON.parse(cached);
+    } catch (e) {
+      console.warn("Failed to parse cached temp issues:", e);
+      store.tempIssues = [...DEFAULT_TEMP_ISSUES_DATA];
+    }
+  } else {
+    store.tempIssues = [...DEFAULT_TEMP_ISSUES_DATA];
+    saveTempIssuesToStorage();
+  }
+  updateTibPendingBadge();
+}
+
+function saveTempIssuesToStorage() {
+  try {
+    localStorage.setItem("ncw_temp_issues_v1", JSON.stringify(store.tempIssues || []));
+  } catch (e) {
+    console.warn("Failed to save temp issues to localStorage:", e);
+  }
+  updateTibPendingBadge();
+}
+
+// ── Period Switcher Logic ──
+function setTempIssuePeriod(period) {
+  store.tibPeriod = period;
+
+  const buttons = document.querySelectorAll(".tib-period-btn");
+  buttons.forEach((btn) => {
+    btn.className = "tib-period-btn px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer";
+  });
+
+  const activeBtn = document.getElementById(`tibBtnPeriod-${period}`);
+  if (activeBtn) {
+    activeBtn.className = "tib-period-btn px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-600 text-white shadow-xs transition-all cursor-pointer";
+  }
+
+  if (period !== "custom") {
+    const fromInp = document.getElementById("tibFilterFromDate");
+    const toInp = document.getElementById("tibFilterToDate");
+    if (fromInp) fromInp.value = "";
+    if (toInp) toInp.value = "";
+  }
+
+  renderTempIssuesDashboard();
+  renderTempIssuesTable();
+}
+
+function applyCustomTempIssueDateRange() {
+  const fromVal = document.getElementById("tibFilterFromDate")?.value;
+  const toVal = document.getElementById("tibFilterToDate")?.value;
+
+  if (fromVal || toVal) {
+    store.tibPeriod = "custom";
+    store.tibCustomFromDate = fromVal;
+    store.tibCustomToDate = toVal;
+
+    const buttons = document.querySelectorAll(".tib-period-btn");
+    buttons.forEach((btn) => {
+      btn.className = "tib-period-btn px-2.5 py-1 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-900 transition-all cursor-pointer";
+    });
+
+    renderTempIssuesDashboard();
+    renderTempIssuesTable();
+  }
+}
+
+// Helper: Check if date falls in active period
+function isDateInSelectedPeriod(dateStr, period) {
+  if (!dateStr) return false;
+  if (period === "all") return true;
+
+  const itemDate = new Date(dateStr);
+  if (isNaN(itemDate.getTime())) return true;
+
+  const now = new Date();
+  const todayStr = getLocalDateString();
+
+  if (period === "today") {
+    return dateStr.startsWith(todayStr);
+  }
+
+  if (period === "week") {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(now.getDate() - 7);
+    return itemDate >= oneWeekAgo && itemDate <= now;
+  }
+
+  if (period === "month") {
+    return itemDate.getFullYear() === now.getFullYear() && itemDate.getMonth() === now.getMonth();
+  }
+
+  if (period === "last30") {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(now.getDate() - 30);
+    return itemDate >= thirtyDaysAgo && itemDate <= now;
+  }
+
+  if (period === "year") {
+    return itemDate.getFullYear() === now.getFullYear();
+  }
+
+  if (period === "custom") {
+    const from = store.tibCustomFromDate ? new Date(store.tibCustomFromDate) : null;
+    const to = store.tibCustomToDate ? new Date(store.tibCustomToDate + "T23:59:59") : null;
+    if (from && itemDate < from) return false;
+    if (to && itemDate > to) return false;
+    return true;
+  }
+
+  return true;
+}
+
+// ── Render Period Analytics Dashboard ──
+function renderTempIssuesDashboard() {
+  const allIssues = store.tempIssues || [];
+  const scopeFilter = document.getElementById("tibScopeZoneFilter")?.value || "CURRENT_ZONE";
+  const period = store.tibPeriod || "month";
+  const todayStr = getLocalDateString();
+
+  // 1. Filter by Scope
+  const scopedIssues = allIssues.filter((item) => {
+    if (scopeFilter === "ALL_ZONES") return true;
+    if (scopeFilter === "CURRENT_ZONE") {
+      return !item.zone_id || item.zone_id === store.currentZone || item.target_destination === store.currentZone;
+    }
+    return item.zone_id === scopeFilter || item.target_destination === scopeFilter;
+  });
+
+  // 2. Filter by Period for metrics
+  const periodIssues = scopedIssues.filter((item) => isDateInSelectedPeriod(item.date, period));
+
+  // Compute Metrics
+  let totalValueIssued = 0;
+  let totalItemsQty = 0;
+  let activeCount = 0;
+  let activeValue = 0;
+  let pendingCount = 0;
+  let pendingValue = 0;
+  let overdueCount = 0;
+  let overdueValue = 0;
+  let returnedCount = 0;
+  let returnedValue = 0;
+
+  const categoryValueMap = {};
+  const recipientValueMap = {};
+
+  periodIssues.forEach((item) => {
+    const val = parseFloat(item.total_value) || (parseFloat(item.unit_cost) * parseFloat(item.qty)) || 0;
+    const qty = parseFloat(item.qty) || 1;
+    totalValueIssued += val;
+    totalItemsQty += qty;
+
+    const isReturned = item.status === "returned" || !!item.actual_return_date;
+    const isPending = item.status === "pending_receipt";
+    const isOverdue = !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
+
+    if (isReturned) {
+      returnedCount++;
+      returnedValue += val;
+    } else if (isPending) {
+      pendingCount++;
+      pendingValue += val;
+      activeCount++;
+      activeValue += val;
+    } else {
+      activeCount++;
+      activeValue += val;
+      if (isOverdue) {
+        overdueCount++;
+        overdueValue += val;
+      }
+    }
+
+    // Category breakdown
+    const cat = item.category || "General Materials";
+    categoryValueMap[cat] = (categoryValueMap[cat] || 0) + val;
+
+    // Recipient / Trade breakdown
+    const rec = item.trade || item.issued_to?.split(" ")[0] || "General";
+    recipientValueMap[rec] = (recipientValueMap[rec] || 0) + val;
+  });
+
+  const totalIssuesCount = periodIssues.length;
+  const returnRate = totalIssuesCount > 0 ? ((returnedCount / totalIssuesCount) * 100) : 0;
+
+  // Period label string
+  const periodLabels = {
+    today: "Items issued today",
+    week: "Items issued this week",
+    month: "Items issued this month",
+    last30: "Items issued in last 30 days",
+    year: "Items issued this year",
+    all: "All time total issued",
+    custom: `From ${store.tibCustomFromDate || 'Start'} to ${store.tibCustomToDate || 'Today'}`
+  };
+
+  // Update UI Metric Cards
+  const valEl = document.getElementById("tibStatTotalValue");
+  if (valEl) valEl.textContent = `Rs. ${totalValueIssued.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const periodLabelEl = document.getElementById("tibStatPeriodLabel");
+  if (periodLabelEl) periodLabelEl.textContent = periodLabels[period] || "Total value issued over period";
+
+  const totalItemsEl = document.getElementById("tibStatTotalItems");
+  if (totalItemsEl) totalItemsEl.textContent = `${totalItemsQty} ${totalItemsQty === 1 ? 'Item' : 'Items'}`;
+
+  const issuesCountEl = document.getElementById("tibStatIssuesCount");
+  if (issuesCountEl) issuesCountEl.textContent = `${totalIssuesCount} issue ${totalIssuesCount === 1 ? 'record' : 'records'}`;
+
+  const activeCountEl = document.getElementById("tibStatActiveCount");
+  if (activeCountEl) activeCountEl.textContent = `${activeCount} Out (${pendingCount} Pending)`;
+
+  const activeValueEl = document.getElementById("tibStatActiveValue");
+  if (activeValueEl) activeValueEl.textContent = `Rs. ${activeValue.toLocaleString("en-LK", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} out on loan`;
+
+  const overdueCountEl = document.getElementById("tibStatOverdueCount");
+  if (overdueCountEl) overdueCountEl.textContent = `${overdueCount} Overdue`;
+
+  const overdueValueEl = document.getElementById("tibStatOverdueValue");
+  if (overdueValueEl) overdueValueEl.textContent = `Rs. ${overdueValue.toLocaleString("en-LK", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} overdue`;
+
+  const returnRateEl = document.getElementById("tibStatReturnRate");
+  if (returnRateEl) returnRateEl.textContent = `${returnRate.toFixed(1)}%`;
+
+  const returnedValEl = document.getElementById("tibStatReturnedValue");
+  if (returnedValEl) returnedValEl.textContent = `Rs. ${returnedValue.toLocaleString("en-LK", { minimumFractionDigits: 0, maximumFractionDigits: 0 })} returned`;
+
+  // Render Category Breakdown Bars
+  const catContainer = document.getElementById("tibCategoryBreakdown");
+  if (catContainer) {
+    const catKeys = Object.keys(categoryValueMap).sort((a, b) => categoryValueMap[b] - categoryValueMap[a]);
+    if (catKeys.length === 0) {
+      catContainer.innerHTML = `<p class="text-xs text-slate-400 italic py-2">No issue records in this period.</p>`;
+    } else {
+      catContainer.innerHTML = catKeys.slice(0, 4).map((k) => {
+        const catVal = categoryValueMap[k];
+        const pct = totalValueIssued > 0 ? ((catVal / totalValueIssued) * 100).toFixed(0) : 0;
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between font-medium text-slate-700">
+              <span class="truncate max-w-[200px]">${k}</span>
+              <span class="font-mono font-bold text-slate-900">Rs. ${catVal.toLocaleString("en-LK")} (${pct}%)</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-indigo-600 h-1.5 rounded-full" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  // Render Recipient Breakdown Bars
+  const recContainer = document.getElementById("tibRecipientBreakdown");
+  if (recContainer) {
+    const recKeys = Object.keys(recipientValueMap).sort((a, b) => recipientValueMap[b] - recipientValueMap[a]);
+    if (recKeys.length === 0) {
+      recContainer.innerHTML = `<p class="text-xs text-slate-400 italic py-2">No recipient data in this period.</p>`;
+    } else {
+      recContainer.innerHTML = recKeys.slice(0, 4).map((k) => {
+        const recVal = recipientValueMap[k];
+        const pct = totalValueIssued > 0 ? ((recVal / totalValueIssued) * 100).toFixed(0) : 0;
+        return `
+          <div class="space-y-1">
+            <div class="flex justify-between font-medium text-slate-700">
+              <span class="truncate max-w-[200px]">${k}</span>
+              <span class="font-mono font-bold text-slate-900">Rs. ${recVal.toLocaleString("en-LK")} (${pct}%)</span>
+            </div>
+            <div class="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
+              <div class="bg-teal-600 h-1.5 rounded-full" style="width: ${pct}%"></div>
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+  }
+
+  updateTibPendingBadge();
+}
+
+// ── Render Temporary Issues Register Table ──
+function renderTempIssuesTable() {
+  const tbody = document.getElementById("tempIssuesTableBody");
+  if (!tbody) return;
+
+  const allIssues = store.tempIssues || [];
+  const scopeFilter = document.getElementById("tibScopeZoneFilter")?.value || "CURRENT_ZONE";
+  const catFilter = document.getElementById("tibCategoryFilter")?.value || "all";
+  const statusFilter = document.getElementById("tibStatusFilter")?.value || "all";
+  const searchQuery = (document.getElementById("tibSearchInput")?.value || "").toLowerCase().trim();
+  const period = store.tibPeriod || "month";
+  const todayStr = getLocalDateString();
+
+  // Filter pipeline
+  const filtered = allIssues.filter((item) => {
+    // 1. Scope Filter
+    if (scopeFilter !== "ALL_ZONES") {
+      if (scopeFilter === "CURRENT_ZONE") {
+        if (item.zone_id && item.zone_id !== store.currentZone && item.target_destination !== store.currentZone) return false;
+      } else if (item.zone_id !== scopeFilter && item.target_destination !== scopeFilter) {
+        return false;
+      }
+    }
+
+    // 2. Period Filter
+    if (!isDateInSelectedPeriod(item.date, period)) return false;
+
+    // 3. Category Filter
+    if (catFilter !== "all" && item.category !== catFilter) return false;
+
+    // 4. Status Filter
+    const isReturned = item.status === "returned" || !!item.actual_return_date;
+    const isPending = item.status === "pending_receipt";
+    const isOverdue = !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
+
+    if (statusFilter === "pending_receipt" && !isPending) return false;
+    if (statusFilter === "active" && (isReturned || isPending)) return false;
+    if (statusFilter === "returned" && !isReturned) return false;
+    if (statusFilter === "overdue" && !isOverdue) return false;
+
+    // 5. Search Query
+    if (searchQuery) {
+      const matchStr = `${item.ref_no || ''} ${item.item_name || ''} ${item.issued_to || ''} ${item.trade || ''} ${item.purpose || ''} ${item.zone_id || ''} ${item.target_destination || ''} ${item.remarks || ''}`.toLowerCase();
+      if (!matchStr.includes(searchQuery)) return false;
+    }
+
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="9" class="text-center py-10 text-slate-400 bg-slate-50/50">
+          <div class="space-y-1.5">
+            <span class="text-3xl">📭</span>
+            <p class="font-medium text-xs">No temporary issues found matching the selected period and filters.</p>
+            <button onclick="openAddTempIssueModal()" class="text-xs font-bold text-teal-600 hover:text-teal-800 underline cursor-pointer">+ Log a New Temporary Issue</button>
+          </div>
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  // Sort descending by date
+  filtered.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+  tbody.innerHTML = filtered.map((item) => {
+    const isReturned = item.status === "returned" || !!item.actual_return_date;
+    const isPending = item.status === "pending_receipt";
+    const isOverdue = !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
+    const val = parseFloat(item.total_value) || ((parseFloat(item.unit_cost) || 0) * (parseFloat(item.qty) || 1));
+    const unitCost = parseFloat(item.unit_cost) || 0;
+
+    let statusBadge = "";
+    if (isReturned) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ Returned</span>`;
+    } else if (isPending) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 w-fit mx-auto"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> ⏳ Pending Receipt</span>`;
+    } else if (isOverdue) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 animate-pulse">🚨 Overdue</span>`;
+    } else {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-200">🛠️ Active / In Use</span>`;
+    }
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition-colors ${isPending ? 'bg-amber-50/20' : ''}">
+        <td class="px-3.5 py-3 align-top font-mono">
+          <span class="font-bold text-slate-900">${item.ref_no || 'TIB/—'}</span>
+          <div class="text-[11px] text-slate-500 font-sans">${item.date || '—'}</div>
+        </td>
+        <td class="px-3.5 py-3 align-top">
+          <div class="font-bold text-slate-900">${item.item_name || '—'}</div>
+          ${item.remarks ? `<div class="text-[11px] text-slate-500 italic max-w-xs truncate" title="${item.remarks}">${item.remarks}</div>` : ''}
+          ${item.received_by ? `<div class="text-[10px] text-teal-700 font-medium">📥 Received by: ${item.received_by} (${item.received_date || ''})</div>` : ''}
+        </td>
+        <td class="px-3 py-3 text-center align-top">
+          <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">${item.category || 'General'}</span>
+        </td>
+        <td class="px-3 py-3 text-center align-top font-bold text-slate-800 font-mono">
+          ${item.qty || 1} <span class="text-[10px] font-normal text-slate-500 font-sans">${item.deno || 'Nos'}</span>
+        </td>
+        <td class="px-3.5 py-3 text-right align-top font-mono">
+          <div class="font-bold text-slate-900">Rs. ${val.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          ${unitCost > 0 ? `<div class="text-[10px] text-slate-400">@ Rs. ${unitCost.toLocaleString("en-LK")}</div>` : ''}
+        </td>
+        <td class="px-3.5 py-3 align-top">
+          <div class="font-bold text-slate-800">${item.issued_to || '—'}</div>
+          <div class="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
+            <span class="text-teal-700 font-semibold">${item.zone_id || store.currentZone}</span>
+            ${item.purpose ? `<span>• ${item.purpose}</span>` : ''}
+          </div>
+        </td>
+        <td class="px-3 py-3 text-center align-top">
+          <div class="font-medium text-slate-700 ${isOverdue ? 'text-rose-700 font-bold' : ''}">${item.expected_return_date || '—'}</div>
+          ${isReturned && item.actual_return_date ? `<div class="text-[10px] text-emerald-700 font-semibold">Ret: ${item.actual_return_date}</div>` : ''}
+        </td>
+        <td class="px-3 py-3 text-center align-top">
+          ${statusBadge}
+        </td>
+        <td class="px-3.5 py-3 text-center align-top">
+          <div class="flex items-center justify-center gap-1.5 flex-wrap">
+            ${isPending ? `
+              <button onclick="openConfirmReceiptModal('${item.id || item._fbKey}')" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1" title="Confirm Receipt in this Zone/Workshop">
+                <span>📥</span> Confirm Received
+              </button>
+            ` : (!isReturned ? `
+              <button onclick="openReturnTempIssueModal('${item.id || item._fbKey}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1" title="Record Item Return">
+                <span>🔄</span> Return
+              </button>
+            ` : '')}
+            <button onclick="printTempIssueSlip('${item.id || item._fbKey}')" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs transition-all cursor-pointer" title="Print Gate Pass / Issue Slip">
+              🖨️
+            </button>
+            <button onclick="openAddTempIssueModal('${item.id || item._fbKey}')" class="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs transition-all cursor-pointer" title="Edit Issue">
+              ✏️
+            </button>
+            <button onclick="deleteTempIssue('${item.id || item._fbKey}', event)" class="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs transition-all cursor-pointer" title="Delete Issue">
+              🗑️
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function filterTempIssues() {
+  renderTempIssuesDashboard();
+  renderTempIssuesTable();
+}
+
+// ── Open Add / Edit Temporary Issue Modal ──
+function openAddTempIssueModal(editId = null) {
+  const modal = document.getElementById("addTempIssueModal");
+  if (!modal) return;
+
+  const idInp = document.getElementById("tibInputId");
+  const refInp = document.getElementById("tibInputRefNo");
+  const dateInp = document.getElementById("tibInputDate");
+  const zoneSelect = document.getElementById("tibInputZoneId");
+  const descInp = document.getElementById("tibInputDescription");
+  const catSelect = document.getElementById("tibInputCategory");
+  const qtyInp = document.getElementById("tibInputQty");
+  const denoInp = document.getElementById("tibInputDeno");
+  const unitCostInp = document.getElementById("tibInputUnitCost");
+  const issuedToInp = document.getElementById("tibInputIssuedTo");
+  const tradeInp = document.getElementById("tibInputTrade");
+  const purposeInp = document.getElementById("tibInputPurpose");
+  const expDateInp = document.getElementById("tibInputExpectedReturnDate");
+  const issuedByInp = document.getElementById("tibInputIssuedBy");
+  const remarksInp = document.getElementById("tibInputRemarks");
+  const titleEl = document.getElementById("addTempIssueModalTitle");
+
+  // Populate Zone Select
+  if (zoneSelect) {
+    const allZones = getAllAvailableZonesAndWorkshops();
+    zoneSelect.innerHTML = allZones.map((z) => `<option value="${z.id || z.name}">${z.name || z.id}</option>`).join("");
+    zoneSelect.value = store.currentZone || "A-Zone";
+  }
+
+  // Populate Inventory Quick Pick Dropdown
+  const invPick = document.getElementById("tibInventoryQuickPick");
+  if (invPick) {
+    const invItems = store.inventory || [];
+    invPick.innerHTML = `<option value="">⚡ Pick from Zone Inventory</option>` +
+      invItems.map((it) => `<option value="${it.id || it._fbKey}">${it.description} (Stock: ${it.quantity} ${it.deno || ''}) - Rs. ${parseFloat(it.cost || 0).toLocaleString()}</option>`).join("");
+  }
+
+  // Populate Sailor Quick Pick Dropdown
+  const sailorPick = document.getElementById("tibSailorQuickPick");
+  if (sailorPick) {
+    const sailors = store.sailors || [];
+    sailorPick.innerHTML = `<option value="">⚓ Select Sailor from Directory</option>` +
+      sailors.map((s) => `<option value="${s.id || s.official_number}">${s.official_number || ""} • ${s.rank || ""} ${s.name || s.initials || "Sailor"} (${s.trade || "Trade"})</option>`).join("");
+  }
+
+  const todayStr = getLocalDateString();
+  const nextWeek = new Date();
+  nextWeek.setDate(nextWeek.getDate() + 7);
+  const nextWeekStr = nextWeek.toISOString().split("T")[0];
+
+  if (editId) {
+    const issue = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === editId);
+    if (issue) {
+      if (titleEl) titleEl.textContent = "Edit Temporary Issue Record";
+      if (idInp) idInp.value = editId;
+      if (refInp) refInp.value = issue.ref_no || "";
+      if (dateInp) dateInp.value = issue.date || todayStr;
+      if (zoneSelect) zoneSelect.value = issue.zone_id || store.currentZone;
+      if (descInp) descInp.value = issue.item_name || "";
+      if (catSelect) catSelect.value = issue.category || "Tools & Machinery";
+      if (qtyInp) qtyInp.value = issue.qty || 1;
+      if (denoInp) denoInp.value = issue.deno || "Nos";
+      if (unitCostInp) unitCostInp.value = issue.unit_cost || 0;
+      if (issuedToInp) issuedToInp.value = issue.issued_to || "";
+      if (tradeInp) tradeInp.value = issue.trade || "";
+      if (purposeInp) purposeInp.value = issue.purpose || "";
+      if (expDateInp) expDateInp.value = issue.expected_return_date || nextWeekStr;
+      if (issuedByInp) issuedByInp.value = issue.issued_by || "";
+      if (remarksInp) remarksInp.value = issue.remarks || "";
+    }
+  } else {
+    if (titleEl) titleEl.textContent = "Log New Temporary Issue";
+    if (idInp) idInp.value = "";
+    const seq = String((store.tempIssues || []).length + 1).padStart(3, "0");
+    const yr = new Date().getFullYear();
+    const mo = String(new Date().getMonth() + 1).padStart(2, "0");
+    if (refInp) refInp.value = `TIB/${yr}/${mo}/${seq}`;
+    if (dateInp) dateInp.value = todayStr;
+    if (descInp) descInp.value = "";
+    if (catSelect) catSelect.value = "Tools & Machinery";
+    if (qtyInp) qtyInp.value = "1";
+    if (denoInp) denoInp.value = "Nos";
+    if (unitCostInp) unitCostInp.value = "0";
+    if (issuedToInp) issuedToInp.value = "";
+    if (tradeInp) tradeInp.value = "";
+    if (purposeInp) purposeInp.value = "";
+    if (expDateInp) expDateInp.value = nextWeekStr;
+    if (issuedByInp) issuedByInp.value = (store.currentUser && store.currentUser.name) ? `${store.currentUser.name} (${store.currentUser.rank || ''})` : "Storekeeper";
+    if (remarksInp) remarksInp.value = "";
+  }
+
+  calculateTibFormTotalValue();
+  modal.classList.remove("hidden");
+}
+
+function handleTibInventoryQuickPick(itemId) {
+  if (!itemId) return;
+  const item = (store.inventory || []).find((i) => (i.id || i._fbKey) === itemId);
+  if (!item) return;
+
+  const descInp = document.getElementById("tibInputDescription");
+  const denoInp = document.getElementById("tibInputDeno");
+  const unitCostInp = document.getElementById("tibInputUnitCost");
+  const catSelect = document.getElementById("tibInputCategory");
+
+  if (descInp) descInp.value = item.description || "";
+  if (denoInp) denoInp.value = item.deno || "Nos";
+  if (unitCostInp) unitCostInp.value = item.cost || 0;
+  if (catSelect && item.category) {
+    if (catSelect.querySelector(`option[value="${item.category}"]`)) {
+      catSelect.value = item.category;
+    }
+  }
+
+  calculateTibFormTotalValue();
+}
+
+function handleTibSailorQuickPick(sailorId) {
+  if (!sailorId) return;
+  const sailor = (store.sailors || []).find((s) => (s.id || s.official_number) === sailorId);
+  if (!sailor) return;
+
+  const issuedToInp = document.getElementById("tibInputIssuedTo");
+  const tradeInp = document.getElementById("tibInputTrade");
+
+  if (issuedToInp) {
+    issuedToInp.value = `${sailor.official_number || ''} ${sailor.rank || ''} ${sailor.name || sailor.initials || ''}`.trim();
+  }
+  if (tradeInp) {
+    tradeInp.value = sailor.trade || sailor.department || "";
+  }
+}
+
+function calculateTibFormTotalValue() {
+  const qty = parseFloat(document.getElementById("tibInputQty")?.value) || 0;
+  const unitCost = parseFloat(document.getElementById("tibInputUnitCost")?.value) || 0;
+  const total = qty * unitCost;
+
+  const totalInp = document.getElementById("tibInputTotalValue");
+  if (totalInp) {
+    totalInp.value = `Rs. ${total.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+}
+
+// ── Submit Temporary Issue Form ──
+function handleTempIssueFormSubmit(e) {
+  e.preventDefault();
+
+  const id = document.getElementById("tibInputId")?.value;
+  const refNo = document.getElementById("tibInputRefNo")?.value || "TIB/—";
+  const date = document.getElementById("tibInputDate")?.value || getLocalDateString();
+  const zoneId = document.getElementById("tibInputZoneId")?.value || store.currentZone;
+  const desc = document.getElementById("tibInputDescription")?.value || "Tool / Material";
+  const category = document.getElementById("tibInputCategory")?.value || "Tools & Machinery";
+  const qty = parseFloat(document.getElementById("tibInputQty")?.value) || 1;
+  const deno = document.getElementById("tibInputDeno")?.value || "Nos";
+  const unitCost = parseFloat(document.getElementById("tibInputUnitCost")?.value) || 0;
+  const totalVal = qty * unitCost;
+  const issuedTo = document.getElementById("tibInputIssuedTo")?.value || "";
+  const trade = document.getElementById("tibInputTrade")?.value || "";
+  const purpose = document.getElementById("tibInputPurpose")?.value || "";
+  const expDate = document.getElementById("tibInputExpectedReturnDate")?.value || "";
+  const issuedBy = document.getElementById("tibInputIssuedBy")?.value || "";
+  const remarks = document.getElementById("tibInputRemarks")?.value || "";
+
+  const record = {
+    ref_no: refNo,
+    date: date,
+    zone_id: zoneId,
+    origin_zone: store.currentZone || "Main Store",
+    target_destination: zoneId,
+    item_name: desc,
+    category: category,
+    qty: qty,
+    deno: deno,
+    unit_cost: unitCost,
+    total_value: totalVal,
+    issued_to: issuedTo,
+    trade: trade,
+    purpose: purpose,
+    expected_return_date: expDate,
+    issued_by: issuedBy,
+    remarks: remarks,
+    status: "pending_receipt",
+    updated_at: Date.now()
+  };
+
+  if (id) {
+    record.id = id;
+    const existing = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === id);
+    if (existing && existing.status) record.status = existing.status;
+    if (existing && existing.received_date) record.received_date = existing.received_date;
+    if (existing && existing.received_by) record.received_by = existing.received_by;
+
+    if (typeof opsDB !== "undefined") {
+      opsDB.ref(`temp_issues/${id}`).update(record);
+    }
+    const idx = (store.tempIssues || []).findIndex((i) => (i.id || i._fbKey) === id);
+    if (idx !== -1) store.tempIssues[idx] = { ...store.tempIssues[idx], ...record };
+    showToast(`Temporary Issue ${refNo} updated!`, "success");
+  } else {
+    record.created_at = Date.now();
+    if (typeof opsDB !== "undefined") {
+      const newRef = opsDB.ref("temp_issues").push(record);
+      record.id = newRef.key;
+      record._fbKey = newRef.key;
+    } else {
+      record.id = `tib_${Date.now()}`;
+    }
+    store.tempIssues.push(record);
+    showToast(`Temporary Issue ${refNo} logged as Pending Receipt!`, "success");
+  }
+
+  saveTempIssuesToStorage();
+  closeModal("addTempIssueModal");
+  renderTempIssuesDashboard();
+  renderTempIssuesTable();
+}
+
+// ── Inward Receipt Confirmation Modal & Handler ──
+function openConfirmReceiptModal(issueId) {
+  const issue = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === issueId);
+  if (!issue) return;
+
+  const modal = document.getElementById("confirmReceiptModal");
+  if (!modal) return;
+
+  const idInp = document.getElementById("receiptTibId");
+  const refEl = document.getElementById("receiptTibRef");
+  const valEl = document.getElementById("receiptTibValue");
+  const itemEl = document.getElementById("receiptTibItem");
+  const originEl = document.getElementById("receiptTibOrigin");
+  const expReturnEl = document.getElementById("receiptTibExpReturn");
+  const dateInp = document.getElementById("receiptTibDate");
+  const qtyInp = document.getElementById("receiptTibQty");
+  const condSelect = document.getElementById("receiptTibCondition");
+  const recInp = document.getElementById("receiptTibReceivedBy");
+  const notesInp = document.getElementById("receiptTibNotes");
+
+  if (idInp) idInp.value = issueId;
+  if (refEl) refEl.textContent = `Issue Ref: ${issue.ref_no || 'TIB/—'}`;
+  const totalVal = parseFloat(issue.total_value) || ((parseFloat(issue.unit_cost) || 0) * (parseFloat(issue.qty) || 1));
+  if (valEl) valEl.textContent = `Value: Rs. ${totalVal.toLocaleString("en-LK", { minimumFractionDigits: 2 })}`;
+  if (itemEl) itemEl.textContent = `📦 ${issue.item_name} (${issue.qty} ${issue.deno || 'Nos'})`;
+  if (originEl) originEl.textContent = `From: ${issue.origin_zone || issue.zone_id || 'Store'} → To: ${issue.target_destination || issue.zone_id || store.currentZone}`;
+  if (expReturnEl) expReturnEl.textContent = `Expected Return: ${issue.expected_return_date || '—'}`;
+
+  if (dateInp) dateInp.value = getLocalDateString();
+  if (qtyInp) qtyInp.value = issue.qty || 1;
+  if (condSelect) condSelect.value = "Good Working Condition";
+  if (recInp) recInp.value = (store.currentUser && store.currentUser.name) ? `${store.currentUser.name}` : (issue.issued_to || "");
+  if (notesInp) notesInp.value = "Inspected, tested and taken into custody.";
+
+  modal.classList.remove("hidden");
+}
+
+function handleConfirmReceiptSubmit(e) {
+  e.preventDefault();
+
+  const id = document.getElementById("receiptTibId")?.value;
+  if (!id) return;
+
+  const receiptDate = document.getElementById("receiptTibDate")?.value || getLocalDateString();
+  const qtyReceived = parseFloat(document.getElementById("receiptTibQty")?.value) || 1;
+  const condition = document.getElementById("receiptTibCondition")?.value || "Good Working Condition";
+  const receivedBy = document.getElementById("receiptTibReceivedBy")?.value || "In-Charge";
+  const notes = document.getElementById("receiptTibNotes")?.value || "";
+
+  const updates = {
+    status: "active",
+    received_date: receiptDate,
+    received_qty: qtyReceived,
+    receipt_condition: condition,
+    received_by: receivedBy,
+    receipt_notes: notes,
+    receipt_confirmed_at: Date.now()
+  };
+
+  if (typeof opsDB !== "undefined") {
+    opsDB.ref(`temp_issues/${id}`).update(updates);
+  }
+
+  const idx = (store.tempIssues || []).findIndex((i) => (i.id || i._fbKey) === id);
+  if (idx !== -1) {
+    store.tempIssues[idx] = { ...store.tempIssues[idx], ...updates };
+  }
+
+  saveTempIssuesToStorage();
+  closeModal("confirmReceiptModal");
+  renderTempIssuesDashboard();
+  renderTempIssuesTable();
+  showToast(`Custody confirmed! Item is now Active in this Zone/WS.`, "success");
+}
+
+// ── Open Return Item Modal ──
+function openReturnTempIssueModal(issueId) {
+  const issue = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === issueId);
+  if (!issue) return;
+
+  const modal = document.getElementById("returnTempIssueModal");
+  if (!modal) return;
+
+  const idInp = document.getElementById("returnTibId");
+  const refEl = document.getElementById("returnTibRef");
+  const valEl = document.getElementById("returnTibValue");
+  const itemEl = document.getElementById("returnTibItem");
+  const issuedToEl = document.getElementById("returnTibIssuedTo");
+  const dateInp = document.getElementById("returnTibDate");
+  const qtyInp = document.getElementById("returnTibQty");
+  const condSelect = document.getElementById("returnTibCondition");
+  const recInp = document.getElementById("returnTibReceivedBy");
+  const remarksInp = document.getElementById("returnTibRemarks");
+
+  if (idInp) idInp.value = issueId;
+  if (refEl) refEl.textContent = `Issue Ref: ${issue.ref_no || 'TIB/—'}`;
+  const totalVal = parseFloat(issue.total_value) || ((parseFloat(issue.unit_cost) || 0) * (parseFloat(issue.qty) || 1));
+  if (valEl) valEl.textContent = `Value: Rs. ${totalVal.toLocaleString("en-LK", { minimumFractionDigits: 2 })}`;
+  if (itemEl) itemEl.textContent = `📦 ${issue.item_name} (${issue.qty} ${issue.deno || 'Nos'})`;
+  if (issuedToEl) issuedToEl.textContent = `Issued To: ${issue.issued_to || '—'} • Purpose: ${issue.purpose || 'General'}`;
+
+  if (dateInp) dateInp.value = getLocalDateString();
+  if (qtyInp) qtyInp.value = issue.qty || 1;
+  if (condSelect) condSelect.value = "Good Condition";
+  if (recInp) recInp.value = (store.currentUser && store.currentUser.name) ? `${store.currentUser.name}` : "Storekeeper";
+  if (remarksInp) remarksInp.value = "Inspected and returned to store.";
+
+  modal.classList.remove("hidden");
+}
+
+function handleTempIssueReturnSubmit(e) {
+  e.preventDefault();
+
+  const id = document.getElementById("returnTibId")?.value;
+  if (!id) return;
+
+  const returnDate = document.getElementById("returnTibDate")?.value || getLocalDateString();
+  const returnQty = parseFloat(document.getElementById("returnTibQty")?.value) || 1;
+  const condition = document.getElementById("returnTibCondition")?.value || "Good Condition";
+  const receivedBy = document.getElementById("returnTibReceivedBy")?.value || "Storekeeper";
+  const remarks = document.getElementById("returnTibRemarks")?.value || "";
+
+  const updates = {
+    actual_return_date: returnDate,
+    qty_returned: returnQty,
+    condition_on_return: condition,
+    return_received_by: receivedBy,
+    return_remarks: remarks,
+    status: "returned",
+    returned_at: Date.now()
+  };
+
+  if (typeof opsDB !== "undefined") {
+    opsDB.ref(`temp_issues/${id}`).update(updates);
+  }
+
+  const idx = (store.tempIssues || []).findIndex((i) => (i.id || i._fbKey) === id);
+  if (idx !== -1) {
+    store.tempIssues[idx] = { ...store.tempIssues[idx], ...updates };
+  }
+
+  saveTempIssuesToStorage();
+  closeModal("returnTempIssueModal");
+  renderTempIssuesDashboard();
+  renderTempIssuesTable();
+  showToast(`Item marked as Returned successfully!`, "success");
+}
+
+// ── Delete Temporary Issue ──
+function deleteTempIssue(id, event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if (!confirm("Are you sure you want to delete this Temporary Issue record?")) return;
+
+  if (typeof opsDB !== "undefined") {
+    opsDB.ref(`temp_issues/${id}`).remove();
+  }
+
+  store.tempIssues = (store.tempIssues || []).filter((i) => (i.id || i._fbKey) !== id);
+  saveTempIssuesToStorage();
+  renderTempIssuesDashboard();
+  renderTempIssuesTable();
+  showToast("Temporary issue record deleted", "info");
+}
+
+// ── Print Official Gate Pass / Temporary Issue Slip ──
+function printTempIssueSlip(issueId) {
+  const issue = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === issueId);
+  if (!issue) return;
+
+  const totalVal = parseFloat(issue.total_value) || ((parseFloat(issue.unit_cost) || 0) * (parseFloat(issue.qty) || 1));
+  const printWindow = window.open("", "_blank", "width=850,height=700");
+  if (!printWindow) {
+    window.print();
+    return;
+  }
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Temporary Issue Slip - ${issue.ref_no}</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+          @page { size: A5 landscape; margin: 10mm; }
+          body { font-family: "Times New Roman", Times, Georgia, serif; color: #000; background: #fff; }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #000; padding: 6px 10px; font-size: 12px; }
+        </style>
+      </head>
+      <body class="p-6">
+        <div class="max-w-2xl mx-auto border-2 border-black p-6 space-y-4">
+          <!-- Header -->
+          <div class="text-center border-b pb-3">
+            <h1 class="font-black text-base uppercase tracking-wider">SRI LANKA NAVY · CIVIL ENGINEERING DEPARTMENT</h1>
+            <h2 class="font-bold text-sm underline tracking-wide">TEMPORARY ISSUE VOUCHER / TOOL GATE PASS</h2>
+            <p class="text-xs text-slate-600 mt-1">Ref: <strong>${issue.ref_no}</strong> • Date: <strong>${issue.date}</strong> • Scope: <strong>${issue.zone_id || store.currentZone}</strong></p>
+          </div>
+
+          <!-- Item Table -->
+          <table>
+            <thead class="bg-slate-100">
+              <tr>
+                <th>Item Description</th>
+                <th>Category</th>
+                <th class="text-center">Qty / Deno</th>
+                <th class="text-right">Unit Cost</th>
+                <th class="text-right">Total Value</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="font-bold">${issue.item_name}</td>
+                <td>${issue.category || 'Tools & Machinery'}</td>
+                <td class="text-center">${issue.qty} ${issue.deno || 'Nos'}</td>
+                <td class="text-right">Rs. ${parseFloat(issue.unit_cost || 0).toLocaleString("en-LK", { minimumFractionDigits: 2 })}</td>
+                <td class="text-right font-bold">Rs. ${totalVal.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <!-- Recipient & Conditions -->
+          <div class="grid grid-cols-2 gap-4 text-xs">
+            <div class="space-y-1">
+              <p><strong>Issued To:</strong> ${issue.issued_to}</p>
+              <p><strong>Trade / Section:</strong> ${issue.trade || '—'}</p>
+              <p><strong>Purpose:</strong> ${issue.purpose || 'Civil Works Maintenance'}</p>
+            </div>
+            <div class="space-y-1">
+              <p><strong>Expected Return Date:</strong> <span class="font-bold underline">${issue.expected_return_date || '—'}</span></p>
+              <p><strong>Issued By:</strong> ${issue.issued_by || 'Storekeeper'}</p>
+              <p><strong>Remarks:</strong> ${issue.remarks || 'None'}</p>
+            </div>
+          </div>
+
+          <!-- Undertaking -->
+          <div class="p-2.5 bg-slate-50 border border-slate-300 text-[11px] leading-snug">
+            <em>I hereby acknowledge the receipt of the above items in good condition on a temporary return basis. I undertake to return them promptly on or before the expected return date in the same condition.</em>
+          </div>
+
+          <!-- Signature Blocks -->
+          <div class="pt-8 grid grid-cols-3 text-center text-xs">
+            <div class="space-y-1">
+              <div class="border-t border-black pt-1">Recipient's Signature</div>
+              <div class="text-[10px] text-slate-600">(Name & Official No)</div>
+            </div>
+            <div class="space-y-1">
+              <div class="border-t border-black pt-1">Storekeeper Signature</div>
+              <div class="text-[10px] text-slate-600">(Issuing Authority)</div>
+            </div>
+            <div class="space-y-1">
+              <div class="border-t border-black pt-1">Officer in Charge (CE)</div>
+              <div class="text-[10px] text-slate-600">(Approval Signature)</div>
+            </div>
+          </div>
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); window.close(); }, 300);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+// ── Print Tabular Temporary Issues Register ──
+function printTempIssuesRegister() {
+  const allIssues = store.tempIssues || [];
+  const scopeFilter = document.getElementById("tibScopeZoneFilter")?.value || "CURRENT_ZONE";
+  const period = store.tibPeriod || "month";
+  const todayStr = getLocalDateString();
+
+  const filtered = allIssues.filter((item) => {
+    if (scopeFilter !== "ALL_ZONES") {
+      if (scopeFilter === "CURRENT_ZONE") {
+        if (item.zone_id && item.zone_id !== store.currentZone) return false;
+      } else if (item.zone_id !== scopeFilter) {
+        return false;
+      }
+    }
+    return isDateInSelectedPeriod(item.date, period);
+  });
+
+  const printWindow = window.open("", "_blank", "width=1000,height=750");
+  if (!printWindow) {
+    window.print();
+    return;
+  }
+
+  let totalVal = 0;
+  const rowsHtml = filtered.map((i, idx) => {
+    const val = parseFloat(i.total_value) || ((parseFloat(i.unit_cost) || 0) * (parseFloat(i.qty) || 1));
+    totalVal += val;
+    const isReturned = i.status === "returned" || !!i.actual_return_date;
+    return `
+      <tr>
+        <td class="text-center">${idx + 1}</td>
+        <td>${i.ref_no}</td>
+        <td>${i.date}</td>
+        <td class="font-bold">${i.item_name}</td>
+        <td class="text-center">${i.qty} ${i.deno || ''}</td>
+        <td class="text-right font-mono">Rs. ${val.toLocaleString("en-LK")}</td>
+        <td>${i.issued_to} (${i.trade || ''})</td>
+        <td>${i.expected_return_date || '—'}</td>
+        <td class="text-center">${isReturned ? 'Returned' : 'Active / Out'}</td>
+      </tr>
+    `;
+  }).join("");
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+      <head>
+        <title>Temporary Issue Register</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <style>
+          @page { size: A4 landscape; margin: 12mm; }
+          body { font-family: "Times New Roman", Times, serif; color: #000; }
+          table { border-collapse: collapse; width: 100%; }
+          th, td { border: 1px solid #000; padding: 5px 8px; font-size: 11px; }
+        </style>
+      </head>
+      <body class="p-6">
+        <div class="text-center pb-4 border-b">
+          <h1 class="font-black text-base uppercase">SRI LANKA NAVY · CIVIL ENGINEERING DEPARTMENT</h1>
+          <h2 class="font-bold text-sm uppercase">TEMPORARY & RETURN-BASIS ISSUE REGISTER</h2>
+          <p class="text-xs mt-1">Scope: <strong>${scopeFilter === 'ALL_ZONES' ? 'All Zones & Workshops' : store.currentZone}</strong> • Total Records: <strong>${filtered.length}</strong> • Total Value: <strong>Rs. ${totalVal.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</strong></p>
+        </div>
+        <table class="mt-4">
+          <thead class="bg-slate-100">
+            <tr>
+              <th>#</th>
+              <th>Ref No</th>
+              <th>Issue Date</th>
+              <th>Item Description</th>
+              <th>Qty</th>
+              <th>Total Value</th>
+              <th>Issued To & Trade</th>
+              <th>Expected Return</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rowsHtml}
+          </tbody>
+          <tfoot>
+            <tr class="font-bold bg-slate-100">
+              <td colspan="5" class="text-right">Total Value Issued Over Period:</td>
+              <td class="text-right font-mono">Rs. ${totalVal.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</td>
+              <td colspan="3"></td>
+            </tr>
+          </tfoot>
+        </table>
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); window.close(); }, 300);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+// ── Export CSV ──
+function exportTempIssuesCsv() {
+  const allIssues = store.tempIssues || [];
+  if (allIssues.length === 0) {
+    showToast("No temporary issue records to export", "warning");
+    return;
+  }
+
+  const headers = ["Ref No", "Issue Date", "Zone", "Item Description", "Category", "Qty", "Deno", "Unit Cost", "Total Value", "Issued To", "Trade", "Purpose", "Expected Return Date", "Actual Return Date", "Status", "Remarks"];
+  const rows = allIssues.map((i) => [
+    `"${i.ref_no || ''}"`,
+    `"${i.date || ''}"`,
+    `"${i.zone_id || ''}"`,
+    `"${(i.item_name || '').replace(/"/g, '""')}"`,
+    `"${i.category || ''}"`,
+    i.qty || 1,
+    `"${i.deno || ''}"`,
+    i.unit_cost || 0,
+    i.total_value || 0,
+    `"${(i.issued_to || '').replace(/"/g, '""')}"`,
+    `"${i.trade || ''}"`,
+    `"${(i.purpose || '').replace(/"/g, '""')}"`,
+    `"${i.expected_return_date || ''}"`,
+    `"${i.actual_return_date || ''}"`,
+    `"${i.status || ''}"`,
+    `"${(i.remarks || '').replace(/"/g, '""')}"`
+  ]);
+
+  const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+  const encodedUri = encodeURI(csvContent);
+  const link = document.createElement("a");
+  link.setAttribute("href", encodedUri);
+  link.setAttribute("download", `Temporary_Issue_Book_${getLocalDateString()}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  showToast("Temporary Issue Book exported to CSV!", "success");
 }
 

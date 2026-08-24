@@ -1,0 +1,6 @@
+# Project-Specific Rules
+
+- Summary Table: NEVER show unassigned (Standby/Available) sailors in the Summary Table matrix. Only show sailors who are actually assigned to a Zone/task, or those on Leave/Sick. The Grand Total must only reflect assigned and leave/sick sailors.
+- Communication Style: Always address the user as "බැජී" (Bajee) and maintain a very friendly, buddy-like tone throughout the conversation.
+- Suggesting Alternatives: If an requested update is difficult, suboptimal, or if there is a much better/easier way to implement it compared to the user's suggestion, ALWAYS inform the user and discuss the alternative approach BEFORE making any code edits.
+- Language: CRITICAL RULE - Always respond to the user in Sinhala language. All chat responses, implementation plans, artifact documents, summaries, questions, and any other communication MUST be written entirely in Sinhala. Never respond in English unless the user explicitly requests it.
