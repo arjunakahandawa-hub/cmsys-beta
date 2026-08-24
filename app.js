@@ -1515,6 +1515,21 @@ function findSailorById(sailorId) {
 // VIEW MANAGEMENT
 // =============================================
 function switchView(view, preventPushState = false) {
+  if (view === "tempissues") {
+    switchView("inventory", preventPushState);
+    if (typeof switchInventorySubTab === "function") {
+      switchInventorySubTab("tempissues");
+    }
+    const tabTemp = document.getElementById("tab-tempissues");
+    if (tabTemp) tabTemp.classList.add("tab-active");
+    const mobileTabTemp = document.getElementById("mobile-tab-tempissues");
+    if (mobileTabTemp) {
+      mobileTabTemp.classList.remove("text-slate-400");
+      mobileTabTemp.classList.add("text-teal-400");
+    }
+    return;
+  }
+
   store.currentView = view;
   if (!preventPushState) {
     window.history.pushState({ view: view }, "", `#${view}`);
@@ -1525,7 +1540,12 @@ function switchView(view, preventPushState = false) {
   document
     .querySelectorAll(".view-content")
     .forEach((v) => v.classList.add("hidden"));
-  document.getElementById(`view-${view}`).classList.remove("hidden");
+
+  const targetView = document.getElementById(`view-${view}`);
+  if (targetView) {
+    targetView.classList.remove("hidden");
+  }
+
   document.querySelectorAll('[id^="tab-"]').forEach((t) => {
     t.classList.remove("tab-active");
   });
@@ -1540,13 +1560,13 @@ function switchView(view, preventPushState = false) {
     activeMobileTab.classList.remove("text-slate-400");
     activeMobileTab.classList.add("text-teal-400");
   }
-    switch (view) {
-      case "nastatus":
-        if (typeof renderNastatusView === "function") renderNastatusView();
-        break;
-      case "dashboard":
-        renderDashboard();
-        break;
+  switch (view) {
+    case "nastatus":
+      if (typeof renderNastatusView === "function") renderNastatusView();
+      break;
+    case "dashboard":
+      renderDashboard();
+      break;
     case "projects":
       renderProjectsList();
       break;
@@ -1555,6 +1575,9 @@ function switchView(view, preventPushState = false) {
       break;
     case "inventory":
       renderInventory();
+      if (typeof switchInventorySubTab === "function") {
+        switchInventorySubTab(store.inventorySubTab || "stock");
+      }
       break;
     case "estimates":
       renderEstimates();
@@ -1583,9 +1606,13 @@ function switchView(view, preventPushState = false) {
     case "documents":
       renderDocumentsView();
       break;
-    case "tempissues":
-      renderTempIssuesView();
-      break;
+  }
+}
+
+function renderTempIssuesView() {
+  switchView("inventory");
+  if (typeof switchInventorySubTab === "function") {
+    switchInventorySubTab("tempissues");
   }
 }
 function changeZone() {
@@ -24925,6 +24952,20 @@ function renderTempIssuesTable() {
 function filterTempIssues() {
   renderTempIssuesDashboard();
   renderTempIssuesTable();
+}
+
+function getAllAvailableZonesAndWorkshops() {
+  if (store.zones && store.zones.length > 0) {
+    return store.zones.map((z) => ({ id: z.id, name: z.name || z.id }));
+  }
+  return [
+    { id: "A-Zone", name: "A Zone" },
+    { id: "B-Zone", name: "B Zone" },
+    { id: "C-Zone", name: "C Zone" },
+    { id: "D-Zone", name: "D Zone" },
+    { id: "E-Zone", name: "E Zone" },
+    { id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" }
+  ];
 }
 
 // ── Open Add / Edit Temporary Issue Modal ──
