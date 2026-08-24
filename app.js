@@ -10403,20 +10403,20 @@ function deleteEstimate() {
   }
 } // ---- Compact printable layout (req 7) ----
 // Status intentionally omitted from the printout (req 7)
-function buildEstimatePrintHTML(est) {
+function buildEstimatePrintHTML(est, isBulk = false) {
   var _store$zones$find2;
   const zoneObj = store.zones
     ? store.zones.find((z) => z.id === (est.zone_id || store.currentZone))
     : null;
   const zoneName =
-    zoneObj && zoneObj.name ? zoneObj.name : "CE Management System";
+    zoneObj && zoneObj.name ? zoneObj.name : (store.currentZone || "Civil Engineering Department");
 
   const sigBlock = (label, p) => `
         <div style="text-align:center;width:30%;">
-            <div style="height:18px;border-bottom:1px solid #000;margin-bottom:2px;"></div>
-            <div style="font-size:8px;font-weight:bold;">${label}</div>
-            <div style="font-size:7.5px;">${p && p.name ? p.name : "&nbsp;"}</div>
-            <div style="font-size:7px;color:#444;">${p && p.rank ? p.rank : ""}${p && p.serviceNo ? " • " + p.serviceNo : ""}</div>
+            <div style="height:34px;border-bottom:1.5px solid #0f172a;margin-bottom:4px;"></div>
+            <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#0f172a;">${label}</div>
+            <div style="font-size:11px;font-weight:700;color:#1e293b;margin-top:1px;">${p && p.name ? p.name : "&nbsp;"}</div>
+            <div style="font-size:10px;color:#475569;font-weight:600;">${p && p.rank ? p.rank : ""}${p && p.serviceNo ? " • " + p.serviceNo : ""}</div>
         </div>`;
 
   let sectionsHtml = "";
@@ -10426,12 +10426,12 @@ function buildEstimatePrintHTML(est) {
         .map(
           (m, i) => `
             <tr>
-                <td style="text-align:center;width:6%;">${i + 1}</td>
-                <td style="font-weight:600;">${m.description}</td>
-                <td style="text-align:center;width:10%;">${m.qty}</td>
-                <td style="text-align:center;width:10%;">${m.unit}</td>
-                <td style="text-align:right;width:16%;">${formatCurrency(m.cost)}</td>
-                <td style="text-align:right;width:18%;font-weight:bold;">${formatCurrency(m.qty * m.cost)}</td>
+                <td style="text-align:center;width:5%;font-weight:600;">${i + 1}</td>
+                <td style="font-weight:600;color:#0f172a;">${m.description}</td>
+                <td style="text-align:center;width:10%;font-weight:700;">${m.qty}</td>
+                <td style="text-align:center;width:10%;">${m.unit || 'Nos'}</td>
+                <td style="text-align:right;width:17%;font-family:monospace;font-weight:600;">${formatCurrency(m.cost)}</td>
+                <td style="text-align:right;width:19%;font-family:monospace;font-weight:800;color:#0f172a;">${formatCurrency(m.qty * m.cost)}</td>
             </tr>`,
         )
         .join("");
@@ -10440,10 +10440,10 @@ function buildEstimatePrintHTML(est) {
         .map(
           (l) => `
             <tr>
-                <td style="font-weight:600;">${l.trade}</td>
-                <td style="text-align:center;width:14%;">${l.workers}</td>
-                <td style="text-align:center;width:14%;font-weight:bold;">${l.manDays}</td>
-                <td>${l.taskDescription || "—"}</td>
+                <td style="font-weight:700;color:#0f172a;">${l.trade}</td>
+                <td style="text-align:center;width:14%;font-weight:700;">${l.workers}</td>
+                <td style="text-align:center;width:14%;font-weight:800;color:#2563eb;">${l.manDays}</td>
+                <td style="color:#334155;">${l.taskDescription || "—"}</td>
             </tr>`,
         )
         .join("");
@@ -10454,18 +10454,18 @@ function buildEstimatePrintHTML(est) {
       );
 
       sectionsHtml += `
-        <div style="margin-top: 3px; border: 1px solid #cbd5e1; border-radius: 3px; padding: 3px 5px; background-color: #fafbfc; page-break-inside: avoid;">
-            <div style="font-size: 8.5px; font-weight: bold; border-bottom: 1px solid #94a3b8; padding-bottom: 2px; margin-bottom: 2px; text-transform: uppercase; color: #0f172a; display: flex; justify-content: space-between;">
-                <span>Section ${sIdx + 1}: ${s.description}</span>
-                <span style="color:#059669;">Cost: ${formatCurrency(sectionTotalCost)}</span>
+        <div style="margin-top: 8px; border: 1.2px solid #cbd5e1; border-radius: 6px; padding: 8px 10px; background-color: #fafbfc; page-break-inside: avoid;">
+            <div style="font-size: 11.5px; font-weight: 800; border-bottom: 1px solid #94a3b8; padding-bottom: 4px; margin-bottom: 6px; text-transform: uppercase; color: #0f172a; display: flex; justify-content: space-between; align-items: center;">
+                <span>📌 Section ${sIdx + 1}: ${s.description}</span>
+                <span style="color:#059669;font-family:monospace;font-size:12px;">Cost: ${formatCurrency(sectionTotalCost)}</span>
             </div>
             
             ${
               matRows
                 ? `
-            <table class="est-table" style="margin-bottom: 2px;">
+            <table class="est-table" style="margin-bottom: 6px;">
                 <thead>
-                    <tr><th style="width:6%;text-align:center;">#</th><th>Material</th><th style="width:10%;text-align:center;">Qty</th><th style="width:10%;text-align:center;">Unit</th><th style="width:16%;text-align:right;">Unit Cost</th><th style="width:18%;text-align:right;">Total</th></tr>
+                    <tr><th style="width:5%;text-align:center;">#</th><th>Material Description</th><th style="width:10%;text-align:center;">Qty</th><th style="width:10%;text-align:center;">Unit</th><th style="width:17%;text-align:right;">Unit Cost</th><th style="width:19%;text-align:right;">Total (LKR)</th></tr>
                 </thead>
                 <tbody>${matRows}</tbody>
             </table>
@@ -10477,7 +10477,7 @@ function buildEstimatePrintHTML(est) {
               labRows
                 ? `
             <table class="est-table">
-                <thead><tr><th>Trade / Role</th><th style="width:14%;text-align:center;">Workers</th><th style="width:14%;text-align:center;">Man-Days</th><th>Task Description</th></tr></thead>
+                <thead><tr><th>Trade / Skill Required</th><th style="width:14%;text-align:center;">Workers</th><th style="width:14%;text-align:center;">Man-Days</th><th>Task Description</th></tr></thead>
                 <tbody>${labRows}</tbody>
             </table>
             `
@@ -10493,49 +10493,49 @@ function buildEstimatePrintHTML(est) {
         .map(
           (m, i) => `
             <tr>
-                <td style="text-align:center;width:6%;">${i + 1}</td>
-                <td>${m.description}</td>
-                <td style="text-align:center;width:10%;">${m.qty}</td>
-                <td style="text-align:center;width:10%;">${m.unit}</td>
-                <td style="text-align:right;width:16%;">${formatCurrency(m.cost)}</td>
-                <td style="text-align:right;width:18%;font-weight:bold;">${formatCurrency(m.qty * m.cost)}</td>
+                <td style="text-align:center;width:5%;font-weight:600;">${i + 1}</td>
+                <td style="font-weight:600;color:#0f172a;">${m.description}</td>
+                <td style="text-align:center;width:10%;font-weight:700;">${m.qty}</td>
+                <td style="text-align:center;width:10%;">${m.unit || 'Nos'}</td>
+                <td style="text-align:right;width:17%;font-family:monospace;font-weight:600;">${formatCurrency(m.cost)}</td>
+                <td style="text-align:right;width:19%;font-family:monospace;font-weight:800;color:#0f172a;">${formatCurrency(m.qty * m.cost)}</td>
             </tr>`,
         )
         .join("") ||
-      '<tr><td colspan="6" style="text-align:center;font-style:italic;">No materials</td></tr>';
+      '<tr><td colspan="6" style="text-align:center;font-style:italic;padding:8px;">No materials specified</td></tr>';
 
     const labRows =
       (est.labor || [])
         .map(
           (l) => `
             <tr>
-                <td>${l.trade}</td>
-                <td style="text-align:center;width:15%;">${l.workers}</td>
-                <td style="text-align:center;width:15%;font-weight:bold;">${l.manDays}</td>
-                <td>${l.taskDescription || "—"}</td>
+                <td style="font-weight:700;color:#0f172a;">${l.trade}</td>
+                <td style="text-align:center;width:15%;font-weight:700;">${l.workers}</td>
+                <td style="text-align:center;width:15%;font-weight:800;color:#2563eb;">${l.manDays}</td>
+                <td style="color:#334155;">${l.taskDescription || "—"}</td>
             </tr>`,
         )
         .join("") ||
-      '<tr><td colspan="4" style="text-align:center;font-style:italic;">No labor</td></tr>';
+      '<tr><td colspan="4" style="text-align:center;font-style:italic;padding:8px;">No labor specified</td></tr>';
 
     sectionsHtml = `
-      <table class="est-table" style="margin-top:2px;">
+      <table class="est-table" style="margin-top:6px;">
           <thead>
               <tr>
-                  <th style="width:6%;text-align:center;">#</th>
-                  <th>Material</th>
+                  <th style="width:5%;text-align:center;">#</th>
+                  <th>Material Description</th>
                   <th style="width:10%;text-align:center;">Qty</th>
                   <th style="width:10%;text-align:center;">Unit</th>
-                  <th style="width:16%;text-align:right;">Unit Cost</th>
-                  <th style="width:18%;text-align:right;">Total</th>
+                  <th style="width:17%;text-align:right;">Unit Cost</th>
+                  <th style="width:19%;text-align:right;">Total (LKR)</th>
               </tr>
           </thead>
           <tbody>${matRows}</tbody>
       </table>
 
-      <table class="est-table" style="margin-top:2px;">
+      <table class="est-table" style="margin-top:6px;">
           <thead><tr>
-              <th>Trade / Role</th>
+              <th>Trade / Skill Required</th>
               <th style="width:15%;text-align:center;">Workers</th>
               <th style="width:15%;text-align:center;">Man-Days</th>
               <th>Task Description</th>
@@ -10548,7 +10548,7 @@ function buildEstimatePrintHTML(est) {
   const hasSignatures = est.createdBy || est.checkedBy || est.approvedBy;
   const sigSection = hasSignatures
     ? `
-        <div style="display:flex;justify-content:space-between;margin-top:4px;page-break-inside:avoid;">
+        <div style="display:flex;justify-content:space-between;margin-top:16px;padding-top:8px;page-break-inside:avoid;">
             ${sigBlock("Created By", est.createdBy)}
             ${sigBlock("Checked By", est.checkedBy)}
             ${sigBlock("Approved By", est.approvedBy)}
@@ -10564,51 +10564,51 @@ function buildEstimatePrintHTML(est) {
 
   return `
     <div class="est-sheet">
-        <!-- Compact Header with Crest and ONLY Captain Civil Engineering Department (E) -->
-        <div style="width:100%;border-bottom:1.5px solid #000;padding-bottom:3px;margin-bottom:3px;">
+        <!-- Official Header with Crest and Captain Civil Engineering Department (E) -->
+        <div style="width:100%;border-bottom:2px solid #0f172a;padding-bottom:8px;margin-bottom:8px;">
             <table style="width:100%;border:none;border-collapse:collapse;">
                 <tr>
-                    <td style="border:none;padding:0;width:38px;vertical-align:middle;">
-                        <img src="${window.location.href.split("?")[0].split("#")[0].replace("index.html", "")}images/navy_crest_cropped.png" style="height:32px;width:auto;display:block;" alt="SLN Crest">
+                    <td style="border:none;padding:0;width:50px;vertical-align:middle;">
+                        <img src="${window.location.href.split("?")[0].split("#")[0].replace("index.html", "")}images/navy_crest_cropped.png" style="height:44px;width:auto;display:block;" alt="SLN Crest">
                     </td>
-                    <td style="border:none;padding:0 0 0 8px;vertical-align:middle;">
-                        <div style="font-size:12px;font-weight:900;letter-spacing:0.4px;color:#0f172a;line-height:1.15;">CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
-                        <div style="font-size:8.5px;font-weight:bold;color:#475569;margin-top:1px;">${zoneName} — Cost Estimate</div>
+                    <td style="border:none;padding:0 0 0 12px;vertical-align:middle;">
+                        <div style="font-size:15px;font-weight:900;letter-spacing:0.5px;color:#0f172a;line-height:1.2;">CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
+                        <div style="font-size:11.5px;font-weight:700;color:#334155;margin-top:2px;">${zoneName} — Cost Estimate & Bill of Quantities</div>
                     </td>
                     <td style="border:none;padding:0;text-align:right;vertical-align:middle;">
-                        <div style="font-size:11px;font-weight:900;color:#b91c1c;font-family:monospace;">${est.estimate_number}</div>
-                        ${createdDate ? `<div style="font-size:8px;color:#64748b;font-family:monospace;">${createdDate}</div>` : ""}
+                        <div style="font-size:13.5px;font-weight:900;color:#b91c1c;font-family:monospace;letter-spacing:0.5px;">${est.estimate_number}</div>
+                        ${createdDate ? `<div style="font-size:11px;color:#475569;font-weight:600;font-family:monospace;margin-top:2px;">Date: ${createdDate}</div>` : ""}
                     </td>
                 </tr>
             </table>
         </div>
 
-        <!-- Compact Info Table -->
-        <table style="width:100%;font-size:8.5px;line-height:1.25;margin-bottom:2px;border:none;border-collapse:collapse;">
+        <!-- Info Grid Table -->
+        <table style="width:100%;font-size:11.5px;line-height:1.55;margin-bottom:6px;border:none;border-collapse:collapse;">
             <tr>
-                <td style="border:none;padding:1px 0;width:35%;"><b>Ref Type:</b> ${est.ref_type || est.reference_type || "Minute"}</td>
-                <td style="border:none;padding:1px 0;width:35%;"><b>Ref No:</b> ${est.reference_doc || est.reference_no || "—"}</td>
-                <td style="border:none;padding:1px 0;width:30%;text-align:right;"><b>Type:</b> ${est.project_type || est.type || "Project"}</td>
+                <td style="border:none;padding:2.5px 0;width:34%;color:#1e293b;"><b>Ref Type:</b> ${est.ref_type || est.reference_type || "Minute Sheet"}</td>
+                <td style="border:none;padding:2.5px 0;width:38%;color:#1e293b;"><b>Ref No:</b> ${est.reference_doc || est.reference_no || "—"}</td>
+                <td style="border:none;padding:2.5px 0;width:28%;text-align:right;color:#1e293b;"><b>Job/Project Type:</b> ${est.project_type || est.type || "Project"}</td>
             </tr>
             <tr>
-                <td style="border:none;padding:1px 0;"><b>Location:</b> ${est.location || "—"}</td>
-                <td style="border:none;padding:1px 0;"><b>Location 2:</b> ${est.location2 || est.sub_location || "—"}</td>
-                <td style="border:none;padding:1px 0;text-align:right;"><b>End User:</b> ${est.endUser || "—"}</td>
+                <td style="border:none;padding:2.5px 0;color:#1e293b;"><b>Location:</b> ${est.location || "—"}</td>
+                <td style="border:none;padding:2.5px 0;color:#1e293b;"><b>Specific Site / Location 2:</b> ${est.location2 || est.sub_location || "—"}</td>
+                <td style="border:none;padding:2.5px 0;text-align:right;color:#1e293b;"><b>End User:</b> ${est.endUser || "—"}</td>
             </tr>
             <tr>
-                <td colspan="3" style="border:none;padding:1px 0;"><b>Description:</b> ${est.description}${est.approvedAuthority ? ` | <b>Appr:</b> ${est.approvedAuthority}` : ""}</td>
+                <td colspan="3" style="border:none;padding:3.5px 0;color:#0f172a;font-size:12px;border-top:1px dashed #cbd5e1;margin-top:2px;"><b>Description:</b> ${est.description}${est.approvedAuthority ? ` &nbsp;|&nbsp; <b>Approval Authority:</b> ${est.approvedAuthority}` : ""}</td>
             </tr>
         </table>
-        ${est.workScope && !est.workScopes ? `<p style="font-size:8.5px;margin:2px 0;"><b>Work Scope:</b> ${est.workScope}</p>` : ""}
+        ${est.workScope && !est.workScopes ? `<p style="font-size:11.5px;margin:4px 0;color:#334155;"><b>Scope of Work:</b> ${est.workScope}</p>` : ""}
 
         <!-- Work Scopes / Sections -->
         ${sectionsHtml}
         
-        <!-- Compact Grand Summary Bar -->
-        <div style="margin-top: 3px; border: 1.2px solid #000; border-radius: 3px; padding: 3px 6px; background-color: #f1f5f9; display: flex; justify-content: space-between; align-items: center; page-break-inside: avoid; font-size: 8.5px;">
-            <span>Materials: <strong style="color: #059669; font-size: 9px;">${formatCurrency(est.total_cost)}</strong></span>
-            <span>Labor: <strong style="color: #2563eb; font-size: 9px;">${est.totalManDays || 0} Man-Days</strong></span>
-            <span>Grand Total: <strong style="color: #b45309; font-size: 10px; font-weight: 900;">${formatCurrency(est.total_cost)}</strong></span>
+        <!-- Grand Summary Bar -->
+        <div style="margin-top: 10px; border: 1.5px solid #0f172a; border-radius: 6px; padding: 8px 12px; background-color: #f8fafc; display: flex; justify-content: space-between; align-items: center; page-break-inside: avoid; font-size: 12px;">
+            <span>Total Materials: <strong style="color: #059669; font-size: 13px; font-family: monospace;">${formatCurrency(est.total_cost)}</strong></span>
+            <span>Total Labor: <strong style="color: #2563eb; font-size: 13px;">${est.totalManDays || 0} Man-Days</strong></span>
+            <span>Grand Total Estimated Cost: <strong style="color: #b45309; font-size: 14px; font-weight: 900; font-family: monospace;">${formatCurrency(est.total_cost)}</strong></span>
         </div>
 
         ${sigSection}
@@ -10627,15 +10627,16 @@ function printEstimatesByIds(ids, settings = null) {
   }
   let sheetsHtml = "";
   let customCSS = "";
+  
   if (settings && settings.isTiled) {
-    // Tiled mode
+    // Tiled mode (multiple on one page)
     customCSS = `
             @page { size: A4 portrait; margin: 6mm 8mm; }
             body { margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .est-sheet { 
                 width: 100%; 
                 margin: 0 0 4mm 0; 
-                padding: 6px 8px; 
+                padding: 8px 10px; 
                 border: 1.2px solid #000; 
                 border-radius: 4px; 
                 background: #fff; 
@@ -10643,24 +10644,24 @@ function printEstimatesByIds(ids, settings = null) {
                 page-break-inside: avoid !important; 
                 break-inside: avoid !important; 
             }
-            .est-table { width: 100%; border-collapse: collapse; font-size: 8px; }
-            .est-table th { border: 1px solid #64748b; padding: 2px 3px; background: #e2e8f0; text-align: left; font-size: 8px; font-weight: bold; }
-            .est-table td { border: 1px solid #64748b; padding: 1.5px 3px; font-size: 8px; }
-            .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 8px; }
+            .est-table { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+            .est-table th { border: 1px solid #64748b; padding: 3px 4px; background: #e2e8f0; text-align: left; font-size: 9.5px; font-weight: bold; }
+            .est-table td { border: 1px solid #64748b; padding: 2.5px 4px; font-size: 9.5px; }
+            .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 9.5px; }
             .html-page-break { page-break-after: always; }
         `;
     sheetsHtml = ests
       .map((e, i) => {
-        let html = buildEstimatePrintHTML(e);
-        if ((i + 1) % 3 === 0 && i !== ests.length - 1) {
+        let html = buildEstimatePrintHTML(e, true);
+        if ((i + 1) % 2 === 0 && i !== ests.length - 1) {
           html += '<div class="html-page-break"></div>';
         }
         return html;
       })
       .join("");
   } else {
-    // Continuous / Flow mode (fits up to 3 estimates per A4, avoids breaking inside cards)
-    sheetsHtml = ests.map((e) => buildEstimatePrintHTML(e)).join("");
+    // Standard High-Quality Printable Document Mode
+    sheetsHtml = ests.map((e) => buildEstimatePrintHTML(e, false)).join("");
     let pSize = "A4";
     let pOri = "portrait";
     if (settings) {
@@ -10668,47 +10669,59 @@ function printEstimatesByIds(ids, settings = null) {
       pOri = settings.orientation;
     }
     customCSS = `
-            @page { size: ${pSize} ${pOri}; margin: 6mm 8mm; }
+            @page { size: ${pSize} ${pOri}; margin: 8mm 10mm; }
             body { margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .est-sheet { 
                 width: 100%; 
-                margin: 0 0 4mm 0; 
-                padding: 6px 8px; 
-                border: 1.2px solid #000; 
-                border-radius: 4px; 
+                margin: 0 auto 8mm auto; 
+                padding: 12px 14px; 
+                border: 1.5px solid #0f172a; 
+                border-radius: 6px; 
                 background: #fff; 
                 box-sizing: border-box; 
                 page-break-inside: avoid !important; 
                 break-inside: avoid !important; 
             }
-            .est-table { width: 100%; border-collapse: collapse; font-size: 8px; }
-            .est-table th { border: 1px solid #64748b; padding: 2px 3px; background: #e2e8f0; text-align: left; font-size: 8px; font-weight: bold; }
-            .est-table td { border: 1px solid #64748b; padding: 1.5px 3px; font-size: 8px; }
-            .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 8px; }
+            .est-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+            .est-table th { border: 1px solid #94a3b8; padding: 5px 8px; background: #f1f5f9; text-align: left; font-size: 10.5px; font-weight: bold; color: #0f172a; }
+            .est-table td { border: 1px solid #cbd5e1; padding: 5px 8px; font-size: 11px; color: #1e293b; }
+            .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 11px; border: 1px solid #94a3b8; }
             .html-page-break { page-break-after: always; }
         `;
   }
+
   const win = window.open("", "_blank");
   win.document.write(`<!DOCTYPE html>
-<html><head><title>NCW Estimate Print</title>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NCW Estimate Print</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Noto+Sans+Sinhala:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, Helvetica, sans-serif; color: #000; background: #fff; }
+  body { 
+      font-family: 'Inter', 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; 
+      color: #0f172a; 
+      background: #fff; 
+      line-height: 1.35;
+  }
   .est-sheet { 
       width: 100%; 
-      margin: 0 0 4mm 0; 
-      padding: 6px 8px; 
-      border: 1.2px solid #000; 
-      border-radius: 4px; 
+      margin: 0 auto 8mm auto; 
+      padding: 12px 14px; 
+      border: 1.5px solid #0f172a; 
+      border-radius: 6px; 
       background: #fff; 
       box-sizing: border-box; 
       page-break-inside: avoid !important; 
       break-inside: avoid !important; 
   }
-  .est-table { width: 100%; border-collapse: collapse; font-size: 8px; }
-  .est-table th { border: 1px solid #64748b; padding: 2px 3px; background: #e2e8f0; text-align: left; font-size: 8px; font-weight: bold; }
-  .est-table td { border: 1px solid #64748b; padding: 1.5px 3px; font-size: 8px; }
-  .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 8px; }
+  .est-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
+  .est-table th { border: 1px solid #94a3b8; padding: 5px 8px; background: #f1f5f9; text-align: left; font-size: 10.5px; font-weight: bold; color: #0f172a; }
+  .est-table td { border: 1px solid #cbd5e1; padding: 5px 8px; font-size: 11px; color: #1e293b; }
+  .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 11px; border: 1px solid #94a3b8; }
   @media print {
       ${customCSS}
   }
@@ -10744,28 +10757,28 @@ function exportEstimatesToPDFByIds(ids) {
   tempDiv.style.left = "0";
   tempDiv.style.zIndex = "99999";
   tempDiv.style.width = "794px";
-  tempDiv.style.fontFamily = "Arial, Helvetica, sans-serif";
-  tempDiv.style.color = "#000";
+  tempDiv.style.fontFamily = "'Inter', 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif";
+  tempDiv.style.color = "#0f172a";
   tempDiv.style.backgroundColor = "#fff";
   tempDiv.style.minHeight = "100vh";
-  tempDiv.innerHTML = ests.map((e) => buildEstimatePrintHTML(e)).join("");
+  tempDiv.innerHTML = ests.map((e) => buildEstimatePrintHTML(e, false)).join("");
   const style = document.createElement("style");
   style.innerHTML = `
         .est-sheet { 
             width: 100%; 
-            margin: 0 0 5mm 0; 
-            padding: 6px 8px; 
-            border: 1.2px solid #000; 
-            border-radius: 4px; 
+            margin: 0 0 8mm 0; 
+            padding: 12px 14px; 
+            border: 1.5px solid #0f172a; 
+            border-radius: 6px; 
             background: #fff; 
             box-sizing: border-box; 
             page-break-inside: avoid !important; 
             break-inside: avoid !important; 
         }
-        .est-table { width: 100%; border-collapse: collapse; font-size: 8px; table-layout: auto; }
-        .est-table th { border: 1px solid #64748b; padding: 2px 3px; background: #e2e8f0; text-align: left; font-size: 8px; font-weight: bold; }
-        .est-table td { border: 1px solid #64748b; padding: 1.5px 3px; word-wrap: break-word; font-size: 8px; }
-        .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 8px; }
+        .est-table { width: 100%; border-collapse: collapse; font-size: 11px; table-layout: auto; margin-top: 4px; }
+        .est-table th { border: 1px solid #94a3b8; padding: 5px 8px; background: #f1f5f9; text-align: left; font-size: 10.5px; font-weight: bold; color: #0f172a; }
+        .est-table td { border: 1px solid #cbd5e1; padding: 5px 8px; word-wrap: break-word; font-size: 11px; color: #1e293b; }
+        .est-table tfoot td { background: #f8fafc; font-weight: bold; font-size: 11px; border: 1px solid #94a3b8; }
     `;
   tempDiv.appendChild(style);
   document.body.appendChild(tempDiv);
@@ -10775,7 +10788,7 @@ function exportEstimatesToPDFByIds(ids) {
       ? `Estimate_${ests[0].estimate_number.replace(/[^a-zA-Z0-9]/g, "_")}.pdf`
       : `Estimates_Bulk_Export.pdf`;
   const opt = {
-    margin: [6, 8, 6, 8],
+    margin: [8, 10, 8, 10],
     filename: filename,
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: {
