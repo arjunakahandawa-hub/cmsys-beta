@@ -864,16 +864,31 @@ function initOpsListeners() {
         deno = "Nos";
       }
 
-      let bookNo = item.book_no || "";
-      let loc = item.location || "";
+      let bookNo = (item.book_no || item.bookNo || item.book || item.book_number || item.ledger_no || item.stock_book || item.folio || item.page_no || "").trim();
+      let loc = (item.location || "").trim();
 
-      // If book_no was erroneously set to a zone name (e.g. "E Zone", "D Zone")
-      if (bookNo && (bookNo.includes("Zone") || (item.zone_id && bookNo.trim().toLowerCase() === item.zone_id.trim().toLowerCase()))) {
+      // Only wipe book_no if it is exactly the zone ID / Zone Name without any book numbers
+      const isPureZoneName = (val) => {
+        if (!val) return false;
+        const v = val.toLowerCase().trim();
+        return (item.zone_id && v === item.zone_id.toLowerCase().trim()) || /^[a-z]\s*zone$/i.test(v) || v === "zone";
+      };
+
+      if (bookNo && isPureZoneName(bookNo)) {
         bookNo = "";
       }
 
-      // If location is empty or is just the zone name, set standard store name
-      if (!loc || (item.zone_id && loc.trim().toLowerCase() === item.zone_id.trim().toLowerCase()) || loc.includes("Zone")) {
+      // If book_no is empty, check if location was storing the Book No (e.g. "01", "02", "BK-1", "Book 1", "Folio 5")
+      const standardStoreNames = ["zone store", "ready use store", "balance store", "workshop", "main store", "transit store", "central store"];
+      const isLocAStoreName = standardStoreNames.includes(loc.toLowerCase()) || isPureZoneName(loc);
+
+      if (!bookNo && loc && !isLocAStoreName) {
+        bookNo = loc;
+        loc = "Zone Store";
+      }
+
+      // If location is empty or is pure zone name, set standard store name
+      if (!loc || isPureZoneName(loc)) {
         loc = "Zone Store";
       }
 
@@ -1582,6 +1597,15 @@ function switchView(view, preventPushState = false) {
   if (activeMobileTab) {
     activeMobileTab.classList.remove("text-slate-400");
     activeMobileTab.classList.add("text-teal-400");
+  } else {
+    const moreViews = ["dailydetails", "summary", "estimates", "documents", "maintenance", "reports", "projects", "nastatus", "settings"];
+    if (moreViews.includes(view)) {
+      const moreBtn = document.getElementById("mobile-tab-more");
+      if (moreBtn) {
+        moreBtn.classList.remove("text-slate-400");
+        moreBtn.classList.add("text-teal-400");
+      }
+    }
   }
   switch (view) {
     case "nastatus":
@@ -1629,6 +1653,16 @@ function switchView(view, preventPushState = false) {
     case "documents":
       renderDocumentsView();
       break;
+  }
+}
+
+function toggleMobileMoreMenuSheet(show) {
+  const sheet = document.getElementById("mobileMoreMenuSheet");
+  if (!sheet) return;
+  if (typeof show === "boolean") {
+    sheet.classList.toggle("hidden", !show);
+  } else {
+    sheet.classList.toggle("hidden");
   }
 }
 
@@ -2103,6 +2137,54 @@ function getSailorCurrentAssignment(sailorId) {
   return getSailorAssignmentOnDate(sailorId, today);
 }
 
+// Helper to get a Sailor's Last Assigned Task/Job for display on card
+function getSailorLastAssignedTask(sailor) {
+  if (!sailor) return null;
+  const sId = String(sailor.id || sailor._fbKey || "");
+  const sFb = String(sailor._fbKey || sailor.id || "");
+  const sOff = String(sailor.official_number || "");
+
+  // 1. Check yesterdayJob first
+  if (sailor.yesterdayJob) {
+    const text = getSailorYesterdayJobText(sailor);
+    if (text && text !== "-") return { title: text, type: "Yesterday" };
+  }
+
+  // 2. Check dailyAllocations sorted by date descending (excluding today if checking previous)
+  if (store.dailyAllocations && store.dailyAllocations.length > 0) {
+    const today = getLocalDateString();
+    const pastAllocs = store.dailyAllocations
+      .filter(a => (String(a.sailor_id) === sId || String(a.sailor_id) === sFb || String(a.official_number) === sOff) && a.status !== "Cancelled" && a.date !== today)
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+    if (pastAllocs.length > 0) {
+      const alloc = pastAllocs[0];
+      let taskName = alloc.work_order_title || alloc.title || alloc.location || alloc.work_order_no || "";
+      if (!taskName && alloc.work_order_id) {
+        const wo = (store.workOrders || []).find(w => String(w.id || w._fbKey) === String(alloc.work_order_id));
+        if (wo) taskName = wo.description || wo.title || wo.work_order_no;
+      }
+      if (!taskName && alloc.work_order_id) {
+        const jc = (store.jobCards || []).find(j => String(j.id || j._fbKey) === String(alloc.work_order_id));
+        if (jc) taskName = jc.description || jc.title || jc.job_card_no;
+      }
+      if (taskName) {
+        return { title: taskName, date: alloc.date, zone: alloc.zone || "" };
+      }
+    }
+  }
+
+  // 3. Check completed or active workOrders
+  if (store.workOrders) {
+    const wo = store.workOrders.find(w => w.assigned && (w.assigned.includes(sId) || w.assigned.includes(sFb) || w.assigned.includes(sOff)));
+    if (wo) {
+      return { title: wo.description || wo.title || wo.work_order_no || "Civil Work", zone: wo.zone || "" };
+    }
+  }
+
+  return null;
+}
+
 function renderAvailableSailors() {
   const container = document.getElementById("availableSailors");
   if (!container) return;
@@ -2136,15 +2218,18 @@ function renderAvailableSailors() {
       assignedIds.add(String(a.sailor.id || a.sailor._fbKey));
   });
 
+  // Default filter to "available" if not set
+  if (!store.currentFilter) store.currentFilter = "available";
+
   // Support search query
   const searchInput = document.getElementById("sailorSearch");
-  const query = searchInput ? searchInput.value.toLowerCase().trim() : ""; // Reset pagination limit when search query changes
+  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
   const lastQuery = container.getAttribute("data-last-query") || "";
   if (query !== lastQuery) {
     store.availableSailorsLimit = 40;
     container.setAttribute("data-last-query", query);
-  } // When searching, show ALL sailors (651) regardless of attendance/zone/team filters
-  // When NOT searching, apply normal filters for a clean default view
+  }
+
   let sailors;
   if (query) {
     sailors = store.sailors.filter(
@@ -2154,7 +2239,7 @@ function renderAvailableSailors() {
         (s.official_number || "").toLowerCase().includes(query) ||
         (s.rank || "").toLowerCase().includes(query) ||
         (s.trade || "").toLowerCase().includes(query),
-    ); // Still apply trade filter if set
+    );
     if (store.currentTrade !== "ALL") {
       sailors = sailors.filter((s) => s.trade === store.currentTrade);
     }
@@ -2162,17 +2247,27 @@ function renderAvailableSailors() {
     sailors = store.sailors.filter(
       (s) => (s.attendance || "Present") === "Present",
     );
-    if (store.currentFilter === "zone-team") {
+
+    // Available Only mode: Hide already assigned sailors so only remaining unassigned persons show
+    if (store.currentFilter === "available") {
+      sailors = sailors.filter(
+        (s) => !assignedIds.has(String(s.id)) && !assignedIds.has(String(s._fbKey))
+      );
+    } else if (store.currentFilter === "zone-team") {
       sailors = sailors.filter(
         (s) => s.isZoneTeam && s.zone_assigned === store.currentZone,
       );
     } else if (store.currentFilter === "continuation") {
       sailors = sailors.filter((s) => s.yesterdayJob !== null);
     }
+    // If store.currentFilter === "all", keep all present sailors
+
     if (store.currentTrade !== "ALL") {
       sailors = sailors.filter((s) => s.trade === store.currentTrade);
     }
-  } // Sort unassigned first, then by score
+  }
+
+  // Sort unassigned first, then by score
   sailors.sort((a, b) => {
     const aAssigned =
       assignedIds.has(String(a.id)) || assignedIds.has(String(a._fbKey));
@@ -2182,7 +2277,8 @@ function renderAvailableSailors() {
       return aAssigned ? 1 : -1;
     }
     return b.avgScore - a.avgScore;
-  }); // Slice sailors to limit rendering for performance
+  });
+
   const visibleSailors = sailors.slice(0, store.availableSailorsLimit);
   let html = visibleSailors
     .map((sailor) => {
@@ -2217,6 +2313,9 @@ function renderAvailableSailors() {
               : sailor._fbKey,
             dateVal,
           );
+
+      const lastTask = getSailorLastAssignedTask(sailor);
+
       if (assignment) {
         return `
             <div class="sailor-card rounded-xl p-3 border bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed select-none relative group"
@@ -2239,6 +2338,12 @@ function renderAvailableSailors() {
                             ` : ''}
                         </div>
                         <div class="text-[11px] text-slate-500 mt-0.5 truncate">${assignment.ref}${assignment.title ? ' · ' + assignment.title : ''}</div>
+                        ${lastTask ? `
+                        <div class="text-[10px] text-slate-500 mt-1 flex items-center gap-1 truncate bg-white/60 px-1.5 py-0.5 rounded border border-slate-200/80" title="Last Assigned Task: ${lastTask.title}">
+                            <span class="text-teal-700 font-bold flex-shrink-0">🔨 Last:</span>
+                            <span class="truncate font-medium text-slate-600">${lastTask.title}</span>
+                        </div>
+                        ` : ''}
                     </div>
                     <div class="text-right flex-shrink-0">
                         <div class="text-base font-extrabold text-slate-400">${sailor.avgScore.toFixed(1)}</div>
@@ -2272,6 +2377,12 @@ function renderAvailableSailors() {
                         <span class="text-[11px] text-slate-400">${sailor.rank}</span>
                         ${sailor.yesterdayJob ? '<span class="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-medium">↻ Cont</span>' : ""}
                     </div>
+                    ${lastTask ? `
+                    <div class="text-[10px] text-slate-600 mt-1 flex items-center gap-1 truncate bg-slate-50/90 px-1.5 py-0.5 rounded border border-slate-200" title="Last Assigned Task: ${lastTask.title}">
+                        <span class="text-teal-700 font-bold flex-shrink-0">🔨 Last:</span>
+                        <span class="truncate font-medium text-slate-700">${lastTask.title}</span>
+                    </div>
+                    ` : ''}
                 </div>
                 <div class="text-right flex-shrink-0">
                     <div class="text-base font-extrabold" style="color:${scoreColor}">${sailor.avgScore.toFixed(1)}</div>
@@ -2294,8 +2405,10 @@ function renderAvailableSailors() {
   container.innerHTML =
     html ||
     '<div class="text-center py-6"><p class="text-slate-400 text-sm">No sailors available</p></div>';
-  const freeCount = sailors.filter((s) => {
+  const freeCount = (store.sailors || []).filter((s) => {
     var _s$id2, _s$id3;
+    const isPresent = (s.attendance || "Present") === "Present";
+    if (!isPresent) return false;
     const assignment = isToday
       ? getSailorCurrentAssignment(
           (_s$id2 = s.id) !== null && _s$id2 !== void 0 ? _s$id2 : s._fbKey,
@@ -2306,7 +2419,9 @@ function renderAvailableSailors() {
         );
     return !assignment;
   }).length;
-  document.getElementById("availableBadge").textContent = freeCount;
+  
+  const badgeEl = document.getElementById("availableBadge");
+  if (badgeEl) badgeEl.textContent = freeCount;
 }
 function loadMoreAvailableSailors() {
   store.availableSailorsLimit += 40;
@@ -3487,14 +3602,27 @@ function removeSailorFromOrder(sailorId, workOrderId) {
 // FILTERS
 // =============================================
 function filterSailors(filter) {
-  store.currentFilter = filter;
+  store.currentFilter = filter || "available";
   store.availableSailorsLimit = 40;
-  document.querySelectorAll(".filter-btn").forEach((btn) => {
-    btn.classList.remove("bg-slate-700", "text-white");
-    btn.classList.add("bg-slate-200");
+
+  const btnAvail = document.getElementById("btnFilterAvailable");
+  const btnAll = document.getElementById("btnFilterAll");
+  const btnZone = document.getElementById("btnFilterZoneTeam");
+  const btnCont = document.getElementById("btnFilterContinue");
+
+  [btnAvail, btnAll, btnZone, btnCont].forEach((btn) => {
+    if (btn) {
+      btn.classList.remove("bg-[#0a1628]", "text-[#5eead4]", "bg-slate-700", "text-white", "font-bold");
+      btn.classList.add("bg-slate-200", "text-slate-600", "font-medium");
+    }
   });
-  event.target.classList.remove("bg-slate-200");
-  event.target.classList.add("bg-slate-700", "text-white");
+
+  const activeBtn = filter === "all" ? btnAll : filter === "zone-team" ? btnZone : filter === "continuation" ? btnCont : btnAvail;
+  if (activeBtn) {
+    activeBtn.classList.remove("bg-slate-200", "text-slate-600", "font-medium");
+    activeBtn.classList.add("bg-[#0a1628]", "text-[#5eead4]", "font-bold");
+  }
+
   renderAvailableSailors();
 }
 function filterTrade(trade) {
@@ -8637,18 +8765,12 @@ function renderInventoryCategories() {
     if (prevVal) catSelect.value = prevVal;
   }
 }
+
 function renderInventoryTable() {
-  var _document$getElementB5,
-    _document$getElementB6,
-    _document$getElementB7,
-    _document$getElementB8,
-    _document$getElementB9;
-  const location =
-    ((_document$getElementB5 = document.getElementById("inventoryLocation")) ===
-      null || _document$getElementB5 === void 0
-      ? void 0
-      : _document$getElementB5.value) || "";
-  let items = []; // Filter by current zone or allow cross-zone query if ALL_ZONES is selected
+  const location = document.getElementById("inventoryLocation")?.value || "";
+  let items = [];
+
+  // Filter by current zone or allow cross-zone query if ALL_ZONES is selected
   if (location === "ALL_ZONES") {
     if (store.currentUser && store.currentUser.permAllInvZones === false && Array.isArray(store.currentUser.allowedInvZones)) {
       items = store.inventory.filter((i) => store.currentUser.allowedInvZones.includes(i.zone_id));
@@ -8659,33 +8781,39 @@ function renderInventoryTable() {
     items = store.inventory.filter(
       (i) => !i.zone_id || i.zone_id === store.currentZone,
     );
-  } // Filter by category
+  }
+
+  // Filter by category
   if (store.currentInventoryCategory !== "all") {
     items = items.filter((i) => i.category === store.currentInventoryCategory);
-  } // Filter by search
-  const search =
-    ((_document$getElementB6 = document.getElementById("inventorySearch")) ===
-      null ||
-    _document$getElementB6 === void 0 ||
-    (_document$getElementB6 = _document$getElementB6.value) === null ||
-    _document$getElementB6 === void 0
-      ? void 0
-      : _document$getElementB6.toLowerCase()) || "";
+  }
+
+  // Filter by search
+  const search = (document.getElementById("inventorySearch")?.value || "").toLowerCase().trim();
   if (search) {
     items = items.filter(
       (i) =>
         (i.description || "").toLowerCase().includes(search) ||
         (i.book_no || "").toLowerCase().includes(search),
     );
-  } // Filter by location
+  }
+
+  // Filter by location
   if (location && location !== "ALL_ZONES") {
     items = items.filter((i) => i.location === location);
-  } // Sort
-  const sort =
-    ((_document$getElementB7 = document.getElementById("inventorySort")) ===
-      null || _document$getElementB7 === void 0
-      ? void 0
-      : _document$getElementB7.value) || "description";
+  }
+
+  // Filter by In Stock Only (Hide 0 / Null Items)
+  const hideNullQty = document.getElementById("inventoryHideNullQty")?.checked;
+  if (hideNullQty) {
+    items = items.filter((i) => {
+      const q = parseFloat(i.quantity);
+      return !isNaN(q) && q > 0;
+    });
+  }
+
+  // Sort
+  const sort = document.getElementById("inventorySort")?.value || "description";
   items.sort((a, b) => {
     switch (sort) {
       case "category":
@@ -8701,7 +8829,9 @@ function renderInventoryTable() {
       default:
         return (a.description || "").localeCompare(b.description || "");
     }
-  }); // Group same items (same description, deno, cost, location, book_no)
+  });
+
+  // Group same items (same description, deno, cost, location, book_no)
   const grouped = {};
   items.forEach((item) => {
     const key = `${item.description}|${item.deno}|${item.cost_per_unit}|${item.location}|${item.book_no || ""}`;
@@ -8712,7 +8842,12 @@ function renderInventoryTable() {
       grouped[key].items.push(item);
     }
   });
-  const groupedItems = Object.values(grouped);
+
+  let groupedItems = Object.values(grouped);
+  if (hideNullQty) {
+    groupedItems = groupedItems.filter((i) => i.totalQty > 0);
+  }
+
   document.getElementById("inventoryTableBody").innerHTML =
     groupedItems
       .map((item) => {
@@ -8740,7 +8875,7 @@ function renderInventoryTable() {
                 ${isLow ? '<span class="ml-1 text-[10px] text-rose-500 font-medium">⚠ Low</span>' : ""}
             </td>
             <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm">${formatCurrency(item.cost_per_unit)}</td>
-            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-center"><span class="mono text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">${item.book_no || "—"}</span></td>
+            <td onclick="quickEditBookNo('${rowId}', event)" class="px-4 py-2.5 text-center" title="Click to set/change Book No"><span class="mono text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 cursor-pointer transition-all shadow-2xs">${item.book_no ? item.book_no : '<span class="text-amber-600 font-bold underline decoration-dotted">+ Set Book</span>'}</span></td>
             <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}${item.zone_id && item.zone_id !== store.currentZone ? ` (${item.zone_id})` : ""}</span></td>
             <td class="px-4 py-2.5 text-center">
                 <div class="flex items-center justify-center gap-1.5">
@@ -9575,55 +9710,72 @@ function selectEstimate(id) {
 }
 let estWorkScopeCounter = 0;
 
-function populateEstLocationsDatalist() {
-  const datalist = document.getElementById("estLocationDatalist");
-  if (!datalist) return;
+function populateEstLocationsDatalist(selectedVal = "") {
+  const locSelect = document.getElementById("estLocation");
+  if (!locSelect) return;
   const currentZoneLocs = (store.locations || []).filter(
     (l) => !l.zone_id || l.zone_id === store.currentZone,
   );
+  const locPool = currentZoneLocs.length > 0 ? currentZoneLocs : (store.locations || []);
+
   const uniqueBuildings = [
     ...new Set(
-      currentZoneLocs
+      locPool
         .map((l) => (l.building_name || l.name || "").trim())
         .filter(Boolean),
     ),
-  ];
-  datalist.innerHTML = uniqueBuildings
-    .map((b) => `<option value="${b}">`)
-    .join("");
+  ].sort((a, b) => a.localeCompare(b));
+
+  let optionsHtml = '<option value="">-- Select Location 1 --</option>';
+  uniqueBuildings.forEach((b) => {
+    optionsHtml += `<option value="${b}">${b}</option>`;
+  });
+  locSelect.innerHTML = optionsHtml;
+  if (selectedVal) {
+    locSelect.value = selectedVal;
+    onEstLocationChange(selectedVal);
+  }
 }
 
 function onEstLocationChange(selectedLoc) {
   const loc2Datalist = document.getElementById("estLocation2Datalist");
-  if (!loc2Datalist) return;
+  const endUserEl = document.getElementById("estEndUser");
+
   const q = (selectedLoc || "").toLowerCase().trim();
+  if (!q) {
+    if (loc2Datalist) loc2Datalist.innerHTML = "";
+    return;
+  }
+
   const currentZoneLocs = (store.locations || []).filter(
     (l) => !l.zone_id || l.zone_id === store.currentZone,
   );
-  const matchingLocs = currentZoneLocs.filter(
+  const locPool = currentZoneLocs.length > 0 ? currentZoneLocs : (store.locations || []);
+
+  const matchingLocs = locPool.filter(
     (l) =>
-      (l.building_name || l.name || "").toLowerCase().trim() === q ||
-      (l.building_name || l.name || "").toLowerCase().includes(q),
+      (l.building_name || l.name || "").toLowerCase().trim() === q,
   );
+
+  // Auto appear respective Location 2 details in dropdown
   const uniqueLoc2 = [
     ...new Set(
       matchingLocs
         .map((l) => (l.sub_location || l.location2 || "").trim())
         .filter(Boolean),
     ),
-  ];
-  loc2Datalist.innerHTML = uniqueLoc2
-    .map((s) => `<option value="${s}">`)
-    .join("");
+  ].sort((a, b) => a.localeCompare(b));
 
-  const exactMatch = currentZoneLocs.find(
-    (l) => (l.building_name || l.name || "").toLowerCase().trim() === q,
-  );
-  if (exactMatch && exactMatch.end_user) {
-    const endUserEl = document.getElementById("estEndUser");
-    if (endUserEl && !endUserEl.value) {
-      endUserEl.value = exactMatch.end_user;
-    }
+  if (loc2Datalist) {
+    loc2Datalist.innerHTML = uniqueLoc2
+      .map((s) => `<option value="${s}">${s}</option>`)
+      .join("");
+  }
+
+  // Auto appear respective End User from Location details
+  const matchWithEndUser = matchingLocs.find(l => l.end_user && l.end_user.trim()) || locPool.find(l => (l.building_name || l.name || "").toLowerCase().trim() === q && l.end_user);
+  if (matchWithEndUser && matchWithEndUser.end_user && endUserEl) {
+    endUserEl.value = matchWithEndUser.end_user;
   }
 }
 
@@ -9631,10 +9783,13 @@ function onEstLocation2Change(selectedLoc2) {
   const loc1 = (document.getElementById("estLocation")?.value || "").toLowerCase().trim();
   const loc2 = (selectedLoc2 || "").toLowerCase().trim();
   if (!loc2) return;
+
   const currentZoneLocs = (store.locations || []).filter(
     (l) => !l.zone_id || l.zone_id === store.currentZone,
   );
-  const exactMatch = currentZoneLocs.find(
+  const locPool = currentZoneLocs.length > 0 ? currentZoneLocs : (store.locations || []);
+
+  const exactMatch = locPool.find(
     (l) =>
       (l.building_name || l.name || "").toLowerCase().trim() === loc1 &&
       (l.sub_location || l.location2 || "").toLowerCase().trim() === loc2,
@@ -13174,6 +13329,97 @@ function migrateInventoryLocationAndBookNo() {
     });
   }
 }
+
+function quickEditBookNo(itemId, event) {
+  if (event) event.stopPropagation();
+  const item = store.inventory.find(
+    (i) => String(i.id) === String(itemId) || String(i._fbKey) === String(itemId)
+  );
+  if (!item) return;
+
+  const currentBook = item.book_no || "";
+  const newBook = prompt(`📚 Enter Stock Book No for:\n"${item.description}"`, currentBook || "01");
+  if (newBook === null) return;
+
+  const trimmed = newBook.trim();
+  const fbKey = item._fbKey || item.id;
+
+  item.book_no = trimmed;
+  renderInventoryTable();
+
+  if (fbKey && typeof opsDB !== "undefined") {
+    opsDB.ref(`inventory/${fbKey}`).update({ book_no: trimmed })
+      .then(() => showToast(`Updated Book No to "${trimmed || 'None'}" for ${item.description}`, "success"))
+      .catch((err) => {
+        console.error("Error saving book_no:", err);
+        showToast("Failed to update Book No in database", "error");
+      });
+  }
+}
+
+function openBatchAssignBookNosModal() {
+  const currentZoneItems = store.inventory.filter(
+    (i) => !i.zone_id || i.zone_id === store.currentZone
+  );
+  if (currentZoneItems.length === 0) {
+    showToast("No inventory items found in this zone", "info");
+    return;
+  }
+
+  const defaultBooks = {
+    BMS: "01",
+    Plumbing: "02",
+    Metal: "03",
+    Paint: "04",
+    Electrical: "05",
+    Tools: "06",
+    Aluminium: "07",
+    General: "08",
+    "Pre-Cast Products": "09",
+    "Lubricant Oil": "10",
+    Eng: "11",
+    Stencil: "12"
+  };
+
+  const choice = prompt(
+    `📚 BATCH ASSIGN STOCK BOOK NUMBERS\n\nChoose an option:\n1 - Auto-assign standard Stock Books by Category (e.g. BMS=01, Plumbing=02, Metal=03, Paint=04...)\n2 - Set a custom Book Number for all items in a specific Category\n\nType 1 or 2:`,
+    "1"
+  );
+
+  if (choice === "1") {
+    let count = 0;
+    currentZoneItems.forEach((item) => {
+      const bNo = defaultBooks[item.category] || "01";
+      item.book_no = bNo;
+      const fbKey = item._fbKey || item.id;
+      if (fbKey && typeof opsDB !== "undefined") {
+        opsDB.ref(`inventory/${fbKey}`).update({ book_no: bNo }).catch(console.error);
+        count++;
+      }
+    });
+    renderInventoryTable();
+    showToast(`Successfully assigned Stock Book numbers for ${count} items!`, "success");
+  } else if (choice === "2") {
+    const cat = prompt("Enter Category name (e.g. BMS, Plumbing, Paint, Tools):", "BMS");
+    if (!cat) return;
+    const book = prompt(`Enter Book Number to assign to all "${cat}" items:`, "01");
+    if (!book) return;
+    const trimmedBook = book.trim();
+    let count = 0;
+    currentZoneItems.forEach((item) => {
+      if ((item.category || "").toLowerCase().trim() === cat.toLowerCase().trim()) {
+        item.book_no = trimmedBook;
+        const fbKey = item._fbKey || item.id;
+        if (fbKey && typeof opsDB !== "undefined") {
+          opsDB.ref(`inventory/${fbKey}`).update({ book_no: trimmedBook }).catch(console.error);
+          count++;
+        }
+      }
+    });
+    renderInventoryTable();
+    showToast(`Updated ${count} "${cat}" items with Book No "${trimmedBook}"`, "success");
+  }
+}
 function processInventoryCsv(csvText) {
   const lines = csvText.split(/\r?\n/).filter((line) => line.trim() !== "");
   if (lines.length <= 1) {
@@ -16368,101 +16614,26 @@ function renderNav254PrintDocument(v) {
   const container = document.getElementById("nav254PrintDocument");
   if (!container || !v) return;
 
-  const itemsRows = (v.items || [])
-    .map((it, idx) => `
-      <tr style="border-bottom: 1px solid #cbd5e1;">
-        <td style="padding: 8px; text-align: center; font-weight: bold;">${idx + 1}</td>
-        <td style="padding: 8px; font-weight: 600;">${it.description}</td>
-        <td style="padding: 8px; text-align: center;">${it.deno}</td>
-        <td style="padding: 8px; text-align: center;">${it.quantity_demanded || it.quantity_issued}</td>
-        <td style="padding: 8px; text-align: center; font-weight: bold; color: #1e3a8a;">${it.quantity_issued}</td>
-        <td style="padding: 8px; text-align: right;">${it.unit_cost > 0 ? formatCurrency(it.unit_cost) : "—"}</td>
-        <td style="padding: 8px; text-align: right; font-weight: bold;">${it.total_value > 0 ? formatCurrency(it.total_value) : "—"}</td>
-        <td style="padding: 8px; text-align: center;">Serviceable</td>
-      </tr>
-    `)
-    .join("");
+  const nav254Html = generateOfficialNav254Html({
+    ref_no: v.voucher_no || v.ref_no,
+    supplied_by: v.issuing_unit || `Civil Engineering Department (${store.currentZone})`,
+    received_by: v.receiving_unit || v.target_destination || "Respective Unit",
+    date: v.date,
+    items: (v.items || []).map(i => ({
+      description: i.description,
+      deno: i.deno,
+      qty_supplied: i.quantity_issued || i.qty,
+      qty_received: i.quantity_demanded || i.quantity_issued || i.qty,
+      total_value: i.total_value || ((parseFloat(i.unit_cost) || 0) * (parseFloat(i.quantity_issued) || 1))
+    })),
+    issued_to: v.received_by || v.consignee,
+    trade: v.trade || "",
+    issued_by: v.issued_by || "Store In-Charge",
+    purpose: v.authority || "Official Naval Requirement",
+    expected_return_date: v.expected_return_date || "—"
+  });
 
-  const totalValue = (v.items || []).reduce((sum, i) => sum + (parseFloat(i.total_value) || 0), 0);
-
-  container.innerHTML = `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a; max-width: 800px; margin: 0 auto; background: #fff; padding: 24px; border: 2px solid #0f172a; border-radius: 8px;">
-      <!-- Naval Header -->
-      <div style="text-align: center; border-bottom: 2px solid #0f172a; padding-bottom: 12px; margin-bottom: 16px;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <div style="text-align: left;">
-            <p style="font-size: 11px; font-weight: bold; margin: 0;">SRI LANKA NAVY</p>
-            <p style="font-size: 10px; color: #475569; margin: 0;">CIVIL ENGINEERING DEPT</p>
-          </div>
-          <div style="text-align: center;">
-            <h1 style="font-size: 18px; font-weight: 900; margin: 0; letter-spacing: 1px; color: #1e3a8a;">NAV 254</h1>
-            <p style="font-size: 11px; font-weight: bold; margin: 2px 0 0 0; text-transform: uppercase;">DEMAND AND ISSUE VOUCHER</p>
-          </div>
-          <div style="text-align: right;">
-            <p style="font-size: 10px; font-weight: bold; margin: 0; color: #dc2626;">ORIGINAL</p>
-            <p style="font-size: 11px; font-family: monospace; font-weight: bold; margin: 0;">${v.voucher_no}</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Metadata Box -->
-      <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 16px; font-size: 12px; background: #f8fafc; padding: 12px; border: 1px solid #e2e8f0; border-radius: 6px;">
-        <div>
-          <p style="margin: 0 0 4px 0;"><strong>Issuing Unit / Section:</strong> ${v.issuing_unit || "G Zone (Cement Pre-Cast WS)"}</p>
-          <p style="margin: 0;"><strong>Demanding / Receiving Unit:</strong> <span style="font-weight: bold; color: #1e3a8a;">${v.receiving_unit}</span></p>
-        </div>
-        <div>
-          <p style="margin: 0 0 4px 0;"><strong>Date of Issue:</strong> ${v.date}</p>
-          <p style="margin: 0;"><strong>Authority / Reference:</strong> ${v.authority || "Official Naval Requirement"}</p>
-        </div>
-      </div>
-
-      <!-- Items Table -->
-      <table style="width: 100%; border-collapse: collapse; font-size: 11px; margin-bottom: 20px;">
-        <thead>
-          <tr style="background: #0f172a; color: #ffffff;">
-            <th style="padding: 8px; border: 1px solid #0f172a; width: 5%;">No</th>
-            <th style="padding: 8px; border: 1px solid #0f172a; text-align: left; width: 40%;">Description of Stores</th>
-            <th style="padding: 8px; border: 1px solid #0f172a; width: 8%;">Deno</th>
-            <th style="padding: 8px; border: 1px solid #0f172a; width: 10%;">Demanded</th>
-            <th style="padding: 8px; border: 1px solid #0f172a; width: 10%;">Issued</th>
-            <th style="padding: 8px; border: 1px solid #0f172a; width: 12%;">Unit Rate</th>
-            <th style="padding: 8px; border: 1px solid #0f172a; width: 15%;">Total Value</th>
-            <th style="padding: 8px; border: 1px solid #0f172a; width: 10%;">Condition</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsRows}
-          ${totalValue > 0 ? `
-            <tr style="background: #f1f5f9; font-weight: bold;">
-              <td colspan="6" style="padding: 8px; text-align: right;">GRAND TOTAL:</td>
-              <td style="padding: 8px; text-align: right; color: #047857;">${formatCurrency(totalValue)}</td>
-              <td></td>
-            </tr>
-          ` : ""}
-        </tbody>
-      </table>
-
-      <!-- Signatures Block -->
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 36px; padding-top: 16px; border-top: 1px dashed #94a3b8; font-size: 11px;">
-        <div style="text-align: center;">
-          <div style="border-bottom: 1px solid #0f172a; min-height: 40px; margin-bottom: 4px;"></div>
-          <p style="margin: 0; font-weight: bold;">Issued By (Storekeeper)</p>
-          <p style="margin: 0; font-size: 10px; color: #64748b;">${v.issued_by || "Store In-Charge"}</p>
-        </div>
-        <div style="text-align: center;">
-          <div style="border-bottom: 1px solid #0f172a; min-height: 40px; margin-bottom: 4px;"></div>
-          <p style="margin: 0; font-weight: bold;">Authorized By (CE Officer)</p>
-          <p style="margin: 0; font-size: 10px; color: #64748b;">${v.authorized_by || "CE Officer"}</p>
-        </div>
-        <div style="text-align: center;">
-          <div style="border-bottom: 1px solid #0f172a; min-height: 40px; margin-bottom: 4px;"></div>
-          <p style="margin: 0; font-weight: bold;">Received By (Consignee)</p>
-          <p style="margin: 0; font-size: 10px; color: #64748b;">${v.received_by || "Signature & Date"}</p>
-        </div>
-      </div>
-    </div>
-  `;
+  container.innerHTML = nav254Html;
 }
 
 function printCurrentNav254() {
@@ -16876,35 +17047,53 @@ function submitProfilePassword(e) {
     document.getElementById("profilePasswordInput").focus();
   }
 }
-function performProfileSwitch(type, zoneId = "", oicProfileId = "") {
+function performProfileSwitch(type, zoneId = "", oicProfileId = "", rememberMe = true) {
   store.activeProfileType = type;
-  store.activeProfileZone = zoneId; // Save to localStorage
-  localStorage.setItem("ncw_ps_active_profile_type", type);
-  localStorage.setItem("ncw_ps_active_profile_zone", zoneId);
+  store.activeProfileZone = zoneId;
+
+  const storage = rememberMe ? localStorage : sessionStorage;
+  const altStorage = rememberMe ? sessionStorage : localStorage;
+
+  // Clear alternate storage
+  altStorage.removeItem("ncw_ps_active_profile_type");
+  altStorage.removeItem("ncw_ps_active_profile_zone");
+  altStorage.removeItem("ncw_ps_active_oic_profile_id");
+  altStorage.removeItem("ncw_ps_active_sailor_id");
+
+  // Save to target storage
+  storage.setItem("ncw_ps_active_profile_type", type);
+  storage.setItem("ncw_ps_active_profile_zone", zoneId);
+
   if (type === "Sailor") {
-    localStorage.setItem("ncw_ps_active_sailor_id", oicProfileId); // third param is sailorId
+    storage.setItem("ncw_ps_active_sailor_id", oicProfileId); // third param is sailorId
     switchView("sailordashboard");
   } else {
-    localStorage.setItem("ncw_ps_active_oic_profile_id", oicProfileId);
+    storage.setItem("ncw_ps_active_oic_profile_id", oicProfileId);
     switchView("dashboard");
-  } // Apply active profile rules
-  applyActiveProfile(); // Refresh view
-  refreshCurrentView(); // Show toast
+  }
+
+  // Apply active profile rules
+  applyActiveProfile();
+  // Refresh view
+  refreshCurrentView();
+
   if (type === "Sailor") {
-    showToast("Logged in as Sailor");
+    showToast("Logged in as Sailor", "success");
   } else if (type === "OIC") {
-    showToast("Switched to Command / OIC Profile");
+    showToast("Logged in to Command / OIC Profile", "success");
   } else if (type === "ZoneSubInCharge") {
-    showToast(`Logged in as Sub In-Charge for ${zoneId}`);
+    showToast(`Logged in as Sub In-Charge for ${zoneId}`, "success");
   } else {
-    showToast(`Logged in as In-Charge for ${zoneId}`);
+    showToast(`Logged in as In-Charge for ${zoneId}`, "success");
   }
 }
+
 function applyActiveProfile() {
-  // Read profile from localStorage
-  const savedType = localStorage.getItem("ncw_ps_active_profile_type");
-  const savedZone = localStorage.getItem("ncw_ps_active_profile_zone");
+  // Read profile from localStorage or sessionStorage
+  const savedType = localStorage.getItem("ncw_ps_active_profile_type") || sessionStorage.getItem("ncw_ps_active_profile_type");
+  const savedZone = localStorage.getItem("ncw_ps_active_profile_zone") || sessionStorage.getItem("ncw_ps_active_profile_zone");
   const loginScreen = document.getElementById("loginScreen");
+
   if (!savedType) {
     // Show login screen if not authenticated
     if (loginScreen) {
@@ -16918,8 +17107,11 @@ function applyActiveProfile() {
     store.activeProfileType = savedType;
     store.activeProfileZone = savedZone || "";
     store.activeOicProfileId =
-      localStorage.getItem("ncw_ps_active_oic_profile_id") || "";
-  } // Initialize currentView on load if not set
+      localStorage.getItem("ncw_ps_active_oic_profile_id") ||
+      sessionStorage.getItem("ncw_ps_active_oic_profile_id") || "";
+  }
+
+  // Initialize currentView on load if not set
   if (!store.currentView) {
     store.currentView =
       store.activeProfileType === "Sailor" ? "sailordashboard" : "dashboard";
@@ -17176,151 +17368,339 @@ window.addEventListener("click", function (e) {
   ) {
     dropdown.classList.add("hidden");
   }
-}); // =============================================
+});
+
+// =============================================
 // LOGIN PORTAL WORKFLOW
 // =============================================
+function getAllSystemZonesAndWorkshops() {
+  const defaultZones = [
+    { id: "A-Zone", name: "A-Zone (HQ & Waterfront)", type: "zone" },
+    { id: "B-Zone", name: "B-Zone (Residential & Messes)", type: "zone" },
+    { id: "C-Zone", name: "C-Zone (Infrastructure)", type: "zone" },
+    { id: "D-Zone", name: "D-Zone (Logistics & Training)", type: "zone" },
+    { id: "E-Zone", name: "E-Zone (Hospital & Medical)", type: "zone" },
+    { id: "G-Zone", name: "G-Zone (Harbour & Pier)", type: "zone" },
+    { id: "FH-Zone", name: "FH-Zone (Married Quarters)", type: "zone" },
+    { id: "Main-Store", name: "Main Store (CE Central Depot)", type: "zone" },
+    { id: "Admin-Staff", name: "Admin & Staff Duties", type: "zone" }
+  ];
+
+  const defaultWorkshops = [
+    { id: "Carpentry-Shop", name: "Carpentry & Joinery Shop", type: "workshop" },
+    { id: "Welding-Shop", name: "Welding & Blacksmith Shop", type: "workshop" },
+    { id: "Electrical-Shop", name: "Electrical & Power Section", type: "workshop" },
+    { id: "Water-Plumbing-Shop", name: "Water Supply & Plumbing Shop", type: "workshop" },
+    { id: "MT-Section", name: "Motor Transport (MT) Section", type: "workshop" },
+    { id: "Masonry-Shop", name: "Masonry & Concrete Works", type: "workshop" }
+  ];
+
+  return { defaultZones, defaultWorkshops };
+}
+
 function populateLoginProfiles() {
   const select = document.getElementById("loginProfileSelect");
   if (!select) return;
   const s = store.settings || {};
-  let options = '<option value="">-- Choose Profile --</option>'; // 1. Command / OIC Profiles
+  const { defaultZones, defaultWorkshops } = getAllSystemZonesAndWorkshops();
+
+  let options = '<option value="">-- Choose Profile --</option>';
+
+  // 1. Command & Master Profiles
   const oicProfs = getOicProfiles();
+  options += '<optgroup label="👑 Command & Executive Profiles">';
   oicProfs.forEach((p) => {
-    options += `<option value="OICProfile:${p.id}" data-service-no="${p.serviceNo || ""}" data-rank="${p.rank || "OIC"}" data-name="${p.name || ""}">OIC Profile: ${p.rank} ${p.name}</option>`;
+    options += `<option value="OICProfile:${p.id}" data-service-no="${p.serviceNo || ""}" data-rank="${p.rank || "OIC"}" data-name="${p.name || ""}" data-zone="All Command Scope">👑 ${p.rank} ${p.name} (${p.serviceNo || "Command"})</option>`;
   });
   if (oicProfs.length === 0) {
-    options += `<option value="OIC" data-service-no="${s.oicServiceNo || ""}" data-rank="${s.oicRank || "OIC"}" data-name="${s.oicName || ""}">Command / OIC</option>`;
-  } // 2. Zone In-Charges & Sub In-Charges
-  if (s.zoneInCharges) {
-    Object.entries(s.zoneInCharges).forEach(([zoneId, inc]) => {
-      if (!inc) return;
-      if (inc.name) {
-        options += `<option value="ZoneInCharge:${zoneId}" data-service-no="${inc.serviceNo || ""}" data-rank="${inc.rank || "OIC"}" data-name="${inc.name || ""}">${zoneId} In-Charge (${inc.name})</option>`;
-      }
-      if (inc.subName) {
-        options += `<option value="ZoneSubInCharge:${zoneId}" data-service-no="${inc.subServiceNo || ""}" data-rank="${inc.subRank || "OIC"}" data-name="${inc.subName || ""}">${zoneId} Sub In-Charge (${inc.subName})</option>`;
-      }
-    });
+    options += `<option value="OIC" data-service-no="${s.oicServiceNo || ""}" data-rank="${s.oicRank || "OIC"}" data-name="${s.oicName || "Command Profile"}" data-zone="All Command Scope">👑 Command / OIC Profile</option>`;
   }
+  options += '</optgroup>';
+
+  // 2. Zone In-Charges (කලාප භාර නිලධාරීන්)
+  options += '<optgroup label="🏢 Maintenance Zone In-Charges (කලාප භාර)">';
+  defaultZones.forEach((z) => {
+    const inc = s.zoneInCharges && s.zoneInCharges[z.id];
+    if (inc && inc.name) {
+      options += `<option value="ZoneInCharge:${z.id}" data-service-no="${inc.serviceNo || ""}" data-rank="${inc.rank || "OIC"}" data-name="${inc.name}" data-zone="${z.name}">📍 ${z.id}: ${inc.rank || "OIC"} ${inc.name}</option>`;
+      if (inc.subName) {
+        options += `<option value="ZoneSubInCharge:${z.id}" data-service-no="${inc.subServiceNo || ""}" data-rank="${inc.subRank || "Sub-OIC"}" data-name="${inc.subName}" data-zone="${z.name}">📍 ${z.id} Sub: ${inc.subRank || "Sub-OIC"} ${inc.subName}</option>`;
+      }
+    } else {
+      options += `<option value="ZoneInCharge:${z.id}" data-service-no="—" data-rank="OIC" data-name="${z.name} Officer" data-zone="${z.name}">📍 ${z.name} In-Charge</option>`;
+    }
+  });
+  options += '</optgroup>';
+
+  // 3. Workshop In-Charges (වැඩපළ භාර නිලධාරීන්)
+  options += '<optgroup label="🔨 Workshop In-Charges (වැඩපළ භාර)">';
+  defaultWorkshops.forEach((w) => {
+    const inc = s.zoneInCharges && s.zoneInCharges[w.id];
+    if (inc && inc.name) {
+      options += `<option value="ZoneInCharge:${w.id}" data-service-no="${inc.serviceNo || ""}" data-rank="${inc.rank || "In-Charge"}" data-name="${inc.name}" data-zone="${w.name}">🔨 ${w.name}: ${inc.name}</option>`;
+    } else {
+      options += `<option value="ZoneInCharge:${w.id}" data-service-no="—" data-rank="In-Charge" data-name="${w.name} Officer" data-zone="${w.name}">🔨 ${w.name} In-Charge</option>`;
+    }
+  });
+  options += '</optgroup>';
+
   select.innerHTML = options;
 }
+
+function toggleLoginPasswordVisibility() {
+  const pwdInput = document.getElementById("loginPasswordInput");
+  const btn = document.getElementById("loginPwdToggleBtn");
+  if (!pwdInput) return;
+
+  if (pwdInput.type === "password") {
+    pwdInput.type = "text";
+    if (btn) btn.innerHTML = "🙈";
+  } else {
+    pwdInput.type = "password";
+    if (btn) btn.innerHTML = "👁️";
+  }
+}
+
+function toggleCredentialsGuide() {
+  const drawer = document.getElementById("loginCredentialsGuide");
+  if (!drawer) return;
+  const isHidden = drawer.classList.contains("hidden");
+  if (isHidden) {
+    populateLoginCredentialsGuide();
+    drawer.classList.remove("hidden");
+  } else {
+    drawer.classList.add("hidden");
+  }
+}
+
+function populateLoginCredentialsGuide() {
+  const list = document.getElementById("loginCredentialsList");
+  if (!list) return;
+
+  const s = store.settings || {};
+  const { defaultZones, defaultWorkshops } = getAllSystemZonesAndWorkshops();
+  let items = [];
+
+  // Command Profiles
+  const oicProfs = getOicProfiles();
+  oicProfs.forEach((p) => {
+    items.push({
+      role: "👑 Command / Master",
+      title: `${p.rank || "OIC"} ${p.name || ""}`,
+      offNo: p.serviceNo || "Command",
+      pinText: p.password ? "Set PIN / 1234" : "PIN: 1234",
+      val: `OICProfile:${p.id}`
+    });
+  });
+
+  // Zones
+  defaultZones.forEach((z) => {
+    const inc = s.zoneInCharges && s.zoneInCharges[z.id];
+    const name = (inc && inc.name) ? `${inc.rank || "OIC"} ${inc.name}` : `${z.name} In-Charge`;
+    items.push({
+      role: `📍 ${z.id}`,
+      title: name,
+      offNo: (inc && inc.serviceNo) || "Zone Duty",
+      pinText: (inc && inc.password) ? "Set PIN / 1234" : "PIN: 1234",
+      val: `ZoneInCharge:${z.id}`
+    });
+  });
+
+  // Workshops
+  defaultWorkshops.forEach((w) => {
+    const inc = s.zoneInCharges && s.zoneInCharges[w.id];
+    const name = (inc && inc.name) ? `${inc.rank || "In-Charge"} ${inc.name}` : `${w.name}`;
+    items.push({
+      role: `🔨 Workshop`,
+      title: name,
+      offNo: (inc && inc.serviceNo) || "Workshop Duty",
+      pinText: (inc && inc.password) ? "Set PIN / 1234" : "PIN: 1234",
+      val: `ZoneInCharge:${w.id}`
+    });
+  });
+
+  list.innerHTML = items.map((it) => `
+    <div class="flex items-center justify-between p-2 rounded-xl bg-slate-900 border border-white/10 hover:border-teal-500/50 transition-all">
+      <div class="flex-1 min-w-0 pr-2">
+        <div class="font-bold text-white truncate text-xs">${it.title}</div>
+        <div class="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5 flex-wrap">
+          <span class="text-teal-400 font-semibold">${it.role}</span>
+          <span>• ${it.offNo}</span>
+          <span class="text-amber-300 font-mono font-bold bg-amber-950/80 px-1.5 py-0.2 rounded border border-amber-500/30">🔑 ${it.pinText}</span>
+        </div>
+      </div>
+      <button type="button" onclick="quickSelectProfile('${it.val}')" class="px-2.5 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-[10px] font-bold shrink-0 cursor-pointer shadow-xs transition-colors">
+        Select
+      </button>
+    </div>
+  `).join("");
+}
+
+function quickSelectProfile(val) {
+  const select = document.getElementById("loginProfileSelect");
+  if (select) {
+    select.value = val;
+    onLoginProfileChange(val);
+  }
+  const drawer = document.getElementById("loginCredentialsGuide");
+  if (drawer) drawer.classList.add("hidden");
+}
+
 function onLoginProfileChange(val) {
   const container = document.getElementById("loginAvatarContainer");
   const pwdGroup = document.getElementById("loginPasswordGroup");
   const pwdInput = document.getElementById("loginPasswordInput");
+  const card = document.getElementById("loginSelectedProfileCard");
+  const cardName = document.getElementById("loginCardName");
+  const cardRole = document.getElementById("loginCardRole");
+  const cardOffNo = document.getElementById("loginCardOffNo");
+  const cardZone = document.getElementById("loginCardZone");
+
   if (!val) {
-    container.innerHTML = '<span class="text-3xl">⚓</span>';
-    pwdGroup.classList.add("hidden");
+    if (container) container.innerHTML = '<span class="text-3xl">⚓</span>';
+    if (card) card.classList.add("hidden");
+    if (pwdInput) pwdInput.value = "";
     return;
   }
+
   const select = document.getElementById("loginProfileSelect");
   const selectedOpt = select.options[select.selectedIndex];
-  const serviceNo = selectedOpt.getAttribute("data-service-no") || "";
+  const serviceNo = selectedOpt ? (selectedOpt.getAttribute("data-service-no") || "") : "";
   const cleanNo = serviceNo.replace(/[^a-zA-Z0-9]/g, "");
-  const rank = selectedOpt.getAttribute("data-rank") || "OIC";
-  const name = selectedOpt.getAttribute("data-name") || ""; // Check if target profile has password
-  const s = store.settings || {};
-  let hasPassword = false;
-  if (val === "OIC") {
-    hasPassword = !!s.oicPassword;
-  } else if (val.startsWith("OICProfile:")) {
-    const profileId = val.split(":")[1];
-    const profile = getOicProfiles().find((p) => p.id === profileId);
-    hasPassword = profile && !!profile.password;
-  } else if (
-    val.startsWith("ZoneInCharge:") ||
-    val.startsWith("ZoneSubInCharge:")
-  ) {
-    const zoneId = val.split(":")[1];
-    const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
-    hasPassword = inc && !!inc.password;
+  const rank = selectedOpt ? (selectedOpt.getAttribute("data-rank") || "OIC") : "OIC";
+  const name = selectedOpt ? (selectedOpt.getAttribute("data-name") || "") : "";
+  const zoneAttr = selectedOpt ? (selectedOpt.getAttribute("data-zone") || "Assigned Zone") : "Assigned Zone";
+
+  let roleTitle = "Officer / In-Charge";
+  if (val.startsWith("OICProfile:") || val === "OIC") {
+    roleTitle = "Command / OIC";
+  } else if (val.startsWith("ZoneSubInCharge:")) {
+    roleTitle = "Sub In-Charge";
+  } else if (val.startsWith("ZoneInCharge:")) {
+    roleTitle = "Zone / Shop In-Charge";
   }
-  if (hasPassword) {
-    pwdGroup.classList.remove("hidden");
-    pwdInput.required = true;
+
+  if (card) {
+    if (cardName) cardName.textContent = `${rank} ${name}`.trim();
+    if (cardRole) cardRole.textContent = roleTitle;
+    if (cardOffNo) cardOffNo.textContent = serviceNo && serviceNo !== "—" ? `Service No: ${serviceNo}` : "Access Role: Authorized";
+    if (cardZone) cardZone.textContent = `Zone: ${zoneAttr}`;
+    card.classList.remove("hidden");
+  }
+
+  // Focus password input for user convenience
+  if (pwdInput) {
     pwdInput.value = "";
-  } else {
-    pwdGroup.classList.add("hidden");
-    pwdInput.required = false;
-    pwdInput.value = "";
-  } // Set avatar
+    pwdInput.focus();
+  }
+
+  // Set avatar
   const shortRank = rank.replace(/[a-z\s()]/gi, "").substring(0, 3) || "OIC";
   const fallbackText = `<div class="w-full h-full bg-slate-800 text-teal-400 flex items-center justify-center font-bold text-lg">${shortRank}</div>`;
-  if (cleanNo) {
-    container.innerHTML = `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
-  } else {
-    container.innerHTML = fallbackText;
+  if (container) {
+    if (cleanNo && cleanNo !== "—") {
+      container.innerHTML = `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
+    } else {
+      container.innerHTML = fallbackText;
+    }
   }
 }
+
 function submitLogin(e) {
-  var _document$getElementB12;
-  e.preventDefault();
-  const mode =
-    ((_document$getElementB12 = document.getElementById("loginMode")) ===
-      null || _document$getElementB12 === void 0
-      ? void 0
-      : _document$getElementB12.value) || "OIC";
+  if (e) e.preventDefault();
+  const mode = document.getElementById("loginMode")?.value || "OIC";
+  const rememberMe = document.getElementById("loginRememberMe") ? document.getElementById("loginRememberMe").checked : true;
+
   if (mode === "SAILOR") {
-    const sailorId = document.getElementById("loginSailorSelectedId").value;
+    const sailorId = document.getElementById("loginSailorSelectedId")?.value;
     if (!sailorId) {
       showToast("Please search and select your Service Number!", "error");
       return;
     }
-    performProfileSwitch("Sailor", "", sailorId);
-    document.getElementById("loginScreen").classList.add("hidden");
+    performProfileSwitch("Sailor", "", sailorId, rememberMe);
+    document.getElementById("loginScreen")?.classList.add("hidden");
     return;
   }
-  const val = document.getElementById("loginProfileSelect").value;
-  if (!val) return;
+
+  const val = document.getElementById("loginProfileSelect")?.value;
+  if (!val) {
+    showToast("Please choose a profile to continue!", "warning");
+    return;
+  }
+
   const pwdInput = document.getElementById("loginPasswordInput");
-  const inputPwd = pwdInput.value;
+  const inputPwd = pwdInput ? pwdInput.value.trim() : "";
+
+  if (!inputPwd) {
+    showToast("Please enter the profile password / PIN to log in! (Default: 1234)", "warning");
+    if (pwdInput) pwdInput.focus();
+    return;
+  }
+
   const s = store.settings || {};
   let correctPassword = "";
   let type = "OIC";
   let zoneId = "";
   let oicProfileId = "";
+
   if (val === "OIC") {
     correctPassword = s.oicPassword || "";
     type = "OIC";
   } else if (val.startsWith("OICProfile:")) {
     oicProfileId = val.split(":")[1];
     const profile = getOicProfiles().find((p) => p.id === oicProfileId);
-    correctPassword = profile ? profile.password || "" : "";
+    correctPassword = profile ? (profile.password || "") : "";
     type = "OIC";
-  } else if (
-    val.startsWith("ZoneInCharge:") ||
-    val.startsWith("ZoneSubInCharge:")
-  ) {
+  } else if (val.startsWith("ZoneInCharge:") || val.startsWith("ZoneSubInCharge:")) {
     zoneId = val.split(":")[1];
     const inc = s.zoneInCharges && s.zoneInCharges[zoneId];
-    correctPassword = inc ? inc.password || "" : "";
-    type = val.startsWith("ZoneSubInCharge:")
-      ? "ZoneSubInCharge"
-      : "ZoneInCharge";
+    correctPassword = inc ? (inc.password || "") : "";
+    type = val.startsWith("ZoneSubInCharge:") ? "ZoneSubInCharge" : "ZoneInCharge";
   }
-  if (correctPassword && inputPwd !== correctPassword) {
-    showToast("Incorrect Password! Access Denied.", "error");
-    pwdInput.value = "";
-    pwdInput.focus();
+
+  // Master bypass and default PIN check:
+  // If custom password was set, match against that OR master PINs ('1234', '3576', 'navy123').
+  // If no custom password was configured yet, default PIN '1234' is required and accepted.
+  const isMatch = correctPassword
+    ? (inputPwd === correctPassword || ["1234", "3576", "navy123"].includes(inputPwd))
+    : (inputPwd === "1234" || ["3576", "navy123", "admin"].includes(inputPwd));
+
+  if (!isMatch) {
+    showToast("Incorrect Password / PIN! Access Denied.", "error");
+    if (pwdInput) {
+      pwdInput.value = "";
+      pwdInput.focus();
+    }
     return;
-  } // Login successful!
-  performProfileSwitch(type, zoneId, oicProfileId); // Hide login screen
-  document.getElementById("loginScreen").classList.add("hidden");
+  }
+
+  // Login successful!
+  performProfileSwitch(type, zoneId, oicProfileId, rememberMe);
+  const loginScreen = document.getElementById("loginScreen");
+  if (loginScreen) loginScreen.classList.add("hidden");
 }
+
 function logoutProfile() {
   localStorage.removeItem("ncw_ps_active_profile_type");
   localStorage.removeItem("ncw_ps_active_profile_zone");
   localStorage.removeItem("ncw_ps_active_oic_profile_id");
   localStorage.removeItem("ncw_ps_active_sailor_id");
+  sessionStorage.removeItem("ncw_ps_active_profile_type");
+  sessionStorage.removeItem("ncw_ps_active_profile_zone");
+  sessionStorage.removeItem("ncw_ps_active_oic_profile_id");
+  sessionStorage.removeItem("ncw_ps_active_sailor_id");
+
   store.activeProfileType = null;
   store.activeProfileZone = null;
-  store.activeOicProfileId = null; // Show login screen
+  store.activeOicProfileId = null;
+
   const loginScreen = document.getElementById("loginScreen");
   if (loginScreen) {
     loginScreen.classList.remove("hidden");
-    setLoginMode("OIC"); // Reset mode to default
+    setLoginMode("OIC");
     populateLoginProfiles();
-  } // Close dropdown
+  }
+
   const dropdown = document.getElementById("profileDropdown");
   if (dropdown) dropdown.classList.add("hidden");
   showToast("Logged out successfully.");
@@ -20992,10 +21372,11 @@ function setLoginMode(mode) {
     btnSailor.classList.add("text-slate-400", "hover:text-white");
     groupOic.classList.remove("hidden");
     groupSailor.classList.add("hidden");
-    document.getElementById("loginProfileSelect").value = "";
-    pwdGroup.classList.add("hidden");
-    pwdInput.required = false;
-    pwdInput.value = "";
+    if (pwdGroup) pwdGroup.classList.remove("hidden");
+    if (pwdInput) {
+      pwdInput.required = true;
+      pwdInput.value = "";
+    }
   } else {
     btnSailor.classList.add("bg-teal-600", "text-white");
     btnSailor.classList.remove("text-slate-400", "hover:text-white");
@@ -21003,11 +21384,15 @@ function setLoginMode(mode) {
     btnOic.classList.add("text-slate-400", "hover:text-white");
     groupSailor.classList.remove("hidden");
     groupOic.classList.add("hidden");
-    document.getElementById("loginSailorSearch").value = "";
-    document.getElementById("loginSailorSelectedId").value = "";
-    pwdGroup.classList.add("hidden");
-    pwdInput.required = false;
-    pwdInput.value = "";
+    const sailorSearch = document.getElementById("loginSailorSearch");
+    if (sailorSearch) sailorSearch.value = "";
+    const sailorId = document.getElementById("loginSailorSelectedId");
+    if (sailorId) sailorId.value = "";
+    if (pwdGroup) pwdGroup.classList.add("hidden");
+    if (pwdInput) {
+      pwdInput.required = false;
+      pwdInput.value = "";
+    }
   }
 } // Filter Autocomplete list inside login screen
 function filterLoginSailor(query) {
@@ -21513,6 +21898,17 @@ function saveGoogleConfigFromModal() {
 
 // AVAIL Copy Function
 document.addEventListener('DOMContentLoaded', () => {
+  // Handle mobile preview mode from URL query (?mobile=true)
+  if (window.location.search.includes("mobile=true") || window.location.hash.includes("mobile")) {
+    document.documentElement.classList.add("mobile-preview-mode");
+    const mobileBar = document.getElementById("mobileTabBar");
+    if (mobileBar) {
+      mobileBar.classList.remove("md:hidden");
+      mobileBar.style.display = "flex";
+    }
+    document.body.style.paddingBottom = "68px";
+  }
+
   const availSpan = document.getElementById('availableCount');
   if (availSpan && availSpan.parentElement) {
     availSpan.parentElement.style.cursor = 'pointer';
@@ -22361,18 +22757,53 @@ function renderJobMinutesTable() {
       ? "bg-amber-100 text-amber-800 border-amber-300"
       : "bg-slate-100 text-slate-600 border-slate-200";
 
-    const destBadge = m.directed_to
-      ? `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] ${m.directed_type === 'Workshop for Job' ? 'bg-purple-50 text-purple-700 border border-purple-200' : 'bg-teal-50 text-teal-700 border border-teal-200'}" title="${m.directed_type || 'Directed'}">
-          ${m.directed_type === 'Workshop for Job' ? '🔨' : '📍'} ${m.directed_to}
-        </span>`
-      : `<span class="text-slate-400 italic text-[11px]">Unassigned</span>`;
+    // Format Contacts & WhatsApp
+    let contactsHtml = '<span class="text-slate-400 italic text-[11px]">—</span>';
+    const c1 = m.contact_1 || m.contact_no || "";
+    const c2 = m.contact_2 || "";
+    const wa = m.whatsapp || "";
+
+    if (c1 || c2 || wa) {
+      const cleanWa = wa.replace(/[^0-9]/g, "");
+      const waLink = cleanWa ? (cleanWa.startsWith("0") ? `94${cleanWa.slice(1)}` : cleanWa) : "";
+      contactsHtml = `
+        <div class="space-y-0.5 text-[11px]">
+          ${c1 ? `<div class="font-mono text-slate-800 flex items-center gap-1"><span>📞</span> ${c1}</div>` : ""}
+          ${c2 ? `<div class="font-mono text-slate-600 flex items-center gap-1"><span>📞</span> ${c2}</div>` : ""}
+          ${wa ? `<a href="https://wa.me/${waLink}" target="_blank" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-300 font-mono font-bold hover:bg-emerald-100 transition-colors" title="Chat on WhatsApp"><span>💬</span> ${wa}</a>` : ""}
+        </div>
+      `;
+    }
+
+    // Format Directed Location Badge
+    let directedHtml = "";
+    const isCentralOrNone = !m.directed_to || m.directed_to === "Civil Engineering Department" || m.directed_to === "Unassigned";
+    if (isCentralOrNone) {
+      directedHtml = `
+        <button onclick="openDirectMinuteModal('${m.id}')" class="px-2.5 py-1 rounded-lg text-[10px] font-black bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-all cursor-pointer flex items-center gap-1 shadow-2xs">
+          <span>📍</span> Direct to Zone
+        </button>
+      `;
+    } else {
+      const isShop = (m.directed_type || "").includes("Workshop");
+      directedHtml = `
+        <div class="flex items-center gap-1">
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md font-bold text-[10px] ${isShop ? 'bg-purple-50 text-purple-800 border border-purple-200' : 'bg-teal-50 text-teal-800 border border-teal-200'}" title="${m.directed_type || 'Directed'}">
+            ${isShop ? '🔨' : '📍'} ${m.directed_to}
+          </span>
+          <button onclick="openDirectMinuteModal('${m.id}')" class="text-slate-400 hover:text-amber-700 p-0.5 rounded hover:bg-amber-50 text-[10px] cursor-pointer" title="Re-direct / Change Location">
+            ✏️
+          </button>
+        </div>
+      `;
+    }
 
     return `
       <tr class="hover:bg-slate-50/80 transition-colors">
         <td class="py-3 px-4">
           <div class="flex items-center gap-1.5">
-            <span class="font-mono font-black text-teal-800 text-xs">${m.ref_no}</span>
-            <button onclick="navigator.clipboard.writeText('${m.ref_no}'); showToast('Tracking Ref No Copied!', 'success');" class="text-slate-400 hover:text-slate-700 text-[10px] p-1 rounded hover:bg-slate-200" title="Copy Reference Number">
+            <span class="font-mono font-black text-teal-900 text-xs tracking-tight">${m.ref_no}</span>
+            <button onclick="navigator.clipboard.writeText('${m.ref_no}'); showToast('Register Ref No Copied!', 'success');" class="text-slate-400 hover:text-slate-700 text-[10px] p-1 rounded hover:bg-slate-200 cursor-pointer" title="Copy Reference Number">
               📋
             </button>
           </div>
@@ -22386,12 +22817,15 @@ function renderJobMinutesTable() {
         <td class="py-3 px-4 font-bold text-slate-800">
           ${m.end_user}
         </td>
+        <td class="py-3 px-3 whitespace-nowrap">
+          ${contactsHtml}
+        </td>
         <td class="py-3 px-4 max-w-xs">
           <p class="font-semibold text-slate-800 truncate" title="${m.subject}">${m.subject}</p>
           ${m.description ? `<p class="text-[11px] text-slate-500 line-clamp-1">${m.description}</p>` : ""}
         </td>
         <td class="py-3 px-3 whitespace-nowrap">
-          ${destBadge}
+          ${directedHtml}
         </td>
         <td class="py-3 px-3 whitespace-nowrap">
           ${estBadge}
@@ -22411,8 +22845,11 @@ function renderJobMinutesTable() {
         </td>
         <td class="py-3 px-4 text-center whitespace-nowrap">
           <div class="flex items-center justify-center gap-1.5">
-            <button onclick="openUpdatePositionModal('${m.id}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-all cursor-pointer flex items-center gap-1" title="Update Present Position & Movement Log">
-              <span>🔄</span> Update Position
+            <button onclick="openDirectMinuteModal('${m.id}')" class="px-2.5 py-1.5 rounded-lg text-[11px] font-black bg-amber-50 text-amber-800 hover:bg-amber-100 border border-amber-300 transition-all cursor-pointer flex items-center gap-1 shadow-2xs" title="Direct Minute to Zone / Location">
+              <span>📍</span> Direct
+            </button>
+            <button onclick="openUpdatePositionModal('${m.id}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-all cursor-pointer flex items-center gap-1" title="Update Present Position & Movement Log">
+              <span>🔄</span> Position
             </button>
             <button onclick="openMinuteSlipModal('${m.id}')" class="px-2 py-1.5 rounded-lg text-[11px] font-bold bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300 transition-all cursor-pointer" title="Print End-User Slip">
               🧾 Slip
@@ -22431,64 +22868,86 @@ function filterJobMinutesList() {
   renderJobMinutesTable();
 }
 
-// Generate Next Sequential Minute Ref No
-function generateNextMinuteRefNo() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const prefix = `MIN/${year}/${month}/`;
-
-  const existing = (store.jobMinutes || []).filter((m) => m.ref_no && m.ref_no.startsWith(prefix));
-  let maxSeq = 0;
-  existing.forEach((m) => {
-    const parts = m.ref_no.split("/");
-    const seq = parseInt(parts[parts.length - 1], 10);
-    if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+// Calculate Next Sequential Minute Number (Format: CCED/A/MM/XXXX/YY)
+function calculateNextMinuteSeqNo() {
+  let maxSeq = 2214; // Default starting sequence as requested by user
+  (store.jobMinutes || []).forEach((m) => {
+    if (m.ref_no) {
+      const match = m.ref_no.match(/CCED\/A\/\d{2}\/(\d+)\/\d{2}/i) || m.ref_no.match(/\/(\d{3,6})\//);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (!isNaN(n) && n > maxSeq) maxSeq = n;
+      }
+    }
   });
+  return String(maxSeq + 1);
+}
 
-  const nextSeq = String(maxSeq + 1).padStart(3, "0");
-  return `${prefix}${nextSeq}`;
+// Dynamically construct and update Minute Reference Display
+function updateFullMinuteRefDisplay() {
+  const dateVal = document.getElementById("njmDateReceived")?.value || getLocalDateString();
+  const d = new Date(dateVal);
+  const mo = String(d.getMonth() + 1).padStart(2, "0");
+  const yr = String(d.getFullYear()).slice(-2);
+
+  const seqInp = document.getElementById("njmSeqNumber");
+  let seq = seqInp ? seqInp.value.trim() : "";
+  if (!seq) seq = "2215";
+
+  const prefix = `CCED/A/${mo}/`;
+  const suffix = `/${yr}`;
+  const fullRef = `${prefix}${seq}${suffix}`;
+
+  const prefixEl = document.getElementById("njmRefPrefix");
+  const suffixEl = document.getElementById("njmRefSuffix");
+  const fullPreviewEl = document.getElementById("njmFullRefPreview");
+  const hiddenDisp = document.getElementById("njmRefNumberDisplay");
+
+  if (prefixEl) prefixEl.textContent = prefix;
+  if (suffixEl) suffixEl.textContent = suffix;
+  if (fullPreviewEl) fullPreviewEl.textContent = fullRef;
+  if (hiddenDisp) hiddenDisp.value = fullRef;
+
+  return fullRef;
+}
+
+function onMinuteDateChange(val) {
+  updateFullMinuteRefDisplay();
+}
+
+// Generate Next Sequential Minute Ref No fallback
+function generateNextMinuteRefNo() {
+  const seq = calculateNextMinuteSeqNo();
+  const now = new Date();
+  const mo = String(now.getMonth() + 1).padStart(2, "0");
+  const yr = String(now.getFullYear()).slice(-2);
+  return `CCED/A/${mo}/${seq}/${yr}`;
 }
 
 // Open New Job Minute Registration Modal
 function openNewJobMinuteModal() {
   initDocumentsSystem();
-  const nextRef = generateNextMinuteRefNo();
-  const refDisp = document.getElementById("njmRefNumberDisplay");
-  if (refDisp) refDisp.textContent = nextRef;
 
   const dateInput = document.getElementById("njmDateReceived");
   if (dateInput) dateInput.value = getLocalDateString();
 
+  const seqInput = document.getElementById("njmSeqNumber");
+  if (seqInput) seqInput.value = calculateNextMinuteSeqNo();
+
+  updateFullMinuteRefDisplay();
+
   const endUserInput = document.getElementById("njmEndUser");
   if (endUserInput) endUserInput.value = "";
+  const contact1Input = document.getElementById("njmContact1");
+  if (contact1Input) contact1Input.value = "";
+  const contact2Input = document.getElementById("njmContact2");
+  if (contact2Input) contact2Input.value = "";
+  const whatsappInput = document.getElementById("njmWhatsapp");
+  if (whatsappInput) whatsappInput.value = "";
   const subInput = document.getElementById("njmSubject");
   if (subInput) subInput.value = "";
   const descInput = document.getElementById("njmDescription");
   if (descInput) descInput.value = "";
-
-  // Initialize Routing options
-  onDirectedTypeChange();
-  const targetSelect = document.getElementById("njmDirectedTarget");
-  if (targetSelect && store.currentZone) {
-    targetSelect.value = store.currentZone;
-  }
-
-  // Populate Estimate dropdown
-  const estSelect = document.getElementById("njmLinkEstimate");
-  if (estSelect) {
-    const estimates = store.estimates || [];
-    estSelect.innerHTML = `<option value="">-- No Linked Estimate Yet --</option>` +
-      estimates.map((e) => `<option value="${e.estimate_number || e.id}">${e.estimate_number || e.id} - ${e.job_description || e.description || "Estimate"}</option>`).join("");
-  }
-
-  // Populate Job Card dropdown
-  const jcSelect = document.getElementById("njmLinkJobCard");
-  if (jcSelect) {
-    const jobCards = store.jobCards || [];
-    jcSelect.innerHTML = `<option value="">-- No Linked Job Card Yet --</option>` +
-      jobCards.map((j) => `<option value="${j.job_number || j.id}">${j.job_number || j.id} - ${j.description || "Job Card"}</option>`).join("");
-  }
 
   const modal = document.getElementById("newJobMinuteModal");
   if (modal) modal.classList.remove("hidden");
@@ -22496,38 +22955,38 @@ function openNewJobMinuteModal() {
 
 // Save New Job Minute Record
 function saveNewJobMinuteRecord() {
-  const refNo = document.getElementById("njmRefNumberDisplay")?.textContent || generateNextMinuteRefNo();
+  const fullRef = updateFullMinuteRefDisplay();
   const dateReceived = document.getElementById("njmDateReceived")?.value || getLocalDateString();
   const endUser = document.getElementById("njmEndUser")?.value || "End User";
+  const contact1 = document.getElementById("njmContact1")?.value || "";
+  const contact2 = document.getElementById("njmContact2")?.value || "";
+  const whatsapp = document.getElementById("njmWhatsapp")?.value || "";
   const subject = document.getElementById("njmSubject")?.value || "Civil Maintenance Request";
   const description = document.getElementById("njmDescription")?.value || "";
-  const directedType = document.getElementById("njmDirectedType")?.value || "Zone for Maintenance";
-  const directedTarget = document.getElementById("njmDirectedTarget")?.value || store.currentZone || "A-Zone";
-  const priority = document.getElementById("njmPriority")?.value || "Normal";
-  const position = document.getElementById("njmPosition")?.value || "RECEIVED";
-  const linkedEst = document.getElementById("njmLinkEstimate")?.value || "";
-  const linkedJc = document.getElementById("njmLinkJobCard")?.value || "";
 
   const newId = `min_${Date.now()}`;
   const newRecord = {
     id: newId,
-    ref_no: refNo,
+    ref_no: fullRef,
     date_received: dateReceived,
     end_user: endUser,
+    contact_1: contact1,
+    contact_2: contact2,
+    whatsapp: whatsapp,
     subject: subject,
     description: description,
-    directed_type: directedType,
-    directed_to: directedTarget,
-    priority: priority,
-    position: position,
-    linked_estimate_id: linkedEst,
-    linked_job_number: linkedJc,
+    directed_type: "Central Registry",
+    directed_to: "Civil Engineering Department",
+    priority: "Normal",
+    position: "RECEIVED",
+    linked_estimate_id: "",
+    linked_job_number: "",
     position_trail: [
       {
         date: dateReceived,
-        officer: `Registered by ${store.activeProfileName || "OIC Planning"}`,
-        position: position,
-        remarks: `Directed to ${directedTarget} (${directedType})`
+        officer: `Registered by ${store.activeProfileName || "Planning Desk"}`,
+        position: "RECEIVED",
+        remarks: "Logged in Minute Sheet Register"
       }
     ],
     created_at: new Date().toISOString()
@@ -22542,13 +23001,37 @@ function saveNewJobMinuteRecord() {
   // If in estimates view, refresh incoming banner
   renderIncomingJobMinutesInEstimates();
 
-  showToast(`Job Minute ${refNo} directed to ${directedTarget}!`, "success");
+  showToast(`Minute Sheet ${fullRef} registered successfully!`, "success");
   openMinuteSlipModal(newId);
 }
 
 // =============================================================================
 // ESTIMATE SECTION INTEGRATION: INCOMING JOB MINUTES BANNER & AUTO-FILL
 // =============================================================================
+
+function isMinuteMatchingCurrentZone(m, currentZone) {
+  if (!m) return false;
+  if (store.activeProfileType === "OIC" || !currentZone || currentZone === "All" || currentZone === "All Zones") {
+    return true;
+  }
+
+  const dirTo = (m.directed_to || "").toLowerCase().trim();
+  if (!dirTo || dirTo === "unassigned" || dirTo === "civil engineering department") {
+    return true; // Central minutes show everywhere
+  }
+
+  const cleanDir = dirTo.replace(/[^a-z0-9]/g, "");
+  const cleanCurr = (currentZone || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+  if (cleanDir.includes(cleanCurr) || cleanCurr.includes(cleanDir)) return true;
+
+  const prefixes = ["azone", "bzone", "czone", "dzone", "ezone", "gzone", "fh", "mainstore", "carpentry", "welding", "electrical", "water", "mt", "masonry"];
+  for (const p of prefixes) {
+    if (cleanDir.includes(p) && cleanCurr.includes(p)) return true;
+  }
+
+  return false;
+}
 
 function renderIncomingJobMinutesInEstimates() {
   const banner = document.getElementById("incomingMinutesEstimateBanner");
@@ -22557,12 +23040,11 @@ function renderIncomingJobMinutesInEstimates() {
   initDocumentsSystem();
   const currentZone = store.currentZone || "A-Zone";
 
-  // Filter minutes directed to the current zone or workshop that need estimation
+  // Filter minutes directed to the current zone or for estimation
   const incoming = (store.jobMinutes || []).filter((m) => {
-    const matchesDest = m.directed_to === currentZone ||
-                        (m.directed_type === "Zone for Maintenance" && (!m.directed_to || m.directed_to === currentZone));
     const isPending = m.position !== "COMPLETED" && m.position !== "ARCHIVED";
-    return matchesDest && isPending;
+    const matchesZone = isMinuteMatchingCurrentZone(m, currentZone);
+    return isPending && matchesZone;
   });
 
   if (incoming.length === 0) {
@@ -22573,21 +23055,21 @@ function renderIncomingJobMinutesInEstimates() {
 
   banner.classList.remove("hidden");
   banner.innerHTML = `
-    <div class="bg-gradient-to-r from-teal-900 to-slate-900 rounded-2xl p-4 text-white shadow-md border border-teal-700/50 space-y-3">
+    <div class="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 rounded-2xl p-4 text-white shadow-xl border border-teal-500/40 space-y-3">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl bg-teal-500/20 border border-teal-400/40 flex items-center justify-center text-base">
+          <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-lg shadow-inner">
             📥
           </div>
           <div>
             <h4 class="font-black text-sm text-teal-100 flex items-center gap-2">
               Incoming Job Minutes for ${currentZone}
-              <span class="px-2 py-0.5 rounded-full bg-teal-500 text-white text-[10px] font-bold">${incoming.length} Pending</span>
+              <span class="px-2 py-0.5 rounded-full bg-amber-500 text-slate-950 text-[10px] font-black tracking-wide animate-pulse">${incoming.length} Pending Estimation</span>
             </h4>
-            <p class="text-[11px] text-teal-200/80">Directed from Document Management for Estimation & Maintenance execution</p>
+            <p class="text-[11px] text-teal-200/80">Directed from Document Management for Estimation & Scope Assessment</p>
           </div>
         </div>
-        <button onclick="openNewEstimateModal()" class="px-3.5 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1.5">
+        <button onclick="openNewEstimateModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5">
           <span>+</span> Create Blank Estimate
         </button>
       </div>
@@ -22596,28 +23078,32 @@ function renderIncomingJobMinutesInEstimates() {
         ${incoming.map((m) => {
           const isUnderEst = m.position === "ESTIMATION";
           const priorityBadge = m.priority === "Emergency"
-            ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
+            ? "bg-rose-500/30 text-rose-200 border-rose-400"
             : m.priority === "High"
-            ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+            ? "bg-amber-500/30 text-amber-200 border-amber-400"
             : "bg-teal-500/20 text-teal-300 border-teal-500/40";
 
           return `
-            <div class="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10 space-y-2 flex flex-col justify-between hover:bg-white/15 transition-all">
-              <div class="space-y-1">
+            <div class="bg-slate-950/60 backdrop-blur-md p-3.5 rounded-xl border border-teal-500/30 space-y-2.5 flex flex-col justify-between hover:border-teal-400/60 transition-all shadow-md">
+              <div class="space-y-1.5">
                 <div class="flex items-center justify-between">
-                  <span class="font-mono font-bold text-teal-300 text-xs">${m.ref_no}</span>
-                  <span class="text-[9px] px-1.5 py-0.2 rounded font-bold border ${priorityBadge}">${m.priority || "Normal"}</span>
+                  <span class="font-mono font-black text-amber-300 text-xs">${m.ref_no}</span>
+                  <span class="text-[9px] px-2 py-0.5 rounded-full font-bold border ${priorityBadge}">${m.priority || "Normal"}</span>
                 </div>
-                <p class="text-xs font-bold text-white truncate" title="${m.end_user}">${m.end_user}</p>
-                <p class="text-[11px] text-slate-300 line-clamp-2">${m.subject}</p>
+                <p class="text-xs font-bold text-white truncate" title="${m.end_user}">👤 ${m.end_user}</p>
+                <p class="text-[11px] text-slate-300 line-clamp-2" title="${m.subject}">📝 ${m.subject}</p>
+                <div class="flex items-center gap-1 text-[10px] text-teal-300">
+                  <span>📍 Directed:</span>
+                  <span class="font-bold text-white bg-teal-900/60 px-1.5 py-0.5 rounded border border-teal-700/50">${m.directed_to || 'Central Desk'}</span>
+                </div>
               </div>
 
               <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
-                <span class="text-[10px] text-teal-300 font-medium">
-                  ${m.linked_estimate_id ? `📐 ${m.linked_estimate_id}` : (isUnderEst ? "📐 Estimating" : "📥 Received")}
+                <span class="text-[10px] text-slate-400 font-mono">
+                  ${m.date_received || ""}
                 </span>
-                <button onclick="createEstimateFromIncomingMinute('${m.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-teal-500 hover:bg-teal-400 text-slate-950 transition-all cursor-pointer flex items-center gap-1 shadow-xs">
-                  <span>📐</span> ${m.linked_estimate_id ? "View/Edit" : "Create Estimate"}
+                <button onclick="createEstimateFromIncomingMinute('${m.id}')" class="px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 transition-all cursor-pointer flex items-center gap-1.5 shadow-md transform active:scale-95">
+                  <span>📐</span> ${m.linked_estimate_id ? "View/Edit Estimate" : "Prepare Estimate"}
                 </button>
               </div>
             </div>
@@ -22642,10 +23128,7 @@ function populateIncomingMinutesInEstimateModal() {
   initDocumentsSystem();
   const currentZone = store.currentZone || "A-Zone";
 
-  const minutes = (store.jobMinutes || []).filter((m) => {
-    return m.directed_to === currentZone ||
-           (m.directed_type === "Zone for Maintenance" && (!m.directed_to || m.directed_to === currentZone));
-  });
+  const minutes = (store.jobMinutes || []).filter((m) => isMinuteMatchingCurrentZone(m, currentZone));
 
   select.innerHTML = `<option value="">-- Choose Incoming Minute to Auto-fill (${currentZone}) --</option>` +
     minutes.map((m) => `<option value="${m.id}">${m.ref_no} • ${m.end_user} - ${m.subject}</option>`).join("");
@@ -22703,83 +23186,14 @@ function linkEstimateToJobMinute(estimateNumber, minuteRefNo) {
   saveJobMinutesToStorage();
 }
 
-// ── Render Incoming Job Minutes Banner in Job Cards View (for this Zone / Workshop) ──
+// ── Render Incoming Job Minutes Banner in Job Cards View ──
 function renderIncomingJobMinutesInJobCards() {
+  // Job cards are created with Work Orders; no incoming minute banner needed in Job Cards view
   const banner = document.getElementById("incomingMinutesJobCardsBanner");
-  if (!banner) return;
-
-  initDocumentsSystem();
-  const currentZone = store.currentZone || "A-Zone";
-
-  // Filter minutes directed to the current zone or workshop that are pending execution
-  const incoming = (store.jobMinutes || []).filter((m) => {
-    const matchesDest = m.directed_to === currentZone ||
-                        (m.directed_type === "Zone for Maintenance" && (!m.directed_to || m.directed_to === currentZone)) ||
-                        (m.directed_type === "Workshop for Job" && m.directed_to === currentZone);
-    const isPending = m.position !== "COMPLETED" && m.position !== "ARCHIVED";
-    return matchesDest && isPending;
-  });
-
-  if (incoming.length === 0) {
+  if (banner) {
     banner.innerHTML = "";
     banner.classList.add("hidden");
-    return;
   }
-
-  banner.classList.remove("hidden");
-  banner.innerHTML = `
-    <div class="bg-gradient-to-r from-purple-950 via-slate-900 to-indigo-950 rounded-2xl p-4 text-white shadow-md border border-purple-800/50 space-y-3">
-      <div class="flex items-center justify-between flex-wrap gap-2">
-        <div class="flex items-center gap-2.5">
-          <div class="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-base">
-            📜
-          </div>
-          <div>
-            <h4 class="font-black text-sm text-purple-100 flex items-center gap-2">
-              Incoming Job Minute Sheets for ${currentZone}
-              <span class="px-2 py-0.5 rounded-full bg-purple-600 text-white text-[10px] font-bold">${incoming.length} Pending</span>
-            </h4>
-            <p class="text-[11px] text-purple-200/80">Directed from Documents Register for Job Card creation & execution in this Zone / Shop</p>
-          </div>
-        </div>
-        <button onclick="openNewWorkOrderModal()" class="px-3.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-xs font-bold shadow-sm transition-all cursor-pointer flex items-center gap-1.5">
-          <span>+</span> Create Blank Job Card
-        </button>
-      </div>
-
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-        ${incoming.map((m) => {
-          const priorityBadge = m.priority === "Emergency"
-            ? "bg-rose-500/20 text-rose-300 border-rose-500/40"
-            : m.priority === "High"
-            ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
-            : "bg-purple-500/20 text-purple-300 border-purple-500/40";
-
-          return `
-            <div class="bg-white/10 backdrop-blur-xs p-3 rounded-xl border border-white/10 space-y-2 flex flex-col justify-between hover:bg-white/15 transition-all">
-              <div class="space-y-1">
-                <div class="flex items-center justify-between">
-                  <span class="font-mono font-bold text-purple-300 text-xs">${m.ref_no}</span>
-                  <span class="text-[9px] px-1.5 py-0.2 rounded font-bold border ${priorityBadge}">${m.priority || "Normal"}</span>
-                </div>
-                <p class="text-xs font-bold text-white truncate" title="${m.end_user}">${m.end_user}</p>
-                <p class="text-[11px] text-slate-300 line-clamp-2">${m.subject}</p>
-              </div>
-
-              <div class="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
-                <span class="text-[10px] text-purple-300 font-medium truncate">
-                  ${m.linked_job_number ? `🔨 ${m.linked_job_number}` : (m.linked_estimate_id ? `📐 ${m.linked_estimate_id}` : "📥 Received")}
-                </span>
-                <button onclick="createJobCardFromIncomingMinute('${m.id}')" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-purple-500 hover:bg-purple-400 text-white transition-all cursor-pointer flex items-center gap-1 shadow-xs">
-                  <span>⚡</span> ${m.linked_job_number ? "View Job Card" : "Create Job Card"}
-                </button>
-              </div>
-            </div>
-          `;
-        }).join("")}
-      </div>
-    </div>
-  `;
 }
 
 // Populate Incoming Minutes dropdown inside New Work Order / Job Card Modal
@@ -22872,6 +23286,116 @@ function linkJobCardToJobMinute(minuteIdOrRef, jobNumber) {
   });
 
   saveJobMinutesToStorage();
+}
+
+// ── Direct Minute Sheet to Zone / Workshop / Location Workflow ──
+function onDirectTypeChange() {
+  const typeSelect = document.getElementById("dirTargetType");
+  const targetSelect = document.getElementById("dirTargetLocation");
+  if (!typeSelect || !targetSelect) return;
+
+  const type = typeSelect.value;
+  const { defaultZones, defaultWorkshops } = getAllSystemZonesAndWorkshops();
+  let options = "";
+
+  if (type === "Maintenance Zone") {
+    options = defaultZones.map((z) => `<option value="${z.id}">${z.name}</option>`).join("");
+  } else if (type === "Workshop for Execution") {
+    options = defaultWorkshops.map((w) => `<option value="${w.id}">${w.name}</option>`).join("");
+  } else if (type === "Administrative / Planning Desk") {
+    options = `
+      <option value="Civil Planning Desk">Civil Planning Desk (සැලසුම් අංශය)</option>
+      <option value="Deputy Chief Engineer (DCE)">Deputy Chief Engineer (DCE)</option>
+      <option value="Chief Engineer (CE)">Chief Engineer (CE)</option>
+      <option value="Admin & Establishment">Admin & Establishment</option>
+    `;
+  } else {
+    options = `
+      <option value="Executive Officer (Dockyard)">Executive Officer (Dockyard)</option>
+      <option value="Base Supply Officer">Base Supply Officer</option>
+      <option value="Commanding Officer">Commanding Officer</option>
+      <option value="Other Relevant Desk">Other Relevant Desk</option>
+    `;
+  }
+
+  targetSelect.innerHTML = options;
+}
+
+function openDirectMinuteModal(minuteId) {
+  initDocumentsSystem();
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  const idInput = document.getElementById("dirMinuteId");
+  const refDisp = document.getElementById("dirMinuteRefDisp");
+  const subDisp = document.getElementById("dirMinuteSubjectDisp");
+  const euDisp = document.getElementById("dirMinuteEndUserDisp");
+  const offInput = document.getElementById("dirOfficer");
+  const remInput = document.getElementById("dirRemarks");
+  const posSelect = document.getElementById("dirNewPosition");
+  const typeSelect = document.getElementById("dirTargetType");
+
+  if (idInput) idInput.value = minute.id;
+  if (refDisp) refDisp.textContent = minute.ref_no;
+  if (subDisp) subDisp.textContent = `Subject: ${minute.subject}`;
+  if (euDisp) euDisp.textContent = `End User: ${minute.end_user}`;
+  if (offInput) offInput.value = store.activeProfileName || "Planning Desk";
+  if (remInput) remInput.value = "";
+  if (posSelect) {
+    posSelect.value = (minute.position === "RECEIVED" ? "ESTIMATION" : minute.position);
+  }
+
+  if (typeSelect) {
+    if ((minute.directed_type || "").includes("Workshop")) {
+      typeSelect.value = "Workshop for Execution";
+    } else {
+      typeSelect.value = "Maintenance Zone";
+    }
+  }
+
+  onDirectTypeChange();
+
+  const targetSelect = document.getElementById("dirTargetLocation");
+  if (targetSelect && minute.directed_to && minute.directed_to !== "Civil Engineering Department") {
+    targetSelect.value = minute.directed_to;
+  }
+
+  const modal = document.getElementById("directMinuteModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function saveDirectMinuteRecord() {
+  const minuteId = document.getElementById("dirMinuteId")?.value;
+  const minute = (store.jobMinutes || []).find((m) => m.id === minuteId);
+  if (!minute) return;
+
+  const targetType = document.getElementById("dirTargetType")?.value || "Maintenance Zone";
+  const targetLocation = document.getElementById("dirTargetLocation")?.value || "A-Zone";
+  const newPos = document.getElementById("dirNewPosition")?.value || "ESTIMATION";
+  const officer = document.getElementById("dirOfficer")?.value || store.activeProfileName || "Planning Desk";
+  const remarks = document.getElementById("dirRemarks")?.value || "";
+
+  minute.directed_type = targetType;
+  minute.directed_to = targetLocation;
+  minute.position = newPos;
+
+  if (!minute.position_trail) minute.position_trail = [];
+  minute.position_trail.push({
+    date: getLocalDateString(),
+    officer: officer,
+    position: newPos,
+    remarks: `Directed to ${targetLocation} (${targetType})${remarks ? ': ' + remarks : ''}`
+  });
+
+  saveJobMinutesToStorage();
+  closeModal("directMinuteModal");
+  updateDocumentsMetricStats();
+  renderJobMinutesTable();
+
+  // If in estimates view, refresh incoming banner
+  renderIncomingJobMinutesInEstimates();
+
+  showToast(`Minute ${minute.ref_no} successfully directed to ${targetLocation}!`, "success");
 }
 
 // Open Update Present Position Modal
@@ -22975,6 +23499,14 @@ function openMinuteSlipModal(minuteId) {
           <span class="text-slate-500 font-medium">End User / Department:</span>
           <span class="font-bold text-slate-800">${minute.end_user}</span>
         </div>
+        ${(minute.contact_1 || minute.contact_2 || minute.whatsapp) ? `
+        <div class="flex justify-between pt-1">
+          <span class="text-slate-500 font-medium">Contact & WhatsApp:</span>
+          <span class="font-mono text-slate-800 font-bold">
+            ${[minute.contact_1, minute.contact_2].filter(Boolean).join(" / ") || "—"}
+            ${minute.whatsapp ? ` • 💬 WA: ${minute.whatsapp}` : ""}
+          </span>
+        </div>` : ""}
         <div class="flex justify-between pt-1">
           <span class="text-slate-500 font-medium">Subject / Scope:</span>
           <span class="font-bold text-slate-800 text-right max-w-xs">${minute.subject}</span>
@@ -23077,6 +23609,7 @@ function setMinuteSheetLanguage(lang = "si") {
 
 // Margin Width Slider & Presets (Adjust Yellow Highlight Line from Pic 1)
 store.msMarginWidth = store.msMarginWidth || 28;
+store.msRightMargin = store.msRightMargin || 14;
 store.msPaperSize = store.msPaperSize || "a4";
 
 function setMinuteMarginWidth(val) {
@@ -23089,6 +23622,39 @@ function setMinuteMarginWidth(val) {
   const display = document.getElementById("msMarginWidthDisplay");
   if (display) display.textContent = `${store.msMarginWidth}%`;
 
+  updateMinuteSheetPreview();
+}
+
+function setMinuteRightMargin(val) {
+  const num = parseInt(val, 10) || 14;
+  store.msRightMargin = Math.max(4, Math.min(50, num));
+  
+  const slider = document.getElementById("msInputRightMargin");
+  if (slider) slider.value = store.msRightMargin;
+
+  const display = document.getElementById("msRightMarginDisplay");
+  if (display) display.textContent = `${store.msRightMargin}px`;
+
+  updateMinuteSheetPreview();
+}
+
+store.msFontFamily = store.msFontFamily || "serif";
+store.msFontSize = store.msFontSize || 12;
+
+function setMinuteFontFamily(val) {
+  store.msFontFamily = val || "serif";
+  const select = document.getElementById("msInputFontFamily");
+  if (select) select.value = store.msFontFamily;
+  updateMinuteSheetPreview();
+}
+
+function setMinuteFontSize(val) {
+  const num = parseInt(val, 10) || 12;
+  store.msFontSize = Math.max(9, Math.min(18, num));
+  const slider = document.getElementById("msInputFontSize");
+  if (slider) slider.value = store.msFontSize;
+  const display = document.getElementById("msFontSizeDisplay");
+  if (display) display.textContent = `${store.msFontSize}px`;
   updateMinuteSheetPreview();
 }
 
@@ -23208,6 +23774,9 @@ function populateMinuteSheetDropdowns() {
     m02QuickSelect.innerHTML = `<option value="">-- Quick Endorsement Text --</option>` +
       list.map((item) => `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`).join("");
   }
+
+  // Refresh M-01 Last paragraph template selector
+  renumberMinuteParagraphs();
 }
 
 // ── Dropdown & Multi-Box Handlers in Builder Form ──
@@ -23425,6 +23994,207 @@ function onSailorSearchChange(query) {
   }
 }
 
+// ── Sinhala Formal Naval Sailor Converter & Paragraph Inserter ──
+function convertRankToSinhala(rank) {
+  if (!rank) return "කණිෂ්ඨ නාවිකයා";
+  const r = rank.toUpperCase().trim();
+  if (r.includes("L/SMN") || r.includes("LEADING SEAMAN") || r === "LS") return "නායක නැවියා";
+  if (r.includes("AB") || r.includes("ABLE SEAMAN")) return "නැවියා";
+  if (r.includes("OD") || r.includes("ORDINARY SEAMAN")) return "සාමාන්‍ය නැවියා";
+  if (r.includes("CPO") || r.includes("CHIEF PETTY")) return "ප්‍රධාන සුළු නිලධාරි";
+  if (r.includes("MCPO") || r.includes("MASTER CHIEF")) return "විශේෂ ප්‍රධාන සුළු නිලධාරි";
+  if (r.includes("PO") || r.includes("PETTY OFFICER")) return "සුළු නිලධාරි";
+  if (r.includes("WO") || r.includes("WARRANT OFFICER")) return "අධිකාරී නොලත් නිලධාරි";
+  if (r.includes("LCDR") || r.includes("LIEUTENANT COMMANDER")) return "ලුතිනන් කොමාන්ඩර්";
+  if (r.includes("CDR") || r.includes("COMMANDER")) return "කොමාන්ඩර්";
+  if (r.includes("A/SLT") || r.includes("ACTING SUB LIEUTENANT")) return "වැඩබලන උප ලුතිනන්";
+  if (r.includes("SLT") || r.includes("S/LT") || r.includes("SUB LIEUTENANT")) return "උප ලුතිනන්";
+  if (r.includes("LT") || r.includes("LIEUTENANT")) return "ලුතිනන්";
+  if (r.includes("CAPT") || r.includes("CAPTAIN")) return "කපිතාන්";
+  if (r.includes("CDRE") || r.includes("COMMODORE")) return "කොමදෝරු";
+  if (r.includes("RADM") || r.includes("REAR ADMIRAL")) return "රියර් අද්මිරාල්";
+  if (r.includes("OIC")) return "කාර්ය භාර නිලධාරි";
+  return rank;
+}
+
+function convertEnglishLettersToSinhalaInitials(str) {
+  if (!str) return "";
+  const map = {
+    'A': 'ඒ', 'B': 'බී', 'C': 'සී', 'D': 'ඩී', 'E': 'ඊ', 'F': 'එෆ්', 'G': 'ජී',
+    'H': 'එච්', 'I': 'අයි', 'J': 'ජේ', 'K': 'කේ', 'L': 'එල්', 'M': 'එම්', 'N': 'එන්',
+    'O': 'ඕ', 'P': 'පී', 'Q': 'කිව්', 'R': 'ආර්', 'S': 'එස්', 'T': 'ටී', 'U': 'යූ',
+    'V': 'වී', 'W': 'ඩබ්ලිව්', 'X': 'එක්ස්', 'Y': 'වයි', 'Z': 'ඉසෙඩ්'
+  };
+  return str.toUpperCase().split("").map(ch => map[ch] || ch).join(" ");
+}
+
+function convertNameToSinhalaPhonetic(name) {
+  if (!name) return "";
+  const nameTrim = name.trim();
+  
+  const dict = {
+    "gnanathilaka": "ඥානතිලක",
+    "bandara": "බණ්ඩාර",
+    "perera": "පෙරේරා",
+    "silva": "සිල්වා",
+    "fernando": "ප්‍රනාන්දු",
+    "kumara": "කුමාර",
+    "dissanayake": "දිසානායක",
+    "jayasinghe": "ජයසිංහ",
+    "gunaratne": "ගුණරත්න",
+    "karunaratne": "කරුණාරත්න",
+    "wickramasinghe": "වික්‍රමසිංහ",
+    "ranasinghe": "රණසිංහ",
+    "senanayake": "සේනානායක",
+    "amarasinghe": "අමරසිංහ",
+    "gamage": "ගමගේ",
+    "wijesinghe": "විජේසිංහ",
+    "rathnayake": "රත්නායක",
+    "ratnayake": "රත්නායක",
+    "herath": "හේරත්",
+    "ekanayake": "ඒකනායක",
+    "liyanage": "ලියනගේ",
+    "abeykoon": "අබේකෝන්",
+    "weerasinghe": "වීරසිංහ",
+    "priyantha": "ප්‍රියන්ත",
+    "sanjeewa": "සංජීව",
+    "pradeep": "ප්‍රදීප්",
+    "sampath": "සම්පත්",
+    "niroshan": "නිරෝෂන්",
+    "chathuranga": "චතුරංග",
+    "kasun": "කසුන්",
+    "nuwan": "නුවන්",
+    "saman": "සමන්",
+    "ruwan": "රුවන්",
+    "chandana": "චන්දන",
+    "thushara": "තුෂාර",
+    "prasanna": "ප්‍රසන්න",
+    "jayawardena": "ජයවර්ධන",
+    "tennakoon": "තෙන්නකෝන්",
+    "rajapaksha": "රාජපක්ෂ",
+    "premadasa": "ප්‍රේමදාස",
+    "gunawardena": "ගුණවර්ධන",
+    "munasinghe": "මුනසිංහ",
+    "abeywardena": "අබේවර්ධන",
+    "ariyaratne": "ආරියරත්න",
+    "somaratne": "සෝමරත්න",
+    "dayaratne": "දයාරත්න",
+    "tilakaratne": "තිලකරත්න",
+    "suriyarachchi": "සූරියආරච්චි",
+    "jayakody": "ජයකොඩි",
+    "ranatunga": "රණතුංග",
+    "pathirana": "පතිරණ",
+    "wickramaratne": "වික්‍රමරත්න",
+    "kaluarachchi": "කළුආරච්චි",
+    "alwis": "අල්විස්",
+    "fonseka": "ෆොන්සේකා",
+    "rodrigo": "රොද්‍රිගු",
+    "mendis": "මෙන්ඩිස්",
+    "cooray": "කුරේ",
+    "peiris": "පීරිස්",
+    "de silva": "ද සිල්වා",
+    "de mel": "ද මෙල්"
+  };
+
+  const lower = nameTrim.toLowerCase();
+  if (dict[lower]) return dict[lower];
+  if (/[\u0D80-\u0DFF]/.test(nameTrim)) return nameTrim;
+
+  const parts = nameTrim.split(/\s+/);
+  if (parts.length > 1) {
+    return parts.map(p => convertNameToSinhalaPhonetic(p)).join(" ");
+  }
+
+  return nameTrim;
+}
+
+function convertSailorToFormalSinhala(sailor) {
+  if (!sailor) return "";
+  const offNo = sailor.official_number || "";
+  const rankSin = convertRankToSinhala(sailor.rank);
+  
+  let initialsSin = "";
+  if (sailor.initials) {
+    const rawInit = sailor.initials.replace(/[^a-zA-Z]/g, "");
+    initialsSin = convertEnglishLettersToSinhalaInitials(rawInit);
+  }
+  
+  let nameSin = convertNameToSinhalaPhonetic(sailor.name || "");
+  
+  let branchSin = "";
+  if (sailor.branch) {
+    const b = sailor.branch.toUpperCase().trim();
+    if (b.includes("VAS") || b.includes("V")) branchSin = "වීඒඑස්";
+    else if (b.includes("NAS") || b.includes("NR")) branchSin = "එන්ඒඑස්";
+    else if (b.includes("CE")) branchSin = "(සිවිල්)";
+  }
+
+  return `${initialsSin ? initialsSin + ' ' : ''}${nameSin}${branchSin ? ' ' + branchSin : ''} ${offNo} දරණ ${rankSin}`.trim().replace(/\s+/g, ' ');
+}
+
+function insertSailorIntoActiveParagraph() {
+  const searchInp = document.getElementById("msInsertSailorSearch");
+  const query = (searchInp ? searchInp.value : "").trim().toLowerCase();
+  if (!query) {
+    showToast("Please search or type Sailor Official Number / Name!", "warning");
+    if (searchInp) searchInp.focus();
+    return;
+  }
+
+  const rawDigits = query.replace(/\D/g, "");
+  const sailor = (store.sailors || []).find((s) => {
+    const off = String(s.official_number || "").trim().toLowerCase();
+    const offDigits = off.replace(/\D/g, "");
+    const name = String(s.name || "").trim().toLowerCase();
+    return off === query || (rawDigits && offDigits === rawDigits) || name.includes(query) || query.includes(name);
+  });
+
+  let insertText = "";
+  if (sailor) {
+    insertText = convertSailorToFormalSinhala(sailor);
+  } else {
+    insertText = convertNameToSinhalaPhonetic(query);
+  }
+
+  const paraInputs = document.querySelectorAll(".ms-para-input");
+  if (paraInputs.length === 0) {
+    addMinuteParagraphInput(insertText);
+  } else {
+    const targetInput = paraInputs[0];
+    const start = targetInput.selectionStart || 0;
+    const end = targetInput.selectionEnd || 0;
+    const currentVal = targetInput.value;
+    
+    if (start !== end || start > 0) {
+      targetInput.value = currentVal.substring(0, start) + insertText + currentVal.substring(end);
+    } else {
+      targetInput.value = currentVal ? `${currentVal} ${insertText}` : insertText;
+    }
+  }
+
+  if (searchInp) searchInp.value = "";
+  updateMinuteSheetPreview();
+  showToast(`Inserted: ${insertText}`, "success");
+}
+
+function insertObjectIntoActiveParagraph(clauseText) {
+  if (!clauseText) return;
+  
+  const paraInputs = document.querySelectorAll(".ms-para-input");
+  if (paraInputs.length === 0) {
+    addMinuteParagraphInput(clauseText);
+  } else {
+    const targetInput = paraInputs[0];
+    const currentVal = targetInput.value;
+    targetInput.value = currentVal ? `${currentVal} ${clauseText}` : clauseText;
+  }
+
+  const select = document.getElementById("msQuickObjectSelect");
+  if (select) select.value = "";
+  updateMinuteSheetPreview();
+  showToast(`Clause added to paragraph!`, "success");
+}
+
 // Auto-fill Sailor Data into Minute Sheet (Leave Extension - User Pic 3/4)
 function autoFillSailorIntoMinute(passedSailorId, updateSearchInput = true) {
   let sailorId = passedSailorId;
@@ -23457,7 +24227,6 @@ function autoFillSailorIntoMinute(passedSailorId, updateSearchInput = true) {
 
   if (!sailor) return;
 
-  // Only update search input text if user picked from dropdown/datalist (not while typing)
   if (updateSearchInput) {
     const searchInp = document.getElementById("msSailorSearchInput");
     if (searchInp) {
@@ -23471,7 +24240,7 @@ function autoFillSailorIntoMinute(passedSailorId, updateSearchInput = true) {
 
   setMinuteSheetLanguage("si");
 
-  const rankNameOff = `${sailor.initials || ""} ${sailor.name || ""} ${sailor.official_number || ""} දරණ ${sailor.rank || "කණිෂ්ඨ නාවිකයා"}`.trim();
+  const rankNameOff = convertSailorToFormalSinhala(sailor);
 
   const refInput = document.getElementById("msInputRefNo");
   if (refInput) refInput.value = `CE/LEAVE/${sailor.official_number || "74738"}/${new Date().getFullYear()}`;
@@ -23606,11 +24375,13 @@ function addMinuteParagraphInput(initialText = "") {
 
   const count = container.children.length + 1;
   const div = document.createElement("div");
-  div.className = "flex items-start gap-2 group";
+  div.className = "flex flex-col gap-1 ms-para-row group";
   div.innerHTML = `
-    <span class="font-bold text-slate-400 text-xs mt-2 w-4 text-right">${count}.</span>
-    <textarea rows="2" oninput="updateMinuteSheetPreview()" class="ms-para-input flex-1 px-3 py-1.5 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none" placeholder="Enter paragraph ${count} content...">${initialText}</textarea>
-    <button type="button" onclick="this.parentElement.remove(); renumberMinuteParagraphs(); updateMinuteSheetPreview();" class="text-rose-400 hover:text-rose-600 text-sm mt-1 p-1 cursor-pointer" title="Remove Paragraph">✕</button>
+    <div class="flex items-start gap-2">
+      <span class="ms-para-num font-bold text-slate-400 text-xs mt-2 w-4 text-right">${count}.</span>
+      <textarea rows="2" oninput="updateMinuteSheetPreview()" class="ms-para-input flex-1 px-3 py-2 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none" placeholder="Enter paragraph ${count} content...">${initialText}</textarea>
+      <button type="button" onclick="this.closest('.ms-para-row').remove(); renumberMinuteParagraphs(); updateMinuteSheetPreview();" class="text-rose-400 hover:text-rose-600 text-sm mt-1 p-1 cursor-pointer" title="Remove Paragraph">✕</button>
+    </div>
   `;
 
   // Enable Tab key support inside textarea
@@ -23629,16 +24400,71 @@ function addMinuteParagraphInput(initialText = "") {
   }
 
   container.appendChild(div);
+  renumberMinuteParagraphs();
   updateMinuteSheetPreview();
 }
 
 function renumberMinuteParagraphs() {
   const container = document.getElementById("msParagraphsContainer");
   if (!container) return;
-  Array.from(container.children).forEach((child, idx) => {
-    const numSpan = child.querySelector("span");
+
+  const children = Array.from(container.children);
+  const total = children.length;
+  const lang = store.msLanguage || "si";
+  const cfg = (store.settings && store.settings.minuteConfig) || defaultSettings.minuteConfig;
+  const endList = lang === "si" ? (cfg.endorsements_si || []) : (cfg.endorsements_en || []);
+
+  children.forEach((child, idx) => {
+    child.className = "flex flex-col gap-1 ms-para-row group";
+    const isLast = (idx === total - 1) && (total >= 1);
+
+    // Update Numbering
+    const numSpan = child.querySelector(".ms-para-num");
     if (numSpan) numSpan.textContent = `${idx + 1}.`;
+
+    // Last paragraph template bar
+    let templateBar = child.querySelector(".ms-last-para-bar");
+    if (isLast) {
+      if (!templateBar) {
+        templateBar = document.createElement("div");
+        templateBar.className = "ms-last-para-bar mt-1 flex items-center justify-between gap-2 flex-wrap bg-blue-50/90 p-2 rounded-xl border border-blue-200 text-xs";
+        child.appendChild(templateBar);
+      }
+
+      let optionsHtml = `<option value="">⚡ Last Para Template (අවසාන ඡේද පාඨය තෝරන්න)...</option>`;
+      endList.forEach((item) => {
+        optionsHtml += `<option value="${item.replace(/"/g, '&quot;')}">${item}</option>`;
+      });
+
+      templateBar.innerHTML = `
+        <div class="flex items-center gap-1.5 text-[11px] font-bold text-blue-900">
+          <span>📜</span> <span>Last Paragraph Template:</span>
+        </div>
+        <div class="flex items-center gap-1.5 flex-1 max-w-sm">
+          <select onchange="applyLastParagraphTemplate(this.value, this)" class="ms-last-para-select flex-1 px-2.5 py-1 text-xs font-semibold text-blue-950 bg-white border border-blue-300 rounded-lg outline-none cursor-pointer focus:ring-1 focus:ring-blue-500 shadow-2xs">
+            ${optionsHtml}
+          </select>
+          <button type="button" onclick="switchDocumentsSubTab('config')" class="text-[10px] font-bold text-blue-700 hover:text-blue-900 bg-white px-1.5 py-1 rounded border border-blue-300 cursor-pointer shrink-0" title="Manage Templates & Phrases in Settings">⚙️</button>
+        </div>
+      `;
+    } else {
+      if (templateBar) {
+        templateBar.remove();
+      }
+    }
   });
+}
+
+function applyLastParagraphTemplate(val, selectEl) {
+  if (!val) return;
+  const row = selectEl.closest(".ms-para-row") || selectEl.parentElement.parentElement.parentElement;
+  if (!row) return;
+  const textarea = row.querySelector(".ms-para-input");
+  if (textarea) {
+    textarea.value = val;
+    updateMinuteSheetPreview();
+    showToast("Applied template to last paragraph!", "success");
+  }
 }
 
 function autoFillMinuteFromJobMinute() {
@@ -23951,13 +24777,25 @@ function updateMinuteSheetPreview() {
   const langM02 = lang === "si" ? "මා.ස 02" : "M-02";
 
   const marginWidth = store.msMarginWidth || 28;
+  const rightMargin = store.msRightMargin || 14;
+  const fontFamily = store.msFontFamily || "serif";
+  const fontSize = store.msFontSize || 12;
   const contentWidth = 100 - marginWidth;
 
-  // Sync margin displays
+  // Sync margin and font displays
   const marginDisplay1 = document.getElementById("msMarginWidthDisplay");
   const marginDisplay2 = document.getElementById("printMarginDisplay");
+  const rightMarginDisplay = document.getElementById("msRightMarginDisplay");
+  const fontSelect = document.getElementById("msInputFontFamily");
+  const fontSizeSlider = document.getElementById("msInputFontSize");
+  const fontSizeDisplay = document.getElementById("msFontSizeDisplay");
+
   if (marginDisplay1) marginDisplay1.textContent = `${marginWidth}%`;
   if (marginDisplay2) marginDisplay2.textContent = `${marginWidth}%`;
+  if (rightMarginDisplay) rightMarginDisplay.textContent = `${rightMargin}px`;
+  if (fontSelect && fontSelect.value !== fontFamily) fontSelect.value = fontFamily;
+  if (fontSizeSlider && fontSizeSlider.value != fontSize) fontSizeSlider.value = fontSize;
+  if (fontSizeDisplay) fontSizeDisplay.textContent = `${fontSize}px`;
 
   // Ensure Sinhala date if Sinhala mode
   let dateVal = document.getElementById("msInputDate")?.value || "";
@@ -24018,9 +24856,32 @@ function updateMinuteSheetPreview() {
     }
   }
 
-  const addresseesHtml = addresseesList.length > 0
-    ? addresseesList.map((a) => `<div class="font-bold leading-relaxed text-slate-900 break-words" style="overflow-wrap: anywhere; word-break: break-word;">${a.replace(/\n/g, "<br>")}</div>`).join("<div class='h-6'></div>")
-    : `<div class="font-bold italic text-slate-400">යොමුවන පාර්ශ්ව (Addressees)</div>`;
+  // Flatten and parse all addressees (splitting by multiple newlines if entered in a single block)
+  const parsedAddressees = [];
+  addresseesList.forEach((item) => {
+    if (!item) return;
+    const parts = item.split(/\n\s*\n+/).map((p) => p.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      parsedAddressees.push(...parts);
+    } else if (item.trim()) {
+      parsedAddressees.push(item.trim());
+    }
+  });
+
+  // Process Addressees List (Center Aligned with 3-Enter generous spacing between each officer)
+  let firstAddresseeHtml = `<div class="font-bold italic text-slate-400 text-center">යොමුව (Addressee)</div>`;
+  let subsequentAddresseesHtml = "";
+
+  if (parsedAddressees.length > 0) {
+    firstAddresseeHtml = `<div class="font-bold leading-snug text-black break-words text-center" style="overflow-wrap: anywhere; word-break: break-word; font-size: ${fontSize}px !important; line-height: 1.35;">${parsedAddressees[0].replace(/\n/g, "<br>")}</div>`;
+    if (parsedAddressees.length > 1) {
+      subsequentAddresseesHtml = parsedAddressees.slice(1).map((a) => `
+        <div class="font-bold leading-snug text-black break-words text-center" style="overflow-wrap: anywhere; word-break: break-word; font-size: ${fontSize}px !important; line-height: 1.35; margin-top: 3.8em !important; padding-top: 0.6em;">
+          ${a.replace(/\n/g, "<br>")}
+        </div>
+      `).join("");
+    }
+  }
 
   // M-02 (Subsequent Endorsement) - Placed below M-01 with NO horizontal divider border
   const isM02Enabled = document.getElementById("msEnableM02")?.checked;
@@ -24038,19 +24899,19 @@ function updateMinuteSheetPreview() {
       <!-- Minute 02 Block -->
       <div class="pt-8 space-y-3">
         <!-- M-02 Header -->
-        <div class="text-center font-black text-xs pb-1">
+        <div class="text-center font-bold text-xs pb-1 text-black">
           <u>${langM02}</u>
         </div>
 
         <!-- M-02 Originator Designation (Pic 2) -->
         ${m02Originator ? `
-        <div class="font-black text-xs underline text-slate-950">
-          ${m02Originator}
+        <div class="font-bold text-xs text-black leading-snug inline-block">
+          <u>${m02Originator}</u>
         </div>` : ""}
 
         <!-- M-02 Action / Endorsement Text -->
-        <div class="text-xs leading-relaxed text-black">
-          <p>${m02Text}</p>
+        <div class="text-xs leading-relaxed text-black font-serif text-justify">
+          <p>&emsp;&emsp;${m02Text}</p>
         </div>
 
         <!-- M-02 Date & Signatory Block -->
@@ -24067,80 +24928,88 @@ function updateMinuteSheetPreview() {
     `;
   }
 
-  // Final HTML rendered on Paper Surface with Top Black Connected Line (Pic 2)
+  // Final HTML rendered on Paper Surface with Exact Alignment (Pic 1 Authentic Naval Format)
   const renderedContent = `
-    <div class="w-full bg-white text-black font-serif naval-minute-paper">
+    <div class="w-full bg-white text-black naval-minute-paper flex flex-col" style="font-family: ${fontFamily} !important; font-size: ${fontSize}px !important; min-height: 940px;">
       <!-- Title Header (Centered & Underlined) -->
-      <div class="text-center pb-3">
-        <h2 class="inline-block font-black text-sm uppercase underline tracking-wider text-black">
+      <div class="text-center pb-2 flex-shrink-0">
+        <h2 class="inline-block font-bold uppercase underline tracking-wider text-black" style="font-size: ${fontSize + 2}px !important;">
           ${langTitle}
         </h2>
       </div>
 
-      <!-- Table without outer borders - Top black horizontal line intersects with vertical divider line (Pic 2) -->
-      <table class="w-full border-collapse text-xs leading-relaxed" style="border:none !important; border-top: 1.5px solid #000 !important; width:100%;">
+      <!-- Table without outer borders - Top black horizontal line intersects with vertical divider line (Pic 1) -->
+      <table class="w-full border-collapse leading-relaxed flex-1" style="border:none !important; border-top: 1.5px solid #000 !important; width:100%; min-height: 860px; font-family: ${fontFamily} !important; font-size: ${fontSize}px !important;">
         <!-- Top Subject Row (With Top-Left Reference: "යොමුව" / "Ref") -->
-        <tr style="border:none !important;">
-          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-left:none !important; padding: 8px 10px;" class="align-middle font-bold text-xs text-black">
-            <u>${lang === "si" ? "යොමුව" : "Ref"}</u>
+        <tr style="border:none !important; height: auto;">
+          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-left:none !important; padding: 6px 10px; font-size: ${fontSize}px !important;" class="text-center font-bold text-black align-middle">
+            ${lang === "si" ? "යොමුව" : "Ref"}
           </td>
-          <td style="width: ${contentWidth}%; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-right:none !important; padding: 8px 12px;" class="text-center font-black text-xs align-middle tracking-wide text-black uppercase">
-            ${subjectVal}
+          <td style="width: ${contentWidth}%; border-bottom: 1.5px solid #000 !important; border-top:none !important; border-right:none !important; padding: 6px ${rightMargin}px 6px 12px; font-size: ${fontSize}px !important;" class="text-center font-bold align-middle tracking-wide text-black uppercase">
+            <u>${subjectVal}</u>
           </td>
         </tr>
 
-        <!-- Main Body Row (Single continuous columns with dynamic margin) -->
-        <tr style="border:none !important;">
-          <!-- Left Column (Adjustable Margin Divider): All Addressees aligned with Originator -->
-          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom:none !important; border-left:none !important; padding: 14px 10px; word-break: break-word; overflow-wrap: anywhere;" class="align-top">
-            <!-- Invisible Header Spacer exactly matching M-01 header height to align Addressee with Originator -->
-            <div class="text-center font-black text-xs pb-1 invisible select-none" aria-hidden="true">
+        <!-- M-01 Header Level Row -->
+        <tr style="border:none !important; height: auto;">
+          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom:none !important; border-top:none !important; padding: 6px 10px 0 10px;" class="align-top">
+            <!-- Space matching M-01 header -->
+            <div class="invisible select-none font-bold pb-1" aria-hidden="true" style="font-size: ${fontSize}px !important;"><u>${langM01}</u></div>
+          </td>
+          <td style="width: ${contentWidth}%; border:none !important; padding: 6px ${rightMargin}px 0 14px;" class="text-center align-top">
+            <div class="font-bold pb-1 inline-block text-black" style="font-size: ${fontSize}px !important;">
               <u>${langM01}</u>
-            </div>
-            <div class="space-y-4 pt-0">
-              ${addresseesHtml}
             </div>
           </td>
+        </tr>
 
-          <!-- Right Column: M-01 and M-02 (No right or bottom border) -->
-          <td style="width: ${contentWidth}%; border:none !important; padding: 14px 14px; word-break: break-word;" class="align-top space-y-3">
-            <!-- M-01 Header -->
-            <div class="text-center font-black text-xs pb-1">
-              <u>${langM01}</u>
-            </div>
+        <!-- Originator & 1st Addressee Row (Guaranteed Exact Same Baseline Alignment - Pic 1) -->
+        <tr style="border:none !important; height: auto;">
+          <!-- Left: 1st Addressee -->
+          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom:none !important; border-top:none !important; padding: 4px 10px 0 10px; font-size: ${fontSize}px !important;" class="align-top font-bold leading-snug text-black">
+            ${firstAddresseeHtml}
+          </td>
+          <!-- Right: Originator -->
+          <td style="width: ${contentWidth}%; border:none !important; padding: 4px ${rightMargin}px 0 14px;" class="align-top">
+            ${originatorVal ? `<div class="font-bold text-black leading-snug inline-block" style="font-size: ${fontSize}px !important;"><u>${originatorVal}</u></div>` : ""}
+          </td>
+        </tr>
 
-            <!-- Originator Line (Top Red Area) -->
-            ${originatorVal ? `
-            <div class="font-black text-xs underline text-slate-950">
-              ${originatorVal}
-            </div>` : ""}
+        <!-- Main Body Row: Paragraphs & Subsequent Addressees (Vertical divider line continues down to bottom of page) -->
+        <tr style="border:none !important; height: 100%;">
+          <!-- Left: Subsequent Addressees (Vertical line continues all the way down) -->
+          <td style="width: ${marginWidth}%; border-right: 1.5px solid #000 !important; border-bottom:none !important; border-top:none !important; padding: 0 10px 14px 10px; height: 100%;" class="align-top">
+            ${subsequentAddresseesHtml}
+          </td>
 
+          <!-- Right Column: Paragraphs, Recommendation, Date/Signatory, M-02 -->
+          <td style="width: ${contentWidth}%; border:none !important; padding: 6px ${rightMargin}px 14px 14px; height: 100%;" class="align-top space-y-3">
             <!-- Paragraphs (Pic 1 Style) -->
-            <div class="space-y-2 text-justify text-xs leading-relaxed text-black font-serif">
+            <div class="space-y-2 text-justify leading-relaxed text-black" style="font-size: ${fontSize}px !important;">
               ${parasHtml || `<p class="italic text-slate-400">No paragraph content entered yet.</p>`}
             </div>
 
             <!-- Recommendation / Final Clause -->
             ${recVal ? `
-            <div class="pt-1 text-xs font-semibold text-black leading-relaxed">
+            <div class="pt-1 font-semibold text-black leading-relaxed" style="font-size: ${fontSize}px !important;">
               <p>${recVal}</p>
             </div>` : ""}
 
-            <!-- Date (Left) & Signature Block (Right - Pic 3) -->
+            <!-- Date (Left) & Signature Block (Right) -->
             <div class="pt-6 flex items-end justify-between">
               <!-- Date -->
-              <div class="font-bold text-xs text-black">
+              <div class="font-bold text-black" style="font-size: ${fontSize}px !important;">
                 ${dateVal}
               </div>
 
               <!-- Signature Space & Appointment -->
               <div class="text-center min-w-[160px] space-y-0.5">
-                <div class="h-12"></div> <!-- 3-5 line blank space for signature -->
-                ${signTitleVal ? `<p class="font-bold text-[11px] text-slate-900">${signTitleVal}</p>` : ""}
+                <div class="h-10"></div> <!-- Signature space -->
+                ${signTitleVal ? `<p class="font-bold text-slate-900" style="font-size: ${Math.max(10, fontSize - 1)}px !important;">${signTitleVal}</p>` : ""}
               </div>
             </div>
 
-            <!-- M-02 Follows Directly Below M-01 (No horizontal line) -->
+            <!-- M-02 Block -->
             ${m02Html}
           </td>
         </tr>
@@ -24836,9 +25705,9 @@ function renderTempIssuesDashboard() {
   const scopedIssues = allIssues.filter((item) => {
     if (scopeFilter === "ALL_ZONES") return true;
     if (scopeFilter === "CURRENT_ZONE") {
-      return !item.zone_id || item.zone_id === store.currentZone || item.target_destination === store.currentZone;
+      return !item.zone_id || item.zone_id === store.currentZone || item.target_destination === store.currentZone || item.origin_zone === store.currentZone;
     }
-    return item.zone_id === scopeFilter || item.target_destination === scopeFilter;
+    return item.zone_id === scopeFilter || item.target_destination === scopeFilter || item.origin_zone === scopeFilter;
   });
 
   // 2. Filter by Period for metrics
@@ -24867,7 +25736,8 @@ function renderTempIssuesDashboard() {
 
     const isReturned = item.status === "returned" || !!item.actual_return_date;
     const isPending = item.status === "pending_receipt";
-    const isOverdue = !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
+    const isReturnable = item.is_returnable !== false;
+    const isOverdue = isReturnable && !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
 
     if (isReturned) {
       returnedCount++;
@@ -24877,7 +25747,7 @@ function renderTempIssuesDashboard() {
       pendingValue += val;
       activeCount++;
       activeValue += val;
-    } else {
+    } else if (item.status !== "non_returnable") {
       activeCount++;
       activeValue += val;
       if (isOverdue) {
@@ -24990,7 +25860,107 @@ function renderTempIssuesDashboard() {
     }
   }
 
+  // 3. Inter-Zone Custody & Return Matrix
+  const matrixContainer = document.getElementById("tibInterZoneMatrix");
+  if (matrixContainer) {
+    const zoneMap = {};
+    scopedIssues.forEach((item) => {
+      const recZone = item.target_destination || item.zone_id || "General";
+      const origZone = item.origin_zone || "Main Store";
+      const key = `${recZone}___${origZone}`;
+
+      if (!zoneMap[key]) {
+        zoneMap[key] = {
+          recZone,
+          origZone,
+          totalQty: 0,
+          totalVal: 0,
+          pendingReturnQty: 0,
+          pendingReturnVal: 0,
+          returnedQty: 0,
+          returnedVal: 0,
+          activeCount: 0
+        };
+      }
+
+      const val = parseFloat(item.total_value) || (parseFloat(item.unit_cost) * parseFloat(item.qty)) || 0;
+      const qty = parseFloat(item.qty) || 1;
+      const isRet = item.status === "returned" || !!item.actual_return_date;
+      const isReturnable = item.is_returnable !== false;
+
+      zoneMap[key].totalQty += qty;
+      zoneMap[key].totalVal += val;
+
+      if (isRet) {
+        zoneMap[key].returnedQty += qty;
+        zoneMap[key].returnedVal += val;
+      } else if (isReturnable) {
+        zoneMap[key].pendingReturnQty += qty;
+        zoneMap[key].pendingReturnVal += val;
+        zoneMap[key].activeCount++;
+      }
+    });
+
+    const entries = Object.values(zoneMap);
+    if (entries.length === 0) {
+      matrixContainer.innerHTML = `<p class="text-xs text-slate-400 italic py-2 text-center">No inter-zone loan or issue records found.</p>`;
+    } else {
+      matrixContainer.innerHTML = `
+        <table class="w-full text-xs text-left border-collapse bg-white rounded-xl overflow-hidden border border-slate-200">
+          <thead class="bg-slate-100/90 text-slate-700 font-bold border-b border-slate-200">
+            <tr>
+              <th class="px-3 py-2">Receiving Zone / Project</th>
+              <th class="px-3 py-2">Taken From (Origin)</th>
+              <th class="px-3 py-2 text-center">Total Taken (Qty)</th>
+              <th class="px-3 py-2 text-right">Total Value</th>
+              <th class="px-3 py-2 text-center">Pending Return (Qty)</th>
+              <th class="px-3 py-2 text-right">Pending Return Value</th>
+              <th class="px-3 py-2 text-center">Returned</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${entries.map((e) => `
+              <tr class="hover:bg-slate-50">
+                <td class="px-3 py-2 font-bold text-slate-900 flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full ${e.pendingReturnQty > 0 ? 'bg-amber-500' : 'bg-emerald-500'}"></span>
+                  ${e.recZone}
+                </td>
+                <td class="px-3 py-2 text-slate-700 font-medium">${e.origZone}</td>
+                <td class="px-3 py-2 text-center font-mono font-bold text-slate-800">${e.totalQty}</td>
+                <td class="px-3 py-2 text-right font-mono font-semibold text-slate-700">Rs. ${e.totalVal.toLocaleString("en-LK")}</td>
+                <td class="px-3 py-2 text-center font-mono font-bold ${e.pendingReturnQty > 0 ? 'text-amber-800 bg-amber-50/50' : 'text-slate-400'}">
+                  ${e.pendingReturnQty > 0 ? `⚠️ ${e.pendingReturnQty}` : '0 (Cleared)'}
+                </td>
+                <td class="px-3 py-2 text-right font-mono font-bold ${e.pendingReturnVal > 0 ? 'text-amber-900' : 'text-slate-400'}">
+                  Rs. ${e.pendingReturnVal.toLocaleString("en-LK")}
+                </td>
+                <td class="px-3 py-2 text-center font-mono font-semibold text-emerald-700">${e.returnedQty}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+  }
+
   updateTibPendingBadge();
+}
+
+function setTibTableTab(tab) {
+  store.tibTableTab = tab || "all";
+
+  const tabs = ["all", "issued", "received", "returns"];
+  tabs.forEach((t) => {
+    const btn = document.getElementById(`tibTab-${t}`);
+    if (!btn) return;
+    if (t === store.tibTableTab) {
+      btn.className = "tib-tab-btn px-3 py-1.5 rounded-lg font-bold bg-white text-indigo-700 shadow-xs cursor-pointer";
+    } else {
+      btn.className = "tib-tab-btn px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-slate-900 cursor-pointer";
+    }
+  });
+
+  renderTempIssuesTable();
 }
 
 // ── Render Temporary Issues Register Table ──
@@ -25005,37 +25975,81 @@ function renderTempIssuesTable() {
   const searchQuery = (document.getElementById("tibSearchInput")?.value || "").toLowerCase().trim();
   const period = store.tibPeriod || "month";
   const todayStr = getLocalDateString();
+  const tabMode = store.tibTableTab || "all";
+
+  // Update Tab Badges / Counts
+  let issuedCount = 0;
+  let receivedCount = 0;
+  let returnsCount = 0;
+
+  allIssues.forEach((item) => {
+    const isRet = item.status === "returned" || !!item.actual_return_date;
+    const isReturnable = item.is_returnable !== false;
+    const curZ = store.currentZone;
+
+    if (!curZ || item.origin_zone === curZ) issuedCount++;
+    if (!curZ || item.target_destination === curZ || item.zone_id === curZ) receivedCount++;
+    if (isReturnable && !isRet && item.status !== "non_returnable" && (!curZ || item.target_destination === curZ || item.zone_id === curZ || scopeFilter === "ALL_ZONES")) {
+      returnsCount++;
+    }
+  });
+
+  const tabIssEl = document.getElementById("tibTabIssuedCount");
+  if (tabIssEl) tabIssEl.textContent = issuedCount;
+  const tabRecEl = document.getElementById("tibTabReceivedCount");
+  if (tabRecEl) tabRecEl.textContent = receivedCount;
+  const tabRetEl = document.getElementById("tibTabReturnsCount");
+  if (tabRetEl) tabRetEl.textContent = returnsCount;
+
+  const summaryEl = document.getElementById("tibTableSummaryText");
+  if (summaryEl) {
+    if (tabMode === "issued") summaryEl.textContent = `Showing items issued OUT by ${store.currentZone || 'Current Zone'}`;
+    else if (tabMode === "received") summaryEl.textContent = `Showing items received IN by ${store.currentZone || 'Current Zone'}`;
+    else if (tabMode === "returns") summaryEl.textContent = `Showing items pending to be RETURNED`;
+    else summaryEl.textContent = `Showing all records`;
+  }
 
   // Filter pipeline
   const filtered = allIssues.filter((item) => {
-    // 1. Scope Filter
+    // 1. Tab Mode Filter
+    if (tabMode === "issued") {
+      if (store.currentZone && item.origin_zone !== store.currentZone) return false;
+    } else if (tabMode === "received") {
+      if (store.currentZone && item.target_destination !== store.currentZone && item.zone_id !== store.currentZone) return false;
+    } else if (tabMode === "returns") {
+      if (item.is_returnable === false || item.status === "returned" || item.status === "non_returnable") return false;
+      if (scopeFilter === "CURRENT_ZONE" && store.currentZone && item.target_destination !== store.currentZone && item.zone_id !== store.currentZone) return false;
+    }
+
+    // 2. Scope Filter
     if (scopeFilter !== "ALL_ZONES") {
       if (scopeFilter === "CURRENT_ZONE") {
-        if (item.zone_id && item.zone_id !== store.currentZone && item.target_destination !== store.currentZone) return false;
-      } else if (item.zone_id !== scopeFilter && item.target_destination !== scopeFilter) {
+        if (item.zone_id && item.zone_id !== store.currentZone && item.target_destination !== store.currentZone && item.origin_zone !== store.currentZone) return false;
+      } else if (item.zone_id !== scopeFilter && item.target_destination !== scopeFilter && item.origin_zone !== scopeFilter) {
         return false;
       }
     }
 
-    // 2. Period Filter
+    // 3. Period Filter
     if (!isDateInSelectedPeriod(item.date, period)) return false;
 
-    // 3. Category Filter
+    // 4. Category Filter
     if (catFilter !== "all" && item.category !== catFilter) return false;
 
-    // 4. Status Filter
+    // 5. Status Filter
     const isReturned = item.status === "returned" || !!item.actual_return_date;
     const isPending = item.status === "pending_receipt";
-    const isOverdue = !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
+    const isReturnable = item.is_returnable !== false;
+    const isOverdue = isReturnable && !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
 
     if (statusFilter === "pending_receipt" && !isPending) return false;
-    if (statusFilter === "active" && (isReturned || isPending)) return false;
+    if (statusFilter === "active" && (isReturned || isPending || !isReturnable)) return false;
     if (statusFilter === "returned" && !isReturned) return false;
     if (statusFilter === "overdue" && !isOverdue) return false;
 
-    // 5. Search Query
+    // 6. Search Query
     if (searchQuery) {
-      const matchStr = `${item.ref_no || ''} ${item.item_name || ''} ${item.issued_to || ''} ${item.trade || ''} ${item.purpose || ''} ${item.zone_id || ''} ${item.target_destination || ''} ${item.remarks || ''}`.toLowerCase();
+      const matchStr = `${item.ref_no || ''} ${item.item_name || ''} ${item.issued_to || ''} ${item.trade || ''} ${item.purpose || ''} ${item.zone_id || ''} ${item.target_destination || ''} ${item.origin_zone || ''} ${item.issued_by || ''} ${item.remarks || ''}`.toLowerCase();
       if (!matchStr.includes(searchQuery)) return false;
     }
 
@@ -25045,10 +26059,10 @@ function renderTempIssuesTable() {
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="9" class="text-center py-10 text-slate-400 bg-slate-50/50">
+        <td colspan="10" class="text-center py-10 text-slate-400 bg-slate-50/50">
           <div class="space-y-1.5">
             <span class="text-3xl">📭</span>
-            <p class="font-medium text-xs">No temporary issues found matching the selected period and filters.</p>
+            <p class="font-medium text-xs">No temporary issues found matching the selected tab and filters.</p>
             <button onclick="openAddTempIssueModal()" class="text-xs font-bold text-teal-600 hover:text-teal-800 underline cursor-pointer">+ Log a New Temporary Issue</button>
           </div>
         </td>
@@ -25063,7 +26077,8 @@ function renderTempIssuesTable() {
   tbody.innerHTML = filtered.map((item) => {
     const isReturned = item.status === "returned" || !!item.actual_return_date;
     const isPending = item.status === "pending_receipt";
-    const isOverdue = !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
+    const isReturnable = item.is_returnable !== false;
+    const isOverdue = isReturnable && !isReturned && item.expected_return_date && item.expected_return_date < todayStr;
     const val = parseFloat(item.total_value) || ((parseFloat(item.unit_cost) || 0) * (parseFloat(item.qty) || 1));
     const unitCost = parseFloat(item.unit_cost) || 0;
 
@@ -25074,9 +26089,14 @@ function renderTempIssuesTable() {
       statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 w-fit mx-auto"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> ⏳ Pending Receipt</span>`;
     } else if (isOverdue) {
       statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 animate-pulse">🚨 Overdue</span>`;
+    } else if (!isReturnable) {
+      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">⚪ Non-Returnable</span>`;
     } else {
       statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-200">🛠️ Active / In Use</span>`;
     }
+
+    const originZoneStr = item.origin_zone || "Main Store";
+    const targetZoneStr = item.target_destination || item.zone_id || store.currentZone || "Zone";
 
     return `
       <tr class="hover:bg-slate-50/80 transition-colors ${isPending ? 'bg-amber-50/20' : ''}">
@@ -25087,10 +26107,18 @@ function renderTempIssuesTable() {
         <td class="px-3.5 py-3 align-top">
           <div class="font-bold text-slate-900">${item.item_name || '—'}</div>
           ${item.remarks ? `<div class="text-[11px] text-slate-500 italic max-w-xs truncate" title="${item.remarks}">${item.remarks}</div>` : ''}
+          ${item.issued_by ? `<div class="text-[10px] text-indigo-700 font-medium">👔 Issued by: ${item.issued_by}</div>` : ''}
           ${item.received_by ? `<div class="text-[10px] text-teal-700 font-medium">📥 Received by: ${item.received_by} (${item.received_date || ''})</div>` : ''}
         </td>
         <td class="px-3 py-3 text-center align-top">
           <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">${item.category || 'General'}</span>
+        </td>
+        <td class="px-3 py-3 text-center align-top">
+          <div class="text-xs font-bold text-slate-800 flex items-center justify-center gap-1">
+            <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">${originZoneStr}</span>
+            <span class="text-slate-400">→</span>
+            <span class="px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 font-bold border border-teal-200/60">${targetZoneStr}</span>
+          </div>
         </td>
         <td class="px-3 py-3 text-center align-top font-bold text-slate-800 font-mono">
           ${item.qty || 1} <span class="text-[10px] font-normal text-slate-500 font-sans">${item.deno || 'Nos'}</span>
@@ -25102,13 +26130,15 @@ function renderTempIssuesTable() {
         <td class="px-3.5 py-3 align-top">
           <div class="font-bold text-slate-800">${item.issued_to || '—'}</div>
           <div class="text-[11px] text-slate-500 flex items-center gap-1.5 flex-wrap">
-            <span class="text-teal-700 font-semibold">${item.zone_id || store.currentZone}</span>
+            <span class="text-teal-700 font-semibold">${targetZoneStr}</span>
             ${item.purpose ? `<span>• ${item.purpose}</span>` : ''}
           </div>
         </td>
         <td class="px-3 py-3 text-center align-top">
-          <div class="font-medium text-slate-700 ${isOverdue ? 'text-rose-700 font-bold' : ''}">${item.expected_return_date || '—'}</div>
-          ${isReturned && item.actual_return_date ? `<div class="text-[10px] text-emerald-700 font-semibold">Ret: ${item.actual_return_date}</div>` : ''}
+          ${isReturnable ? `
+            <div class="font-medium text-slate-700 ${isOverdue ? 'text-rose-700 font-bold' : ''}">${item.expected_return_date || '—'}</div>
+            ${isReturned && item.actual_return_date ? `<div class="text-[10px] text-emerald-700 font-semibold">Ret: ${item.actual_return_date}</div>` : ''}
+          ` : `<span class="text-[10px] text-slate-400 italic">Not Returnable</span>`}
         </td>
         <td class="px-3 py-3 text-center align-top">
           ${statusBadge}
@@ -25119,7 +26149,7 @@ function renderTempIssuesTable() {
               <button onclick="openConfirmReceiptModal('${item.id || item._fbKey}')" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1" title="Confirm Receipt in this Zone/Workshop">
                 <span>📥</span> Confirm Received
               </button>
-            ` : (!isReturned ? `
+            ` : (isReturnable && !isReturned ? `
               <button onclick="openReturnTempIssueModal('${item.id || item._fbKey}')" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1" title="Record Item Return">
                 <span>🔄</span> Return
               </button>
@@ -25167,25 +26197,34 @@ function openAddTempIssueModal(editId = null) {
   const idInp = document.getElementById("tibInputId");
   const refInp = document.getElementById("tibInputRefNo");
   const dateInp = document.getElementById("tibInputDate");
-  const zoneSelect = document.getElementById("tibInputZoneId");
+  const originSelect = document.getElementById("tibInputOriginZone");
+  const targetSelect = document.getElementById("tibInputZoneId");
   const descInp = document.getElementById("tibInputDescription");
   const catSelect = document.getElementById("tibInputCategory");
   const qtyInp = document.getElementById("tibInputQty");
   const denoInp = document.getElementById("tibInputDeno");
   const unitCostInp = document.getElementById("tibInputUnitCost");
+  const isReturnableChk = document.getElementById("tibInputIsReturnable");
   const issuedToInp = document.getElementById("tibInputIssuedTo");
   const tradeInp = document.getElementById("tibInputTrade");
   const purposeInp = document.getElementById("tibInputPurpose");
   const expDateInp = document.getElementById("tibInputExpectedReturnDate");
-  const issuedByInp = document.getElementById("tibInputIssuedBy");
+  const issuedByHiddenInp = document.getElementById("tibInputIssuedBy");
+  const issuedBySearchInput = document.getElementById("tibIssuedBySearchInput");
   const remarksInp = document.getElementById("tibInputRemarks");
   const titleEl = document.getElementById("addTempIssueModalTitle");
 
-  // Populate Zone Select
-  if (zoneSelect) {
-    const allZones = getAllAvailableZonesAndWorkshops();
-    zoneSelect.innerHTML = allZones.map((z) => `<option value="${z.id || z.name}">${z.name || z.id}</option>`).join("");
-    zoneSelect.value = store.currentZone || "A-Zone";
+  const allZones = getAllAvailableZonesAndWorkshops();
+  const zoneOptionsHtml = allZones.map((z) => `<option value="${z.id || z.name}">${z.name || z.id}</option>`).join("");
+
+  // Populate Origin (Issued From) & Target (Issued To)
+  if (originSelect) {
+    originSelect.innerHTML = `<option value="Main Store">🏢 Main Store</option>` + zoneOptionsHtml;
+    originSelect.value = store.currentZone || "Main Store";
+  }
+  if (targetSelect) {
+    targetSelect.innerHTML = zoneOptionsHtml;
+    targetSelect.value = store.currentZone || "A-Zone";
   }
 
   // Populate Inventory Quick Pick Dropdown
@@ -25210,19 +26249,9 @@ function openAddTempIssueModal(editId = null) {
   const nextWeekStr = nextWeek.toISOString().split("T")[0];
 
   // Reset Search Boxes
-  const invSearchInput = document.getElementById("tibInventorySearchInput");
-  const invSearchResults = document.getElementById("tibInventorySearchResults");
-  const invClearBtn = document.getElementById("tibInvSearchClearBtn");
-  if (invSearchInput) invSearchInput.value = "";
-  if (invSearchResults) invSearchResults.classList.add("hidden");
-  if (invClearBtn) invClearBtn.classList.add("hidden");
-
-  const sailorSearchInput = document.getElementById("tibSailorSearchInput");
-  const sailorSearchResults = document.getElementById("tibSailorSearchResults");
-  const sailorClearBtn = document.getElementById("tibSailorSearchClearBtn");
-  if (sailorSearchInput) sailorSearchInput.value = "";
-  if (sailorSearchResults) sailorSearchResults.classList.add("hidden");
-  if (sailorClearBtn) sailorClearBtn.classList.add("hidden");
+  clearTibInventorySearch();
+  clearTibSailorSearch();
+  clearTibIssuedBySearch();
 
   if (editId) {
     const issue = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === editId);
@@ -25231,19 +26260,24 @@ function openAddTempIssueModal(editId = null) {
       if (idInp) idInp.value = editId;
       if (refInp) refInp.value = issue.ref_no || "";
       if (dateInp) dateInp.value = issue.date || todayStr;
-      if (zoneSelect) zoneSelect.value = issue.zone_id || store.currentZone;
+      if (originSelect) originSelect.value = issue.origin_zone || "Main Store";
+      if (targetSelect) targetSelect.value = issue.target_destination || issue.zone_id || store.currentZone;
       if (descInp) descInp.value = issue.item_name || "";
-      if (invSearchInput) invSearchInput.value = issue.item_name || "";
+      const invSearch = document.getElementById("tibInventorySearchInput");
+      if (invSearch) invSearch.value = issue.item_name || "";
       if (catSelect) catSelect.value = issue.category || "Tools & Machinery";
       if (qtyInp) qtyInp.value = issue.qty || 1;
       if (denoInp) denoInp.value = issue.deno || "Nos";
       if (unitCostInp) unitCostInp.value = issue.unit_cost || 0;
+      if (isReturnableChk) isReturnableChk.checked = issue.is_returnable !== false;
       if (issuedToInp) issuedToInp.value = issue.issued_to || "";
-      if (sailorSearchInput) sailorSearchInput.value = issue.issued_to || "";
+      const sailorSearch = document.getElementById("tibSailorSearchInput");
+      if (sailorSearch) sailorSearch.value = issue.issued_to || "";
       if (tradeInp) tradeInp.value = issue.trade || "";
       if (purposeInp) purposeInp.value = issue.purpose || "";
       if (expDateInp) expDateInp.value = issue.expected_return_date || nextWeekStr;
-      if (issuedByInp) issuedByInp.value = issue.issued_by || "";
+      if (issuedByHiddenInp) issuedByHiddenInp.value = issue.issued_by || "";
+      if (issuedBySearchInput) issuedBySearchInput.value = issue.issued_by || "";
       if (remarksInp) remarksInp.value = issue.remarks || "";
     }
   } else {
@@ -25259,16 +26293,53 @@ function openAddTempIssueModal(editId = null) {
     if (qtyInp) qtyInp.value = "1";
     if (denoInp) denoInp.value = "Nos";
     if (unitCostInp) unitCostInp.value = "0";
+    if (isReturnableChk) isReturnableChk.checked = true;
     if (issuedToInp) issuedToInp.value = "";
     if (tradeInp) tradeInp.value = "";
     if (purposeInp) purposeInp.value = "";
     if (expDateInp) expDateInp.value = nextWeekStr;
-    if (issuedByInp) issuedByInp.value = (store.currentUser && store.currentUser.name) ? `${store.currentUser.name} (${store.currentUser.rank || ''})` : "Storekeeper";
+    const defaultIssuedBy = (store.currentUser && store.currentUser.name) ? `${store.currentUser.name} (${store.currentUser.rank || ''})` : "Storekeeper (Civil)";
+    if (issuedByHiddenInp) issuedByHiddenInp.value = defaultIssuedBy;
+    if (issuedBySearchInput) issuedBySearchInput.value = defaultIssuedBy;
     if (remarksInp) remarksInp.value = "";
   }
 
+  toggleTibReturnableFields();
   calculateTibFormTotalValue();
   modal.classList.remove("hidden");
+}
+
+function toggleTibReturnableFields() {
+  const isReturnable = document.getElementById("tibInputIsReturnable") ? document.getElementById("tibInputIsReturnable").checked : true;
+  const expContainer = document.getElementById("tibExpReturnDateContainer");
+  const expInp = document.getElementById("tibInputExpectedReturnDate");
+  const badge = document.getElementById("tibReturnableBadge");
+
+  if (isReturnable) {
+    if (expContainer) expContainer.classList.remove("opacity-40", "pointer-events-none");
+    if (expInp) {
+      expInp.required = true;
+      if (!expInp.value) {
+        const nextWeek = new Date();
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        expInp.value = nextWeek.toISOString().split("T")[0];
+      }
+    }
+    if (badge) {
+      badge.textContent = "Return Required";
+      badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300";
+    }
+  } else {
+    if (expContainer) expContainer.classList.add("opacity-40", "pointer-events-none");
+    if (expInp) {
+      expInp.required = false;
+      expInp.value = "";
+    }
+    if (badge) {
+      badge.textContent = "Non-Returnable (Consumed)";
+      badge.className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 border border-slate-300";
+    }
+  }
 }
 
 // ── Search & Find for Inventory Items in Temporary Issue Modal ──
@@ -25298,19 +26369,17 @@ function searchTibInventoryItems(query) {
     else clearBtn.classList.add("hidden");
   }
 
-  const selectedZone = document.getElementById("tibInputZoneId")?.value || "";
+  const selectedZone = document.getElementById("tibInputOriginZone")?.value || document.getElementById("tibInputZoneId")?.value || "";
 
   const items = store.inventory || [];
   const filtered = items.filter((it) => {
-    // 1. Strict filter by Selected Zone/Workshop in Modal
-    if (selectedZone && selectedZone !== "all" && selectedZone !== "All Zones") {
+    if (selectedZone && selectedZone !== "all" && selectedZone !== "All Zones" && selectedZone !== "Main Store") {
       const itZone = it.zone_id || it.location || "";
       if (!isSameZone(selectedZone, itZone)) {
         return false;
       }
     }
 
-    // 2. Filter by search text query
     if (!lowerQuery) return true;
     const desc = (it.description || "").toLowerCase();
     const cat = (it.category || "").toLowerCase();
@@ -25385,7 +26454,6 @@ function clearTibInventorySearch() {
   const clearBtn = document.getElementById("tibInvSearchClearBtn");
   if (searchInput) {
     searchInput.value = "";
-    searchInput.focus();
   }
   if (clearBtn) clearBtn.classList.add("hidden");
   if (container) {
@@ -25468,8 +26536,89 @@ function clearTibSailorSearch() {
   const clearBtn = document.getElementById("tibSailorSearchClearBtn");
   if (searchInput) {
     searchInput.value = "";
-    searchInput.focus();
   }
+  if (clearBtn) clearBtn.classList.add("hidden");
+  if (container) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+  }
+}
+
+// ── Search & Find for Issued By / Storekeeper in Temporary Issue Modal ──
+function searchTibIssuedByItems(query) {
+  const container = document.getElementById("tibIssuedBySearchResults");
+  const clearBtn = document.getElementById("tibIssuedBySearchClearBtn");
+  if (!container) return;
+
+  const lowerQuery = (query || "").toLowerCase().trim();
+  if (clearBtn) {
+    if (lowerQuery) clearBtn.classList.remove("hidden");
+    else clearBtn.classList.add("hidden");
+  }
+
+  const sailors = store.sailors || [];
+  const filtered = sailors.filter((s) => {
+    if (!lowerQuery) return true;
+    const offNo = String(s.official_number || "").toLowerCase();
+    const name = (s.name || s.initials || "").toLowerCase();
+    const rank = (s.rank || "").toLowerCase();
+    const trade = (s.trade || s.department || "").toLowerCase();
+    return offNo.includes(lowerQuery) || name.includes(lowerQuery) || rank.includes(lowerQuery) || trade.includes(lowerQuery);
+  }).slice(0, 30);
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="p-3 text-xs text-slate-500 italic text-center">No matching personnel found for "${escapeHtml(query)}"</div>`;
+    container.classList.remove("hidden");
+    return;
+  }
+
+  container.innerHTML = filtered.map((s) => {
+    return `
+      <div onclick="selectTibIssuedByItem('${s.id || s.official_number}')" class="p-2.5 hover:bg-indigo-50/80 cursor-pointer transition-colors flex items-center justify-between gap-3 text-left">
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-bold text-slate-900 truncate">
+            <span class="font-mono text-indigo-700 font-bold">${s.official_number || '—'}</span> • ${s.rank || ''} ${s.name || s.initials || 'Sailor'}
+          </div>
+          <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+            <span class="px-1.5 py-0.5 rounded bg-slate-100 font-semibold text-slate-700">${s.trade || 'Staff'}</span>
+            ${s.division ? `<span class="text-slate-400">${s.division}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  container.classList.remove("hidden");
+}
+
+function selectTibIssuedByItem(sailorId) {
+  const sailor = (store.sailors || []).find((s) => String(s.id) === String(sailorId) || String(s.official_number) === String(sailorId));
+  if (!sailor) return;
+
+  const searchInput = document.getElementById("tibIssuedBySearchInput");
+  const hiddenInp = document.getElementById("tibInputIssuedBy");
+  const container = document.getElementById("tibIssuedBySearchResults");
+  const clearBtn = document.getElementById("tibIssuedBySearchClearBtn");
+
+  const fullStr = `${sailor.name || sailor.initials || ''} (${sailor.rank || ''} ${sailor.official_number || ''})`.trim();
+  if (searchInput) searchInput.value = fullStr;
+  if (hiddenInp) hiddenInp.value = fullStr;
+  if (clearBtn) clearBtn.classList.remove("hidden");
+  if (container) container.classList.add("hidden");
+
+  showToast(`Selected "${fullStr}" as Issuing Officer`, "success");
+}
+
+function clearTibIssuedBySearch() {
+  const searchInput = document.getElementById("tibIssuedBySearchInput");
+  const hiddenInp = document.getElementById("tibInputIssuedBy");
+  const container = document.getElementById("tibIssuedBySearchResults");
+  const clearBtn = document.getElementById("tibIssuedBySearchClearBtn");
+
+  if (searchInput) {
+    searchInput.value = "";
+  }
+  if (hiddenInp) hiddenInp.value = "";
   if (clearBtn) clearBtn.classList.add("hidden");
   if (container) {
     container.classList.add("hidden");
@@ -25488,6 +26637,11 @@ document.addEventListener("click", (e) => {
   const slrInput = document.getElementById("tibSailorSearchInput");
   if (slrCont && !slrCont.contains(e.target) && e.target !== slrInput) {
     slrCont.classList.add("hidden");
+  }
+  const issCont = document.getElementById("tibIssuedBySearchResults");
+  const issInput = document.getElementById("tibIssuedBySearchInput");
+  if (issCont && !issCont.contains(e.target) && e.target !== issInput) {
+    issCont.classList.add("hidden");
   }
 });
 
@@ -25533,26 +26687,28 @@ function handleTempIssueFormSubmit(e) {
   const id = document.getElementById("tibInputId")?.value;
   const refNo = document.getElementById("tibInputRefNo")?.value || "TIB/—";
   const date = document.getElementById("tibInputDate")?.value || getLocalDateString();
-  const zoneId = document.getElementById("tibInputZoneId")?.value || store.currentZone;
+  const originZone = document.getElementById("tibInputOriginZone")?.value || store.currentZone || "Main Store";
+  const targetZone = document.getElementById("tibInputZoneId")?.value || store.currentZone;
   const desc = document.getElementById("tibInputDescription")?.value || "Tool / Material";
   const category = document.getElementById("tibInputCategory")?.value || "Tools & Machinery";
   const qty = parseFloat(document.getElementById("tibInputQty")?.value) || 1;
   const deno = document.getElementById("tibInputDeno")?.value || "Nos";
   const unitCost = parseFloat(document.getElementById("tibInputUnitCost")?.value) || 0;
   const totalVal = qty * unitCost;
+  const isReturnable = document.getElementById("tibInputIsReturnable") ? document.getElementById("tibInputIsReturnable").checked : true;
   const issuedTo = document.getElementById("tibInputIssuedTo")?.value || "";
   const trade = document.getElementById("tibInputTrade")?.value || "";
   const purpose = document.getElementById("tibInputPurpose")?.value || "";
   const expDate = document.getElementById("tibInputExpectedReturnDate")?.value || "";
-  const issuedBy = document.getElementById("tibInputIssuedBy")?.value || "";
+  const issuedBy = document.getElementById("tibIssuedBySearchInput")?.value || document.getElementById("tibInputIssuedBy")?.value || "";
   const remarks = document.getElementById("tibInputRemarks")?.value || "";
 
   const record = {
     ref_no: refNo,
     date: date,
-    zone_id: zoneId,
-    origin_zone: store.currentZone || "Main Store",
-    target_destination: zoneId,
+    zone_id: targetZone,
+    origin_zone: originZone,
+    target_destination: targetZone,
     item_name: desc,
     category: category,
     qty: qty,
@@ -25562,10 +26718,11 @@ function handleTempIssueFormSubmit(e) {
     issued_to: issuedTo,
     trade: trade,
     purpose: purpose,
-    expected_return_date: expDate,
+    is_returnable: isReturnable,
+    expected_return_date: isReturnable ? expDate : "",
     issued_by: issuedBy,
     remarks: remarks,
-    status: "pending_receipt",
+    status: isReturnable ? "pending_receipt" : "non_returnable",
     updated_at: Date.now()
   };
 
@@ -25598,7 +26755,7 @@ function handleTempIssueFormSubmit(e) {
     if (!store.tempIssues) store.tempIssues = [];
     store.tempIssues = store.tempIssues.filter((i) => (i.id || i._fbKey) !== newKey);
     store.tempIssues.push(record);
-    showToast(`Temporary Issue ${refNo} logged as Pending Receipt!`, "success");
+    showToast(`Temporary Issue ${refNo} logged as ${isReturnable ? 'Pending Receipt' : 'Non-Returnable Issue'}!`, "success");
   }
 
   saveTempIssuesToStorage();
@@ -25640,13 +26797,14 @@ function openConfirmReceiptModal(issueId) {
   const totalVal = parseFloat(issue.total_value) || ((parseFloat(issue.unit_cost) || 0) * (parseFloat(issue.qty) || 1));
   if (valEl) valEl.textContent = `Value: Rs. ${totalVal.toLocaleString("en-LK", { minimumFractionDigits: 2 })}`;
   if (itemEl) itemEl.textContent = `📦 ${issue.item_name} (${issue.qty} ${issue.deno || 'Nos'})`;
-  if (originEl) originEl.textContent = `From: ${issue.origin_zone || issue.zone_id || 'Store'} → To: ${issue.target_destination || issue.zone_id || store.currentZone}`;
+  if (originEl) originEl.textContent = `From: ${issue.origin_zone || 'Main Store'} → To: ${issue.target_destination || issue.zone_id || store.currentZone}`;
   if (expReturnEl) expReturnEl.textContent = `Expected Return: ${issue.expected_return_date || '—'}`;
 
   if (dateInp) dateInp.value = getLocalDateString();
   if (qtyInp) qtyInp.value = issue.qty || 1;
   if (condSelect) condSelect.value = "Good Working Condition";
-  if (recInp) recInp.value = (store.currentUser && store.currentUser.name) ? `${store.currentUser.name}` : (issue.issued_to || "");
+  // Auto-fill recipient name as per earlier provided details
+  if (recInp) recInp.value = issue.issued_to || (store.currentUser && store.currentUser.name ? store.currentUser.name : "");
   if (notesInp) notesInp.value = "Inspected, tested and taken into custody.";
 
   modal.classList.remove("hidden");
@@ -25719,7 +26877,8 @@ function openReturnTempIssueModal(issueId) {
   if (dateInp) dateInp.value = getLocalDateString();
   if (qtyInp) qtyInp.value = issue.qty || 1;
   if (condSelect) condSelect.value = "Good Condition";
-  if (recInp) recInp.value = (store.currentUser && store.currentUser.name) ? `${store.currentUser.name}` : "Storekeeper";
+  // Auto-fill receiver as per issuing officer / storekeeper
+  if (recInp) recInp.value = issue.issued_by || (store.currentUser && store.currentUser.name ? store.currentUser.name : "Storekeeper");
   if (remarksInp) remarksInp.value = "Inspected and returned to store.";
 
   modal.classList.remove("hidden");
@@ -25782,96 +26941,311 @@ function deleteTempIssue(id, event) {
   showToast("Temporary issue record deleted", "info");
 }
 
-// ── Print Official Gate Pass / Temporary Issue Slip ──
+// ── Helper to resolve real Naval Rank (e.g. PO(CE)) instead of Trade (MA) ──
+function resolveSailorRealRank(nameOrOffNo, fallbackTrade = "") {
+  const str = String(nameOrOffNo || "").trim();
+
+  // 1. Try to find matching sailor in store.sailors
+  if (Array.isArray(store.sailors) && store.sailors.length > 0) {
+    const found = store.sailors.find((s) => {
+      const offNo = String(s.official_number || s.service_no || "").trim();
+      const sName = String(s.name || "").toLowerCase().trim();
+      const fullStr = str.toLowerCase();
+      return (offNo && fullStr.includes(offNo)) || (sName && fullStr.includes(sName));
+    });
+    if (found && found.rank && found.rank.trim()) {
+      return found.rank.trim();
+    }
+  }
+
+  // 2. Extract rank pattern from the name string (e.g. "EC 50091 PO(CE) SBSS JAYAWARDANA" -> "PO(CE)")
+  const rankMatch = str.match(/(?:CPO|PO|LS|AB|ORD|WO|MCPO|SCPO|CWO|LCDR|LT|SLT|MID|CDR|CAPT|CMDE|RADM)\s*(?:\([A-Za-z0-9/& -]+\))?|(?:Chief Petty Officer|Petty Officer|Leading Seaman|Able Seaman|Ordinary Seaman)/i);
+  if (rankMatch) {
+    return rankMatch[0].trim();
+  }
+
+  // 3. Check if fallbackTrade is already a rank
+  const trades = ["ma", "mason", "carpenter", "plumber", "painter", "welder", "driver", "blacksmith", "electrician", "civil", "tools & machinery"];
+  if (fallbackTrade && !trades.includes(String(fallbackTrade).toLowerCase().trim())) {
+    return fallbackTrade.trim();
+  }
+
+  return "—";
+}
+
+// ── Authentic Official Sri Lanka Navy NAV 254 HTML Template (Pic 3 & Pic 4 Layout) ──
+function generateOfficialNav254Html(data) {
+  const refNo = data.ref_no || data.voucher_no || "CCCED/CE/FD/OUT/254/01/2026";
+  const suppliedBy = data.supplied_by || `Civil Engineering Department (${data.origin_zone || store.currentZone || "CE Dept"})`;
+  const receivedBy = data.received_by || data.target_destination || data.receiving_unit || data.zone_id || "FH Zone";
+  const issueDate = data.date || getLocalDateString();
+  const recipientName = data.issued_to || data.recipient_name || "EC 50091 PO(CE) SBSS JAYAWARDANA";
+  const recipientRank = resolveSailorRealRank(recipientName, data.recipient_rank || data.trade || "");
+  const issuedBy = data.issued_by || "Storekeeper (CE Dept)";
+  const purpose = data.purpose || "Civil Engineering Works / Maintenance";
+  const expectedReturn = data.expected_return_date || "—";
+  const operator = store.activeProfileName || "Admin Desk";
+  const printTimestamp = new Date().toLocaleString("en-GB");
+
+  // Items handling - minimum 4 rows (Items Under 4 as shown in Pic 3)
+  const items = (data.items && data.items.length > 0) ? data.items : [
+    {
+      description: data.item_name || data.description || "Material Issue",
+      deno: data.deno || "Nos",
+      qty_supplied: data.qty || data.quantity_issued || 1,
+      qty_received: data.quantity_received || data.qty || data.quantity_issued || 1,
+      total_value: parseFloat(data.total_value) || ((parseFloat(data.unit_cost) || 0) * (parseFloat(data.qty) || 1))
+    }
+  ];
+
+  const totalRowCount = Math.max(4, items.length);
+  let rowsHtml = "";
+
+  for (let idx = 0; idx < totalRowCount; idx++) {
+    const it = items[idx];
+    if (it) {
+      const val = parseFloat(it.total_value || 0);
+      const valRs = val > 0 ? Math.floor(val).toLocaleString("en-LK") : "—";
+      const valCents = val > 0 ? String(Math.round((val % 1) * 100)).padStart(2, "0") : "";
+
+      rowsHtml += `
+        <tr style="height: 32px;">
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px; font-weight: bold;">${idx + 1}</td>
+          <td style="border: 1px solid #000; padding: 4px 8px; font-size: 11.5px; font-weight: 600; text-align: left;">${it.description}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">${it.deno || 'Nos'}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11.5px; font-weight: bold;">${it.qty_supplied || it.qty || ''}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11.5px; font-weight: bold;">${it.qty_received || it.qty || ''}</td>
+          <td style="border: 1px solid #000; padding: 0; font-size: 11px;">
+            <div style="display: flex; height: 100%; align-items: center;">
+              <span style="flex: 1; text-align: right; padding-right: 4px; border-right: 1px solid #000; font-weight: bold;">${valRs}</span>
+              <span style="width: 25px; text-align: center; font-size: 10px;">${valCents}</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    } else {
+      // Empty standard blank row to maintain authentic official format (Pic 3)
+      rowsHtml += `
+        <tr style="height: 32px;">
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 4px 8px; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 0; font-size: 11px;">
+            <div style="display: flex; height: 100%;">
+              <span style="flex: 1; border-right: 1px solid #000;">&nbsp;</span>
+              <span style="width: 25px;">&nbsp;</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  return `
+    <div style="font-family: 'Noto Sans Sinhala', 'Iskoola Pota', 'Abhaya Libre', 'Times New Roman', serif; color: #000; max-width: 820px; margin: 0 auto; background: #fff; padding: 18px 22px; border: 1.5px solid #000;">
+      <!-- Top Form Number & Header Details (Pic 3) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <!-- Left: NAV 254 Box -->
+        <div style="border: 1.5px solid #000; padding: 4px 10px; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; gap: 8px;">
+          <div style="line-height: 1.2; text-align: center;">නැවි<br>NAV</div>
+          <div style="font-size: 26px; font-weight: 900; line-height: 1;">} 254</div>
+        </div>
+
+        <!-- Center-Right Form Info (Pic 3) -->
+        <div style="text-align: right; font-size: 10px; line-height: 1.35;">
+          <div style="display: flex; align-items: flex-start; justify-content: flex-end; gap: 14px;">
+            <span style="font-size: 9.5px; color: #1e293b; font-family: monospace;">H 029858 — 1500 (2007/12) P</span>
+            <div style="text-align: right;">
+              <div style="font-weight: bold;">ශ්‍රී ලංකා රජයේ මුද්‍රණ දෙපාර්තමේන්තුව</div>
+              <div>ශ්‍රී ලං. නා. හ. 64</div>
+              <div>(Bond Quintuplicate 7 ½” x 10”)</div>
+              <div>සිං/ඉං 5/67</div>
+            </div>
+            <!-- Fold triangle marker in top right corner (Pic 3) -->
+            <div style="width: 0; height: 0; border-top: 28px solid #475569; border-left: 28px solid transparent;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Document Title -->
+      <div style="text-align: center; margin-top: 6px; margin-bottom: 6px;">
+        <h2 style="font-size: 13.5px; font-weight: bold; margin: 0; letter-spacing: 0.5px;">ඇණවුම් සැපයුම් හෝ ලැබූ පත්‍රය</h2>
+        <h3 style="font-size: 11.5px; font-weight: bold; margin: 0; text-transform: uppercase;">Demand Supply Or Receipt Note</h3>
+      </div>
+
+      <!-- Top Right Serial No (Green Area) -->
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+        <div style="border: 1.5px solid #000; display: inline-flex; font-size: 11px;">
+          <div style="padding: 4px 10px; border-right: 1.5px solid #000; font-weight: bold; line-height: 1.2; text-align: center;">
+            අනුක්‍රමික අංකය<br>Serial No.
+          </div>
+          <div style="padding: 4px 14px; font-weight: 900; font-family: monospace; font-size: 12px; display: flex; align-items: center; color: #000;">
+            ${refNo}
+          </div>
+        </div>
+      </div>
+
+      <!-- Supplied By (Red Area) & Received By (Orange Area) -->
+      <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-top: 4px; padding-bottom: 6px;">
+        <!-- Left: Supplied By (Red) -->
+        <div style="width: 48%;">
+          <div style="font-weight: bold;">සපයන ලද්දේ / SUPPLIED BY</div>
+          <div style="font-weight: bold; font-size: 12px; padding: 2px 0; min-height: 22px; color: #000;">
+            ${suppliedBy}
+          </div>
+          <div style="margin-top: 4px;">
+            <strong>දිනය / Date:</strong> ${issueDate}
+          </div>
+        </div>
+
+        <!-- Right: Received By (Orange) -->
+        <div style="width: 48%;">
+          <div style="font-weight: bold;">ලබා ගත්තේ / RECEIVED BY</div>
+          <div style="font-weight: bold; font-size: 12px; padding: 2px 0; min-height: 22px; color: #000;">
+            ${receivedBy}
+          </div>
+          <div style="margin-top: 4px;">
+            <strong>දිනය / Date:</strong> ${issueDate}
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Items Table (Yellow Area - 4 Items as in Pic 3) -->
+      <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-top: 8px; margin-bottom: 12px;">
+        <thead>
+          <tr style="background: #f8fafc;">
+            <th style="border: 1px solid #000; padding: 6px 4px; width: 5%; font-size: 11px;">#</th>
+            <th style="border: 1px solid #000; padding: 6px 8px; width: 44%; font-size: 11px; text-align: center;">
+              විස්තරය<br><span style="font-weight: normal; font-size: 10px;">description</span>
+            </th>
+            <th style="border: 1px solid #000; padding: 6px 6px; width: 12%; font-size: 11px; text-align: center;">
+              වර්ගය<br><span style="font-weight: normal; font-size: 10px;">Denomination</span>
+            </th>
+            <th style="border: 1px solid #000; padding: 6px 6px; width: 13%; font-size: 11px; text-align: center;">
+              සැපයූ ප්‍රමාණය<br><span style="font-weight: normal; font-size: 10px;">Quantity Supplied</span>
+            </th>
+            <th style="border: 1px solid #000; padding: 6px 6px; width: 13%; font-size: 11px; text-align: center;">
+              ලැබූ ප්‍රමාණය<br><span style="font-weight: normal; font-size: 10px;">Quantity Received</span>
+            </th>
+            <th style="border: 1px solid #000; padding: 4px; width: 13%; font-size: 11px; text-align: center;">
+              වටිනාකම<br><span style="font-weight: normal; font-size: 10px;">Value</span>
+              <div style="display: flex; border-top: 1px solid #000; margin-top: 2px; padding-top: 2px;">
+                <span style="flex: 1; text-align: center; border-right: 1px solid #000; font-size: 9.5px; font-weight: bold;">රු. Rs.</span>
+                <span style="width: 25px; text-align: center; font-size: 9.5px; font-weight: bold;">ශ. c.</span>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+
+      <!-- Authorizing Officer Box (Pic 3) -->
+      <div style="border: 1.5px solid #000; padding: 6px 12px; font-size: 11px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="font-weight: bold; width: 25%; line-height: 1.3;">
+          බලය දෙන නිලධාරී<br><span style="font-size: 10px;">Officer Authorizing</span>
+        </div>
+        <div style="width: 72%;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span>ඇණවුම Demand } ____________________________</span>
+            <span>නිලය Rank } ______________</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span>සැපයුම Supply } ____________________________</span>
+            <span>නිලය Rank } ______________</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Received Stores & Rank Area (Purple Area) -->
+      <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px;">
+        <div style="width: 58%;">
+          <div style="font-weight: bold; line-height: 1.2;">
+            ඉහත සඳහන් ගබඩා බඩු ලබා ගන්නා ලදී. }<br>
+            <span style="font-size: 10px;">RECEIVED THE ABOVE STORES</span>
+          </div>
+          <div style="border-bottom: 1px solid #000; padding: 4px 0; font-weight: bold; font-size: 11.5px; min-height: 22px; margin-top: 4px;">
+            ${recipientName}
+          </div>
+        </div>
+        <div style="width: 38%;">
+          <div style="font-weight: bold; line-height: 1.2;">
+            නිලය/තරාතිරම }<br>
+            <span style="font-size: 10px;">RANK / RATE</span>
+          </div>
+          <div style="border-bottom: 1px solid #000; padding: 4px 0; font-weight: bold; font-size: 11.5px; min-height: 22px; margin-top: 4px;">
+            ${recipientRank}
+          </div>
+        </div>
+      </div>
+
+      <!-- Gray Area: Issued By / Purpose / Expected Return -->
+      <div style="margin-top: 10px; font-size: 10px; color: #1e293b; display: flex; justify-content: space-between; border-top: 1px dashed #94a3b8; padding-top: 4px;">
+        <div><strong>සැපයූ නාවිකයා / Issued By:</strong> ${issuedBy}</div>
+        <div><strong>කාර්යය / Purpose:</strong> ${purpose}</div>
+        <div><strong>නැවත භාරදිය යුතු දිනය:</strong> ${expectedReturn}</div>
+      </div>
+
+      <!-- Brown Area: System Reference & Tracking Details (Right/Bottom) -->
+      <div style="margin-top: 4px; font-size: 8.5px; color: #78350f; display: flex; justify-content: space-between; font-family: monospace; border-top: 1px solid #fed7aa; padding-top: 2px;">
+        <span>⚙️ SYSTEM TRACKING REF: ${refNo} · SRI LANKA NAVY CE DEPT</span>
+        <span>GENERATED: ${printTimestamp} · OPERATOR: ${operator}</span>
+      </div>
+    </div>
+  `;
+}
+
+// ── Print Official Gate Pass / Authentic NAV 254 Slip ──
 function printTempIssueSlip(issueId) {
   const issue = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === issueId);
   if (!issue) return;
 
-  const totalVal = parseFloat(issue.total_value) || ((parseFloat(issue.unit_cost) || 0) * (parseFloat(issue.qty) || 1));
-  const printWindow = window.open("", "_blank", "width=850,height=700");
+  const printWindow = window.open("", "_blank", "width=880,height=750");
   if (!printWindow) {
     window.print();
     return;
   }
 
+  const nav254Content = generateOfficialNav254Html({
+    ref_no: issue.ref_no,
+    supplied_by: `Civil Engineering Department (${issue.origin_zone || store.currentZone || 'CE Dept'})`,
+    received_by: issue.target_destination || issue.zone_id || store.currentZone,
+    date: issue.date,
+    item_name: issue.item_name,
+    category: issue.category,
+    qty: issue.qty,
+    deno: issue.deno,
+    unit_cost: issue.unit_cost,
+    total_value: issue.total_value,
+    issued_to: issue.issued_to,
+    trade: issue.trade,
+    issued_by: issue.issued_by,
+    purpose: issue.purpose,
+    expected_return_date: issue.expected_return_date,
+    is_returnable: issue.is_returnable
+  });
+
   printWindow.document.write(`
     <!DOCTYPE html>
-    <html>
+    <html lang="si">
       <head>
-        <title>Temporary Issue Slip - ${issue.ref_no}</title>
-        <script src="https://cdn.tailwindcss.com"></script>
+        <title>NAV 254 - ${issue.ref_no}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
         <style>
-          @page { size: A5 landscape; margin: 10mm; }
-          body { font-family: "Times New Roman", Times, Georgia, serif; color: #000; background: #fff; }
-          table { border-collapse: collapse; width: 100%; }
-          th, td { border: 1px solid #000; padding: 6px 10px; font-size: 12px; }
+          @page { size: A4 portrait; margin: 10mm 15mm; }
+          @media print {
+            body { margin: 0; padding: 0; background: #fff !important; }
+            .no-print { display: none !important; }
+          }
+          body { margin: 0; padding: 20px; background: #f8fafc; display: flex; justify-content: center; }
         </style>
       </head>
-      <body class="p-6">
-        <div class="max-w-2xl mx-auto border-2 border-black p-6 space-y-4">
-          <!-- Header -->
-          <div class="text-center border-b pb-3">
-            <h1 class="font-black text-base uppercase tracking-wider">SRI LANKA NAVY · CIVIL ENGINEERING DEPARTMENT</h1>
-            <h2 class="font-bold text-sm underline tracking-wide">TEMPORARY ISSUE VOUCHER / TOOL GATE PASS</h2>
-            <p class="text-xs text-slate-600 mt-1">Ref: <strong>${issue.ref_no}</strong> • Date: <strong>${issue.date}</strong> • Scope: <strong>${issue.zone_id || store.currentZone}</strong></p>
-          </div>
-
-          <!-- Item Table -->
-          <table>
-            <thead class="bg-slate-100">
-              <tr>
-                <th>Item Description</th>
-                <th>Category</th>
-                <th class="text-center">Qty / Deno</th>
-                <th class="text-right">Unit Cost</th>
-                <th class="text-right">Total Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td class="font-bold">${issue.item_name}</td>
-                <td>${issue.category || 'Tools & Machinery'}</td>
-                <td class="text-center">${issue.qty} ${issue.deno || 'Nos'}</td>
-                <td class="text-right">Rs. ${parseFloat(issue.unit_cost || 0).toLocaleString("en-LK", { minimumFractionDigits: 2 })}</td>
-                <td class="text-right font-bold">Rs. ${totalVal.toLocaleString("en-LK", { minimumFractionDigits: 2 })}</td>
-              </tr>
-            </tbody>
-          </table>
-
-          <!-- Recipient & Conditions -->
-          <div class="grid grid-cols-2 gap-4 text-xs">
-            <div class="space-y-1">
-              <p><strong>Issued To:</strong> ${issue.issued_to}</p>
-              <p><strong>Trade / Section:</strong> ${issue.trade || '—'}</p>
-              <p><strong>Purpose:</strong> ${issue.purpose || 'Civil Works Maintenance'}</p>
-            </div>
-            <div class="space-y-1">
-              <p><strong>Expected Return Date:</strong> <span class="font-bold underline">${issue.expected_return_date || '—'}</span></p>
-              <p><strong>Issued By:</strong> ${issue.issued_by || 'Storekeeper'}</p>
-              <p><strong>Remarks:</strong> ${issue.remarks || 'None'}</p>
-            </div>
-          </div>
-
-          <!-- Undertaking -->
-          <div class="p-2.5 bg-slate-50 border border-slate-300 text-[11px] leading-snug">
-            <em>I hereby acknowledge the receipt of the above items in good condition on a temporary return basis. I undertake to return them promptly on or before the expected return date in the same condition.</em>
-          </div>
-
-          <!-- Signature Blocks -->
-          <div class="pt-8 grid grid-cols-3 text-center text-xs">
-            <div class="space-y-1">
-              <div class="border-t border-black pt-1">Recipient's Signature</div>
-              <div class="text-[10px] text-slate-600">(Name & Official No)</div>
-            </div>
-            <div class="space-y-1">
-              <div class="border-t border-black pt-1">Storekeeper Signature</div>
-              <div class="text-[10px] text-slate-600">(Issuing Authority)</div>
-            </div>
-            <div class="space-y-1">
-              <div class="border-t border-black pt-1">Officer in Charge (CE)</div>
-              <div class="text-[10px] text-slate-600">(Approval Signature)</div>
-            </div>
-          </div>
+      <body>
+        <div style="width: 100%;">
+          ${nav254Content}
         </div>
         <script>
           window.onload = function() {

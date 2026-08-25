@@ -59,15 +59,16 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Sinhala:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
-            --body-bg: #f8fafc;
+            --body-bg: #f4f6fa;
             --card-bg: #ffffff;
-            --text-primary: #1e293b;
-            --text-secondary: #64748b;
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
             --border-color: #e2e8f0;
             --header-bg: #0a1628;
             --input-bg: #ffffff;
-            --input-text: #1e293b;
-            --card-sub-bg: rgba(15,32,64,0.04);
+            --input-text: #0f172a;
+            --input-border: #cbd5e1;
+            --card-sub-bg: rgba(15,32,64,0.03);
             --navy-900: #0a1628;
             --navy-800: #0f2040;
             --navy-700: #152a55;
@@ -76,24 +77,37 @@
             --teal-light: #14b8a6;
             --gold: #d4a017;
             --gold-light: #f0c040;
+            --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+            --shadow-card: 0 4px 14px -2px rgba(15, 23, 42, 0.07);
         }
 
         html.dark {
-            --body-bg: #070e1b;
-            --card-bg: #0f2040;
+            --body-bg: #070d18;
+            --card-bg: #0f1d35;
             --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
-            --border-color: rgba(255,255,255,0.08);
+            --border-color: rgba(255,255,255,0.09);
             --header-bg: #050a12;
-            --input-bg: #152a55;
+            --input-bg: #13233f;
             --input-text: #ffffff;
+            --input-border: rgba(20, 184, 166, 0.25);
             --card-sub-bg: rgba(255,255,255,0.03);
+            --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+            --shadow-card: 0 4px 18px -2px rgba(0, 0, 0, 0.45);
         }
 
         body {
             background-color: var(--body-bg) !important;
             color: var(--text-primary) !important;
-            transition: background-color 0.2s ease, color 0.2s ease;
+            transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        /* Light & Dark Cards */
+        .glass-card {
+            background-color: var(--card-bg) !important;
+            border-color: var(--border-color) !important;
+            box-shadow: var(--shadow-card);
+            transition: background-color 0.25s ease, border-color 0.25s ease;
         }
 
         html.dark body {
@@ -111,6 +125,7 @@
             background-color: var(--card-bg) !important;
             background: var(--card-bg) !important;
             color: var(--text-primary) !important;
+            border-color: var(--border-color) !important;
         }
 
         html.dark .bg-slate-100,
@@ -118,7 +133,8 @@
         html.dark .bg-slate-50,
         html.dark .bg-slate-50/50,
         html.dark .bg-slate-50/80 {
-            background-color: var(--body-bg) !important;
+            background-color: #11223e !important;
+            border-color: var(--border-color) !important;
         }
 
         html.dark .text-slate-900,
@@ -163,48 +179,74 @@
             border-color: var(--border-color) !important;
         }
 
+        /* Adaptive Scrollbars */
+        ::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--body-bg);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #94a3b8;
+            border-radius: 6px;
+        }
+        html.dark ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 6px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        html.dark ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
         .sailors-table-container {
             max-height: calc(100vh - 275px);
             min-height: 480px;
             overflow-x: auto !important;
             overflow-y: auto !important;
         }
-        .sailors-table-container::-webkit-scrollbar {
-            height: 10px;
-            width: 8px;
-        }
-        .sailors-table-container::-webkit-scrollbar-track {
-            background: #f1f5f9;
-            border-radius: 6px;
-        }
-        .sailors-table-container::-webkit-scrollbar-thumb {
-            background: #94a3b8;
-            border-radius: 6px;
-            border: 2px solid #f1f5f9;
-        }
-        .sailors-table-container::-webkit-scrollbar-thumb:hover {
-            background: #64748b;
-        }
 
         html.dark .work-order-card {
             background-color: var(--card-bg) !important;
             border-color: var(--border-color) !important;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.3) !important;
         }
         
         html.dark .modal-content {
             background-color: var(--card-bg) !important;
-            border-color: var(--border-color) !important;
+            border-color: rgba(20, 184, 166, 0.3) !important;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.65) !important;
         }
 
         html.dark .bg-white/80,
         html.dark .bg-white/90 {
-            background-color: rgba(15, 32, 64, 0.8) !important;
+            background-color: rgba(15, 29, 53, 0.85) !important;
         }
         
         html.dark input, html.dark select, html.dark textarea {
             background-color: var(--input-bg) !important;
             color: var(--input-text) !important;
+            border-color: var(--input-border) !important;
+        }
+
+        html.dark input::placeholder, html.dark textarea::placeholder {
+            color: #64748b !important;
+        }
+
+        html.dark table thead tr {
+            background-color: #11223e !important;
+            border-bottom: 1px solid var(--border-color) !important;
+        }
+
+        html.dark table tbody tr {
             border-color: var(--border-color) !important;
+        }
+
+        html.dark table tbody tr:hover {
+            background-color: rgba(20, 184, 166, 0.06) !important;
         }
 
         html.dark .divide-slate-200 > *,
@@ -498,87 +540,137 @@
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body class="min-h-screen" style="background:linear-gradient(160deg,#e8f4f8 0%,#dbeafe 25%,#e0f2fe 55%,#ecfdf5 100%)">
-    <!-- ==================== PREMIUM LOGIN SCREEN ==================== -->
+    <!-- ==================== PREMIUM NAVAL LOGIN SCREEN ==================== -->
     <div id="loginScreen" class="fixed inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 z-50 flex items-center justify-center p-4">
-        <div class="bg-white/10 backdrop-blur-xl border border-white/10 rounded-3xl p-6 w-full max-w-sm shadow-2xl text-center">
+        <div class="bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl text-center space-y-4">
             
             <!-- Crest and Title -->
-            <div class="flex flex-col items-center gap-3 mb-6">
-                <div class="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center">
+            <div class="flex flex-col items-center gap-2">
+                <div class="w-16 h-16 rounded-full overflow-hidden flex items-center justify-center shadow-lg border-2 border-teal-400/40 bg-slate-900">
                     <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
                 </div>
                 <div>
-                    <h2 class="text-xl font-bold text-white tracking-wide">CE Management System Portal</h2>
-                    <p class="text-xs text-teal-400 font-medium">CE Management Hub</p>
+                    <h2 class="text-xl font-black text-white tracking-wide">Civil Engineering Management System</h2>
+                    <p class="text-xs text-teal-300 font-semibold flex items-center justify-center gap-1.5 mt-0.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Sri Lanka Navy • Eastern Command Hub
+                    </p>
                 </div>
             </div>
 
             <!-- Profile Avatar Preview -->
-            <div class="mb-6 flex justify-center">
-                <div id="loginAvatarContainer" class="w-24 h-24 rounded-full border-4 border-teal-500/30 overflow-hidden shadow-inner flex items-center justify-center bg-slate-800 text-slate-300">
+            <div class="flex justify-center">
+                <div id="loginAvatarContainer" class="w-20 h-20 rounded-full border-4 border-teal-500/50 overflow-hidden shadow-2xl flex items-center justify-center bg-slate-800 text-slate-300">
                     <span class="text-3xl">⚓</span>
                 </div>
             </div>
 
-            <form onsubmit="submitLogin(event)" class="space-y-4">
+            <form onsubmit="submitLogin(event)" class="space-y-3.5 text-left">
                 <input type="hidden" id="loginMode" value="OIC">
 
                 <!-- Mode Toggle Tab -->
-                <div class="flex border border-white/10 rounded-xl overflow-hidden mb-4 p-0.5 bg-slate-950/40">
-                    <button type="button" onclick="setLoginMode('OIC')" id="loginModeBtnOIC" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-white bg-teal-600 shadow-sm">Officer / OIC</button>
-                    <button type="button" onclick="setLoginMode('SAILOR')" id="loginModeBtnSailor" class="flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white">Sailor Profile</button>
+                <div class="flex border border-white/15 rounded-xl overflow-hidden p-0.5 bg-slate-950/60">
+                    <button type="button" onclick="setLoginMode('OIC')" id="loginModeBtnOIC" class="flex-1 py-2 text-xs font-bold rounded-lg transition-all text-white bg-teal-600 shadow-sm cursor-pointer flex items-center justify-center gap-1.5">
+                        <span>👔</span> Officer / In-Charge
+                    </button>
+                    <button type="button" onclick="setLoginMode('SAILOR')" id="loginModeBtnSailor" class="flex-1 py-2 text-xs font-bold rounded-lg transition-all text-slate-400 hover:text-white cursor-pointer flex items-center justify-center gap-1.5">
+                        <span>⚓</span> Sailor Profile
+                    </button>
                 </div>
 
                 <!-- OIC / Officer Selection -->
                 <div id="loginGroupOic">
-                    <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Select Profile</label>
-                    <select id="loginProfileSelect" onchange="onLoginProfileChange(this.value)" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 cursor-pointer">
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-[11px] font-bold text-slate-300 uppercase tracking-wider">Select Command / Zone Profile <span class="text-rose-400">*</span></label>
+                        <button type="button" onclick="toggleCredentialsGuide()" class="text-[10px] font-bold text-teal-400 hover:text-teal-300 underline cursor-pointer flex items-center gap-1">
+                            <span>🔑</span> View All Profiles & PINs
+                        </button>
+                    </div>
+                    <select id="loginProfileSelect" onchange="onLoginProfileChange(this.value)" required class="w-full px-3.5 py-2.5 bg-slate-900/95 border border-white/20 text-white rounded-xl text-xs font-bold focus:outline-none focus:border-teal-400 cursor-pointer">
                         <option value="">-- Choose Profile --</option>
                     </select>
                 </div>
 
                 <!-- Sailor Search Autocomplete Selection -->
                 <div id="loginGroupSailor" class="hidden relative">
-                    <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Search Service No / Name</label>
-                    <input type="text" id="loginSailorSearch" placeholder="Type Service No or Name..." oninput="filterLoginSailor(this.value)" onfocus="showLoginSailorDropdown()" autocomplete="off" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500">
+                    <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider mb-1">Search Service No / Name <span class="text-rose-400">*</span></label>
+                    <input type="text" id="loginSailorSearch" placeholder="Type Service No or Name..." oninput="filterLoginSailor(this.value)" onfocus="showLoginSailorDropdown()" autocomplete="off" class="w-full px-3.5 py-2.5 bg-slate-900/95 border border-white/20 text-white rounded-xl text-xs font-semibold focus:outline-none focus:border-teal-400">
                     <input type="hidden" id="loginSailorSelectedId">
-                    <div id="loginSailorDropdown" class="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto divide-y divide-slate-800 bg-slate-950 border border-white/10 rounded-xl shadow-2xl hidden scrollbar-thin text-left">
+                    <div id="loginSailorDropdown" class="absolute left-0 right-0 z-50 mt-1 max-h-48 overflow-y-auto divide-y divide-slate-800 bg-slate-950 border border-white/20 rounded-xl shadow-2xl hidden scrollbar-thin text-left">
                         <!-- Populated dynamically -->
                     </div>
                 </div>
 
-                <!-- Password Input (OIC mode only) -->
-                <div id="loginPasswordGroup" class="hidden">
-                    <label class="block text-left text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Password</label>
-                    <input type="password" id="loginPasswordInput" placeholder="Enter password" class="w-full px-3 py-2.5 bg-slate-900/80 border border-white/10 text-white rounded-xl text-sm focus:outline-none focus:border-teal-500 text-center tracking-widest font-bold">
+                <!-- Selected Profile Details Badge Card -->
+                <div id="loginSelectedProfileCard" class="hidden p-3 rounded-xl bg-slate-950/70 border border-teal-500/40 text-xs space-y-1">
+                    <div class="flex items-center justify-between text-teal-300 font-bold">
+                        <span id="loginCardName">Profile Name</span>
+                        <span id="loginCardRole" class="px-2 py-0.5 rounded bg-teal-900/80 text-[10px] text-teal-200 border border-teal-500/40">Role</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400">
+                        <span id="loginCardOffNo">Service No: —</span>
+                        <span id="loginCardZone" class="text-amber-300 font-medium">Zone: All</span>
+                    </div>
+                </div>
+
+                <!-- Password Input with Show/Hide Toggle (OIC mode only) -->
+                <div id="loginPasswordGroup" class="space-y-1">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">Password / PIN <span class="text-rose-400">*</span></label>
+                        <span class="text-[10px] text-slate-400 italic">Default PIN: <strong class="text-amber-300 font-mono">1234</strong></span>
+                    </div>
+                    <div class="relative flex items-center">
+                        <input type="password" id="loginPasswordInput" required placeholder="Enter password / PIN (Default: 1234)" class="w-full pl-3.5 pr-10 py-2.5 bg-slate-900/95 border border-white/20 text-white rounded-xl text-xs font-bold focus:outline-none focus:border-teal-400 tracking-wider">
+                        <button type="button" onclick="toggleLoginPasswordVisibility()" id="loginPwdToggleBtn" class="absolute right-2.5 text-slate-400 hover:text-white p-1 text-sm cursor-pointer transition-colors" title="Show / Hide Password">
+                            👁️
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Keep Me Logged In Checkbox -->
+                <div class="flex items-center justify-between text-xs text-slate-300 pt-0.5">
+                    <label class="flex items-center gap-2 cursor-pointer select-none">
+                        <input type="checkbox" id="loginRememberMe" checked class="w-4 h-4 rounded text-teal-600 bg-slate-900 border-white/20 focus:ring-teal-500 cursor-pointer">
+                        <span class="text-xs text-slate-300 font-medium">Keep me logged in (Stay logged in)</span>
+                    </label>
                 </div>
 
                 <!-- Login Button -->
-                <button type="submit" class="w-full py-3 bg-gradient-to-r from-teal-600 to-cyan-500 hover:from-teal-500 hover:to-cyan-400 text-white font-bold rounded-xl shadow-lg transform transition-all active:scale-95 text-sm mt-2">
-                    Access Portal
+                <button type="submit" class="w-full py-3 bg-gradient-to-r from-teal-600 via-teal-500 to-cyan-600 hover:from-teal-500 hover:to-cyan-400 text-white font-black rounded-xl shadow-lg transform transition-all active:scale-95 text-xs uppercase tracking-wider cursor-pointer flex items-center justify-center gap-2">
+                    <span>🔐</span> Access Naval Portal ➔
                 </button>
             </form>
+
+            <!-- Expandable Credentials Guide Drawer -->
+            <div id="loginCredentialsGuide" class="hidden text-left p-3.5 rounded-2xl bg-slate-950/90 border border-teal-500/30 text-xs space-y-2 max-h-56 overflow-y-auto">
+                <div class="flex items-center justify-between text-teal-300 font-bold border-b border-white/10 pb-1.5">
+                    <span class="flex items-center gap-1.5">🔑 All Available Profiles & Access Roles</span>
+                    <button type="button" onclick="toggleCredentialsGuide()" class="text-slate-400 hover:text-white text-xs p-1">✕</button>
+                </div>
+                <div id="loginCredentialsList" class="space-y-1.5 text-[11px] text-slate-300">
+                    <!-- Populated dynamically via populateLoginCredentialsGuide() -->
+                </div>
+            </div>
         </div>
     </div>
     <!-- ========== NAVAL HEADER ========== -->
     <header id="navalHeader" class="nav-header header-glow sticky top-0 z-50 no-print">
-        <div class="container mx-auto px-4">
-            <div class="flex items-center justify-between h-[68px]">
+        <div class="container mx-auto px-2.5 sm:px-4">
+            <div class="flex items-center justify-between h-[52px] sm:h-[68px]">
 
                 <!-- Brand -->
-                <div class="flex items-center gap-3">
-                    <div class="w-[60px] h-[60px] rounded-full overflow-hidden flex-shrink-0 -ml-1 flex items-center justify-center">
+                <div class="flex items-center gap-2 sm:gap-3">
+                    <div class="w-8 h-8 sm:w-[52px] sm:h-[52px] rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center">
                         <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
                     </div>
                     <div>
-                        <div class="flex items-center gap-2">
-                            <h1 class="text-[15px] font-bold text-white tracking-wide">CMSys <span class="text-teal-400 font-extrabold">v2.2</span></h1>
+                        <div class="flex items-center gap-1.5 sm:gap-2">
+                            <h1 class="text-xs sm:text-[15px] font-bold text-white tracking-wide">CMSys <span class="text-teal-400 font-extrabold text-[11px] sm:text-[13px]">v2.2</span></h1>
                         </div>
-                        <p class="brand-tag leading-none hidden sm:block">CE Management · Trincomalee</p>
+                        <p class="brand-tag leading-none hidden md:block">CE Management · Trincomalee</p>
                     </div>
                 </div>
 
-                <!-- Navigation -->
+                <!-- Navigation (Desktop) -->
                 <nav class="hidden md:flex gap-0.5 bg-white/5 backdrop-blur rounded-xl p-1 border border-white/10">
                     <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3.5 py-2 text-[13px] font-medium text-slate-300 tab-active">
                         <span class="hidden xl:inline">📊 </span>Dashboard
@@ -613,39 +705,39 @@
                 </nav>
 
                 <!-- Right Controls -->
-                <div class="flex items-center gap-2.5">
-                    <!-- Isolated Documents Section Button -->
-                    <button onclick="switchView('documents')" id="tab-documents" class="nav-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Documents & Minute Sheet System">
+                <div class="flex items-center gap-1.5 sm:gap-2.5">
+                    <!-- Isolated Documents Section Button (Desktop) -->
+                    <button onclick="switchView('documents')" id="tab-documents" class="hidden xl:flex nav-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Documents & Minute Sheet System">
                         <span>📄</span>
-                        <span class="hidden xl:inline text-[11px]">Documents</span>
+                        <span class="text-[11px]">Documents</span>
                     </button>
 
-                    <!-- Isolated Sailors Section Button -->
-                    <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Sailors Operations & Performance">
+                    <!-- Isolated Sailors Section Button (Desktop) -->
+                    <button onclick="switchView('sailors')" id="tab-sailors" class="hidden xl:flex nav-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Sailors Operations & Performance">
                         <span>⚓</span>
-                        <span class="hidden xl:inline text-[11px]">Sailors</span>
+                        <span class="text-[11px]">Sailors</span>
                     </button>
 
-                    <!-- Isolated Admin Settings Button -->
-                    <button onclick="openSettingsView()" id="btn-admin-settings" class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 flex items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="System Settings (Admin Only)">
+                    <!-- Isolated Admin Settings Button (Desktop) -->
+                    <button onclick="openSettingsView()" id="btn-admin-settings" class="hidden xl:flex px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="System Settings (Admin Only)">
                         <span>⚙️</span>
-                        <span class="hidden xl:inline text-[11px]">Settings</span>
+                        <span class="text-[11px]">Settings</span>
                     </button>
 
                     <!-- Dark Mode Toggle Button -->
-                    <button onclick="toggleDarkMode()" id="darkModeToggleBtn" class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-slate-800/50 hover:bg-slate-700/50 text-slate-300 hover:text-white cursor-pointer transition-all shadow-sm border border-slate-700/30" title="Toggle Theme">
+                    <button onclick="toggleDarkMode()" id="darkModeToggleBtn" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs sm:text-sm bg-slate-800/60 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer transition-all shadow-sm border border-slate-700/40" title="Toggle Theme (Light / Dark)">
                         🌙
                     </button>
 
-                    <button onclick="triggerPwaInstall()" id="installAppBtn" class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-teal-800/50 hover:bg-teal-700/50 text-teal-300 hover:text-white cursor-pointer transition-all shadow-sm border border-teal-700/30 hidden" title="🖥️ Install App on PC/Mobile">
+                    <button onclick="triggerPwaInstall()" id="installAppBtn" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs sm:text-sm bg-teal-800/50 hover:bg-teal-700/50 text-teal-300 hover:text-white cursor-pointer transition-all shadow-sm border border-teal-700/30 hidden" title="🖥️ Install App on PC/Mobile">
                         🖥️
                     </button>
 
-                    <select id="zoneSelector" onchange="changeZone()" class="text-xs rounded-lg px-2 py-1.5 border border-teal-600/50 font-medium cursor-pointer max-w-[180px] sm:max-w-[260px] md:max-w-none text-ellipsis"
+                    <select id="zoneSelector" onchange="changeZone()" class="text-[11px] sm:text-xs rounded-lg px-2 py-1 sm:py-1.5 border border-teal-600/50 font-medium cursor-pointer max-w-[110px] xs:max-w-[140px] sm:max-w-[220px] text-ellipsis"
                         style="background:rgba(13,148,136,0.18);color:#5eead4;">
                     </select>
                     <div class="relative">
-                        <button onclick="toggleProfileDropdown()" id="profileMenuBtn" class="w-9 h-9 rounded-full overflow-hidden flex items-center justify-center text-[10px] font-bold text-white shadow-lg cursor-pointer hover:scale-105 active:scale-95 transition-all"
+                        <button onclick="toggleProfileDropdown()" id="profileMenuBtn" class="w-7 h-7 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center text-[9px] sm:text-[10px] font-bold text-white shadow-lg cursor-pointer hover:scale-105 active:scale-95 transition-all shrink-0"
                             style="background:linear-gradient(135deg,#0d9488,#0891b2)" title="Profile Actions">OIC</button>
                         <div id="profileDropdown" class="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 hidden">
                             <div class="px-4 py-2 border-b border-slate-100 text-left">
@@ -666,33 +758,34 @@
 
     <!-- ===== Tactical Status Bar ===== -->
     <div id="tacticalStatusBar" class="no-print" style="background:linear-gradient(90deg,#0a1628 0%,#152a55 50%,#0a1628 100%);border-bottom:1px solid rgba(13,148,136,0.3)">
-        <div class="container mx-auto px-4 py-2 flex flex-col md:flex-row items-center justify-between gap-2.5 text-xs">
-            <div class="flex flex-wrap items-center justify-center md:justify-start gap-3 md:gap-5 text-slate-400">
-                <span class="mono">📅 <span id="currentDate" class="text-teal-300"></span></span>
-                <span class="mono">🕐 <span id="currentTime" class="text-teal-300"></span></span>
-                <span id="onlineIndicator" class="flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border border-emerald-500/20 bg-emerald-500/10 text-emerald-400 transition-all duration-300">
+        <div class="container mx-auto px-2.5 sm:px-4 py-1 sm:py-1.5 flex flex-col md:flex-row items-center justify-between gap-1 sm:gap-2 text-xs">
+            <div class="flex items-center justify-between md:justify-start gap-2 sm:gap-4 text-slate-400 w-full md:w-auto text-[10px] sm:text-xs">
+                <span class="mono flex items-center gap-1">📅 <span id="currentDate" class="text-teal-300"></span></span>
+                <span class="mono flex items-center gap-1">🕐 <span id="currentTime" class="text-teal-300"></span></span>
+                <span id="onlineIndicator" class="flex items-center gap-1 font-bold text-[8px] sm:text-[9px] uppercase tracking-wider rounded-full px-1.5 py-0.5 border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
                     <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                     <span>Online</span>
                 </span>
-                <span id="currentRootingBadge" class="flex items-center gap-1 font-bold text-[9px] uppercase tracking-wider rounded-full px-2 py-0.5 border transition-all duration-300 hidden">
+                <span id="currentRootingBadge" class="flex items-center gap-1 font-bold text-[8px] sm:text-[9px] uppercase tracking-wider rounded-full px-1.5 py-0.5 border transition-all hidden">
                     <span id="currentRootingDot" class="w-1.5 h-1.5 rounded-full"></span>
                     <span id="currentRootingText"></span>
                 </span>
             </div>
-            <div class="flex flex-wrap items-center justify-center gap-1.5 md:gap-2">
-                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.35)">
+            <!-- Sleek Horizontal Metric Ribbon -->
+            <div class="flex items-center gap-1 sm:gap-1.5 overflow-x-auto w-full md:w-auto py-0.5 scrollbar-none justify-start md:justify-end">
+                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.35)">
                     ⚓ NET: <span id="netForce">24</span>
                 </span>
-                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.35)">
+                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.35)">
                     🔨 TASK: <span id="assignedCount">18</span>
                 </span>
-                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.35)">
-                    ⚠️ TODAY N/A: <span id="todayNaCount">0</span>
+                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.35)">
+                    ⚠️ N/A: <span id="todayNaCount">0</span>
                 </span>
-                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(59,130,246,0.2);color:#93c5fd;border:1px solid rgba(59,130,246,0.35)">
+                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(59,130,246,0.2);color:#93c5fd;border:1px solid rgba(59,130,246,0.35)">
                     ✅ AVAIL: <span id="availableCount">6</span>
                 </span>
-                <span class="px-2.5 py-1 rounded-full text-[11px] font-bold" style="background:rgba(168,85,247,0.2);color:#d8b4fe;border:1px solid rgba(168,85,247,0.35)">
+                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(168,85,247,0.2);color:#d8b4fe;border:1px solid rgba(168,85,247,0.35)">
                     👥 TEAM: <span id="zoneTeamCount">12</span>
                 </span>
             </div>
@@ -766,10 +859,11 @@
 
                             <!-- Filter Tabs -->
                             <div class="p-3 border-b border-slate-200" style="background:rgba(248,250,252,0.8)">
-                                <div class="flex gap-1.5 mb-2">
-                                    <button onclick="filterSailors('all')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium" style="background:#0a1628;color:#5eead4">All</button>
-                                    <button onclick="filterSailors('zone-team')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Zone Team</button>
-                                    <button onclick="filterSailors('continuation')" class="filter-btn px-3 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Continue</button>
+                                <div class="flex flex-wrap gap-1 mb-2">
+                                    <button onclick="filterSailors('available')" id="btnFilterAvailable" class="filter-btn px-2.5 py-1 text-xs rounded-lg font-bold" style="background:#0a1628;color:#5eead4">🟢 Available</button>
+                                    <button onclick="filterSailors('all')" id="btnFilterAll" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">👥 All</button>
+                                    <button onclick="filterSailors('zone-team')" id="btnFilterZoneTeam" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Zone Team</button>
+                                    <button onclick="filterSailors('continuation')" id="btnFilterContinue" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Continue</button>
                                 </div>
                                 <div class="flex flex-wrap gap-1">
                                     <button onclick="filterTrade('ALL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-700 text-white">ALL</button>
@@ -1248,9 +1342,6 @@
                 </div>
             </div>
 
-            <!-- Incoming Job Minutes Banner for this Zone / Workshop -->
-            <div id="incomingMinutesJobCardsBanner" class="mb-6"></div>
-
             <!-- Job Cards Tabs -->
             <div class="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
                 <div class="border-b border-slate-200 flex">
@@ -1458,6 +1549,9 @@
                     <p class="text-sm text-slate-500">Stock Balance, Materials Tracking, and Temporary Issue Book</p>
                 </div>
                 <div class="flex gap-2 flex-wrap" id="invMainStockActions">
+                    <button onclick="openBatchAssignBookNosModal()" class="bg-amber-700 hover:bg-amber-800 text-white px-3.5 py-2 rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1" title="Batch assign Stock Book numbers by Category (e.g. BMS -> Book 01, Plumbing -> Book 02)">
+                        📚 Assign Book Nos
+                    </button>
                     <button onclick="migrateInventoryLocationAndBookNo()" class="bg-amber-600 hover:bg-amber-700 text-white px-3.5 py-2 rounded-lg text-xs font-medium" title="Scan and repair inventory location entry errors by moving Stock Book No into Book No field and setting Location to Zone">
                         🔧 Fix Location & Book No
                     </button>
@@ -1523,7 +1617,7 @@
                                 class="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 text-xs font-medium"
                                 onkeyup="filterInventory()">
                         </div>
-                        <div class="flex gap-2 w-full sm:w-auto flex-wrap">
+                        <div class="flex gap-2 w-full sm:w-auto flex-wrap items-center">
                             <select id="inventoryCategoryFilter" onchange="handleInventoryCategoryDropdownChange(this.value)" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white font-semibold text-slate-700">
                                 <option value="all">🏷️ All Categories</option>
                             </select>
@@ -1540,6 +1634,10 @@
                                 <option value="date">Sort: Date</option>
                                 <option value="book_no">Sort: Book No</option>
                             </select>
+                            <label class="flex items-center gap-1.5 px-3 py-2 border border-teal-300 rounded-xl text-xs bg-teal-50/80 hover:bg-teal-100 text-teal-900 font-bold cursor-pointer select-none transition-all shadow-2xs" title="Hide 0 / Null quantity items (In Stock Only)">
+                                <input type="checkbox" id="inventoryHideNullQty" onchange="filterInventory()" class="w-4 h-4 text-teal-600 accent-teal-600 rounded cursor-pointer">
+                                <span class="whitespace-nowrap">📦 In Stock Only (Hide 0)</span>
+                            </label>
                         </div>
                     </div>
 
@@ -1728,10 +1826,32 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Inter-Zone Custody & Return Matrix Grid -->
+                    <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
+                        <div class="flex items-center justify-between text-xs font-bold text-slate-800">
+                            <span class="flex items-center gap-1.5"><span>🌐</span> Inter-Zone Custody & Return Ledger (කලාප අතර නිකුත් කිරීම් සහ ආපසු ලැබීම් වාර්තාව)</span>
+                            <span class="text-[10px] text-slate-500 font-normal">Who took what from whom & pending returns</span>
+                        </div>
+                        <div id="tibInterZoneMatrix" class="overflow-x-auto">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
                 </div>
 
                 <!-- ==================== TEMPORARY ISSUE REGISTER TABLE ==================== -->
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-4">
+                    <!-- Tab Pills: All / Issued / Received / Return List -->
+                    <div class="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-slate-100">
+                        <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 flex-wrap text-xs">
+                            <button type="button" onclick="setTibTableTab('all')" id="tibTab-all" class="tib-tab-btn px-3 py-1.5 rounded-lg font-bold bg-white text-indigo-700 shadow-xs cursor-pointer">📋 All Issues</button>
+                            <button type="button" onclick="setTibTableTab('issued')" id="tibTab-issued" class="tib-tab-btn px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">📤 Issued by this Zone (<span id="tibTabIssuedCount">0</span>)</button>
+                            <button type="button" onclick="setTibTableTab('received')" id="tibTab-received" class="tib-tab-btn px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">📥 Received by this Zone (<span id="tibTabReceivedCount">0</span>)</button>
+                            <button type="button" onclick="setTibTableTab('returns')" id="tibTab-returns" class="tib-tab-btn px-3 py-1.5 rounded-lg font-semibold text-amber-800 hover:text-amber-950 bg-amber-50/80 border border-amber-200 cursor-pointer">🔄 Return List (<span id="tibTabReturnsCount">0</span>)</button>
+                        </div>
+                        <div class="text-[11px] text-slate-500 font-medium" id="tibTableSummaryText">Showing all records</div>
+                    </div>
+
                     <!-- Search & Filters -->
                     <div class="flex flex-col sm:flex-row gap-2.5 items-center justify-between">
                         <div class="relative flex-1 w-full">
@@ -1768,6 +1888,7 @@
                                     <th class="px-3.5 py-3 text-left">Issue Ref & Date</th>
                                     <th class="px-3.5 py-3 text-left">Item Description</th>
                                     <th class="px-3 py-3 text-center">Category</th>
+                                    <th class="px-3 py-3 text-center">Origin → Destination</th>
                                     <th class="px-3 py-3 text-center">Qty / Deno</th>
                                     <th class="px-3.5 py-3 text-right">Unit / Total Value</th>
                                     <th class="px-3.5 py-3 text-left">Issued To & Purpose</th>
@@ -2606,14 +2727,14 @@
                                 </div>
                             </div>
 
-                            <!-- Card 4: M-02 Endorsements (නිර්දේශ පාඨ) -->
+                            <!-- Card 4: M-01 Last Paragraph & M-02 Endorsements (නිර්දේශ පාඨ) -->
                             <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                                 <div class="flex items-center justify-between">
                                     <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
-                                        <span>📝</span> M-02 Endorsements (නිර්දේශ / අනුමැති පාඨ)
+                                        <span>📝</span> M-01 Last Paragraph & M-02 Endorsements (අවසාන ඡේද සහ නිර්දේශ පාඨ)
                                     </h4>
-                                    <button onclick="openAddMinuteConfigItemModal('endorsements')" class="text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all">
-                                        + Add Phrase
+                                    <button onclick="openAddMinuteConfigItemModal('endorsements')" class="text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
+                                        + Add Phrase / Template
                                     </button>
                                 </div>
                                 <div id="cfgMinuteEndorsementsList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -3345,15 +3466,16 @@
                         <table class="w-full text-left border-collapse text-xs">
                             <thead class="bg-slate-900 text-white text-[11px] font-bold uppercase tracking-wider">
                                 <tr>
-                                    <th class="py-3 px-4">Minute Ref # (Tracking No)</th>
-                                    <th class="py-3 px-3">Date Received</th>
+                                    <th class="py-3 px-4">Minute Register Ref #</th>
+                                    <th class="py-3 px-3">Date</th>
                                     <th class="py-3 px-4">End User / Unit</th>
+                                    <th class="py-3 px-3">Contact & WhatsApp</th>
                                     <th class="py-3 px-4">Subject & Scope of Work</th>
-                                    <th class="py-3 px-3">Directed To (දිශාගත කිරීම)</th>
-                                    <th class="py-3 px-3">Linked Estimate</th>
-                                    <th class="py-3 px-3">Linked Job Card</th>
-                                    <th class="py-3 px-4">Present Position (ස්ථානය / අදියර)</th>
-                                    <th class="py-3 px-4 text-center">Actions</th>
+                                    <th class="py-3 px-3 whitespace-nowrap">Directed Location (දිශාගත කිරීම)</th>
+                                    <th class="py-3 px-3 whitespace-nowrap">Linked Estimate</th>
+                                    <th class="py-3 px-3 whitespace-nowrap">Linked Job Card</th>
+                                    <th class="py-3 px-4 whitespace-nowrap">Present Position (ස්ථානය)</th>
+                                    <th class="py-3 px-4 text-center whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody id="jobMinutesTableBody" class="divide-y divide-slate-100 font-medium text-slate-700">
@@ -3409,26 +3531,86 @@
                             </div>
                         </div>
 
-                        <!-- Page Setup & Adjustable Margin Line (Yellow Highlight in Pic 1) -->
-                        <div class="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-2.5">
-                            <div class="flex items-center justify-between">
-                                <label class="text-[11px] font-bold text-amber-900 uppercase flex items-center gap-1.5">
-                                    <span>📏</span> Margin Divider Position (<span id="msMarginWidthDisplay" class="font-mono font-bold text-teal-800 bg-white px-1.5 py-0.5 rounded border border-amber-300">28%</span>)
-                                </label>
+                        <!-- Page Setup & Adjustable Margins (Left Divider & Right Margin) -->
+                        <div class="p-3 bg-amber-50/80 border border-amber-200 rounded-xl space-y-3">
+                            <div class="flex items-center justify-between border-b border-amber-200/80 pb-2">
+                                <span class="text-[11px] font-black text-amber-950 uppercase flex items-center gap-1.5">
+                                    <span>📐</span> Page Margin & Divider Adjustments
+                                </span>
                                 <!-- Paper Size Selector -->
                                 <div class="flex items-center bg-white p-0.5 rounded-lg border border-amber-300 text-[10px] font-bold">
                                     <button type="button" id="btnPaperA4" onclick="setMinutePaperSize('a4')" class="px-2 py-0.5 rounded bg-teal-600 text-white shadow-2xs">📄 A4</button>
                                     <button type="button" id="btnPaperLetter" onclick="setMinutePaperSize('letter')" class="px-2 py-0.5 rounded text-slate-600 hover:text-slate-900">📄 Letter</button>
                                 </div>
                             </div>
-                            <input type="range" id="msInputMarginWidth" min="15" max="45" value="28" oninput="setMinuteMarginWidth(this.value)" class="w-full accent-teal-600 cursor-pointer">
-                            <div class="flex items-center justify-between text-[10px]">
-                                <span class="text-slate-500 font-medium">Auto-wraps address text & expands body</span>
-                                <div class="flex items-center gap-1">
-                                    <button type="button" onclick="setMinuteMarginWidth(20)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">20%</button>
-                                    <button type="button" onclick="setMinuteMarginWidth(25)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">25%</button>
-                                    <button type="button" onclick="setMinuteMarginWidth(28)" class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-900 font-bold border border-teal-300">28% (Def)</button>
-                                    <button type="button" onclick="setMinuteMarginWidth(35)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">35%</button>
+
+                            <!-- 1. Left Divider Slider (Green Line) -->
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold text-emerald-900 uppercase flex items-center gap-1">
+                                        <span>📏</span> Left Divider Position (<span id="msMarginWidthDisplay" class="font-mono font-bold text-teal-800 bg-white px-1 py-0.2 rounded border border-emerald-300">28%</span>)
+                                    </label>
+                                    <div class="flex items-center gap-1 text-[10px]">
+                                        <button type="button" onclick="setMinuteMarginWidth(20)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">20%</button>
+                                        <button type="button" onclick="setMinuteMarginWidth(25)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">25%</button>
+                                        <button type="button" onclick="setMinuteMarginWidth(28)" class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-900 font-bold border border-teal-300">28% (Def)</button>
+                                        <button type="button" onclick="setMinuteMarginWidth(35)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">35%</button>
+                                    </div>
+                                </div>
+                                <input type="range" id="msInputMarginWidth" min="15" max="45" value="28" oninput="setMinuteMarginWidth(this.value)" class="w-full accent-teal-600 cursor-pointer">
+                            </div>
+
+                            <!-- 2. Right Margin Slider (Purple Line / Orange Arrow) -->
+                            <div class="space-y-1 pt-1 border-t border-amber-200/60">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold text-amber-900 uppercase flex items-center gap-1">
+                                        <span>📐</span> Right Margin Adjustment (<span id="msRightMarginDisplay" class="font-mono font-bold text-amber-900 bg-white px-1 py-0.2 rounded border border-amber-300">14px</span>)
+                                    </label>
+                                    <div class="flex items-center gap-1 text-[10px]">
+                                        <button type="button" onclick="setMinuteRightMargin(8)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">8px</button>
+                                        <button type="button" onclick="setMinuteRightMargin(14)" class="px-1.5 py-0.5 rounded bg-amber-100 text-amber-900 font-bold border border-amber-300">14px (Def)</button>
+                                        <button type="button" onclick="setMinuteRightMargin(22)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">22px</button>
+                                        <button type="button" onclick="setMinuteRightMargin(32)" class="px-1.5 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">32px</button>
+                                    </div>
+                                </div>
+                                <input type="range" id="msInputRightMargin" min="4" max="50" value="14" oninput="setMinuteRightMargin(this.value)" class="w-full accent-amber-600 cursor-pointer">
+                            </div>
+                        </div>
+
+                        <!-- Typography & Font Customization (Font Type & Font Size) -->
+                        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2.5">
+                            <div class="flex items-center justify-between border-b border-slate-200 pb-1.5">
+                                <span class="text-[11px] font-black text-slate-800 uppercase flex items-center gap-1.5">
+                                    <span>🔤</span> Typography & Font Styling (අකුරු විලාසය සහ ප්‍රමාණය)
+                                </span>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <!-- Font Family -->
+                                <div>
+                                    <label class="block text-[10px] font-bold text-slate-700 uppercase mb-1">Font Family (අකුරු වර්ගය)</label>
+                                    <select id="msInputFontFamily" onchange="setMinuteFontFamily(this.value)" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg text-xs font-semibold bg-white text-slate-800 outline-none">
+                                        <option value="serif">🖋️ Iskoola Pota / Noto Serif (නිල සම්මත)</option>
+                                        <option value="'FM-Abhaya', 'Abhaya Libre', serif">📜 FM-Abhaya / Classical Naval Serif</option>
+                                        <option value="'Noto Sans Sinhala', sans-serif">🔠 Noto Sans / Clean Modern</option>
+                                        <option value="'Times New Roman', Times, serif">🏛️ Times New Roman (Formal)</option>
+                                        <option value="'Courier New', Courier, monospace">📠 Courier / Typewriter Monospace</option>
+                                        <option value="Arial, Helvetica, sans-serif">🔤 Arial / Modern Sans</option>
+                                    </select>
+                                </div>
+
+                                <!-- Font Size -->
+                                <div>
+                                    <div class="flex items-center justify-between mb-1">
+                                        <label class="text-[10px] font-bold text-slate-700 uppercase">Font Size (<span id="msFontSizeDisplay" class="font-mono font-bold text-teal-700">12px</span>)</label>
+                                        <div class="flex items-center gap-1 text-[10px]">
+                                            <button type="button" onclick="setMinuteFontSize(11)" class="px-1 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">11px</button>
+                                            <button type="button" onclick="setMinuteFontSize(12)" class="px-1 py-0.5 rounded bg-teal-100 text-teal-900 font-bold border border-teal-300">12px (Def)</button>
+                                            <button type="button" onclick="setMinuteFontSize(13)" class="px-1 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">13px</button>
+                                            <button type="button" onclick="setMinuteFontSize(14)" class="px-1 py-0.5 rounded bg-white hover:bg-slate-100 border border-slate-200">14px</button>
+                                        </div>
+                                    </div>
+                                    <input type="range" id="msInputFontSize" min="10" max="16" value="12" oninput="setMinuteFontSize(this.value)" class="w-full accent-teal-600 cursor-pointer">
                                 </div>
                             </div>
                         </div>
@@ -3500,6 +3682,40 @@
                                         + Add Paragraph
                                     </button>
                                 </div>
+
+                                <!-- Insert Sailor Name / Object into Paragraph Helper -->
+                                <div class="p-2.5 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
+                                    <div class="flex items-center justify-between">
+                                        <span class="text-[10px] font-black text-blue-900 uppercase flex items-center gap-1">
+                                            <span>⚓</span> Insert Sailor / Object into Paragraph (ඡේදයට නම / කරුණු ඇතුළත් කිරීම)
+                                        </span>
+                                    </div>
+                                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                                        <!-- Sailor Search & Convert to Sinhala -->
+                                        <div class="sm:col-span-7 flex items-center gap-1.5">
+                                            <div class="relative flex-1">
+                                                <input type="text" id="msInsertSailorSearch" list="msSailorsDatalist" placeholder="🔍 Search Sailor (No / Name)..." class="w-full px-2 py-1 border border-blue-300 rounded-lg text-xs bg-white focus:outline-none">
+                                            </div>
+                                            <button type="button" onclick="insertSailorIntoActiveParagraph()" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold shadow-2xs whitespace-nowrap cursor-pointer flex items-center gap-1">
+                                                <span>➕</span> Insert Name (Sinhala)
+                                            </button>
+                                        </div>
+                                        <!-- Quick Object / Clause Insert -->
+                                        <div class="sm:col-span-5 flex items-center gap-1.5">
+                                            <select id="msQuickObjectSelect" onchange="insertObjectIntoActiveParagraph(this.value)" class="w-full px-2 py-1 border border-blue-300 rounded-lg text-[11px] bg-white font-medium outline-none">
+                                                <option value="">⚡ Quick Object / Clause...</option>
+                                                <option value="කපිතාන් සිවිල් ඉංජිනේරු දෙපාර්තමේන්තුව (නැ) ට අනුයුක්තව රාජකාරි සිදු කරනු ලබන">🏢 දෙපාර්තමේන්තුවට අනුයුක්තව</option>
+                                                <option value="දින 09 ක් නිවාඩු ගොස් 2000 පැයට කඳවුරට රෙපෝර්තු කිරීමට තිබූ අතර, ඔහුගේ මව අසනීප වී ඇති බව දන්වා ඇත.">🏥 මව අසනීප වීම / නිවාඩු</option>
+                                                <option value="අවශ්‍ය නිසි කටයුතු සලසා දෙන මෙන් කාරුණිකව අයදේ.">🙏 කටයුතු සලසා දෙන මෙන්</option>
+                                                <option value="හදිසි සිවිල් නඩත්තු සහ අලුත්වැඩියා කටයුතු සිදු කිරීම සඳහා">🔨 හදිසි සිවිල් නඩත්තු සඳහා</option>
+                                                <option value="ලී කබඩ් සෑදීම, තීන්ත ආලේප කිරීම සහ සවිකිරීම සඳහා">🚪 ලී කබඩ් / වඩු වැඩ සඳහා</option>
+                                                <option value="විදුලි රැහැන් සහ උපකරණ අලුත්වැඩියා කිරීම සඳහා">⚡ විදුලි නඩත්තු සඳහා</option>
+                                                <option value="ජල නල එළීම සහ ජල සැපයුම යථා තත්ත්වයට පත් කිරීම සඳහා">🚰 ජල නල නඩත්තු සඳහා</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div id="msParagraphsContainer" class="space-y-2">
                                     <!-- Dynamic paragraph inputs -->
                                 </div>
@@ -3715,14 +3931,14 @@
                             </div>
                         </div>
 
-                        <!-- Card 4: M-02 Endorsements (නිර්දේශ පාඨ) -->
+                        <!-- Card 4: M-01 Last Paragraph & M-02 Endorsements (නිර්දේශ පාඨ) -->
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
                             <div class="flex items-center justify-between">
                                 <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
-                                    <span>📑</span> M-02 Endorsements & Phrases (නිර්දේශ පාඨ)
+                                    <span>📑</span> M-01 Last Paragraph & M-02 Endorsements (අවසාන ඡේද සහ නිර්දේශ පාඨ)
                                 </h4>
                                 <button onclick="openAddMinuteConfigItemModal('endorsements')" class="text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
-                                    + Add Endorsement
+                                    + Add Phrase / Template
                                 </button>
                             </div>
                             <div id="docMinuteEndorsementsList" class="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -3754,25 +3970,31 @@
             <form onsubmit="handleTempIssueFormSubmit(event)" class="p-6 space-y-4 overflow-y-auto flex-1 bg-slate-50">
                 <input type="hidden" id="tibInputId">
 
-                <!-- Row 1: Issue Ref No, Date & Zone Scope -->
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <!-- Row 1: Issue Ref No, Date & Origin / Destination Zones -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                     <div>
                         <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Issue Ref No</label>
                         <input type="text" id="tibInputRefNo" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-mono font-bold text-slate-800 bg-white outline-none">
                     </div>
                     <div>
                         <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Issue Date</label>
-                        <input type="date" id="tibInputDate" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white outline-none">
+                        <input type="date" id="tibInputDate" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white outline-none font-bold">
                     </div>
                     <div>
-                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Zone / Workshop / Project</label>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Issued From (Origin Store)</label>
+                        <select id="tibInputOriginZone" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold bg-white text-slate-800 outline-none">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-700 uppercase mb-1">Issued To (Received Zone / WS)</label>
                         <select id="tibInputZoneId" onchange="onTibZoneChange()" required class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs font-bold bg-white text-slate-800 outline-none">
                             <!-- Populated dynamically with all zones, workshops, and projects -->
                         </select>
                     </div>
                 </div>
 
-                <!-- Row 2: Item Pick / Custom Description -->
+                <!-- Row 2: Item Pick / Custom Description & Returnable Basis Toggle -->
                 <div class="p-3.5 bg-white rounded-xl border border-slate-200 space-y-2.5 shadow-xs">
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                         <label class="text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
@@ -3825,6 +4047,17 @@
                             <input type="text" id="tibInputTotalValue" readonly value="Rs. 0.00" class="w-full px-3 py-2 border border-teal-300 rounded-xl text-xs font-mono font-bold text-teal-900 bg-teal-50 outline-none">
                         </div>
                     </div>
+
+                    <!-- Returnable Basis Checkbox -->
+                    <div class="flex items-center justify-between p-2.5 bg-indigo-50/70 border border-indigo-200/70 rounded-xl mt-1">
+                        <label class="flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="tibInputIsReturnable" checked onchange="toggleTibReturnableFields()" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500 cursor-pointer">
+                            <span class="text-xs font-bold text-indigo-950 flex items-center gap-1">
+                                <span>🔄</span> Returnable Basis (ආපසු භාරදිය යුතු භාණ්ඩයකි / Item must be returned after use)
+                            </span>
+                        </label>
+                        <span id="tibReturnableBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">Return Required</span>
+                    </div>
                 </div>
 
                 <!-- Row 3: Recipient & Purpose -->
@@ -3859,18 +4092,30 @@
                             <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Purpose / Work Order / Project Ref</label>
                             <input type="text" id="tibInputPurpose" placeholder="e.g. WO-2026-089 / Repair of Wardroom Roof" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none">
                         </div>
-                        <div>
-                            <label class="block text-[11px] font-bold text-amber-800 uppercase mb-1">Expected Return Date</label>
+                        <div id="tibExpReturnDateContainer">
+                            <label class="block text-[11px] font-bold text-amber-800 uppercase mb-1" id="tibExpReturnLabel">Expected Return Date</label>
                             <input type="date" id="tibInputExpectedReturnDate" required class="w-full px-3 py-2 border border-amber-300 rounded-xl text-xs font-bold bg-amber-50/40 focus:bg-white outline-none">
                         </div>
                     </div>
                 </div>
 
-                <!-- Row 4: Authorizing Officer & Notes -->
+                <!-- Row 4: Issued By (With Search & Find) & Remarks -->
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Issued By / Storekeeper</label>
-                        <input type="text" id="tibInputIssuedBy" placeholder="e.g. Storekeeper (Civil Engineering)" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white outline-none">
+                    <div class="space-y-1">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-[11px] font-bold text-slate-600 uppercase">Issued By / Storekeeper</label>
+                            <span class="text-[10px] text-indigo-600 font-semibold">🔍 Search & Find</span>
+                        </div>
+                        <div class="relative w-full">
+                            <div class="relative flex items-center">
+                                <span class="absolute left-2.5 text-slate-400 text-xs">👔</span>
+                                <input type="text" id="tibIssuedBySearchInput" oninput="searchTibIssuedByItems(this.value)" onfocus="searchTibIssuedByItems(this.value)" placeholder="Search storekeeper / officer (Name, Off No)..." autocomplete="off" class="w-full pl-8 pr-7 py-2 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500 font-bold">
+                                <button type="button" onclick="clearTibIssuedBySearch()" id="tibIssuedBySearchClearBtn" class="hidden absolute right-2 text-slate-400 hover:text-slate-600 text-xs font-bold p-0.5">✕</button>
+                            </div>
+                            <!-- Live Issued By Results Dropdown -->
+                            <div id="tibIssuedBySearchResults" class="hidden absolute left-0 right-0 bottom-full mb-1 bg-white border border-slate-300 rounded-xl shadow-2xl z-50 max-h-56 overflow-y-auto divide-y divide-slate-100 text-left"></div>
+                        </div>
+                        <input type="hidden" id="tibInputIssuedBy">
                     </div>
                     <div>
                         <label class="block text-[11px] font-bold text-slate-600 uppercase mb-1">Remarks / Serial No / Condition</label>
@@ -5595,18 +5840,21 @@
 
                 <div class="grid grid-cols-12 gap-3">
                     <div class="col-span-5">
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location *</label>
-                        <input list="estLocationDatalist" id="estLocation" required oninput="onEstLocationChange(this.value)" placeholder="Select or type Location..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                        <datalist id="estLocationDatalist"></datalist>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location * <span class="text-[10px] text-teal-600 font-normal">(Mandatory Dropdown)</span></label>
+                        <select id="estLocation" required onchange="onEstLocationChange(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-medium">
+                            <option value="">-- Select Location 1 --</option>
+                        </select>
                     </div>
                     <div class="col-span-4">
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location 2</label>
-                        <input list="estLocation2Datalist" id="estLocation2" oninput="onEstLocation2Change(this.value)" onchange="onEstLocation2Change(this.value)" placeholder="Select or type Location 2..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
-                        <datalist id="estLocation2Datalist"></datalist>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location 2 <span class="text-[10px] text-slate-500 font-normal">(Select / Type)</span></label>
+                        <div class="relative">
+                            <input list="estLocation2Datalist" id="estLocation2" oninput="onEstLocation2Change(this.value)" onchange="onEstLocation2Change(this.value)" placeholder="Select or type Location 2..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" autocomplete="off">
+                            <datalist id="estLocation2Datalist"></datalist>
+                        </div>
                     </div>
                     <div class="col-span-3">
                         <label class="block text-xs font-semibold text-slate-700 mb-1">End User *</label>
-                        <input type="text" id="estEndUser" required placeholder="e.g. Dockyard / Mess Sec" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                        <input type="text" id="estEndUser" required placeholder="e.g. Dockyard / Mess Sec" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white">
                     </div>
                 </div>
 
@@ -6302,48 +6550,79 @@
     });
     </script>
     
-    <!-- Bottom Mobile Navigation Bar (visible only on mobile) -->
-    <div id="mobileTabBar" class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 px-2 py-2 flex justify-around items-center z-40 backdrop-blur bg-opacity-95 shadow-[0_-4px_12px_rgba(0,0,0,0.15)] no-print">
-        <button onclick="switchView('dashboard')" id="mobile-tab-dashboard" class="flex flex-col items-center gap-0.5 text-teal-400 flex-1">
-            <span class="text-lg">📊</span>
-            <span class="text-[8px] font-semibold">Dashboard</span>
+    <!-- Bottom Mobile Navigation Bar (Sleek 5-Tab Compact Design) -->
+    <div id="mobileTabBar" class="md:hidden fixed bottom-0 left-0 right-0 bg-slate-950/95 border-t border-slate-800/80 px-2 py-1.5 flex justify-around items-center z-40 backdrop-blur-lg shadow-[0_-4px_20px_rgba(0,0,0,0.3)] no-print">
+        <button onclick="switchView('dashboard')" id="mobile-tab-dashboard" class="flex flex-col items-center justify-center gap-0.5 text-teal-400 py-1 px-2 rounded-xl active:scale-95 transition-all flex-1">
+            <span class="text-base leading-none">📊</span>
+            <span class="text-[9.5px] font-bold tracking-tight">Home</span>
         </button>
-        <button onclick="switchView('dailydetails')" id="mobile-tab-dailydetails" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">📋</span>
-            <span class="text-[8px] font-semibold">Daily Details</span>
+        <button onclick="switchView('jobcards')" id="mobile-tab-jobcards" class="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-slate-200 py-1 px-2 rounded-xl active:scale-95 transition-all flex-1">
+            <span class="text-base leading-none">📋</span>
+            <span class="text-[9.5px] font-semibold tracking-tight">Jobs</span>
         </button>
-        <button onclick="switchView('summary')" id="mobile-tab-summary" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">📊</span>
-            <span class="text-[8px] font-semibold">Summary</span>
+        <button onclick="switchView('inventory')" id="mobile-tab-inventory" class="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-slate-200 py-1 px-2 rounded-xl active:scale-95 transition-all flex-1">
+            <span class="text-base leading-none">📦</span>
+            <span class="text-[9.5px] font-semibold tracking-tight">Store</span>
         </button>
-        <button onclick="switchView('jobcards')" id="mobile-tab-jobcards" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">📋</span>
-            <span class="text-[8px] font-semibold">Job Cards</span>
+        <button onclick="switchView('sailors')" id="mobile-tab-sailors" class="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-slate-200 py-1 px-2 rounded-xl active:scale-95 transition-all flex-1">
+            <span class="text-base leading-none">⚓</span>
+            <span class="text-[9.5px] font-semibold tracking-tight">Force</span>
         </button>
-        <button onclick="switchView('inventory')" id="mobile-tab-inventory" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">📦</span>
-            <span class="text-[8px] font-semibold">Inventory</span>
+        <button onclick="toggleMobileMoreMenuSheet()" id="mobile-tab-more" class="flex flex-col items-center justify-center gap-0.5 text-slate-400 hover:text-slate-200 py-1 px-2 rounded-xl active:scale-95 transition-all flex-1">
+            <span class="text-base leading-none">✨</span>
+            <span class="text-[9.5px] font-semibold tracking-tight">More</span>
         </button>
-        <button onclick="switchView('estimates')" id="mobile-tab-estimates" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">📐</span>
-            <span class="text-[8px] font-semibold">Estimates</span>
-        </button>
-        <button onclick="switchView('maintenance')" id="mobile-tab-maintenance" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">🔧</span>
-            <span class="text-[8px] font-semibold">LMD</span>
-        </button>
-        <button onclick="switchView('sailors')" id="mobile-tab-sailors" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">⚓</span>
-            <span class="text-[8px] font-semibold">Sailors</span>
-        </button>
-        <button onclick="switchView('reports')" id="mobile-tab-reports" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">📈</span>
-            <span class="text-[8px] font-semibold">Reports</span>
-        </button>
-        <button onclick="switchView('settings')" id="mobile-tab-settings" class="flex flex-col items-center gap-0.5 text-slate-400 flex-1">
-            <span class="text-lg">⚙️</span>
-            <span class="text-[8px] font-semibold">Settings</span>
-        </button>
+    </div>
+
+    <!-- Mobile More Navigation Drawer Sheet -->
+    <div id="mobileMoreMenuSheet" class="fixed inset-0 bg-black/60 z-50 hidden flex flex-col justify-end backdrop-blur-xs transition-opacity duration-200" onclick="if(event.target === this) toggleMobileMoreMenuSheet()">
+        <div class="bg-slate-900 border-t border-slate-700 rounded-t-3xl p-4 pb-8 space-y-3.5 shadow-2xl animate-in slide-in-from-bottom duration-200" onclick="event.stopPropagation()">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 px-1">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">✨</span>
+                    <h3 class="text-xs font-bold text-white uppercase tracking-wider">All App Sections</h3>
+                </div>
+                <button onclick="toggleMobileMoreMenuSheet()" class="w-6 h-6 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs font-bold">✕</button>
+            </div>
+            <div class="grid grid-cols-3 gap-2.5">
+                <button onclick="switchView('dailydetails'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">📝</span>
+                    <span class="text-[10px] font-bold">Daily Details</span>
+                </button>
+                <button onclick="switchView('summary'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">📊</span>
+                    <span class="text-[10px] font-bold">Summary</span>
+                </button>
+                <button onclick="switchView('estimates'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">📐</span>
+                    <span class="text-[10px] font-bold">Estimates</span>
+                </button>
+                <button onclick="switchView('documents'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">📄</span>
+                    <span class="text-[10px] font-bold">Minute Sheet</span>
+                </button>
+                <button onclick="switchView('maintenance'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">📍</span>
+                    <span class="text-[10px] font-bold">LMD & Loc</span>
+                </button>
+                <button onclick="switchView('reports'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">📈</span>
+                    <span class="text-[10px] font-bold">Reports</span>
+                </button>
+                <button onclick="switchView('projects'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">🏗️</span>
+                    <span class="text-[10px] font-bold">Projects</span>
+                </button>
+                <button onclick="switchView('nastatus'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">🛌</span>
+                    <span class="text-[10px] font-bold">N/A Status</span>
+                </button>
+                <button onclick="openSettingsView(); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">⚙️</span>
+                    <span class="text-[10px] font-bold">Settings</span>
+                </button>
+            </div>
+        </div>
     </div>
 
     <!-- OIC Profile Modal -->
@@ -6931,29 +7210,56 @@
                     <span class="text-xl">📋</span>
                     <div>
                         <h3 class="font-bold text-base">Register Incoming Job Minute</h3>
-                        <p class="text-xs text-teal-200">Generate Tracking Ref Number & Initiate Document Workflow</p>
+                        <p class="text-xs text-teal-200">Minute Sheet Register • Record details & generate tracking</p>
                     </div>
                 </div>
                 <button onclick="closeModal('newJobMinuteModal')" class="text-slate-300 hover:text-white text-lg font-bold">✕</button>
             </div>
 
             <form onsubmit="event.preventDefault(); saveNewJobMinuteRecord();" class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
-                <div class="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between">
-                    <div>
-                        <span class="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">Generated Minute Tracking Ref #</span>
-                        <span id="njmRefNumberDisplay" class="text-base font-black text-teal-900 font-mono">MIN/2026/08/001</span>
+                <!-- Minute Sheet Register Number Ref Builder -->
+                <div class="p-3 bg-teal-50/90 border border-teal-200 rounded-xl space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-bold text-teal-800 uppercase tracking-wider">Minute Sheet Register Number (ලියාපදිංචි අංකය)</span>
+                        <span class="text-[10px] bg-teal-200/80 text-teal-900 px-2 py-0.5 rounded font-bold">CCED / A / Month / No / Year</span>
                     </div>
-                    <span class="text-[10px] bg-teal-200/80 text-teal-900 px-2 py-0.5 rounded font-bold">Carried through JC completion</span>
+                    <div class="flex items-center gap-1.5 flex-wrap">
+                        <span id="njmRefPrefix" class="text-sm font-black font-mono text-teal-900 bg-white px-2.5 py-1.5 rounded-lg border border-teal-300 shadow-2xs">CCED/A/08/</span>
+                        <input type="text" id="njmSeqNumber" oninput="updateFullMinuteRefDisplay()" class="w-28 px-3 py-1.5 text-sm font-black font-mono text-center text-teal-950 bg-amber-50 border-2 border-amber-400 rounded-lg focus:bg-white focus:border-teal-600 outline-none shadow-inner" placeholder="2215" title="Editable Sequential Number">
+                        <span id="njmRefSuffix" class="text-sm font-black font-mono text-teal-900 bg-white px-2.5 py-1.5 rounded-lg border border-teal-300 shadow-2xs">/26</span>
+                    </div>
+                    <input type="hidden" id="njmRefNumberDisplay" value="CCED/A/08/2215/26">
+                    <p class="text-[11px] text-slate-600">
+                        Full Register Number: <strong id="njmFullRefPreview" class="text-teal-950 font-mono font-black">CCED/A/08/2215/26</strong>
+                    </p>
                 </div>
 
-                <div class="grid grid-cols-2 gap-3">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                         <label class="block font-bold text-slate-700 uppercase mb-1">Date Received <span class="text-rose-500">*</span></label>
-                        <input type="date" id="njmDateReceived" required class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                        <input type="date" id="njmDateReceived" onchange="onMinuteDateChange(this.value)" required class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
                     </div>
                     <div>
                         <label class="block font-bold text-slate-700 uppercase mb-1">End User / Department / Base <span class="text-rose-500">*</span></label>
-                        <input type="text" id="njmEndUser" required placeholder="e.g. Wardroom, MT, Supply School..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                        <input type="text" id="njmEndUser" required placeholder="e.g. Wardroom, MT, Supply School, SLNS Tissa..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
+                    </div>
+                </div>
+
+                <!-- 2 Contact Numbers + WhatsApp Number -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">📞 Contact No 1</label>
+                        <input type="tel" id="njmContact1" placeholder="e.g. 0712345678" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-1 focus:ring-teal-500 outline-none text-xs font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">📞 Contact No 2</label>
+                        <input type="tel" id="njmContact2" placeholder="e.g. 0771234567" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-1 focus:ring-teal-500 outline-none text-xs font-mono">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-emerald-800 uppercase mb-1 flex items-center gap-1">
+                            <span>💬</span> WhatsApp No
+                        </label>
+                        <input type="tel" id="njmWhatsapp" placeholder="e.g. 0712345678" class="w-full px-3 py-2 border border-emerald-300 rounded-xl bg-emerald-50/50 focus:bg-white focus:ring-1 focus:ring-emerald-500 outline-none text-xs font-mono font-bold text-emerald-950">
                     </div>
                 </div>
 
@@ -6964,69 +7270,97 @@
 
                 <div>
                     <label class="block font-bold text-slate-700 uppercase mb-1">Detailed Description / Instructions from Minute</label>
-                    <textarea id="njmDescription" rows="2" placeholder="Enter full details, end-user remarks, or reference file notes..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none"></textarea>
-                </div>
-
-                <!-- Directed To: Zone / Workshop / Admin Officer Routing -->
-                <div class="grid grid-cols-2 gap-3 p-3 bg-amber-50/70 border border-amber-200 rounded-xl">
-                    <div>
-                        <label class="block font-bold text-amber-900 uppercase mb-1">Direct To (දිශාගත කිරීමේ වර්ගය) <span class="text-rose-500">*</span></label>
-                        <select id="njmDirectedType" onchange="onDirectedTypeChange()" class="w-full px-3 py-2 border border-amber-300 rounded-xl bg-white focus:ring-1 focus:ring-amber-500 outline-none font-medium">
-                            <option value="Zone for Maintenance">📍 Zone for Maintenance (නඩත්තු කලාපය)</option>
-                            <option value="Workshop for Job">🔨 Workshop for Job (වැඩපළ කාර්යය)</option>
-                            <option value="Admin Officer">👔 Admin Officer (පරිපාලන නිලධාරි)</option>
-                            <option value="Relevant Officer / Desk">📑 Relevant Officer / Desk (අදාළ අංශය)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-bold text-amber-900 uppercase mb-1" id="lblNjmDirectedTarget">Target Zone / Workshop <span class="text-rose-500">*</span></label>
-                        <select id="njmDirectedTarget" class="w-full px-3 py-2 border border-amber-300 rounded-xl bg-white focus:ring-1 focus:ring-amber-500 outline-none font-bold text-slate-800">
-                            <!-- Populated dynamically via onDirectedTypeChange() -->
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block font-bold text-slate-700 uppercase mb-1">Priority</label>
-                        <select id="njmPriority" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
-                            <option value="Normal">🟢 Normal (සාමාන්‍ය)</option>
-                            <option value="High">🟡 High / Urgent</option>
-                            <option value="Emergency">🔴 Critical / Emergency</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-bold text-slate-700 uppercase mb-1">Initial Present Position</label>
-                        <select id="njmPosition" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
-                            <option value="RECEIVED">📥 Received from End User</option>
-                            <option value="ESTIMATION">📐 Forwarded for Estimation</option>
-                            <option value="APPROVAL">✍️ Pending Recommendation / Approval</option>
-                            <option value="ASSIGNED">🔨 Assigned to Workshop / JC</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block font-bold text-slate-700 uppercase mb-1">Link to Existing Estimate (Optional)</label>
-                        <select id="njmLinkEstimate" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
-                            <option value="">-- No Linked Estimate Yet --</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block font-bold text-slate-700 uppercase mb-1">Link to Existing Job Card (Optional)</label>
-                        <select id="njmLinkJobCard" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none">
-                            <option value="">-- No Linked Job Card Yet --</option>
-                        </select>
-                    </div>
+                    <textarea id="njmDescription" rows="3" placeholder="Enter full details, end-user remarks, or reference file notes..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none"></textarea>
                 </div>
 
                 <div class="pt-4 border-t border-slate-100 flex items-center justify-between">
-                    <button type="button" onclick="closeModal('newJobMinuteModal')" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-100 transition-all font-bold">
+                    <button type="button" onclick="closeModal('newJobMinuteModal')" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 hover:bg-slate-100 transition-all font-bold cursor-pointer">
                         Cancel
                     </button>
-                    <button type="submit" class="px-6 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5">
-                        <span>💾</span> Register & Generate Slip
+                    <button type="submit" class="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5 text-xs">
+                        <span>💾</span> Register Minute Entry
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal 1.5: Direct Minute Sheet to Zone / Location -->
+    <div id="directMinuteModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4 modal-overlay no-print">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            <div class="bg-gradient-to-r from-slate-900 to-amber-950 text-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-2.5">
+                    <span class="text-xl">📍</span>
+                    <div>
+                        <h3 class="font-bold text-base">Direct Minute to Zone / Location</h3>
+                        <p class="text-xs text-amber-200" id="dirMinuteRefSubtitle">Forward minute to maintenance zone or workshop</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('directMinuteModal')" class="text-slate-300 hover:text-white font-bold cursor-pointer">✕</button>
+            </div>
+
+            <form onsubmit="event.preventDefault(); saveDirectMinuteRecord();" class="p-6 space-y-4 overflow-y-auto flex-1 text-xs">
+                <input type="hidden" id="dirMinuteId">
+
+                <!-- Minute Info Summary Card -->
+                <div class="p-3 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1.5">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-bold text-amber-800 uppercase tracking-wider">Minute Reference Number</span>
+                        <span id="dirMinuteRefDisp" class="font-mono font-black text-amber-950 text-xs">CCED/A/08/2215/26</span>
+                    </div>
+                    <p class="text-xs font-bold text-slate-800" id="dirMinuteEndUserDisp">End User: —</p>
+                    <p class="text-[11px] text-slate-600 line-clamp-2" id="dirMinuteSubjectDisp">Subject: —</p>
+                </div>
+
+                <!-- Directing Category & Target -->
+                <div class="space-y-3 p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Directing Type (දිශාගත කිරීමේ වර්ගය) <span class="text-rose-500">*</span></label>
+                        <select id="dirTargetType" onchange="onDirectTypeChange()" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white font-semibold text-slate-800 focus:ring-1 focus:ring-amber-500 outline-none">
+                            <option value="Maintenance Zone">📍 Maintenance Zone (නඩත්තු කලාපය)</option>
+                            <option value="Workshop for Execution">🔨 Workshop for Job Execution (වැඩපළ කාර්යය)</option>
+                            <option value="Administrative / Planning Desk">👔 Administrative / Planning Desk (පරිපාලන / සැලසුම් අංශය)</option>
+                            <option value="Special Officer / Other">📑 Special Officer / Desk (විශේෂ අංශය)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1" id="lblDirTarget">Target Zone / Workshop <span class="text-rose-500">*</span></label>
+                        <select id="dirTargetLocation" required class="w-full px-3 py-2 border-2 border-amber-400 rounded-xl bg-amber-50/30 font-black text-slate-900 focus:bg-white focus:border-amber-600 outline-none text-xs">
+                            <!-- Populated dynamically via onDirectTypeChange() -->
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Workflow Stage & Directing Officer -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Update Position To</label>
+                        <select id="dirNewPosition" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 font-bold text-slate-800 focus:bg-white outline-none">
+                            <option value="ESTIMATION">📐 Forwarded for Estimation (තක්සේරු අදියර)</option>
+                            <option value="ASSIGNED">🔨 Assigned to Workshop / JC (වැඩපළට පැවරීම)</option>
+                            <option value="APPROVAL">✍️ Pending Approval / Recommendation</option>
+                            <option value="RECEIVED">📥 Keep as Received</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 uppercase mb-1">Directing Officer</label>
+                        <input type="text" id="dirOfficer" class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 font-semibold text-slate-800 focus:bg-white outline-none" placeholder="e.g. Planning Section">
+                    </div>
+                </div>
+
+                <!-- Instructions / Remarks -->
+                <div>
+                    <label class="block font-bold text-slate-700 uppercase mb-1">Directing Instructions / Remarks (නියෝග / උපදෙස්)</label>
+                    <textarea id="dirRemarks" rows="2" placeholder="e.g. Forwarded to A-Zone for site inspection and prepare initial scope/estimate..." class="w-full px-3 py-2 border border-slate-300 rounded-xl bg-slate-50 focus:bg-white outline-none"></textarea>
+                </div>
+
+                <div class="pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <button type="button" onclick="closeModal('directMinuteModal')" class="px-4 py-2 border border-slate-300 rounded-xl text-slate-700 font-bold hover:bg-slate-100 transition-all cursor-pointer">
+                        Cancel
+                    </button>
+                    <button type="submit" class="px-6 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5">
+                        <span>📍</span> Save & Direct Minute
                     </button>
                 </div>
             </form>
