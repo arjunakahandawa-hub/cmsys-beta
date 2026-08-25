@@ -1456,6 +1456,17 @@ function closeModal(modalId) {
     _justClosedModal = false;
   }, 1000);
 }
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function formatCurrency(amount) {
   return (
     "Rs. " +
@@ -25018,6 +25029,21 @@ function openAddTempIssueModal(editId = null) {
   nextWeek.setDate(nextWeek.getDate() + 7);
   const nextWeekStr = nextWeek.toISOString().split("T")[0];
 
+  // Reset Search Boxes
+  const invSearchInput = document.getElementById("tibInventorySearchInput");
+  const invSearchResults = document.getElementById("tibInventorySearchResults");
+  const invClearBtn = document.getElementById("tibInvSearchClearBtn");
+  if (invSearchInput) invSearchInput.value = "";
+  if (invSearchResults) invSearchResults.classList.add("hidden");
+  if (invClearBtn) invClearBtn.classList.add("hidden");
+
+  const sailorSearchInput = document.getElementById("tibSailorSearchInput");
+  const sailorSearchResults = document.getElementById("tibSailorSearchResults");
+  const sailorClearBtn = document.getElementById("tibSailorSearchClearBtn");
+  if (sailorSearchInput) sailorSearchInput.value = "";
+  if (sailorSearchResults) sailorSearchResults.classList.add("hidden");
+  if (sailorClearBtn) sailorClearBtn.classList.add("hidden");
+
   if (editId) {
     const issue = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === editId);
     if (issue) {
@@ -25027,11 +25053,13 @@ function openAddTempIssueModal(editId = null) {
       if (dateInp) dateInp.value = issue.date || todayStr;
       if (zoneSelect) zoneSelect.value = issue.zone_id || store.currentZone;
       if (descInp) descInp.value = issue.item_name || "";
+      if (invSearchInput) invSearchInput.value = issue.item_name || "";
       if (catSelect) catSelect.value = issue.category || "Tools & Machinery";
       if (qtyInp) qtyInp.value = issue.qty || 1;
       if (denoInp) denoInp.value = issue.deno || "Nos";
       if (unitCostInp) unitCostInp.value = issue.unit_cost || 0;
       if (issuedToInp) issuedToInp.value = issue.issued_to || "";
+      if (sailorSearchInput) sailorSearchInput.value = issue.issued_to || "";
       if (tradeInp) tradeInp.value = issue.trade || "";
       if (purposeInp) purposeInp.value = issue.purpose || "";
       if (expDateInp) expDateInp.value = issue.expected_return_date || nextWeekStr;
@@ -25063,8 +25091,86 @@ function openAddTempIssueModal(editId = null) {
   modal.classList.remove("hidden");
 }
 
-function handleTibInventoryQuickPick(itemId) {
-  if (!itemId) return;
+// ── Search & Find for Inventory Items in Temporary Issue Modal ──
+function onTibZoneChange() {
+  const searchInput = document.getElementById("tibInventorySearchInput");
+  if (searchInput) {
+    searchTibInventoryItems(searchInput.value);
+  }
+}
+
+function isSameZone(z1, z2) {
+  if (!z1 || !z2) return false;
+  const clean1 = String(z1).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const clean2 = String(z2).toLowerCase().replace(/[^a-z0-9]/g, "");
+  return clean1 === clean2;
+}
+
+// ── Search & Find for Inventory Items in Temporary Issue Modal ──
+function searchTibInventoryItems(query) {
+  const container = document.getElementById("tibInventorySearchResults");
+  const clearBtn = document.getElementById("tibInvSearchClearBtn");
+  if (!container) return;
+
+  const lowerQuery = (query || "").toLowerCase().trim();
+  if (clearBtn) {
+    if (lowerQuery) clearBtn.classList.remove("hidden");
+    else clearBtn.classList.add("hidden");
+  }
+
+  const selectedZone = document.getElementById("tibInputZoneId")?.value || "";
+
+  const items = store.inventory || [];
+  const filtered = items.filter((it) => {
+    // 1. Strict filter by Selected Zone/Workshop in Modal
+    if (selectedZone && selectedZone !== "all" && selectedZone !== "All Zones") {
+      const itZone = it.zone_id || it.location || "";
+      if (!isSameZone(selectedZone, itZone)) {
+        return false;
+      }
+    }
+
+    // 2. Filter by search text query
+    if (!lowerQuery) return true;
+    const desc = (it.description || "").toLowerCase();
+    const cat = (it.category || "").toLowerCase();
+    const book = (it.book_no || "").toLowerCase();
+    const loc = (it.location || "").toLowerCase();
+    return desc.includes(lowerQuery) || cat.includes(lowerQuery) || book.includes(lowerQuery) || loc.includes(lowerQuery);
+  }).slice(0, 40);
+
+  if (filtered.length === 0) {
+    const zoneMsg = selectedZone ? ` in ${escapeHtml(selectedZone)}` : "";
+    container.innerHTML = `<div class="p-3 text-xs text-slate-500 italic text-center">No inventory items found matching "${escapeHtml(query)}"${zoneMsg}</div>`;
+    container.classList.remove("hidden");
+    return;
+  }
+
+  container.innerHTML = filtered.map((it) => {
+    const cost = parseFloat(it.cost || it.cost_per_unit || 0);
+    const zoneBadge = it.zone_id ? `<span class="px-1.5 py-0.5 rounded bg-amber-50 font-bold text-amber-800 border border-amber-200/70 text-[10px]">🏷️ ${it.zone_id}</span>` : '';
+    return `
+      <div onclick="selectTibInventoryItem('${it.id || it._fbKey}')" class="p-2.5 hover:bg-indigo-50/80 cursor-pointer transition-colors flex items-center justify-between gap-3 text-left">
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-bold text-slate-800 truncate">${it.description}</div>
+          <div class="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5 flex-wrap">
+            ${zoneBadge}
+            <span class="px-1.5 py-0.5 rounded bg-slate-100 font-semibold text-slate-700">${it.category || 'General'}</span>
+            ${it.book_no ? `<span class="font-mono text-slate-400">#${it.book_no}</span>` : ''}
+          </div>
+        </div>
+        <div class="text-right shrink-0">
+          <div class="text-xs font-mono font-bold text-indigo-700">Stock: ${it.quantity} ${it.deno || 'Nos'}</div>
+          <div class="text-[10px] text-emerald-700 font-semibold font-mono">Rs. ${cost.toLocaleString()}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  container.classList.remove("hidden");
+}
+
+function selectTibInventoryItem(itemId) {
   const item = (store.inventory || []).find((i) => (i.id || i._fbKey) === itemId);
   if (!item) return;
 
@@ -25072,33 +25178,146 @@ function handleTibInventoryQuickPick(itemId) {
   const denoInp = document.getElementById("tibInputDeno");
   const unitCostInp = document.getElementById("tibInputUnitCost");
   const catSelect = document.getElementById("tibInputCategory");
+  const searchInput = document.getElementById("tibInventorySearchInput");
+  const container = document.getElementById("tibInventorySearchResults");
+  const clearBtn = document.getElementById("tibInvSearchClearBtn");
 
   if (descInp) descInp.value = item.description || "";
   if (denoInp) denoInp.value = item.deno || "Nos";
-  if (unitCostInp) unitCostInp.value = item.cost || 0;
+  if (unitCostInp) unitCostInp.value = item.cost || item.cost_per_unit || 0;
   if (catSelect && item.category) {
     if (catSelect.querySelector(`option[value="${item.category}"]`)) {
       catSelect.value = item.category;
     }
   }
 
+  if (searchInput) searchInput.value = item.description || "";
+  if (clearBtn) clearBtn.classList.remove("hidden");
+  if (container) container.classList.add("hidden");
+
   calculateTibFormTotalValue();
+  showToast(`Selected "${item.description}"`, "success");
 }
 
-function handleTibSailorQuickPick(sailorId) {
-  if (!sailorId) return;
-  const sailor = (store.sailors || []).find((s) => (s.id || s.official_number) === sailorId);
+function clearTibInventorySearch() {
+  const searchInput = document.getElementById("tibInventorySearchInput");
+  const container = document.getElementById("tibInventorySearchResults");
+  const clearBtn = document.getElementById("tibInvSearchClearBtn");
+  if (searchInput) {
+    searchInput.value = "";
+    searchInput.focus();
+  }
+  if (clearBtn) clearBtn.classList.add("hidden");
+  if (container) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
+  }
+}
+
+// ── Search & Find for Sailors in Temporary Issue Modal ──
+function searchTibSailorItems(query) {
+  const container = document.getElementById("tibSailorSearchResults");
+  const clearBtn = document.getElementById("tibSailorSearchClearBtn");
+  if (!container) return;
+
+  const lowerQuery = (query || "").toLowerCase().trim();
+  if (clearBtn) {
+    if (lowerQuery) clearBtn.classList.remove("hidden");
+    else clearBtn.classList.add("hidden");
+  }
+
+  const sailors = store.sailors || [];
+  const filtered = sailors.filter((s) => {
+    if (!lowerQuery) return true;
+    const offNo = String(s.official_number || "").toLowerCase();
+    const name = (s.name || s.initials || "").toLowerCase();
+    const rank = (s.rank || "").toLowerCase();
+    const trade = (s.trade || s.department || "").toLowerCase();
+    return offNo.includes(lowerQuery) || name.includes(lowerQuery) || rank.includes(lowerQuery) || trade.includes(lowerQuery);
+  }).slice(0, 40);
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="p-3 text-xs text-slate-500 italic text-center">No sailors found matching "${escapeHtml(query)}"</div>`;
+    container.classList.remove("hidden");
+    return;
+  }
+
+  container.innerHTML = filtered.map((s) => {
+    return `
+      <div onclick="selectTibSailorItem('${s.id || s.official_number}')" class="p-2.5 hover:bg-teal-50/80 cursor-pointer transition-colors flex items-center justify-between gap-3 text-left">
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-bold text-slate-900 truncate">
+            <span class="font-mono text-teal-800">${s.official_number || '—'}</span> • ${s.rank || ''} ${s.name || s.initials || 'Sailor'}
+          </div>
+          <div class="text-[11px] text-slate-500 flex items-center gap-2 mt-0.5">
+            <span class="px-1.5 py-0.5 rounded bg-slate-100 font-semibold text-slate-700">${s.trade || 'General'}</span>
+            ${s.division ? `<span class="text-slate-400">${s.division}</span>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  container.classList.remove("hidden");
+}
+
+function selectTibSailorItem(sailorId) {
+  const sailor = (store.sailors || []).find((s) => String(s.id) === String(sailorId) || String(s.official_number) === String(sailorId));
   if (!sailor) return;
 
   const issuedToInp = document.getElementById("tibInputIssuedTo");
   const tradeInp = document.getElementById("tibInputTrade");
+  const searchInput = document.getElementById("tibSailorSearchInput");
+  const container = document.getElementById("tibSailorSearchResults");
+  const clearBtn = document.getElementById("tibSailorSearchClearBtn");
 
-  if (issuedToInp) {
-    issuedToInp.value = `${sailor.official_number || ''} ${sailor.rank || ''} ${sailor.name || sailor.initials || ''}`.trim();
+  const fullSailorStr = `${sailor.official_number || ''} ${sailor.rank || ''} ${sailor.name || sailor.initials || ''}`.trim();
+  if (issuedToInp) issuedToInp.value = fullSailorStr;
+  if (tradeInp) tradeInp.value = sailor.trade || sailor.department || "";
+
+  if (searchInput) searchInput.value = fullSailorStr;
+  if (clearBtn) clearBtn.classList.remove("hidden");
+  if (container) container.classList.add("hidden");
+
+  showToast(`Selected "${fullSailorStr}"`, "success");
+}
+
+function clearTibSailorSearch() {
+  const searchInput = document.getElementById("tibSailorSearchInput");
+  const container = document.getElementById("tibSailorSearchResults");
+  const clearBtn = document.getElementById("tibSailorSearchClearBtn");
+  if (searchInput) {
+    searchInput.value = "";
+    searchInput.focus();
   }
-  if (tradeInp) {
-    tradeInp.value = sailor.trade || sailor.department || "";
+  if (clearBtn) clearBtn.classList.add("hidden");
+  if (container) {
+    container.classList.add("hidden");
+    container.innerHTML = "";
   }
+}
+
+// Global click-outside listener for TIB search dropdowns
+document.addEventListener("click", (e) => {
+  const invCont = document.getElementById("tibInventorySearchResults");
+  const invInput = document.getElementById("tibInventorySearchInput");
+  if (invCont && !invCont.contains(e.target) && e.target !== invInput) {
+    invCont.classList.add("hidden");
+  }
+  const slrCont = document.getElementById("tibSailorSearchResults");
+  const slrInput = document.getElementById("tibSailorSearchInput");
+  if (slrCont && !slrCont.contains(e.target) && e.target !== slrInput) {
+    slrCont.classList.add("hidden");
+  }
+});
+
+// Backward-compatible fallback aliases
+function handleTibInventoryQuickPick(itemId) {
+  selectTibInventoryItem(itemId);
+}
+
+function handleTibSailorQuickPick(sailorId) {
+  selectTibSailorItem(sailorId);
 }
 
 function calculateTibFormTotalValue() {
