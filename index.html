@@ -839,6 +839,9 @@
                                     Today
                                 </button>
                             </div>
+                            <button id="btnCommitAllToday" onclick="commitAllZoneWorkOrders()" class="bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all cursor-pointer">
+                                <span>⚡</span> Commit All Today
+                            </button>
                             <button id="btnContinueYesterday" onclick="continueYesterdayJobs()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-2 shadow-sm transition-all">
                                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -1585,6 +1588,9 @@
                             <p class="text-xs text-amber-800 mt-0.5">Materials or tools have been temporarily issued to this Zone/Workshop/Project. Please inspect and confirm receipt below.</p>
                         </div>
                     </div>
+                    <button type="button" onclick="filterToPendingIssues()" class="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold shadow-xs transition-all flex items-center gap-1.5 shrink-0 cursor-pointer">
+                        <span>🔍</span> View All Pending
+                    </button>
                 </div>
 
                 <!-- TIB Header Banner -->
@@ -6273,10 +6279,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.22.2
+        App Version: v5.22.3
     </div>
 
-    <script src="app.js?v=5.22.2"></script>
+    <script src="app.js?v=5.22.3"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

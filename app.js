@@ -977,15 +977,27 @@ function initOpsListeners() {
   opsDB.ref("temp_issues").on("value", (snapshot) => {
     const arr = snapshotToArray(snapshot);
     if (arr && arr.length > 0) {
-      store.tempIssues = arr;
+      const seen = new Set();
+      const uniqueArr = [];
+      arr.forEach((item) => {
+        const key = String(item._fbKey || item.id || "");
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          uniqueArr.push(item);
+        } else if (!key) {
+          uniqueArr.push(item);
+        }
+      });
+      store.tempIssues = uniqueArr;
     } else {
       const local = localStorage.getItem("ncw_temp_issues_v1");
       store.tempIssues = local ? JSON.parse(local) : (typeof DEFAULT_TEMP_ISSUES_DATA !== "undefined" ? [...DEFAULT_TEMP_ISSUES_DATA] : []);
     }
     saveTempIssuesToStorage();
     console.log(`📑 DB#2: ${store.tempIssues.length} temporary issues loaded`);
-    if (store.currentView === "tempissues") {
-      renderTempIssuesView();
+    if (store.currentView === "tempissues" || (typeof isInvTIBActive === "function" && isInvTIBActive())) {
+      renderTempIssuesDashboard();
+      renderTempIssuesTable();
     }
   });
 
@@ -1827,7 +1839,8 @@ function renderNastatusView() {
 function renderDashboard() {
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
-  const isToday = dateVal === today; // Show/hide views and sidebar
+  const isToday = dateVal === today;
+  refreshDailyCommitmentCache(dateVal);
   toggleViewsBasedOnZone();
   const summaryTitle = document.getElementById("summaryTitle");
   if (summaryTitle) {
@@ -1999,149 +2012,120 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
 
   return false;
 }
-function getSailorAssignmentOnDate(sailorId, dateVal) {
-  const today = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
-  if (!dateVal) dateVal = today;
+// Pre-computed lookup cache for dateVal to guarantee sub-millisecond dashboard renders
+let _dailyCommitmentCache = {
+  date: null,
+  committedWoSet: new Set(),
+  sailorAssignmentMap: new Map()
+};
+
+function refreshDailyCommitmentCache(dateVal) {
+  const today = getLocalDateString();
+  if (!dateVal) dateVal = store.dashboardDate || today;
   const isToday = dateVal === today;
 
-  const sailor = (store.sailors || []).find(
-    (s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId) || String(s.official_number) === String(sailorId)
-  );
-  const idsToMatch = new Set([String(sailorId)]);
-  if (sailor) {
-    if (sailor.id) idsToMatch.add(String(sailor.id));
-    if (sailor._fbKey) idsToMatch.add(String(sailor._fbKey));
-    if (sailor.official_number) idsToMatch.add(String(sailor.official_number));
-  }
+  const committedWoSet = new Set();
+  const sailorAssignmentMap = new Map();
 
-  // 1. If checking for today, check live active Work Orders first
-  if (isToday) {
-    const activeWo = (store.workOrders || []).find((w) => {
-      if (w.status !== "Active" && w.status !== "Pending") return false;
-      return (w.assigned || []).some((id) => idsToMatch.has(String(id)));
+  // 1. Index daily allocations for dateVal
+  (store.dailyAllocations || []).forEach((a) => {
+    if (a.date === dateVal && a.status !== "Cancelled" && a.work_order_id) {
+      committedWoSet.add(String(a.work_order_id));
+    }
+  });
+
+  // 2. Index work orders marked as committed for dateVal
+  (store.workOrders || []).forEach((wo) => {
+    if (wo.last_committed_date === dateVal) {
+      if (wo.id) committedWoSet.add(String(wo.id));
+      if (wo._fbKey) committedWoSet.add(String(wo._fbKey));
+    }
+  });
+
+  // 3. Pre-map sailor assignments in O(N)
+  (store.workOrders || []).forEach((wo) => {
+    const isCommitted = committedWoSet.has(String(wo.id)) || committedWoSet.has(String(wo._fbKey));
+    if (isToday) {
+      if (wo.status !== "Active" && wo.status !== "Pending") return;
+      if (!isCommitted) return;
+    } else {
+      if (typeof isWorkOrderActiveOnDate === "function" && !isWorkOrderActiveOnDate(wo, dateVal)) return;
+      if (!isCommitted) return;
+    }
+    const cleanZone = String(wo.zone_id || "Active WO").replace(/-/g, " ").trim();
+    const info = {
+      ref: wo.reference_no || "Active WO",
+      title: wo.description || "",
+      zone: cleanZone,
+      type: wo.type || "WO",
+    };
+    (wo.assigned || []).forEach((id) => {
+      sailorAssignmentMap.set(String(id), info);
     });
-    if (activeWo) {
-      const cleanZone = String(activeWo.zone_id || "Active WO").replace(/-/g, " ").trim();
-      return {
-        ref: activeWo.reference_no || "Active WO",
-        title: activeWo.description || "",
-        zone: cleanZone,
-        type: activeWo.type || "WO",
-      };
-    }
+  });
 
-    const activeJc = (store.jobCards || []).find((j) => {
-      if (j.status !== "Active" && j.status !== "Pending") return false;
-      return (j.assigned || []).some((id) => idsToMatch.has(String(id)));
+  (store.jobCards || []).forEach((jc) => {
+    const isCommitted = committedWoSet.has(String(jc.id)) || committedWoSet.has(String(jc._fbKey));
+    if (isToday) {
+      if (jc.status !== "Active" && jc.status !== "Pending") return;
+      if (!isCommitted) return;
+    }
+    const cleanZone = String(jc.zone_id || "Job Card").replace(/-/g, " ").trim();
+    const info = {
+      ref: jc.job_card_no || "Job Card",
+      title: jc.description || jc.title || "",
+      zone: cleanZone,
+      type: "JC",
+    };
+    (jc.assigned || []).forEach((id) => {
+      sailorAssignmentMap.set(String(id), info);
     });
-    if (activeJc) {
-      const cleanZone = String(activeJc.zone_id || "Job Card").replace(/-/g, " ").trim();
-      return {
-        ref: activeJc.job_card_no || "Job Card",
-        title: activeJc.description || activeJc.title || "",
-        zone: cleanZone,
-        type: "JC",
-      };
-    }
+  });
+
+  _dailyCommitmentCache = {
+    date: dateVal,
+    committedWoSet,
+    sailorAssignmentMap
+  };
+}
+
+function getSailorAssignmentOnDate(sailorId, dateVal) {
+  const today = getLocalDateString();
+  if (!dateVal) dateVal = today;
+  if (_dailyCommitmentCache.date !== dateVal) {
+    refreshDailyCommitmentCache(dateVal);
   }
-
-  // 2. Check store.dailyAllocations
-  const alloc = (store.dailyAllocations || []).find(
-    (a) => a.date === dateVal && idsToMatch.has(String(a.sailor_id))
-  );
-
-  if (alloc) {
-    const wo = (store.workOrders || []).find(
-      (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id)
-    );
-    if (wo) {
-      if (isToday) {
-        const isInactive = wo.status === "Completed" || wo.status === "Hold" || wo.status === "Cancelled" || wo.status === "Draft";
-        const isStillAssigned = (wo.assigned || []).some((id) => idsToMatch.has(String(id)));
-        if (isInactive || !isStillAssigned) {
-          return null;
-        }
-      }
-      const cleanZone = String(wo.zone_id || alloc.zone_id || "Active WO").replace(/-/g, " ").trim();
-      return {
-        ref: wo.reference_no || "Active WO",
-        title: wo.description || "",
-        zone: cleanZone,
-        type: wo.type || "WO",
-      };
-    }
-    const jc = (store.jobCards || []).find(
-      (j) => String(j.id) === String(alloc.work_order_id) || String(j._fbKey) === String(alloc.work_order_id)
-    );
-    if (jc) {
-      if (isToday) {
-        const isInactive = jc.status === "Completed" || jc.status === "Hold" || jc.status === "Cancelled";
-        const isStillAssigned = (jc.assigned || []).some((id) => idsToMatch.has(String(id)));
-        if (isInactive || !isStillAssigned) {
-          return null;
-        }
-      }
-      const cleanZone = String(jc.zone_id || alloc.zone_id || "Job Card").replace(/-/g, " ").trim();
-      return {
-        ref: jc.job_card_no || "Job Card",
-        title: jc.description || jc.title || "",
-        zone: cleanZone,
-        type: "JC",
-      };
-    }
-  }
-
-  // 3. If historical date and no allocation record found, check if WO was active on that date
-  if (!isToday) {
-    const histWo = (store.workOrders || []).find((w) => {
-      if (typeof isWorkOrderActiveOnDate === "function" && !isWorkOrderActiveOnDate(w, dateVal)) return false;
-      return (w.assigned || []).some((id) => idsToMatch.has(String(id)));
-    });
-    if (histWo) {
-      const cleanZone = String(histWo.zone_id || "Work Order").replace(/-/g, " ").trim();
-      return {
-        ref: histWo.reference_no || "Work Order",
-        title: histWo.description || "",
-        zone: cleanZone,
-        type: histWo.type || "WO",
-      };
-    }
-  }
-
-  return null;
+  return _dailyCommitmentCache.sailorAssignmentMap.get(String(sailorId)) || null;
 }
 
 function getSailorCurrentAssignment(sailorId) {
-  const today = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
   return getSailorAssignmentOnDate(sailorId, today);
 }
+
 function renderAvailableSailors() {
   const container = document.getElementById("availableSailors");
   if (!container) return;
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
-  const isToday = dateVal === today; // Recalculate status for the selected date
+  const isToday = dateVal === today;
+
+  if (_dailyCommitmentCache.date !== dateVal) {
+    refreshDailyCommitmentCache(dateVal);
+  }
+
   const assignedIds = new Set();
+
+  (store.dailyAllocations || []).forEach((alloc) => {
+    if (alloc.date === dateVal && alloc.status !== "Cancelled") {
+      assignedIds.add(String(alloc.sailor_id));
+    }
+  });
+
   if (isToday) {
     (store.workOrders || []).forEach((wo) => {
-      if ((wo.status === "Active" || wo.status === "Pending") && wo.assigned) {
+      if ((wo.status === "Active" || wo.status === "Pending") && isWorkOrderCommittedToday(wo, today) && wo.assigned) {
         wo.assigned.forEach((id) => assignedIds.add(String(id)));
-      }
-    });
-    (store.dailyAllocations || []).forEach((alloc) => {
-      if (alloc.date === today) {
-        const wo = (store.workOrders || []).find(
-          (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id)
-        );
-        if (wo && (wo.status === "Active" || wo.status === "Pending") && (wo.assigned || []).some(id => String(id) === String(alloc.sailor_id))) {
-          assignedIds.add(String(alloc.sailor_id));
-        }
-      }
-    });
-  } else {
-    (store.dailyAllocations || []).forEach((alloc) => {
-      if (alloc.date === dateVal) {
-        assignedIds.add(String(alloc.sailor_id));
       }
     });
   }
@@ -2268,7 +2252,7 @@ function renderAvailableSailors() {
         <div class="sailor-card rounded-xl p-3 hover:shadow-md transition-all border"
             style="background:rgba(255,255,255,0.88);border-color:rgba(255,255,255,0.7);backdrop-filter:blur(6px)"
             draggable="${isToday ? "true" : "false"}"
-            ondragstart="handleDragStart(event, ${sailor.id})"
+            ondragstart="handleDragStart(event, '${sailor.id || sailor._fbKey}')"
             ondragend="handleDragEnd(event)">
             <div class="flex items-center gap-3">
                 <div class="relative flex-shrink-0">
@@ -2513,22 +2497,37 @@ function handleCardClick(event, workOrderId) {
   }
   openWorkOrderDetail(workOrderId);
 }
+function isWorkOrderCommittedToday(wo, dateVal) {
+  if (!wo) return false;
+  const today = getLocalDateString();
+  if (!dateVal) dateVal = store.dashboardDate || today;
+  if (wo.last_committed_date === dateVal) return true;
+  return (store.dailyAllocations || []).some(
+    (a) =>
+      a.date === dateVal &&
+      (String(a.work_order_id) === String(wo.id) || String(a.work_order_id) === String(wo._fbKey)) &&
+      a.status !== "Cancelled"
+  );
+}
+
 function getWorkOrderAssignedSailors(wo, dateVal) {
-  if (!wo) return { sailors: [], source: "" };
+  if (!wo) return { sailors: [], source: "", isCommitted: false };
   const today = getLocalDateString();
   if (!dateVal) dateVal = store.dashboardDate || today;
   const isToday = dateVal === today;
+  const isCommitted = isWorkOrderCommittedToday(wo, dateVal);
 
   if (isToday) {
     if (wo.status === "Completed" || wo.status === "Hold" || wo.status === "Cancelled" || wo.status === "Draft") {
-      return { sailors: [], source: "completed" };
+      return { sailors: [], source: "completed", isCommitted: false };
     }
     const assignedIds = new Set((wo.assigned || []).map(String));
     (store.dailyAllocations || []).forEach((a) => {
       if (
         a.date === today &&
         (String(a.work_order_id) === String(wo.id) ||
-          String(a.work_order_id) === String(wo._fbKey))
+          String(a.work_order_id) === String(wo._fbKey)) &&
+        a.status !== "Cancelled"
       ) {
         if (a.sailor_id) assignedIds.add(String(a.sailor_id));
       }
@@ -2539,14 +2538,13 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
         assignedIds.has(String(s._fbKey)) ||
         (s.official_number && assignedIds.has(String(s.official_number))),
     );
-    return { sailors, source: "live" };
+    return { sailors, source: "live", isCommitted };
   }
 
   // Back-date / Historical Mode resolution:
-  // 1st priority: Try dailyAllocations for this specific date
   const dailyIds = (store.dailyAllocations || [])
     .filter(
-      (a) => a.date === dateVal && (String(a.work_order_id) === String(wo.id) || String(a.work_order_id) === String(wo._fbKey)),
+      (a) => a.date === dateVal && (String(a.work_order_id) === String(wo.id) || String(a.work_order_id) === String(wo._fbKey)) && a.status !== "Cancelled",
     )
     .map((a) => String(a.sailor_id));
 
@@ -2556,10 +2554,9 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
         dailyIds.includes(String(s.id)) ||
         dailyIds.includes(String(s._fbKey)),
     );
-    return { sailors, source: "daily_record" };
+    return { sailors, source: "daily_record", isCommitted: true };
   }
 
-  // 2nd priority: Fall back to wo.assigned
   if (wo.assigned && wo.assigned.length > 0) {
     const assignedIds = (wo.assigned || []).map(String);
     const sailors = store.sailors.filter(
@@ -2567,21 +2564,123 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
         assignedIds.includes(String(s.id)) ||
         assignedIds.includes(String(s._fbKey)),
     );
-    return { sailors, source: "current_assigned" };
+    return { sailors, source: "current_assigned", isCommitted: false };
   }
 
-  // 3rd priority: Fall back to wo.last_assigned
-  if (wo.last_assigned && wo.last_assigned.length > 0) {
-    const lastIds = (wo.last_assigned || []).map(String);
-    const sailors = store.sailors.filter(
-      (s) =>
-        lastIds.includes(String(s.id)) ||
-        lastIds.includes(String(s._fbKey)),
+  return { sailors: [], source: "", isCommitted: false };
+}
+
+function commitDailyLabourForWorkOrder(event, woKey) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  const wo = store.workOrders.find(
+    (w) => String(w.id) === String(woKey) || String(w._fbKey) === String(woKey)
+  );
+  if (!wo) return;
+
+  const today = getLocalDateString();
+  const dateVal = store.dashboardDate || today;
+  const { sailors: plannedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
+
+  if (plannedSailors.length === 0) {
+    showToast("Please assign at least one sailor to this work order before proceeding!", "warning");
+    return;
+  }
+
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+
+  const isLeaveCode = (val) => {
+    if (!val) return false;
+    const str = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
+  };
+
+  let committedCount = 0;
+  let skippedLeaveCount = 0;
+
+  plannedSailors.forEach((sailor) => {
+    const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][sailor._fbKey] : null;
+    const isLeave = isLeaveCode(sailor.status) || isLeaveCode(sailor.attendance) || isLeaveCode(fbStatus);
+
+    if (isLeave) {
+      skippedLeaveCount++;
+      return;
+    }
+
+    const allocKey = `${dateVal}_${sanitizeFbKey(sailor.id)}`;
+    const alloc = {
+      id: Date.now() + Math.random(),
+      date: dateVal,
+      sailor_id: sailor.id,
+      work_order_id: wo.id || wo._fbKey,
+      role_today: "Worker",
+      assigned_by: (store.currentUser && store.currentUser.name) ? store.currentUser.name : "Officer",
+      status: "Active",
+      assigned_at: Date.now()
+    };
+
+    if (!store.dailyAllocations) store.dailyAllocations = [];
+    store.dailyAllocations = store.dailyAllocations.filter(
+      (a) => !(a.date === dateVal && String(a.sailor_id) === String(sailor.id))
     );
-    return { sailors, source: "last_assigned" };
+    store.dailyAllocations.push(alloc);
+    opsDB.ref(`daily_allocations/${allocKey}`).set(alloc);
+
+    sailor.status = "Assigned";
+    committedCount++;
+  });
+
+  wo.last_committed_date = dateVal;
+  wo.last_assigned_date = dateVal;
+  if (window.safeFbAssignSailor && wo.assigned && wo.assigned.length > 0) {
+    wo.assigned.forEach((sid) => safeFbAssignSailor(wo._fbKey || wo.id, sid, dateVal));
+  }
+  if (wo._fbKey) {
+    opsDB.ref(`work_orders/${wo._fbKey}`).update({
+      last_committed_date: dateVal,
+      last_assigned_date: dateVal
+    });
   }
 
-  return { sailors: [], source: "" };
+  renderDashboard();
+  let msg = `✓ Successfully committed ${committedCount} sailor(s) for "${wo.description}"!`;
+  if (skippedLeaveCount > 0) {
+    msg += ` (${skippedLeaveCount} on leave/sick skipped)`;
+  }
+  showToast(msg, "success");
+}
+
+function commitAllZoneWorkOrders() {
+  const today = getLocalDateString();
+  const dateVal = store.dashboardDate || today;
+  const uncommittedWos = (store.workOrders || []).filter(
+    (wo) =>
+      wo.zone_id === store.currentZone &&
+      wo.status === "Active" &&
+      isWorkOrderActiveOnDate(wo, dateVal) &&
+      !isWorkOrderCommittedToday(wo, dateVal) &&
+      wo.assigned &&
+      wo.assigned.length > 0
+  );
+
+  if (uncommittedWos.length === 0) {
+    showToast("All active work orders in this zone are already committed for today!", "info");
+    return;
+  }
+
+  if (!confirm(`Are you sure you want to commit daily labour for all ${uncommittedWos.length} active work orders in ${store.currentZone}?`)) {
+    return;
+  }
+
+  uncommittedWos.forEach((wo) => {
+    commitDailyLabourForWorkOrder(null, wo._fbKey || wo.id);
+  });
+
+  showToast(`✓ Committed all ${uncommittedWos.length} work orders in ${store.currentZone}!`, "success");
 }
 
 function renderWorkOrderCard(wo) {
@@ -2598,6 +2697,8 @@ function renderWorkOrderCard(wo) {
   };
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
+  const isToday = dateVal === today;
+  const isCommitted = isWorkOrderCommittedToday(wo, dateVal);
   const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
   const progress = wo.progress || 0;
   const pendingEvals = assignedSailors.filter((s) => !s.evaluated).length;
@@ -2611,7 +2712,7 @@ function renderWorkOrderCard(wo) {
 
   const assignTypeBadge = wo.assign_type
     ? `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">💼 ${wo.assign_type}</span>`
-    : ""; // Use _fbKey for the click handler (Firebase primary key)
+    : "";
   const woKey = wo._fbKey || wo.id;
   const tradeCounts = {};
   assignedSailors.forEach((s) => {
@@ -2632,6 +2733,44 @@ function renderWorkOrderCard(wo) {
   const statusBadge = isAssignmentOrAdminStaff
     ? ""
     : `<span class="text-[11px] font-medium px-2 py-0.5 rounded-full ${sm.chip}">${wo.status}</span>`;
+
+  // Daily commitment badge
+  const commitmentBadge = isToday && wo.status !== "Completed" && wo.status !== "Hold"
+    ? isCommitted
+      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">🟢 Active Today</span>`
+      : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300 flex items-center gap-1">⏳ Standby (${assignedSailors.length} Planned)</span>`
+    : "";
+
+  // Check if any planned sailor is on Leave/Sick today
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+  const isLeaveCode = (val) => {
+    if (!val) return false;
+    const str = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
+  };
+  let leaveAbsentCount = 0;
+  assignedSailors.forEach((s) => {
+    const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][s._fbKey] : null;
+    if (isLeaveCode(s.status) || isLeaveCode(s.attendance) || isLeaveCode(fbStatus)) {
+      leaveAbsentCount++;
+    }
+  });
+
+  const leaveAlertHtml = (isToday && !isCommitted && leaveAbsentCount > 0)
+    ? `<div class="mt-2 px-2.5 py-1 bg-red-50 border border-red-200 rounded-lg text-[10px] text-red-700 font-semibold flex items-center gap-1.5 animate-pulse">
+        <span>⚠️</span> <span>${leaveAbsentCount} planned sailor(s) on Leave/Sick today</span>
+       </div>`
+    : "";
+
+  const commitActionBtn = (isToday && !isCommitted && wo.status !== "Completed" && wo.status !== "Hold" && assignedSailors.length > 0)
+    ? `<div class="mt-2.5 pt-2 border-t border-slate-100">
+        <button type="button" onclick="commitDailyLabourForWorkOrder(event, '${woKey}')" class="w-full py-1.5 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+          <span>⚡</span> Proceed - Commit Daily Labour (${assignedSailors.length - leaveAbsentCount})
+        </button>
+       </div>`
+    : "";
 
   const progressSection = isAssignmentOrAdminStaff
     ? ""
@@ -2667,6 +2806,7 @@ function renderWorkOrderCard(wo) {
                 <div class="flex items-center gap-1.5 flex-wrap">
                     ${priorityBadge}
                     ${statusBadge}
+                    ${commitmentBadge}
                     ${assignTypeBadge}
                 </div>
                 <span class="text-[10px] text-slate-400 mono font-medium flex-shrink-0">${wo.reference_no || "—"}</span>
@@ -2684,7 +2824,7 @@ function renderWorkOrderCard(wo) {
             <!-- Assigned sailors -->
             <div class="px-3 pb-3 border-t border-slate-100 pt-2">
                 <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-[11px] text-slate-500 flex items-center flex-wrap gap-1">👷 ${assignedSailors.length} assigned ${tradeBadge}</span>
+                    <span class="text-[11px] text-slate-500 flex items-center flex-wrap gap-1">👷 ${assignedSailors.length} ${isCommitted ? 'active' : 'planned'} ${tradeBadge}</span>
                     ${store.isEveningMode && pendingEvals > 0 ? `<span class="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold animate-pulse">📝 ${pendingEvals} eval due</span>` : ""}
                 </div>
                 <div class="flex flex-wrap gap-1" id="assigned-${wo.id}">
@@ -2694,18 +2834,13 @@ function renderWorkOrderCard(wo) {
                             .slice(0, 4)
                             .map(
                               (s) => {
-                                const isLeaveCode = (val) => {
-                                  if (!val) return false;
-                                  const str = typeof val === "string" ? val.trim() : String(val).trim();
-                                  return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
-                                };
                                 const isLeave = isLeaveCode(s.status) || isLeaveCode(s.attendance);
                                 const colorClasses = isLeave 
                                   ? "bg-red-100 text-red-700 opacity-75" 
-                                  : (s.evaluated ? "bg-teal-100 text-teal-700" : "bg-blue-100 text-blue-700");
+                                  : (isCommitted ? (s.evaluated ? "bg-teal-100 text-teal-700" : "bg-blue-100 text-blue-700") : "bg-slate-100 text-slate-700 border border-dashed border-slate-300");
                                 const leaveIcon = isLeave ? "🛌 " : "";
                                 return `
-                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${colorClasses}" title="${isLeave ? 'On Leave/Sick' : ''}">
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${colorClasses}" title="${isLeave ? 'On Leave/Sick' : (isCommitted ? 'Active Today' : 'Planned / Standby')}">
                                 ${leaveIcon}${s.name.split(" ").slice(1, 2).join("")}
                                 <span class="${getPerformanceColor(s.avgScore)} px-1 rounded-full text-[9px]">${s.avgScore.toFixed(1)}</span>
                             </span>`;
@@ -2718,6 +2853,8 @@ function renderWorkOrderCard(wo) {
                         : '<span class="text-slate-300 text-[11px] italic">Drop sailors here or assign in detail view</span>'
                     }
                 </div>
+                ${leaveAlertHtml}
+                ${commitActionBtn}
             </div>
         </div>
     `;
@@ -3005,12 +3142,12 @@ function updateCounters() {
     );
   };
   (store.dailyAllocations || []).forEach((alloc) => {
-    if (alloc.date === dateVal) {
+    if (alloc.date === dateVal && alloc.status !== "Cancelled") {
       const wo = activeWo.find(
-        (w) => String(w.id) === String(alloc.work_order_id),
+        (w) => String(w.id) === String(alloc.work_order_id) || String(w._fbKey) === String(alloc.work_order_id),
       );
       const jc = activeJc.find(
-        (j) => String(j.id) === String(alloc.work_order_id),
+        (j) => String(j.id) === String(alloc.work_order_id) || String(j._fbKey) === String(alloc.work_order_id),
       );
       if (wo || jc) {
           if (
@@ -3023,12 +3160,14 @@ function updateCounters() {
                 assignedIds.add(String(alloc.sailor_id));
             }
           }
+      } else {
+        assignedIds.add(String(alloc.sailor_id));
       }
     }
   });
 
-  // Also include any assignments that haven't been committed to daily allocations yet
-  const activeWos = activeWo.filter(wo => isWorkOrderActiveOnDate(wo, dateVal));
+  // Only include assignments from work orders that have been explicitly committed on dateVal
+  const activeWos = activeWo.filter(wo => isWorkOrderActiveOnDate(wo, dateVal) && isWorkOrderCommittedToday(wo, dateVal));
   activeWos.forEach((wo) => {
       if (wo.assigned && Array.isArray(wo.assigned)) {
           if (isNA(wo.description) || isNA(wo.reference_no)) {
@@ -3039,7 +3178,7 @@ function updateCounters() {
       }
   });
 
-  const activeJcs = activeJc.filter(jc => isWorkOrderActiveOnDate(jc, dateVal));
+  const activeJcs = activeJc.filter(jc => isWorkOrderActiveOnDate(jc, dateVal) && isWorkOrderCommittedToday(jc, dateVal));
   activeJcs.forEach((jc) => {
       if (jc.assigned && Array.isArray(jc.assigned)) {
           if (isNA(jc.description) || isNA(jc.title)) {
@@ -3186,7 +3325,10 @@ function handleDropOnCard(event, workOrderId) {
   if (!draggedSailorId) return;
   const assignment = getSailorCurrentAssignment(draggedSailorId);
   const sailor = store.sailors.find(
-    (s) => String(s.id) === String(draggedSailorId) || String(s._fbKey) === String(draggedSailorId),
+    (s) =>
+      String(s.id) === String(draggedSailorId) ||
+      String(s._fbKey) === String(draggedSailorId) ||
+      (s.official_number && String(s.official_number) === String(draggedSailorId)),
   );
   const workOrder = store.workOrders.find(
     (wo) => String(wo.id) === String(workOrderId) || String(wo._fbKey) === String(workOrderId),
@@ -3231,9 +3373,15 @@ function handleDropOnCard(event, workOrderId) {
       .remove();
   }
   if (!workOrder.assigned) workOrder.assigned = [];
-  const alreadyAssigned = workOrder.assigned.some(id => String(id) === String(draggedSailorId));
+  const matchId = (id) =>
+    String(id) === String(sailor.id) ||
+    String(id) === String(sailor._fbKey) ||
+    (sailor.official_number && String(id) === String(sailor.official_number));
+
+  const alreadyAssigned = workOrder.assigned.some(matchId);
   if (!alreadyAssigned) {
-    workOrder.assigned.push(draggedSailorId);
+    const sidToStore = sailor.id || sailor._fbKey || draggedSailorId;
+    workOrder.assigned.push(sidToStore);
     sailor.status = "Assigned";
     sailor.evaluated = false;
     workOrder.last_assigned_date = today;
@@ -3242,17 +3390,20 @@ function handleDropOnCard(event, workOrderId) {
     const alloc = {
       id: Date.now(),
       date: today,
-      sailor_id: draggedSailorId,
+      sailor_id: sidToStore,
       work_order_id: workOrder.id || workOrder._fbKey,
       role_today: "Worker",
       assigned_by: store.currentUser && store.currentUser.name ? store.currentUser.name : "Officer",
       status: "Active"
     };
     if (!store.dailyAllocations) store.dailyAllocations = [];
+    store.dailyAllocations = store.dailyAllocations.filter(
+      (a) => !(a.date === today && (String(a.sailor_id) === String(sailor.id) || String(a.sailor_id) === String(sailor._fbKey)))
+    );
     store.dailyAllocations.push(alloc);
-    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(draggedSailorId)}`).set(alloc);
+    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`).set(alloc);
     if (window.safeFbAssignSailor) {
-      safeFbAssignSailor(workOrder._fbKey || workOrder.id, draggedSailorId, today);
+      safeFbAssignSailor(workOrder._fbKey || workOrder.id, sidToStore, today);
     }
     renderDashboard();
     showToast(
@@ -5196,24 +5347,25 @@ function renderDetailSailorChips(filter = "") {
   });
   (wo.assigned || []).forEach((id) => assignedIds.add(String(id)));
 
-  // When searching, show ALL sailors (651) so any sailor can be found and assigned
+  if (!filter && document.getElementById("detailSailorSearch")) {
+    filter = document.getElementById("detailSailorSearch").value;
+  }
+
+  // When searching, show ALL sailors (651) so any sailor can be found and assigned across all trades
   let sailors;
-  if (filter) {
+  if (filter && filter.trim()) {
     const q = filter.toLowerCase().trim();
     sailors = store.sailors.filter(
       (s) =>
         !assignedIds.has(String(s.id)) &&
         !assignedIds.has(String(s._fbKey)) &&
         (!s.official_number || !assignedIds.has(String(s.official_number))) &&
-        ((s._searchIndex || "").includes(q) ||
-          s.name.toLowerCase().includes(q) ||
-          (s.official_number || "").toLowerCase().includes(q) ||
-          (s.rank || "").toLowerCase().includes(q) ||
-          (s.trade || "").toLowerCase().includes(q)),
+        ((s._searchIndex || "").toLowerCase().includes(q) ||
+          (s.name || "").toLowerCase().includes(q) ||
+          String(s.official_number || "").toLowerCase().includes(q) ||
+          String(s.rank || "").toLowerCase().includes(q) ||
+          String(s.trade || "").toLowerCase().includes(q)),
     );
-    if (_detailCurrentTrade !== "ALL") {
-      sailors = sailors.filter((s) => s.trade === _detailCurrentTrade);
-    }
   } else {
     sailors = store.sailors.filter(
       (s) =>
@@ -5320,7 +5472,8 @@ function assignSingleLabor(sailorId) {
   const sailor = store.sailors.find(
     (s) =>
       String(s.id) === String(sailorId) ||
-      String(s._fbKey) === String(sailorId),
+      String(s._fbKey) === String(sailorId) ||
+      (s.official_number && String(s.official_number) === String(sailorId)),
   );
   if (!wo || !sailor) return;
 
@@ -5359,19 +5512,23 @@ function assignSingleLabor(sailorId) {
       .remove();
   }
   if (!wo.assigned) wo.assigned = [];
-  const alreadyAssigned = wo.assigned.some(
-    (id) => String(id) === String(sailorId),
-  );
+  const matchId = (id) =>
+    String(id) === String(sailor.id) ||
+    String(id) === String(sailor._fbKey) ||
+    (sailor.official_number && String(id) === String(sailor.official_number));
+
+  const alreadyAssigned = wo.assigned.some(matchId);
   if (!alreadyAssigned) {
-    wo.assigned.push(sailorId);
+    const sidToStore = sailor.id || sailor._fbKey || sailorId;
+    wo.assigned.push(sidToStore);
     sailor.status = "Assigned";
     sailor.evaluated = false;
     wo.last_assigned_date = today;
     if (window.safeFbAssignSailor) {
-      safeFbAssignSailor(wo._fbKey || wo.id, sailorId, today);
+      safeFbAssignSailor(wo._fbKey || wo.id, sidToStore, today);
     }
     const alloc = {
-      sailor_id: sailorId,
+      sailor_id: sidToStore,
       work_order_id: wo._fbKey || wo.id,
       date: today,
       zone_id: store.currentZone,
@@ -5380,8 +5537,11 @@ function assignSingleLabor(sailorId) {
       status: "Active"
     };
     if (!store.dailyAllocations) store.dailyAllocations = [];
+    store.dailyAllocations = store.dailyAllocations.filter(
+      (a) => !(a.date === today && (String(a.sailor_id) === String(sailor.id) || String(a.sailor_id) === String(sailor._fbKey)))
+    );
     store.dailyAllocations.push(alloc);
-    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).set(alloc);
+    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`).set(alloc);
     showToast(
       assignment
         ? `Reassigned ${sailor.name} from ${assignment.zone}! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`
@@ -5958,12 +6118,14 @@ function proceedWorkOrder() {
     wo.status = "Active";
   }
   wo.last_commit_date = today;
+  wo.last_committed_date = today;
   wo.last_assigned = [...wo.assigned];
   wo.last_assigned_date = today;
   if (wo._fbKey) {
     opsDB.ref(`work_orders/${wo._fbKey}`).update({
       status: wo.status,
       last_commit_date: today,
+      last_committed_date: today,
       last_assigned: [...wo.assigned],
       last_assigned_date: today
     });
@@ -24434,6 +24596,24 @@ function updateTibPendingBadge() {
   }
 }
 
+function filterToPendingIssues() {
+  const catFilter = document.getElementById("tibCategoryFilter");
+  const statusFilter = document.getElementById("tibStatusFilter");
+  const searchInput = document.getElementById("tibSearchInput");
+
+  if (catFilter) catFilter.value = "all";
+  if (statusFilter) statusFilter.value = "pending_receipt";
+  if (searchInput) searchInput.value = "";
+
+  setTempIssuePeriod("all");
+  renderTempIssuesTable();
+
+  const tbl = document.getElementById("tempIssuesTableBody");
+  if (tbl) {
+    tbl.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
 const DEFAULT_TEMP_ISSUES_DATA = [
   {
     id: "tib_001",
@@ -25331,9 +25511,24 @@ function calculateTibFormTotalValue() {
   }
 }
 
+let _isSubmittingTempIssue = false;
+
 // ── Submit Temporary Issue Form ──
 function handleTempIssueFormSubmit(e) {
-  e.preventDefault();
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
+  }
+
+  if (_isSubmittingTempIssue) return;
+  _isSubmittingTempIssue = true;
+
+  const submitBtn = e && e.target ? e.target.querySelector('button[type="submit"]') : null;
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.dataset.origText = submitBtn.innerHTML;
+    submitBtn.innerHTML = '<span>⏳</span> Saving...';
+  }
 
   const id = document.getElementById("tibInputId")?.value;
   const refNo = document.getElementById("tibInputRefNo")?.value || "TIB/—";
@@ -25389,13 +25584,19 @@ function handleTempIssueFormSubmit(e) {
     showToast(`Temporary Issue ${refNo} updated!`, "success");
   } else {
     record.created_at = Date.now();
+    let newKey = null;
     if (typeof opsDB !== "undefined") {
       const newRef = opsDB.ref("temp_issues").push(record);
-      record.id = newRef.key;
-      record._fbKey = newRef.key;
+      newKey = newRef.key;
+      record.id = newKey;
+      record._fbKey = newKey;
     } else {
-      record.id = `tib_${Date.now()}`;
+      newKey = `tib_${Date.now()}`;
+      record.id = newKey;
+      record._fbKey = newKey;
     }
+    if (!store.tempIssues) store.tempIssues = [];
+    store.tempIssues = store.tempIssues.filter((i) => (i.id || i._fbKey) !== newKey);
     store.tempIssues.push(record);
     showToast(`Temporary Issue ${refNo} logged as Pending Receipt!`, "success");
   }
@@ -25404,6 +25605,14 @@ function handleTempIssueFormSubmit(e) {
   closeModal("addTempIssueModal");
   renderTempIssuesDashboard();
   renderTempIssuesTable();
+
+  setTimeout(() => {
+    _isSubmittingTempIssue = false;
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = submitBtn.dataset.origText || '<span>💾</span> Save Temporary Issue';
+    }
+  }, 600);
 }
 
 // ── Inward Receipt Confirmation Modal & Handler ──
