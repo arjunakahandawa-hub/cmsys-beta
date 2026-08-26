@@ -2185,6 +2185,30 @@ function getSailorLastAssignedTask(sailor) {
   return null;
 }
 
+function isSailorAvailableForWork(sailor, dateVal) {
+  if (!sailor) return false;
+  const sStatus = String(sailor.status || "").trim();
+  const sAtt = String(sailor.attendance || "").trim();
+
+  const naRegex = /^(Leave|Sick|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R|Not Available|Absent|Off-Charge|Hospital|Pass)$/i;
+  if (naRegex.test(sStatus) || naRegex.test(sAtt)) {
+    return false;
+  }
+
+  if (sAtt && sAtt.toLowerCase() !== "present") {
+    return false;
+  }
+
+  if (typeof getSailorDailyAttendanceStatus === "function") {
+    const fbStatus = getSailorDailyAttendanceStatus(sailor, dateVal);
+    if (fbStatus && naRegex.test(String(fbStatus).trim())) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 function renderAvailableSailors() {
   const container = document.getElementById("availableSailors");
   if (!container) return;
@@ -2221,6 +2245,66 @@ function renderAvailableSailors() {
   // Default filter to "available" if not set
   if (!store.currentFilter) store.currentFilter = "available";
 
+  const allSailors = store.sailors || [];
+
+  // Filter out Not Available / Leave / Sick sailors completely from available counts and available tabs
+  const availablePool = allSailors.filter(s => {
+    const isAvail = isSailorAvailableForWork(s, dateVal);
+    const isAssigned = assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey));
+    return isAvail && !isAssigned;
+  });
+
+  const allActivePool = allSailors.filter(s => isSailorAvailableForWork(s, dateVal));
+  const zoneTeamPool = allSailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone && isSailorAvailableForWork(s, dateVal));
+  const continuePool = allSailors.filter(s => s.yesterdayJob !== null && isSailorAvailableForWork(s, dateVal));
+
+  // Update Status Pill Badges
+  const countAvailEl = document.getElementById("countFilterAvailable");
+  if (countAvailEl) countAvailEl.textContent = `(${availablePool.length})`;
+
+  const countAllEl = document.getElementById("countFilterAll");
+  if (countAllEl) countAllEl.textContent = `(${allActivePool.length})`;
+
+  const countZoneEl = document.getElementById("countFilterZoneTeam");
+  if (countZoneEl) countZoneEl.textContent = `(${zoneTeamPool.length})`;
+
+  const countContEl = document.getElementById("countFilterContinue");
+  if (countContEl) countContEl.textContent = `(${continuePool.length})`;
+
+  const badgeEl = document.getElementById("availableBadge");
+  if (badgeEl) badgeEl.textContent = availablePool.length;
+
+  // Determine active base pool
+  let basePool;
+  if (store.currentFilter === "all") {
+    basePool = allActivePool;
+  } else if (store.currentFilter === "zone-team") {
+    basePool = zoneTeamPool;
+  } else if (store.currentFilter === "continuation") {
+    basePool = continuePool;
+  } else {
+    // "available" (Default)
+    basePool = availablePool;
+  }
+
+  // Update Trade Filter Pills with Dynamic Counts based on the current active base pool
+  const tradeContainer = document.getElementById("sidebarTradePillsContainer");
+  const standardTrades = ["ALL", "MA", "CA", "PA", "PL", "WE", "RW", "AL", "SW", "BB"];
+  const currentTrade = store.currentTrade || "ALL";
+
+  if (tradeContainer) {
+    tradeContainer.innerHTML = standardTrades.map((t) => {
+      const cnt = t === "ALL" ? basePool.length : basePool.filter((s) => s.trade === t).length;
+      const isActive = currentTrade === t;
+      const cls = isActive
+        ? "trade-filter px-2 py-1 text-[11px] rounded bg-slate-800 text-teal-300 font-bold shadow-xs cursor-pointer transition-all"
+        : "trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 hover:bg-slate-300 text-slate-700 font-medium cursor-pointer transition-all";
+      return `<button type="button" onclick="filterTrade('${t}')" class="${cls}">
+        <span>${t}</span> <span class="text-[10px] opacity-80 font-mono">(${cnt})</span>
+      </button>`;
+    }).join("");
+  }
+
   // Support search query
   const searchInput = document.getElementById("sailorSearch");
   const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
@@ -2230,41 +2314,22 @@ function renderAvailableSailors() {
     container.setAttribute("data-last-query", query);
   }
 
-  let sailors;
+  let sailors = [...basePool];
+
+  if (store.currentTrade && store.currentTrade !== "ALL") {
+    sailors = sailors.filter((s) => s.trade === store.currentTrade);
+  }
+
   if (query) {
-    sailors = store.sailors.filter(
+    sailors = sailors.filter(
       (s) =>
         (s._searchIndex || "").includes(query) ||
         s.name.toLowerCase().includes(query) ||
         (s.official_number || "").toLowerCase().includes(query) ||
         (s.rank || "").toLowerCase().includes(query) ||
-        (s.trade || "").toLowerCase().includes(query),
+        (s.trade || "").toLowerCase().includes(query) ||
+        ((s.zone_assigned || s.location || s.zone || "").toLowerCase().includes(query))
     );
-    if (store.currentTrade !== "ALL") {
-      sailors = sailors.filter((s) => s.trade === store.currentTrade);
-    }
-  } else {
-    sailors = store.sailors.filter(
-      (s) => (s.attendance || "Present") === "Present",
-    );
-
-    // Available Only mode: Hide already assigned sailors so only remaining unassigned persons show
-    if (store.currentFilter === "available") {
-      sailors = sailors.filter(
-        (s) => !assignedIds.has(String(s.id)) && !assignedIds.has(String(s._fbKey))
-      );
-    } else if (store.currentFilter === "zone-team") {
-      sailors = sailors.filter(
-        (s) => s.isZoneTeam && s.zone_assigned === store.currentZone,
-      );
-    } else if (store.currentFilter === "continuation") {
-      sailors = sailors.filter((s) => s.yesterdayJob !== null);
-    }
-    // If store.currentFilter === "all", keep all present sailors
-
-    if (store.currentTrade !== "ALL") {
-      sailors = sailors.filter((s) => s.trade === store.currentTrade);
-    }
   }
 
   // Sort unassigned first, then by score
@@ -2315,6 +2380,7 @@ function renderAvailableSailors() {
           );
 
       const lastTask = getSailorLastAssignedTask(sailor);
+      const sailorLoc = sailor.zone_assigned || sailor.location || sailor.zone || (sailor.isZoneTeam ? store.currentZone : "") || "Civil Dept";
 
       if (assignment) {
         return `
@@ -2327,8 +2393,9 @@ function renderAvailableSailors() {
                     </div>
                     <div class="flex-1 min-w-0">
                         <p class="font-semibold text-slate-600 text-sm truncate leading-tight">${sailor.name}</p>
-                        <div class="flex items-center gap-1.5 mt-1">
+                        <div class="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span class="text-[11px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">⚠️ Busy: ${assignment.zone}</span>
+                            <span class="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium border border-slate-200" title="Assigned Zone / Location">📍 ${sailorLoc}</span>
                             ${isMainAdminLoggedIn() ? `
                             <button onclick="event.stopPropagation(); forceCleanSailorAssignments('${sailor.official_number || sailor.id}')" 
                                     class="text-[10px] bg-rose-600 hover:bg-rose-700 text-white font-bold px-2 py-0.5 rounded shadow transition-all cursor-pointer"
@@ -2372,10 +2439,19 @@ function renderAvailableSailors() {
                             👤
                         </button>
                     </p>
-                    <div class="flex items-center gap-1.5 mt-1">
-                        <span class="text-[11px] text-slate-500 mono">${sailor.official_number}</span>
-                        <span class="text-[11px] text-slate-400">${sailor.rank}</span>
-                        ${sailor.yesterdayJob ? '<span class="text-[10px] bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded font-medium">↻ Cont</span>' : ""}
+                    <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                        <span class="text-[11px] text-slate-600 mono font-bold">${sailor.official_number}</span>
+                        <span class="text-[11px] text-slate-500">${sailor.rank}</span>
+                        ${sailor.isZoneTeam ? `
+                        <span class="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-semibold border border-teal-200/80 flex items-center gap-0.5" title="Zone Team">
+                            <span>★</span> Zone Team
+                        </span>
+                        ` : `
+                        <span class="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold border border-emerald-200/80 flex items-center gap-0.5" title="Available for Assignment">
+                            🟢 Available
+                        </span>
+                        `}
+                        ${sailor.yesterdayJob ? '<span class="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold border border-purple-200">↻ Cont</span>' : ""}
                     </div>
                     ${lastTask ? `
                     <div class="text-[10px] text-slate-600 mt-1 flex items-center gap-1 truncate bg-slate-50/90 px-1.5 py-0.5 rounded border border-slate-200" title="Last Assigned Task: ${lastTask.title}">
@@ -2404,24 +2480,7 @@ function renderAvailableSailors() {
   }
   container.innerHTML =
     html ||
-    '<div class="text-center py-6"><p class="text-slate-400 text-sm">No sailors available</p></div>';
-  const freeCount = (store.sailors || []).filter((s) => {
-    var _s$id2, _s$id3;
-    const isPresent = (s.attendance || "Present") === "Present";
-    if (!isPresent) return false;
-    const assignment = isToday
-      ? getSailorCurrentAssignment(
-          (_s$id2 = s.id) !== null && _s$id2 !== void 0 ? _s$id2 : s._fbKey,
-        )
-      : getSailorAssignmentOnDate(
-          (_s$id3 = s.id) !== null && _s$id3 !== void 0 ? _s$id3 : s._fbKey,
-          dateVal,
-        );
-    return !assignment;
-  }).length;
-  
-  const badgeEl = document.getElementById("availableBadge");
-  if (badgeEl) badgeEl.textContent = freeCount;
+    '<div class="text-center py-6"><p class="text-slate-400 text-sm font-medium">No sailors available in this category</p></div>';
 }
 function loadMoreAvailableSailors() {
   store.availableSailorsLimit += 40;
@@ -3626,14 +3685,8 @@ function filterSailors(filter) {
   renderAvailableSailors();
 }
 function filterTrade(trade) {
-  store.currentTrade = trade;
+  store.currentTrade = trade || "ALL";
   store.availableSailorsLimit = 40;
-  document.querySelectorAll(".trade-filter").forEach((btn) => {
-    btn.classList.remove("bg-slate-700", "text-white");
-    btn.classList.add("bg-slate-200");
-  });
-  event.target.classList.remove("bg-slate-200");
-  event.target.classList.add("bg-slate-700", "text-white");
   renderAvailableSailors();
 }
 function searchSailors() {

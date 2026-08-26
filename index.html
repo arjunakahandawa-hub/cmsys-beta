@@ -859,23 +859,23 @@
 
                             <!-- Filter Tabs -->
                             <div class="p-3 border-b border-slate-200" style="background:rgba(248,250,252,0.8)">
-                                <div class="flex flex-wrap gap-1 mb-2">
-                                    <button onclick="filterSailors('available')" id="btnFilterAvailable" class="filter-btn px-2.5 py-1 text-xs rounded-lg font-bold" style="background:#0a1628;color:#5eead4">🟢 Available</button>
-                                    <button onclick="filterSailors('all')" id="btnFilterAll" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">👥 All</button>
-                                    <button onclick="filterSailors('zone-team')" id="btnFilterZoneTeam" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Zone Team</button>
-                                    <button onclick="filterSailors('continuation')" id="btnFilterContinue" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600">Continue</button>
+                                <div class="flex flex-wrap gap-1 mb-2" id="sidebarFilterTabs">
+                                    <button onclick="filterSailors('available')" id="btnFilterAvailable" class="filter-btn px-2.5 py-1 text-xs rounded-lg font-bold transition-all" style="background:#0a1628;color:#5eead4">🟢 Available <span id="countFilterAvailable" class="text-[10px] opacity-90 font-mono">(0)</span></button>
+                                    <button onclick="filterSailors('all')" id="btnFilterAll" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600 transition-all">👥 All <span id="countFilterAll" class="text-[10px] opacity-90 font-mono">(0)</span></button>
+                                    <button onclick="filterSailors('zone-team')" id="btnFilterZoneTeam" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600 transition-all">Zone Team <span id="countFilterZoneTeam" class="text-[10px] opacity-90 font-mono">(0)</span></button>
+                                    <button onclick="filterSailors('continuation')" id="btnFilterContinue" class="filter-btn px-2 py-1 text-xs rounded-lg font-medium bg-slate-200 hover:bg-slate-300 text-slate-600 transition-all">Continue <span id="countFilterContinue" class="text-[10px] opacity-90 font-mono">(0)</span></button>
                                 </div>
-                                <div class="flex flex-wrap gap-1">
-                                    <button onclick="filterTrade('ALL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-700 text-white">ALL</button>
-                                    <button onclick="filterTrade('MA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">MA</button>
-                                    <button onclick="filterTrade('CA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">CA</button>
-                                    <button onclick="filterTrade('PA')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PA</button>
-                                    <button onclick="filterTrade('PL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">PL</button>
-                                    <button onclick="filterTrade('WE')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">WE</button>
-                                    <button onclick="filterTrade('RW')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">RW</button>
-                                    <button onclick="filterTrade('AL')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">AL</button>
-                                    <button onclick="filterTrade('SW')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">SW</button>
-                                    <button onclick="filterTrade('BB')" class="trade-filter px-2 py-1 text-xs rounded bg-slate-200">BB</button>
+                                <div class="flex flex-wrap gap-1" id="sidebarTradePillsContainer">
+                                    <button onclick="filterTrade('ALL')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-800 text-teal-300 font-bold">ALL (0)</button>
+                                    <button onclick="filterTrade('MA')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">MA (0)</button>
+                                    <button onclick="filterTrade('CA')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">CA (0)</button>
+                                    <button onclick="filterTrade('PA')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">PA (0)</button>
+                                    <button onclick="filterTrade('PL')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">PL (0)</button>
+                                    <button onclick="filterTrade('WE')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">WE (0)</button>
+                                    <button onclick="filterTrade('RW')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">RW (0)</button>
+                                    <button onclick="filterTrade('AL')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">AL (0)</button>
+                                    <button onclick="filterTrade('SW')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">SW (0)</button>
+                                    <button onclick="filterTrade('BB')" class="trade-filter px-2 py-1 text-[11px] rounded bg-slate-200 text-slate-700 font-medium">BB (0)</button>
                                 </div>
                             </div>
 
@@ -6533,10 +6533,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.22.4
+        App Version: v5.22.5
     </div>
 
-    <script src="app.js?v=5.22.4"></script>
+    <script src="app.js?v=5.22.5"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
