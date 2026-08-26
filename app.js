@@ -13659,8 +13659,8 @@ function initSettingsListener() {
       store.settings.oicProfiles = saved.oicProfiles || {};
       store.settings.holidays = saved.holidays || {};
     }
-    // If user is currently editing or staying in Settings, do NOT reset active view or redirect
-    if (store.currentView !== "settings") {
+    // If user is currently editing or staying in Settings OR Documents, do NOT reset active view or redirect
+    if (store.currentView !== "settings" && store.currentView !== "documents") {
       applySettings();
       renderZoneSelectors();
     } else {
@@ -13668,6 +13668,10 @@ function initSettingsListener() {
       store.zones = s.zones || defaultSettings.zones;
       if (typeof _currentSettingsTab !== "undefined" && _currentSettingsTab === "identity") {
         renderSettingsOicProfilesList();
+      }
+      if (store.currentView === "documents") {
+        renderMinuteSheetSettings();
+        populateMinuteSheetDropdowns();
       }
     }
   });
@@ -24369,19 +24373,234 @@ function initMinuteSheetBuilder() {
   }
 }
 
+// ── Minute Sheet Rich Text Formatting Engine (Bold, Underline, Bullet Points, Sub-clauses) ──
+function formatMinuteRichText(text) {
+  if (!text) return "";
+  let s = String(text);
+
+  // 1. Bold: **text** or <b>text</b> or <strong>text</strong>
+  s = s.replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: bold; color: inherit;">$1</strong>');
+  s = s.replace(/<b>(.*?)<\/b>/gi, '<strong style="font-weight: bold; color: inherit;">$1</strong>');
+  s = s.replace(/<strong>(.*?)<\/strong>/gi, '<strong style="font-weight: bold; color: inherit;">$1</strong>');
+
+  // 2. Underline: __text__ or <u>text</u>
+  s = s.replace(/__(.*?)__/g, '<u style="text-decoration: underline; text-underline-offset: 2px;">$1</u>');
+  s = s.replace(/<u>(.*?)<\/u>/gi, '<u style="text-decoration: underline; text-underline-offset: 2px;">$1</u>');
+
+  // 3. Line-by-line processing for Bullet Points and Sub-clauses
+  const lines = s.split(/\r?\n/);
+  const formattedLines = [];
+
+  for (let idx = 0; idx < lines.length; idx++) {
+    const rawLine = lines[idx];
+    const trimmed = rawLine.trim();
+
+    if (!trimmed) {
+      formattedLines.push('<span style="display:block; height: 6px;"></span>');
+      continue;
+    }
+
+    // Bullet Points: • or * or -
+    if (/^[•\*\-]\s+/.test(trimmed)) {
+      const bulletContent = trimmed.replace(/^[•\*\-]\s+/, "");
+      formattedLines.push(
+        `<span style="display: flex; align-items: flex-start; gap: 6px; margin-left: 1.8em; margin-top: 2px; margin-bottom: 2px; text-align: left;">
+          <span style="font-weight: bold; line-height: 1.4;">•</span>
+          <span style="flex: 1;">${bulletContent}</span>
+        </span>`
+      );
+    }
+    // Sub-clauses: (a), (b), (c), (i), (ii), (1), (2), (ක), (ඛ), (ග)
+    else if (/^\([a-zA-Z0-9ivxක-ෆ]+\)\s+/.test(trimmed)) {
+      const match = trimmed.match(/^(\([a-zA-Z0-9ivxක-ෆ]+\))\s+(.*)$/);
+      if (match) {
+        formattedLines.push(
+          `<span style="display: flex; align-items: flex-start; gap: 6px; margin-left: 1.8em; margin-top: 2px; margin-bottom: 2px; text-align: left;">
+            <span style="font-weight: bold; min-width: 22px; line-height: 1.4;">${match[1]}</span>
+            <span style="flex: 1;">${match[2]}</span>
+          </span>`
+        );
+      } else {
+        formattedLines.push(rawLine);
+      }
+    }
+    else {
+      if (idx === 0) {
+        formattedLines.push(rawLine);
+      } else {
+        formattedLines.push(`&emsp;&emsp;${rawLine}`);
+      }
+    }
+  }
+
+  return formattedLines.join("<br>");
+}
+
+// Format selected text in a paragraph textarea
+function formatParaSelection(btn, formatType) {
+  const row = btn.closest(".ms-para-row");
+  if (!row) return;
+  const textarea = row.querySelector(".ms-para-input");
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const val = textarea.value;
+  const selected = val.substring(start, end);
+
+  let replacement = "";
+  let newStart = start;
+  let newEnd = end;
+
+  if (formatType === "bold") {
+    if (selected) {
+      if (selected.startsWith("**") && selected.endsWith("**") && selected.length >= 4) {
+        replacement = selected.slice(2, -2);
+        newEnd = start + replacement.length;
+      } else {
+        replacement = `**${selected}**`;
+        newEnd = start + replacement.length;
+      }
+    } else {
+      replacement = "**Bold Text**";
+      newStart = start + 2;
+      newEnd = start + 11;
+    }
+  } else if (formatType === "underline") {
+    if (selected) {
+      if (selected.startsWith("__") && selected.endsWith("__") && selected.length >= 4) {
+        replacement = selected.slice(2, -2);
+        newEnd = start + replacement.length;
+      } else {
+        replacement = `__${selected}__`;
+        newEnd = start + replacement.length;
+      }
+    } else {
+      replacement = "__Underlined Text__";
+      newStart = start + 2;
+      newEnd = start + 17;
+    }
+  } else if (formatType === "bullet") {
+    if (selected) {
+      const lines = selected.split("\n");
+      replacement = lines.map((l) => l.trim().startsWith("• ") ? l.replace(/^•\s*/, "") : `• ${l}`).join("\n");
+      newEnd = start + replacement.length;
+    } else {
+      const before = val.substring(0, start);
+      const prefix = (before.length === 0 || before.endsWith("\n")) ? "• " : "\n• ";
+      replacement = `${prefix}Bullet point item`;
+      newStart = start + prefix.length;
+      newEnd = start + replacement.length;
+    }
+  } else if (formatType === "subitem") {
+    if (selected) {
+      const lines = selected.split("\n");
+      const subLabels = ["(a)", "(b)", "(c)", "(d)", "(e)", "(f)"];
+      replacement = lines.map((l, i) => {
+        const lbl = subLabels[i] || `(${i + 1})`;
+        return `${lbl} ${l.replace(/^\([a-zA-Z0-9]+\)\s*/, "")}`;
+      }).join("\n");
+      newEnd = start + replacement.length;
+    } else {
+      const before = val.substring(0, start);
+      const prefix = (before.length === 0 || before.endsWith("\n")) ? "(a) " : "\n(a) ";
+      replacement = `${prefix}Sub-clause item`;
+      newStart = start + prefix.length;
+      newEnd = start + replacement.length;
+    }
+  }
+
+  textarea.value = val.substring(0, start) + replacement + val.substring(end);
+  textarea.focus();
+  textarea.setSelectionRange(newStart, newEnd);
+  updateMinuteSheetPreview();
+}
+
+// Format selected text by element ID (e.g. msInputRecommendation)
+function formatInputSelectionById(inputId, formatType) {
+  const textarea = document.getElementById(inputId);
+  if (!textarea) return;
+
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const val = textarea.value;
+  const selected = val.substring(start, end);
+
+  let replacement = "";
+  let newStart = start;
+  let newEnd = end;
+
+  if (formatType === "bold") {
+    if (selected) {
+      if (selected.startsWith("**") && selected.endsWith("**") && selected.length >= 4) {
+        replacement = selected.slice(2, -2);
+        newEnd = start + replacement.length;
+      } else {
+        replacement = `**${selected}**`;
+        newEnd = start + replacement.length;
+      }
+    } else {
+      replacement = "**Bold Text**";
+      newStart = start + 2;
+      newEnd = start + 11;
+    }
+  } else if (formatType === "underline") {
+    if (selected) {
+      if (selected.startsWith("__") && selected.endsWith("__") && selected.length >= 4) {
+        replacement = selected.slice(2, -2);
+        newEnd = start + replacement.length;
+      } else {
+        replacement = `__${selected}__`;
+        newEnd = start + replacement.length;
+      }
+    } else {
+      replacement = "__Underlined Text__";
+      newStart = start + 2;
+      newEnd = start + 17;
+    }
+  }
+
+  textarea.value = val.substring(0, start) + replacement + val.substring(end);
+  textarea.focus();
+  textarea.setSelectionRange(newStart, newEnd);
+  updateMinuteSheetPreview();
+}
+
 function addMinuteParagraphInput(initialText = "") {
   const container = document.getElementById("msParagraphsContainer");
   if (!container) return;
 
   const count = container.children.length + 1;
   const div = document.createElement("div");
-  div.className = "flex flex-col gap-1 ms-para-row group";
+  div.className = "flex flex-col gap-1.5 ms-para-row group bg-white p-2.5 rounded-xl border border-slate-200 shadow-2xs hover:border-indigo-200 transition-all";
   div.innerHTML = `
-    <div class="flex items-start gap-2">
-      <span class="ms-para-num font-bold text-slate-400 text-xs mt-2 w-4 text-right">${count}.</span>
-      <textarea rows="2" oninput="updateMinuteSheetPreview()" class="ms-para-input flex-1 px-3 py-2 border border-slate-300 rounded-xl text-xs bg-slate-50 focus:bg-white outline-none" placeholder="Enter paragraph ${count} content...">${initialText}</textarea>
-      <button type="button" onclick="this.closest('.ms-para-row').remove(); renumberMinuteParagraphs(); updateMinuteSheetPreview();" class="text-rose-400 hover:text-rose-600 text-sm mt-1 p-1 cursor-pointer" title="Remove Paragraph">✕</button>
+    <!-- Top Formatting & Action Ribbon -->
+    <div class="flex items-center justify-between gap-2 pb-1 border-b border-slate-100">
+      <div class="flex items-center gap-1.5">
+        <span class="ms-para-num font-bold text-indigo-800 bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 rounded-md text-[11px]">${count}.</span>
+        <span class="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Paragraph Content</span>
+      </div>
+      <div class="flex items-center gap-1">
+        <!-- Formatting Toolbar Pills -->
+        <button type="button" onclick="formatParaSelection(this, 'bold')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 text-[11px] font-black border border-slate-200 cursor-pointer shadow-2xs transition-all" title="Bold Selected Text (**text**)">
+          <b>B</b>
+        </button>
+        <button type="button" onclick="formatParaSelection(this, 'underline')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 text-[11px] font-bold underline border border-slate-200 cursor-pointer shadow-2xs transition-all" title="Underline Selected Text (__text__)">
+          <u>U</u>
+        </button>
+        <button type="button" onclick="formatParaSelection(this, 'bullet')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 text-[11px] font-bold border border-slate-200 cursor-pointer shadow-2xs transition-all" title="Add Bullet Point (• Item)">
+          • List
+        </button>
+        <button type="button" onclick="formatParaSelection(this, 'subitem')" class="px-2 py-0.5 rounded bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 text-[11px] font-bold border border-slate-200 cursor-pointer shadow-2xs transition-all" title="Add Sub-item ((a) Item)">
+          (a) Sub
+        </button>
+        <div class="w-px h-3.5 bg-slate-200 mx-0.5"></div>
+        <button type="button" onclick="this.closest('.ms-para-row').remove(); renumberMinuteParagraphs(); updateMinuteSheetPreview();" class="text-rose-400 hover:text-rose-700 hover:bg-rose-50 px-1.5 py-0.5 rounded text-xs cursor-pointer transition-all font-bold" title="Delete Paragraph">✕</button>
+      </div>
     </div>
+
+    <!-- Textarea -->
+    <textarea rows="3" oninput="updateMinuteSheetPreview()" class="ms-para-input w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-slate-50/50 focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none leading-relaxed transition-all" placeholder="Enter paragraph ${count} content... (Use **bold**, __underline__, • bullet points)">${initialText}</textarea>
   `;
 
   // Enable Tab key support inside textarea
@@ -24820,10 +25039,10 @@ function updateMinuteSheetPreview() {
   });
 
   const parasHtml = paragraphs.map((p, i) => {
-    const cleanP = p.replace(/\n/g, "<br>&emsp;&emsp;");
+    const formattedBody = formatMinuteRichText(p);
     return `
-      <div class="text-justify text-xs leading-relaxed text-black font-serif mb-2.5">
-        <span class="font-bold font-sans">${i + 1}.</span>&emsp;&emsp;${cleanP}
+      <div class="text-justify text-xs leading-relaxed text-black font-serif mb-2.5" style="font-size: ${fontSize}px !important; line-height: 1.6;">
+        <span class="font-bold font-sans">${i + 1}.</span>&emsp;&emsp;${formattedBody}
       </div>
     `;
   }).join("");
@@ -24992,7 +25211,7 @@ function updateMinuteSheetPreview() {
             <!-- Recommendation / Final Clause -->
             ${recVal ? `
             <div class="pt-1 font-semibold text-black leading-relaxed" style="font-size: ${fontSize}px !important;">
-              <p>${recVal}</p>
+              <p>${formatMinuteRichText(recVal)}</p>
             </div>` : ""}
 
             <!-- Date (Left) & Signature Block (Right) -->
@@ -25648,19 +25867,43 @@ function applyCustomTempIssueDateRange() {
   }
 }
 
+// Helper: Check if two zone strings match (case-insensitive, ignoring hyphens/spaces e.g. "G-Zone" === "G Zone")
+function isSameZone(z1, z2) {
+  if (!z1 || !z2) return false;
+  const s1 = String(z1).toLowerCase().replace(/[^a-z0-9]/g, "");
+  const s2 = String(z2).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (s1 === s2) return true;
+  return s1.replace(/zone|shop/g, "") === s2.replace(/zone|shop/g, "");
+}
+
 // Helper: Check if date falls in active period
 function isDateInSelectedPeriod(dateStr, period) {
-  if (!dateStr) return false;
+  if (!dateStr) return true;
   if (period === "all") return true;
 
-  const itemDate = new Date(dateStr);
-  if (isNaN(itemDate.getTime())) return true;
+  let itemDate = null;
+  if (typeof dateStr === "string") {
+    const clean = dateStr.trim();
+    if (/^\d{4}-\d{1,2}-\d{1,2}/.test(clean)) {
+      const parts = clean.split("-");
+      itemDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    } else if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(clean)) {
+      const parts = clean.split("/");
+      itemDate = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+    } else {
+      itemDate = new Date(clean);
+    }
+  } else if (dateStr instanceof Date) {
+    itemDate = dateStr;
+  }
+
+  if (!itemDate || isNaN(itemDate.getTime())) return true;
 
   const now = new Date();
   const todayStr = getLocalDateString();
 
   if (period === "today") {
-    return dateStr.startsWith(todayStr);
+    return dateStr.startsWith(todayStr) || (itemDate.getFullYear() === now.getFullYear() && itemDate.getMonth() === now.getMonth() && itemDate.getDate() === now.getDate());
   }
 
   if (period === "week") {
@@ -25676,7 +25919,7 @@ function isDateInSelectedPeriod(dateStr, period) {
   if (period === "last30") {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(now.getDate() - 30);
-    return itemDate >= thirtyDaysAgo && itemDate <= now;
+    return itemDate >= thirtyDaysAgo;
   }
 
   if (period === "year") {
@@ -25705,9 +25948,9 @@ function renderTempIssuesDashboard() {
   const scopedIssues = allIssues.filter((item) => {
     if (scopeFilter === "ALL_ZONES") return true;
     if (scopeFilter === "CURRENT_ZONE") {
-      return !item.zone_id || item.zone_id === store.currentZone || item.target_destination === store.currentZone || item.origin_zone === store.currentZone;
+      return !store.currentZone || isSameZone(item.zone_id, store.currentZone) || isSameZone(item.target_destination, store.currentZone) || isSameZone(item.origin_zone, store.currentZone);
     }
-    return item.zone_id === scopeFilter || item.target_destination === scopeFilter || item.origin_zone === scopeFilter;
+    return isSameZone(item.zone_id, scopeFilter) || isSameZone(item.target_destination, scopeFilter) || isSameZone(item.origin_zone, scopeFilter);
   });
 
   // 2. Filter by Period for metrics
@@ -25977,66 +26220,21 @@ function renderTempIssuesTable() {
   const todayStr = getLocalDateString();
   const tabMode = store.tibTableTab || "all";
 
-  // Update Tab Badges / Counts
-  let issuedCount = 0;
-  let receivedCount = 0;
-  let returnsCount = 0;
-
-  allIssues.forEach((item) => {
-    const isRet = item.status === "returned" || !!item.actual_return_date;
-    const isReturnable = item.is_returnable !== false;
-    const curZ = store.currentZone;
-
-    if (!curZ || item.origin_zone === curZ) issuedCount++;
-    if (!curZ || item.target_destination === curZ || item.zone_id === curZ) receivedCount++;
-    if (isReturnable && !isRet && item.status !== "non_returnable" && (!curZ || item.target_destination === curZ || item.zone_id === curZ || scopeFilter === "ALL_ZONES")) {
-      returnsCount++;
-    }
-  });
-
-  const tabIssEl = document.getElementById("tibTabIssuedCount");
-  if (tabIssEl) tabIssEl.textContent = issuedCount;
-  const tabRecEl = document.getElementById("tibTabReceivedCount");
-  if (tabRecEl) tabRecEl.textContent = receivedCount;
-  const tabRetEl = document.getElementById("tibTabReturnsCount");
-  if (tabRetEl) tabRetEl.textContent = returnsCount;
-
-  const summaryEl = document.getElementById("tibTableSummaryText");
-  if (summaryEl) {
-    if (tabMode === "issued") summaryEl.textContent = `Showing items issued OUT by ${store.currentZone || 'Current Zone'}`;
-    else if (tabMode === "received") summaryEl.textContent = `Showing items received IN by ${store.currentZone || 'Current Zone'}`;
-    else if (tabMode === "returns") summaryEl.textContent = `Showing items pending to be RETURNED`;
-    else summaryEl.textContent = `Showing all records`;
-  }
-
-  // Filter pipeline
-  const filtered = allIssues.filter((item) => {
-    // 1. Tab Mode Filter
-    if (tabMode === "issued") {
-      if (store.currentZone && item.origin_zone !== store.currentZone) return false;
-    } else if (tabMode === "received") {
-      if (store.currentZone && item.target_destination !== store.currentZone && item.zone_id !== store.currentZone) return false;
-    } else if (tabMode === "returns") {
-      if (item.is_returnable === false || item.status === "returned" || item.status === "non_returnable") return false;
-      if (scopeFilter === "CURRENT_ZONE" && store.currentZone && item.target_destination !== store.currentZone && item.zone_id !== store.currentZone) return false;
-    }
-
-    // 2. Scope Filter
+  // Base Filter (Scope, Category, Status, Search Query, Custom Date)
+  function matchesBaseFilters(item) {
+    // Scope Filter
     if (scopeFilter !== "ALL_ZONES") {
       if (scopeFilter === "CURRENT_ZONE") {
-        if (item.zone_id && item.zone_id !== store.currentZone && item.target_destination !== store.currentZone && item.origin_zone !== store.currentZone) return false;
-      } else if (item.zone_id !== scopeFilter && item.target_destination !== scopeFilter && item.origin_zone !== scopeFilter) {
+        if (store.currentZone && !isSameZone(item.zone_id, store.currentZone) && !isSameZone(item.target_destination, store.currentZone) && !isSameZone(item.origin_zone, store.currentZone)) return false;
+      } else if (!isSameZone(item.zone_id, scopeFilter) && !isSameZone(item.target_destination, scopeFilter) && !isSameZone(item.origin_zone, scopeFilter)) {
         return false;
       }
     }
 
-    // 3. Period Filter
-    if (!isDateInSelectedPeriod(item.date, period)) return false;
-
-    // 4. Category Filter
+    // Category Filter
     if (catFilter !== "all" && item.category !== catFilter) return false;
 
-    // 5. Status Filter
+    // Status Filter
     const isReturned = item.status === "returned" || !!item.actual_return_date;
     const isPending = item.status === "pending_receipt";
     const isReturnable = item.is_returnable !== false;
@@ -26047,10 +26245,79 @@ function renderTempIssuesTable() {
     if (statusFilter === "returned" && !isReturned) return false;
     if (statusFilter === "overdue" && !isOverdue) return false;
 
-    // 6. Search Query
+    // Search Query
     if (searchQuery) {
       const matchStr = `${item.ref_no || ''} ${item.item_name || ''} ${item.issued_to || ''} ${item.trade || ''} ${item.purpose || ''} ${item.zone_id || ''} ${item.target_destination || ''} ${item.origin_zone || ''} ${item.issued_by || ''} ${item.remarks || ''}`.toLowerCase();
       if (!matchStr.includes(searchQuery)) return false;
+    }
+
+    // Custom Date Range Filter
+    if (store.tibPeriod === "custom" && (store.tibCustomFromDate || store.tibCustomToDate)) {
+      const from = store.tibCustomFromDate ? new Date(store.tibCustomFromDate) : null;
+      const to = store.tibCustomToDate ? new Date(store.tibCustomToDate + "T23:59:59") : null;
+      if (item.date) {
+        const itemD = new Date(item.date);
+        if (!isNaN(itemD.getTime())) {
+          if (from && itemD < from) return false;
+          if (to && itemD > to) return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  // Update Tab Badges / Counts dynamically based on active filters
+  let allCount = 0;
+  let issuedCount = 0;
+  let receivedCount = 0;
+  let returnsCount = 0;
+
+  allIssues.forEach((item) => {
+    if (!matchesBaseFilters(item)) return;
+
+    allCount++;
+
+    const isRet = item.status === "returned" || !!item.actual_return_date;
+    const isReturnable = item.is_returnable !== false;
+    const curZ = store.currentZone;
+
+    if (!curZ || isSameZone(item.origin_zone, curZ)) issuedCount++;
+    if (!curZ || isSameZone(item.target_destination, curZ) || isSameZone(item.zone_id, curZ)) receivedCount++;
+    if (isReturnable && !isRet && item.status !== "non_returnable" && (!curZ || isSameZone(item.target_destination, curZ) || isSameZone(item.zone_id, curZ) || scopeFilter === "ALL_ZONES")) {
+      returnsCount++;
+    }
+  });
+
+  const tabAllEl = document.getElementById("tibTabAllCount");
+  if (tabAllEl) tabAllEl.textContent = allCount;
+  const tabIssEl = document.getElementById("tibTabIssuedCount");
+  if (tabIssEl) tabIssEl.textContent = issuedCount;
+  const tabRecEl = document.getElementById("tibTabReceivedCount");
+  if (tabRecEl) tabRecEl.textContent = receivedCount;
+  const tabRetEl = document.getElementById("tibTabReturnsCount");
+  if (tabRetEl) tabRetEl.textContent = returnsCount;
+
+  const summaryEl = document.getElementById("tibTableSummaryText");
+  if (summaryEl) {
+    if (tabMode === "issued") summaryEl.textContent = `Showing ${issuedCount} item(s) issued OUT by ${store.currentZone || 'Current Zone'}`;
+    else if (tabMode === "received") summaryEl.textContent = `Showing ${receivedCount} item(s) received IN by ${store.currentZone || 'Current Zone'}`;
+    else if (tabMode === "returns") summaryEl.textContent = `Showing ${returnsCount} item(s) pending to be RETURNED`;
+    else summaryEl.textContent = `Showing ${allCount} record(s)`;
+  }
+
+  // Filter pipeline for current tab
+  const filtered = allIssues.filter((item) => {
+    if (!matchesBaseFilters(item)) return false;
+
+    // Tab Mode Filter
+    if (tabMode === "issued") {
+      if (store.currentZone && !isSameZone(item.origin_zone, store.currentZone)) return false;
+    } else if (tabMode === "received") {
+      if (store.currentZone && !isSameZone(item.target_destination, store.currentZone) && !isSameZone(item.zone_id, store.currentZone)) return false;
+    } else if (tabMode === "returns") {
+      if (item.is_returnable === false || item.status === "returned" || item.status === "non_returnable") return false;
+      if (scopeFilter === "CURRENT_ZONE" && store.currentZone && !isSameZone(item.target_destination, store.currentZone) && !isSameZone(item.zone_id, store.currentZone)) return false;
     }
 
     return true;

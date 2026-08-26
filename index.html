@@ -1844,7 +1844,7 @@
                     <!-- Tab Pills: All / Issued / Received / Return List -->
                     <div class="flex items-center justify-between flex-wrap gap-2 pb-1 border-b border-slate-100">
                         <div class="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 flex-wrap text-xs">
-                            <button type="button" onclick="setTibTableTab('all')" id="tibTab-all" class="tib-tab-btn px-3 py-1.5 rounded-lg font-bold bg-white text-indigo-700 shadow-xs cursor-pointer">📋 All Issues</button>
+                            <button type="button" onclick="setTibTableTab('all')" id="tibTab-all" class="tib-tab-btn px-3 py-1.5 rounded-lg font-bold bg-white text-indigo-700 shadow-xs cursor-pointer">📋 All Issues (<span id="tibTabAllCount">0</span>)</button>
                             <button type="button" onclick="setTibTableTab('issued')" id="tibTab-issued" class="tib-tab-btn px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">📤 Issued by this Zone (<span id="tibTabIssuedCount">0</span>)</button>
                             <button type="button" onclick="setTibTableTab('received')" id="tibTab-received" class="tib-tab-btn px-3 py-1.5 rounded-lg font-semibold text-slate-600 hover:text-slate-900 cursor-pointer">📥 Received by this Zone (<span id="tibTabReceivedCount">0</span>)</button>
                             <button type="button" onclick="setTibTableTab('returns')" id="tibTab-returns" class="tib-tab-btn px-3 py-1.5 rounded-lg font-semibold text-amber-800 hover:text-amber-950 bg-amber-50/80 border border-amber-200 cursor-pointer">🔄 Return List (<span id="tibTabReturnsCount">0</span>)</button>
@@ -3721,8 +3721,14 @@
                                 </div>
                             </div>
 
-                            <div>
-                                <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1" id="lblMsRecommendation">Recommendation / Final Clause</label>
+                            <div class="space-y-1">
+                                <div class="flex items-center justify-between">
+                                    <label class="block text-[10px] font-bold text-slate-600 uppercase" id="lblMsRecommendation">Recommendation / Final Clause</label>
+                                    <div class="flex items-center gap-1">
+                                        <button type="button" onclick="formatInputSelectionById('msInputRecommendation', 'bold')" class="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 text-[10px] font-black border border-slate-200 cursor-pointer shadow-2xs transition-all" title="Bold Selected Text (**text**)"><b>B</b></button>
+                                        <button type="button" onclick="formatInputSelectionById('msInputRecommendation', 'underline')" class="px-1.5 py-0.5 rounded bg-slate-100 hover:bg-indigo-100 text-slate-700 hover:text-indigo-800 text-[10px] font-bold underline border border-slate-200 cursor-pointer shadow-2xs transition-all" title="Underline Selected Text (__text__)"><u>U</u></button>
+                                    </div>
+                                </div>
                                 <textarea id="msInputRecommendation" rows="2" placeholder="කාරුණික අනුමැතිය සඳහා ඉදිරිපත් කරමි." oninput="updateMinuteSheetPreview()" class="w-full px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white focus:ring-1 focus:ring-teal-500 outline-none"></textarea>
                             </div>
 
@@ -3892,7 +3898,7 @@
                                 <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
                                     <span>📍</span> Standard Addressees (යොමුවන පාර්ශ්ව)
                                 </h4>
-                                <button onclick="openAddMinuteConfigItemModal('addressees')" class="text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
+                                <button type="button" onclick="openAddMinuteConfigItemModal('addressees', event)" class="text-[11px] font-bold bg-amber-600 hover:bg-amber-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
                                     + Add Addressee
                                 </button>
                             </div>
@@ -3907,7 +3913,7 @@
                                 <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
                                     <span>👔</span> Originators (M-01 & M-02 මඟින් යොමු කරන)
                                 </h4>
-                                <button onclick="openAddMinuteConfigItemModal('originators')" class="text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
+                                <button type="button" onclick="openAddMinuteConfigItemModal('originators', event)" class="text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
                                     + Add Originator
                                 </button>
                             </div>
@@ -3922,7 +3928,7 @@
                                 <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
                                     <span>✍️</span> Signatory Titles (අත්සන් තබන තනතුරු)
                                 </h4>
-                                <button onclick="openAddMinuteConfigItemModal('signatoryTitles')" class="text-[11px] font-bold bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
+                                <button type="button" onclick="openAddMinuteConfigItemModal('signatoryTitles', event)" class="text-[11px] font-bold bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
                                     + Add Title
                                 </button>
                             </div>
@@ -3937,7 +3943,7 @@
                                 <h4 class="font-bold text-xs text-slate-800 uppercase flex items-center gap-1.5">
                                     <span>📑</span> M-01 Last Paragraph & M-02 Endorsements (අවසාන ඡේද සහ නිර්දේශ පාඨ)
                                 </h4>
-                                <button onclick="openAddMinuteConfigItemModal('endorsements')" class="text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
+                                <button type="button" onclick="openAddMinuteConfigItemModal('endorsements', event)" class="text-[11px] font-bold bg-blue-600 hover:bg-blue-700 text-white px-2.5 py-1 rounded-lg shadow-xs transition-all cursor-pointer">
                                     + Add Phrase / Template
                                 </button>
                             </div>
@@ -6527,10 +6533,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.22.3
+        App Version: v5.22.4
     </div>
 
-    <script src="app.js?v=5.22.3"></script>
+    <script src="app.js?v=5.22.4"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
