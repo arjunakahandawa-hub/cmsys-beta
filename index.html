@@ -712,6 +712,12 @@
                         <span class="text-[11px]">Documents</span>
                     </button>
 
+                    <!-- Dedicated SBS Record Book Button (Desktop) -->
+                    <button onclick="openSbsBookView()" id="tab-sbs-book" class="hidden xl:flex nav-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-teal-300 hover:text-white border border-teal-500/40 items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Open SBS Work & Maintenance Record Book">
+                        <span>📖</span>
+                        <span class="text-[11px]">SBS Book</span>
+                    </button>
+
                     <!-- Isolated Sailors Section Button (Desktop) -->
                     <button onclick="switchView('sailors')" id="tab-sailors" class="hidden xl:flex nav-pill px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/50 items-center gap-1.5 transition-all shadow-xs cursor-pointer" title="Sailors Operations & Performance">
                         <span>⚓</span>
@@ -954,6 +960,13 @@
                             <button id="dashboardShareWhatsappBtn" onclick="openLmdExportModal('whatsapp')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all">
                                 💬 WhatsApp Share
                             </button>
+                            <button id="woMigrationBtn" onclick="openWorkOrderMigrationModal()" class="bg-indigo-700 hover:bg-indigo-800 text-white px-3.5 py-1.5 rounded-xl text-xs font-medium flex items-center gap-1.5 shadow-sm transition-all" title="Total Migration: Convert mistakenly entered work orders between Project, Assign, Job, Task">
+                                🔄 Type Migration
+                            </button>
+                            <button id="officerHubBtn" onclick="openOfficerApprovalsHubModal()" class="bg-gradient-to-r from-teal-700 to-indigo-800 hover:from-teal-600 hover:to-indigo-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all relative" title="Officer Action & Approvals Hub">
+                                <span>🎖️ Officer Approvals</span>
+                                <span id="officerHubGlobalBadge" class="bg-amber-400 text-slate-950 font-black text-[10px] px-1.5 py-0.2 rounded-full hidden">0</span>
+                            </button>
                         </div>
                         <div class="flex items-center gap-2.5">
                             <!-- Evening Evaluation Button (Shows 18:00-20:00) -->
@@ -993,6 +1006,25 @@
                             </button>
                             <button onclick="changeDashboardDate(getLocalDateString())" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 flex items-center gap-1.5 shadow-sm transition-all">
                                 ⚡ Return to Today (අද දිනය)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- SBS Book Mode Floating / Top Banner -->
+                    <div id="sbsBookModeBanner" class="hidden rounded-xl p-3 mb-4 flex flex-wrap items-center justify-between gap-3 shadow-md transition-all duration-300" style="background:linear-gradient(135deg,#0a192f 0%,#0f2e3d 100%);border:1px solid #14b8a6;border-left:5px solid #14b8a6">
+                        <div class="flex items-center gap-3">
+                            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-500/20 text-teal-400 text-lg font-bold">📖</span>
+                            <div>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-xs font-extrabold uppercase tracking-wider text-teal-300">SBS Works & Maintenance Record Book</span>
+                                    <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-400/20 text-teal-200 border border-teal-400/30">Book / Register Mode</span>
+                                </div>
+                                <p class="text-xs text-slate-300 mt-0.5">Recording maintenance tasks and projects specific to SBS without affecting operational force counts.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button onclick="closeSbsBookMode()" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-700 text-white transition-all flex items-center gap-1.5 shadow-sm">
+                                <span>↩️</span> Back to Operational Zones
                             </button>
                         </div>
                     </div>
@@ -2352,6 +2384,60 @@
                                         <span class="text-xs text-slate-400 italic">No sailors assigned to this zone team yet</span>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Full Width Card: Appointed Zone Officers (Multiple Officers per Zone & Locations) -->
+                        <div class="p-5 bg-white border border-indigo-200 rounded-xl shadow-xs space-y-4">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                                <div>
+                                    <h4 class="font-bold text-slate-800 text-sm flex items-center gap-2">
+                                        <span>🎖️ Appointed Zone Officers</span>
+                                        <span id="cfgZoneOfficersCountBadge" class="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">0 Officers</span>
+                                    </h4>
+                                    <p class="text-xs text-slate-500 mt-0.5">Appoint multiple Officers to this Zone (OIC, 2IC, Project Engineer, Zone Officer) and delegate location responsibilities:</p>
+                                </div>
+                            </div>
+
+                            <!-- Add Officer Controls -->
+                            <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 p-3.5 bg-indigo-50/50 rounded-xl border border-indigo-100 items-end">
+                                <div class="sm:col-span-4">
+                                    <label class="block text-[11px] font-bold text-slate-700 mb-1">Select Officer Profile *</label>
+                                    <select id="cfg-addZoneOfficerProfileSelect" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold">
+                                        <option value="">-- Choose Officer --</option>
+                                    </select>
+                                </div>
+                                <div class="sm:col-span-3">
+                                    <label class="block text-[11px] font-bold text-slate-700 mb-1">Zone Appointment Role *</label>
+                                    <select id="cfg-addZoneOfficerRoleSelect" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold">
+                                        <option value="OIC">⭐ OIC</option>
+                                        <option value="2IC">🎖️ 2IC</option>
+                                        <option value="3IC">🛡️ 3IC</option>
+                                        <option value="Project Engineering">📋 Project Engineering</option>
+                                        <option value="Project Engineering 2">📐 Project Engineering 2</option>
+                                    </select>
+                                </div>
+                                <div class="sm:col-span-3">
+                                    <label class="block text-[11px] font-bold text-slate-700 mb-1">Location / Work Scope</label>
+                                    <select id="cfg-addZoneOfficerLocationSelect" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium">
+                                        <option value="All CE Works in AOR">🌐 All CE Works in AOR</option>
+                                        <option value="Road Network">🛣️ Road Network</option>
+                                        <option value="Marine Construction">⚓ Marine Construction</option>
+                                        <option value="Water Distribution">💧 Water Distribution</option>
+                                        <option value="Construction">🏗️ Construction</option>
+                                        <option value="Renovation">🔨 Renovation</option>
+                                    </select>
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <button type="button" onclick="addOfficerToCurrentZone()" class="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1">
+                                        <span>➕</span> Appoint
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- List of Appointed Zone Officers -->
+                            <div id="cfgZoneOfficersList" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                                <span class="text-xs text-slate-400 italic">No officers appointed to this zone yet</span>
                             </div>
                         </div>
                     </div>
@@ -4377,6 +4463,112 @@
 
                 <!-- ============ DETAILS TAB ============ -->
                 <div id="woTab-details">
+                    <!-- Type Migration & Quick Convert Card -->
+                    <div id="woDetailTypeMigrationCard" class="mb-4 p-3 bg-gradient-to-r from-slate-50 to-indigo-50/60 border border-indigo-100 rounded-xl shadow-xs">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                                    <span>🔄</span> Current Type:
+                                </span>
+                                <span id="woDetailCurrentTypeBadge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                                    PROJECT
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" id="btnQuickConvertToAssign" onclick="quickMigrateCurrentWoToAssign()" class="text-xs font-bold px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1.5 transition-all">
+                                    <span>⚡</span> Quick Migrate to Assign
+                                </button>
+                                <button type="button" onclick="toggleWoTypeMigrationControls()" class="text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white border border-slate-300 px-2.5 py-1 rounded-lg transition-all">
+                                    Change Type ▾
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Expanded Migration Controls -->
+                        <div id="woDetailMigrationControls" class="hidden pt-3 mt-2.5 border-t border-indigo-100/80 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                            <div class="sm:col-span-4">
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Target Type</label>
+                                <select id="woDetailTargetTypeSelect" onchange="handleWoDetailTargetTypeChange(this.value)" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium focus:ring-2 focus:ring-indigo-500">
+                                    <option value="ASSIGNMENT">💼 Assignment (Assign)</option>
+                                    <option value="PROJECT">📋 Project (Type P)</option>
+                                    <option value="JOB">🔧 Job (Type J)</option>
+                                    <option value="TASK">⚡ Task (Type T)</option>
+                                </select>
+                            </div>
+                            <div id="woDetailAssignTypeCol" class="sm:col-span-5">
+                                <label class="block text-[11px] font-semibold text-slate-600 mb-1">Assignment Category</label>
+                                <select id="woDetailAssignTypeSelect" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-medium">
+                                    <option value="In Charge">In Charge</option>
+                                    <option value="Duty">Duty</option>
+                                    <option value="Workshop Duty">Workshop Duty</option>
+                                    <option value="Driver">Driver</option>
+                                    <option value="Admin Staff">Admin Staff</option>
+                                    <option value="General Assignment">General Assignment</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-3 flex items-center">
+                                <button type="button" onclick="applyWorkOrderTypeMigration()" class="w-full text-xs font-bold px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all flex items-center justify-center gap-1">
+                                    <span>✓</span> Apply
+                                </button>
+                            </div>
+                            <div id="woDetailJobCardOptionRow" class="sm:col-span-12 pt-1">
+                                <label class="inline-flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+                                    <input type="checkbox" id="woDetailUnlinkJobCardCb" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                                    <span>Unlink / Remove empty Job Card if migrating to an Assignment</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Officer Review & Forwarding Banner -->
+                    <div id="woDetailOfficerReviewCard" class="mb-4 p-3.5 bg-gradient-to-r from-amber-50/90 via-white to-amber-50/90 border border-amber-200 rounded-xl shadow-xs">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs font-extrabold text-amber-950 uppercase tracking-wide flex items-center gap-1.5">
+                                    <span>🛡️</span> Officer Clearance:
+                                </span>
+                                <span id="woDetailOfficerStatusBadge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                                    In-Charge Draft
+                                </span>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <!-- In-Charge Forward Button -->
+                                <button type="button" id="btnWoForwardToOfficer" onclick="toggleWoOfficerForwardPanel()" class="text-xs font-bold px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1 transition-all">
+                                    <span>📤</span> Forward to Officer
+                                </button>
+                                <!-- Officer Direct Action Buttons -->
+                                <button type="button" id="btnWoOfficerApproveDirect" onclick="officerApproveCurrentWorkOrder()" class="hidden text-xs font-bold px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex items-center gap-1 transition-all">
+                                    <span>✅</span> Officer Approve
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Forward to Officer Form (Collapsible) -->
+                        <div id="woDetailForwardPanel" class="hidden pt-3 mt-2.5 border-t border-amber-200 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+                            <div class="sm:col-span-5">
+                                <label class="block text-[11px] font-bold text-slate-700 mb-1">Select Appointed Officer *</label>
+                                <select id="woDetailForwardOfficerSelect" class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold">
+                                    <option value="">-- Choose Officer --</option>
+                                </select>
+                            </div>
+                            <div class="sm:col-span-4">
+                                <label class="block text-[11px] font-bold text-slate-700 mb-1">Remarks / Note</label>
+                                <input type="text" id="woDetailForwardRemarks" placeholder="e.g. Verified site, ready for approval..." class="w-full text-xs px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
+                            </div>
+                            <div class="sm:col-span-3">
+                                <button type="button" onclick="submitForwardWorkOrderToOfficer()" class="w-full py-1.5 px-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center justify-center gap-1">
+                                    <span>🚀</span> Send Forward
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Officer Remarks / Audit Log -->
+                        <div id="woDetailOfficerAuditLog" class="hidden mt-2 pt-2 border-t border-amber-100 text-xs text-slate-600 flex items-center justify-between">
+                            <span id="woDetailOfficerAuditText">Reviewed by Officer</span>
+                            <button type="button" id="btnWoOfficerReject" onclick="officerRequestChangesForCurrentWorkOrder()" class="text-[11px] font-bold text-rose-600 hover:text-rose-800 underline">↩️ Request Revision</button>
+                        </div>
+                    </div>
+
                     <!-- Status / Priority -->
                     <div id="woDetailStatusPriorityWrapper" class="grid grid-cols-2 gap-4 mb-4">
                         <div id="woDetailStatusGroup">
@@ -4533,6 +4725,9 @@
                 </button>
                 <button id="btnProceedWo" onclick="proceedWorkOrder()" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">
                     🚀 Proceed - Commit Daily Labour
+                </button>
+                <button id="btnOfficerApproveWoFooter" onclick="officerApproveCurrentWorkOrder()" class="hidden flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all">
+                    🛡️ Officer Approve & Save
                 </button>
                 <button id="btnForwardComplete" onclick="forwardToComplete()" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium hidden">
                     ✅ Forward to Complete
@@ -5164,6 +5359,31 @@
                     </div>
                 </div>
 
+                <!-- Officer Material Clearance & LMD Dispatch Banner -->
+                <div class="p-3.5 bg-gradient-to-r from-teal-50/90 via-white to-teal-50/90 border border-teal-200 rounded-xl space-y-2">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <span class="text-xs font-extrabold text-teal-950 uppercase tracking-wide flex items-center gap-1.5">
+                                <span>🛡️</span> Officer Material Clearance & LMD:
+                            </span>
+                            <span id="editJcOfficerStatusBadge" class="text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">
+                                In-Charge Draft
+                            </span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <button type="button" id="btnJcForwardToOfficer" onclick="forwardCurrentJobCardToOfficer()" class="text-xs font-bold px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1 transition-all">
+                                <span>📤</span> Forward to Officer
+                            </button>
+                            <button type="button" id="btnJcOfficerAuthorizeLmd" onclick="officerAuthorizeJobCardAndSendLmd()" class="hidden text-xs font-bold px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex items-center gap-1 transition-all">
+                                <span>🚀</span> Authorize & Send to LMD
+                            </button>
+                        </div>
+                    </div>
+                    <div id="editJcOfficerAuditText" class="text-[11px] text-slate-500 hidden">
+                        <!-- Populated dynamically -->
+                    </div>
+                </div>
+
                 <div class="flex gap-3 pt-4 border-t border-slate-200">
                     <button type="button" onclick="closeModal('editJobCardModal')" class="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 font-medium">Cancel</button>
                     <button type="submit" class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium shadow">Save Changes</button>
@@ -5453,6 +5673,173 @@
                         🔀 Execute Merge Now
                     </button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ==================== WORK ORDER TYPE TOTAL MIGRATION MODAL ==================== -->
+    <div id="workOrderMigrationModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay backdrop-blur-xs">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <span class="w-10 h-10 rounded-xl bg-indigo-600/30 border border-indigo-400/30 flex items-center justify-center text-xl">🔄</span>
+                    <div>
+                        <h2 class="font-extrabold text-base sm:text-lg tracking-tight">Work Order Type Total Migration Suite</h2>
+                        <p class="text-xs text-indigo-200 font-medium">Batch migrate & convert work orders between Project, Assign, Job, and Task</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('workOrderMigrationModal')" class="text-white/70 hover:text-white text-xl p-1 font-bold">✕</button>
+            </div>
+
+            <!-- Filter Controls -->
+            <div class="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap gap-3 items-center justify-between flex-shrink-0">
+                <div class="flex flex-wrap gap-2.5 items-center">
+                    <!-- Zone Selector -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Zone Filter</label>
+                        <select id="migFilterZone" onchange="renderMigrationWorkOrdersList()" class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="ALL">🌐 All Zones</option>
+                        </select>
+                    </div>
+
+                    <!-- Source Type Filter -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Current Type</label>
+                        <select id="migFilterType" onchange="renderMigrationWorkOrdersList()" class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="ALL">All Types</option>
+                            <option value="PROJECT" selected>📋 PROJECT</option>
+                            <option value="JOB">🔧 JOB</option>
+                            <option value="TASK">⚡ TASK</option>
+                            <option value="ASSIGN">💼 ASSIGNMENT</option>
+                        </select>
+                    </div>
+
+                    <!-- Status Filter -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Status</label>
+                        <select id="migFilterStatus" onchange="renderMigrationWorkOrdersList()" class="text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="ALL">All Statuses</option>
+                            <option value="Active">Active</option>
+                            <option value="Pending">Pending</option>
+                            <option value="Hold">On Hold</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Search Input -->
+                <div class="w-full sm:w-64">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Search Description / Ref</label>
+                    <input type="text" id="migSearchInput" oninput="renderMigrationWorkOrdersList()" placeholder="Type to search (Sinhala / Eng)..." class="w-full text-xs px-3 py-1.5 border border-slate-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-indigo-500">
+                </div>
+            </div>
+
+            <!-- Work Orders List Table -->
+            <div class="flex-1 overflow-y-auto p-4 max-h-[44vh] space-y-2">
+                <div class="flex items-center justify-between px-2 py-1 bg-indigo-50/70 border border-indigo-100 rounded-lg text-xs text-indigo-900 font-semibold mb-2">
+                    <label class="inline-flex items-center gap-2 cursor-pointer">
+                        <input type="checkbox" id="migSelectAllCb" onchange="toggleSelectAllMigrationWorkOrders(this.checked)" class="rounded text-indigo-600 focus:ring-indigo-500">
+                        <span>Select All (<span id="migSelectedCount">0</span> selected)</span>
+                    </label>
+                    <span id="migTotalFoundCount" class="text-slate-500">0 found</span>
+                </div>
+
+                <div id="migrationWorkOrdersContainer" class="space-y-2">
+                    <!-- Populated dynamically via renderMigrationWorkOrdersList() -->
+                </div>
+            </div>
+
+            <!-- Migration Destination Action Bar -->
+            <div class="p-4 bg-white border-t border-slate-200 flex-shrink-0 shadow-lg">
+                <div class="bg-gradient-to-r from-slate-50 to-indigo-50/80 p-4 rounded-xl border border-indigo-200">
+                    <h4 class="text-xs font-extrabold text-indigo-950 uppercase tracking-wide flex items-center gap-1.5 mb-3">
+                        <span>🚀</span> Step 2: Choose Target Type & Execute Migration
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                        <div class="sm:col-span-4">
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Migrate Selected To Type *</label>
+                            <select id="migTargetType" onchange="handleMigTargetTypeChange(this.value)" class="w-full text-xs px-3 py-2 border border-indigo-300 rounded-lg bg-white font-bold text-indigo-900 focus:ring-2 focus:ring-indigo-500">
+                                <option value="ASSIGNMENT" selected>💼 Assignment (Assign)</option>
+                                <option value="JOB">🔧 Job (Type J)</option>
+                                <option value="TASK">⚡ Task (Type T)</option>
+                                <option value="PROJECT">📋 Project (Type P)</option>
+                            </select>
+                        </div>
+
+                        <div id="migAssignTypeWrapper" class="sm:col-span-4">
+                            <label class="block text-xs font-bold text-slate-700 mb-1">Assignment Category</label>
+                            <select id="migAssignTypeSelect" class="w-full text-xs px-3 py-2 border border-indigo-300 rounded-lg bg-white font-semibold">
+                                <option value="In Charge" selected>In Charge</option>
+                                <option value="Duty">Duty</option>
+                                <option value="Workshop Duty">Workshop Duty</option>
+                                <option value="Driver">Driver</option>
+                                <option value="Admin Staff">Admin Staff</option>
+                                <option value="General Assignment">General Assignment</option>
+                            </select>
+                        </div>
+
+                        <div class="sm:col-span-4 flex items-center">
+                            <button type="button" id="btnExecuteBatchMigration" onclick="executeBatchWorkOrderMigration()" class="w-full py-2.5 px-4 bg-gradient-to-r from-indigo-600 to-teal-600 hover:from-indigo-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-2">
+                                <span>⚡</span> Execute Total Migration
+                            </button>
+                        </div>
+                    </div>
+
+                    <div id="migUnlinkJobCardWrapper" class="mt-3 flex items-center justify-between text-xs text-slate-600">
+                        <label class="inline-flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="migUnlinkJobCardsCb" checked class="rounded text-indigo-600 focus:ring-indigo-500">
+                            <span>Unlink / Remove zero-cost Job Cards for converted assignments</span>
+                        </label>
+                        <span class="text-[11px] text-slate-400">Preserves assigned sailors & allocations</span>
+                    </div>
+                </div>
+            </div>
+    <!-- ==================== OFFICER ACTION & APPROVALS HUB MODAL ==================== -->
+    <div id="officerApprovalsHubModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay backdrop-blur-xs">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
+            <!-- Modal Header -->
+            <div class="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 text-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+                <div class="flex items-center gap-3">
+                    <span class="w-10 h-10 rounded-xl bg-teal-600/30 border border-teal-400/30 flex items-center justify-center text-xl">🎖️</span>
+                    <div>
+                        <h2 class="font-extrabold text-base sm:text-lg tracking-tight">Officer Action & Approvals Hub</h2>
+                        <p class="text-xs text-teal-200 font-medium" id="officerHubSubtitle">Review forwarded work orders, job card materials, inventory changes, and estimates</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('officerApprovalsHubModal')" class="text-white/70 hover:text-white text-xl p-1 font-bold">✕</button>
+            </div>
+
+            <!-- Tab Navigation Bar -->
+            <div class="bg-slate-50 border-b border-slate-200 px-4 pt-2 flex gap-2 overflow-x-auto flex-shrink-0">
+                <button type="button" onclick="switchOfficerHubTab('work_orders')" id="btnHubTab-work_orders" class="hub-tab-btn px-4 py-2.5 text-xs font-bold border-b-2 border-teal-600 text-teal-700 flex items-center gap-2">
+                    <span>📋 Work Orders</span>
+                    <span id="hubBadge-work_orders" class="bg-teal-100 text-teal-800 text-[10px] px-2 py-0.5 rounded-full font-extrabold">0</span>
+                </button>
+                <button type="button" onclick="switchOfficerHubTab('job_cards')" id="btnHubTab-job_cards" class="hub-tab-btn px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2">
+                    <span>🛠️ Job Cards & LMD</span>
+                    <span id="hubBadge-job_cards" class="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">0</span>
+                </button>
+                <button type="button" onclick="switchOfficerHubTab('inventory')" id="btnHubTab-inventory" class="hub-tab-btn px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2">
+                    <span>📦 Inventory Changes</span>
+                    <span id="hubBadge-inventory" class="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">0</span>
+                </button>
+                <button type="button" onclick="switchOfficerHubTab('estimates')" id="btnHubTab-estimates" class="hub-tab-btn px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2">
+                    <span>📐 Project Estimates</span>
+                    <span id="hubBadge-estimates" class="bg-slate-200 text-slate-700 text-[10px] px-2 py-0.5 rounded-full font-extrabold">0</span>
+                </button>
+            </div>
+
+            <!-- Content Area -->
+            <div class="flex-1 overflow-y-auto p-5 space-y-3 bg-white" id="officerHubContentArea">
+                <!-- Populated dynamically via renderOfficerHubContent() -->
+            </div>
+
+            <!-- Modal Footer -->
+            <div class="p-3.5 bg-slate-50 border-t border-slate-200 flex justify-between items-center text-xs text-slate-500 flex-shrink-0">
+                <span>💡 Click on any card to open and edit directly in its native panel</span>
+                <button type="button" onclick="closeModal('officerApprovalsHubModal')" class="px-4 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold">Close</button>
             </div>
         </div>
     </div>
@@ -6533,10 +6920,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-red-600 font-bold z-[9999] bg-white/80 px-2 py-1 rounded shadow pointer-events-none">
-        App Version: v5.22.5
+        App Version: v5.22.6
     </div>
 
-    <script src="app.js?v=5.22.5"></script>
+    <script src="app.js?v=5.22.6"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
@@ -6606,6 +6993,10 @@
                 <button onclick="switchView('documents'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
                     <span class="text-xl mb-1">📄</span>
                     <span class="text-[10px] font-bold">Minute Sheet</span>
+                </button>
+                <button onclick="openSbsBookView(); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-teal-500/40 text-teal-300 active:scale-95 transition-all">
+                    <span class="text-xl mb-1">📖</span>
+                    <span class="text-[10px] font-bold">SBS Book</span>
                 </button>
                 <button onclick="switchView('maintenance'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
                     <span class="text-xl mb-1">📍</span>

@@ -754,6 +754,7 @@ function initOpsListeners() {
       return mappedWo;
     });
     refreshCurrentView();
+    if (typeof updateGlobalOfficerHubBadge === "function") updateGlobalOfficerHubBadge();
     console.log(`📋 DB#2: ${store.workOrders.length} work orders loaded`);
   }); // ── Job Cards ──
   opsDB.ref("job_cards").on("value", (snapshot) => {
@@ -765,6 +766,7 @@ function initOpsListeners() {
       };
     });
     refreshCurrentView();
+    if (typeof updateGlobalOfficerHubBadge === "function") updateGlobalOfficerHubBadge();
   }); // ── Job Card Materials ──
   opsDB.ref("job_card_materials").on("value", (snapshot) => {
     store.jobCardMaterials = snapshotToArray(snapshot).map((m) => {
@@ -1900,7 +1902,33 @@ function renderDashboard() {
   updateBoardEmptyState();
   updateDashboardButtons();
   updateHistoricalModeBanner();
+  updateSbsBookModeBanner();
 }
+
+function updateSbsBookModeBanner() {
+  const sbsBanner = document.getElementById("sbsBookModeBanner");
+  const isSbs = isSbsZone(store.currentZone);
+  if (sbsBanner) {
+    sbsBanner.classList.toggle("hidden", !isSbs);
+  }
+}
+
+function openSbsBookView() {
+  store.currentZone = "SBS";
+  switchView("dashboard");
+  refreshCurrentViewImmediately();
+  showToast("📖 Opened SBS Works & Maintenance Record Book", "info");
+}
+
+function closeSbsBookMode() {
+  const validZones = (store.zones || []).filter((z) => !isSbsZone(z.id) && !isSbsZone(z.name));
+  store.currentZone = validZones[0]?.id || "A Zone";
+  localStorage.setItem("ncw_saved_zone", store.currentZone);
+  renderZoneSelectors();
+  refreshCurrentViewImmediately();
+  showToast("↩️ Returned to Operational Zones", "info");
+}
+
 function updateHistoricalModeBanner() {
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
@@ -2505,7 +2533,7 @@ function renderWorkOrders() {
       (wo) =>
         wo.type === type &&
         !wo.assign_type &&
-        wo.zone_id === store.currentZone &&
+        (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
         isWorkOrderActiveOnDate(wo, dateVal),
     );
     columns[type].innerHTML = orders
@@ -2571,7 +2599,7 @@ function renderQuickAssignments() {
   const quickOrders = store.workOrders.filter(
     (wo) =>
       wo.assign_type &&
-      wo.zone_id === store.currentZone &&
+      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   );
   const badge = document.getElementById("quickAssignCountBadge");
@@ -2591,27 +2619,27 @@ function updateBoardEmptyState() {
     (wo) =>
       wo.type === "PROJECT" &&
       !wo.assign_type &&
-      wo.zone_id === store.currentZone &&
+      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   ).length;
   const jobs = store.workOrders.filter(
     (wo) =>
       wo.type === "JOB" &&
       !wo.assign_type &&
-      wo.zone_id === store.currentZone &&
+      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   ).length;
   const tasks = store.workOrders.filter(
     (wo) =>
       wo.type === "TASK" &&
       !wo.assign_type &&
-      wo.zone_id === store.currentZone &&
+      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   ).length;
   const assigns = store.workOrders.filter(
     (wo) =>
       wo.assign_type &&
-      wo.zone_id === store.currentZone &&
+      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   ).length; // Explicitly toggle hidden class on wrappers to ensure they are hidden on mobile
   const projWrapper = document.getElementById("projectColumnWrapper");
@@ -2969,6 +2997,12 @@ function renderWorkOrderCard(wo) {
                 ${wo.budget_allocation ? `<span class="font-medium text-slate-600">💰 ${formatCurrency(wo.budget_allocation)}</span>` : ""}
             </div>`;
 
+  const officerBadge = wo.officer_review_status === "Pending Review"
+    ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 animate-pulse">⏳ Pending Officer</span>`
+    : wo.officer_review_status === "Approved"
+      ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">🛡️ Approved</span>`
+      : "";
+
   return `
         <div class="work-order-card ${sm.stripe} rounded-xl shadow-sm hover:shadow-lg transition-all duration-200 cursor-pointer group"
             style="background:rgba(255,255,255,0.9);border:1px solid rgba(255,255,255,0.8);backdrop-filter:blur(6px)"
@@ -2982,6 +3016,7 @@ function renderWorkOrderCard(wo) {
                     ${statusBadge}
                     ${commitmentBadge}
                     ${assignTypeBadge}
+                    ${officerBadge}
                 </div>
                 <span class="text-[10px] text-slate-400 mono font-medium flex-shrink-0">${wo.reference_no || "—"}</span>
             </div>
@@ -5455,7 +5490,1018 @@ function openWorkOrderDetail(workOrderId) {
       !(hasLastCrew && currentCrewEmpty && isToday),
     );
   }
+
+  // Update Type Migration Bar in Details Modal
+  const typeBadgeEl = document.getElementById("woDetailCurrentTypeBadge");
+  const quickConvertBtn = document.getElementById("btnQuickConvertToAssign");
+  const targetTypeSelect = document.getElementById("woDetailTargetTypeSelect");
+  const assignTypeSelect = document.getElementById("woDetailAssignTypeSelect");
+  const migControls = document.getElementById("woDetailMigrationControls");
+  const assignTypeCol = document.getElementById("woDetailAssignTypeCol");
+  const jobCardOptRow = document.getElementById("woDetailJobCardOptionRow");
+
+  if (migControls) migControls.classList.add("hidden");
+
+  if (typeBadgeEl) {
+    if (wo.assign_type) {
+      typeBadgeEl.textContent = `💼 ASSIGN: ${wo.assign_type}`;
+      typeBadgeEl.className = "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200";
+    } else if (wo.type === "PROJECT") {
+      typeBadgeEl.textContent = "📋 PROJECT";
+      typeBadgeEl.className = "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200";
+    } else if (wo.type === "JOB") {
+      typeBadgeEl.textContent = "🔧 JOB";
+      typeBadgeEl.className = "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200";
+    } else {
+      typeBadgeEl.textContent = "⚡ TASK";
+      typeBadgeEl.className = "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200";
+    }
+  }
+
+  if (quickConvertBtn) {
+    if (wo.assign_type) {
+      quickConvertBtn.innerHTML = "<span>⚡</span> Convert to Project";
+      quickConvertBtn.onclick = () => quickMigrateCurrentWoToProject();
+      quickConvertBtn.className = "text-xs font-bold px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs flex items-center gap-1.5 transition-all";
+    } else {
+      quickConvertBtn.innerHTML = "<span>⚡</span> Quick Migrate to Assign";
+      quickConvertBtn.onclick = () => quickMigrateCurrentWoToAssign();
+      quickConvertBtn.className = "text-xs font-bold px-3 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs flex items-center gap-1.5 transition-all";
+    }
+  }
+
+  if (targetTypeSelect) {
+    targetTypeSelect.value = wo.assign_type ? "PROJECT" : "ASSIGNMENT";
+  }
+  if (assignTypeSelect) {
+    assignTypeSelect.value = wo.assign_type || "In Charge";
+  }
+  if (assignTypeCol) {
+    assignTypeCol.classList.toggle("hidden", targetTypeSelect && targetTypeSelect.value !== "ASSIGNMENT");
+  }
+  if (jobCardOptRow) {
+    jobCardOptRow.classList.toggle("hidden", targetTypeSelect && targetTypeSelect.value !== "ASSIGNMENT");
+  }
+
+  // Update Officer Review & Forwarding Banner in Details Modal
+  const isOfficer = isOfficerLoggedIn();
+  const statusBadge = document.getElementById("woDetailOfficerStatusBadge");
+  const forwardBtn = document.getElementById("btnWoForwardToOfficer");
+  const approveBtn = document.getElementById("btnWoOfficerApproveDirect");
+  const approveFooterBtn = document.getElementById("btnOfficerApproveWoFooter");
+  const forwardPanel = document.getElementById("woDetailForwardPanel");
+  const auditLog = document.getElementById("woDetailOfficerAuditLog");
+  const auditText = document.getElementById("woDetailOfficerAuditText");
+  const rejectBtn = document.getElementById("btnWoOfficerReject");
+
+  if (forwardPanel) forwardPanel.classList.add("hidden");
+
+  // Populate Forward Officer Dropdown
+  const forwardOfficerSelect = document.getElementById("woDetailForwardOfficerSelect");
+  if (forwardOfficerSelect) {
+    const zid = wo.zone_id || store.currentZone;
+    const inc = (store.settings?.zoneInCharges || {})[zid] || {};
+    const zoneOfficers = Array.isArray(inc.officers) ? inc.officers : [];
+    const allOic = getOicProfiles();
+
+    let html = '<option value="">-- Choose Officer --</option>';
+    if (zoneOfficers.length > 0) {
+      html += '<optgroup label="Appointed Zone Officers">';
+      zoneOfficers.forEach((zo) => {
+        html += `<option value="${zo.id}">🎖️ ${zo.rank} ${zo.name} (${zo.role})</option>`;
+      });
+      html += '</optgroup>';
+    }
+    html += '<optgroup label="Command / All Officers">';
+    allOic.forEach((p) => {
+      html += `<option value="${p.id}">⭐ ${p.rank} ${p.name} (${p.serviceNo})</option>`;
+    });
+    html += '</optgroup>';
+    forwardOfficerSelect.innerHTML = html;
+  }
+
+  const revStatus = wo.officer_review_status || "Draft";
+  if (statusBadge) {
+    if (revStatus === "Pending Review") {
+      statusBadge.textContent = `⏳ Pending Officer Clearance (${wo.forwarded_to_officer_name || "Officer"})`;
+      statusBadge.className =
+        "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 animate-pulse";
+    } else if (revStatus === "Approved") {
+      statusBadge.textContent = `✅ Officer Cleared (${wo.officer_approved_by || "Officer"})`;
+      statusBadge.className =
+        "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300";
+    } else if (revStatus === "Changes Requested") {
+      statusBadge.textContent = `↩️ Revision Requested (${wo.officer_remarks || ""})`;
+      statusBadge.className =
+        "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300";
+    } else {
+      statusBadge.textContent = "In-Charge Draft / Internal";
+      statusBadge.className =
+        "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300";
+    }
+  }
+
+  if (forwardBtn) {
+    forwardBtn.classList.toggle("hidden", isOfficer && revStatus === "Approved");
+  }
+  if (approveBtn) {
+    approveBtn.classList.toggle("hidden", !isOfficer);
+  }
+  if (approveFooterBtn) {
+    approveFooterBtn.classList.toggle("hidden", !isOfficer);
+  }
+
+  if (auditLog && auditText) {
+    if (wo.incharge_forward_remarks || wo.officer_remarks || wo.officer_approved_by) {
+      auditLog.classList.remove("hidden");
+      let msg = "";
+      if (wo.officer_approved_by) {
+        msg = `✓ Approved by ${wo.officer_approved_by}`;
+      } else if (wo.incharge_forward_remarks) {
+        msg = `Forward note: "${wo.incharge_forward_remarks}"`;
+      } else if (wo.officer_remarks) {
+        msg = `Officer remarks: "${wo.officer_remarks}"`;
+      }
+      auditText.textContent = msg;
+    } else {
+      auditLog.classList.add("hidden");
+    }
+  }
+  if (rejectBtn) {
+    rejectBtn.classList.toggle("hidden", !isOfficer || revStatus !== "Pending Review");
+  }
+
   document.getElementById("workOrderDetailModal").classList.remove("hidden");
+}
+
+// ─────────────────────────────────────────────
+// WORK ORDER TYPE MIGRATION METHODS
+// ─────────────────────────────────────────────
+function toggleWoTypeMigrationControls() {
+  const controls = document.getElementById("woDetailMigrationControls");
+  if (controls) controls.classList.toggle("hidden");
+}
+
+function handleWoDetailTargetTypeChange(val) {
+  const assignCol = document.getElementById("woDetailAssignTypeCol");
+  const jcRow = document.getElementById("woDetailJobCardOptionRow");
+  if (assignCol) assignCol.classList.toggle("hidden", val !== "ASSIGNMENT");
+  if (jcRow) jcRow.classList.toggle("hidden", val !== "ASSIGNMENT");
+}
+
+function quickMigrateCurrentWoToAssign() {
+  const woKey = store.selectedWorkOrder;
+  if (!woKey) return;
+  migrateWorkOrderType(woKey, "ASSIGNMENT", "In Charge", true);
+}
+
+function quickMigrateCurrentWoToProject() {
+  const woKey = store.selectedWorkOrder;
+  if (!woKey) return;
+  migrateWorkOrderType(woKey, "PROJECT", null, false);
+}
+
+function applyWorkOrderTypeMigration() {
+  const woKey = store.selectedWorkOrder;
+  if (!woKey) return;
+  const targetType = document.getElementById("woDetailTargetTypeSelect").value;
+  const assignType = document.getElementById("woDetailAssignTypeSelect").value;
+  const unlinkJobCard = document.getElementById("woDetailUnlinkJobCardCb") ? document.getElementById("woDetailUnlinkJobCardCb").checked : true;
+  migrateWorkOrderType(woKey, targetType, assignType, unlinkJobCard);
+}
+
+function migrateWorkOrderType(workOrderId, targetType, targetAssignType = "In Charge", removeEmptyJobCard = true) {
+  const wo = store.workOrders.find(
+    (w) => String(w._fbKey) === String(workOrderId) || String(w.id) === String(workOrderId)
+  );
+  if (!wo) {
+    showToast("Work Order not found", "error");
+    return;
+  }
+
+  const prevType = wo.assign_type ? `ASSIGNMENT (${wo.assign_type})` : wo.type;
+  const targetFbKey = wo._fbKey || wo.id;
+
+  let newType = "PROJECT";
+  let newAssignType = null;
+
+  if (targetType === "ASSIGNMENT") {
+    newType = "TASK";
+    newAssignType = targetAssignType || "In Charge";
+  } else if (targetType === "JOB") {
+    newType = "JOB";
+    newAssignType = null;
+  } else if (targetType === "TASK") {
+    newType = "TASK";
+    newAssignType = null;
+  } else {
+    newType = "PROJECT";
+    newAssignType = null;
+  }
+
+  // Update in-memory object
+  wo.type = newType;
+  wo.assign_type = newAssignType;
+
+  // Prepare Firebase DB#2 payload
+  const updatePayload = {
+    type: newType,
+    assign_type: newAssignType,
+    updated_at: Date.now()
+  };
+
+  // If converting to Assignment and removeEmptyJobCard is true
+  if (targetType === "ASSIGNMENT" && removeEmptyJobCard) {
+    const jc = getJobCardForWorkOrder(wo._fbKey || wo.id);
+    if (jc) {
+      const cost = computeJobCardCost(jc);
+      if (cost.total === 0) {
+        if (jc._fbKey) {
+          opsDB.ref(`job_cards/${jc._fbKey}`).remove().catch(console.warn);
+        }
+        store.jobCards = store.jobCards.filter(
+          (j) => String(j.id) !== String(jc.id) && String(j._fbKey) !== String(jc._fbKey)
+        );
+      }
+    }
+  }
+
+  // Write to Firebase DB#2
+  if (targetFbKey) {
+    opsDB.ref(`work_orders/${targetFbKey}`).update(updatePayload)
+      .then(() => {
+        showToast(`✅ Successfully migrated from <b>${prevType}</b> to <b>${newAssignType ? 'ASSIGN (' + newAssignType + ')' : newType}</b>!`, "success", 5000);
+      })
+      .catch((err) => {
+        console.error("Migration write error:", err);
+        showToast("Error syncing migration to database", "error");
+      });
+  }
+
+  // Re-render views immediately
+  refreshCurrentViewImmediately();
+  
+  // Re-open/update current modal
+  openWorkOrderDetail(targetFbKey);
+}
+
+// ─────────────────────────────────────────────
+// BATCH TOTAL MIGRATION SUITE
+// ─────────────────────────────────────────────
+let _migSelectedWoKeys = new Set();
+
+function openWorkOrderMigrationModal() {
+  // Populate Zone Selector
+  const zoneSelect = document.getElementById("migFilterZone");
+  if (zoneSelect) {
+    let zonesHtml = '<option value="ALL">🌐 All Zones</option>';
+    const allZones = ["A Zone", "B Zone", "C Zone", "D Zone", "Workshop", "Admin Staff"];
+    allZones.forEach((z) => {
+      zonesHtml += `<option value="${z}" ${store.currentZone === z ? "selected" : ""}>${z}</option>`;
+    });
+    zoneSelect.innerHTML = zonesHtml;
+  }
+
+  // Default filters: Filter to PROJECT by default for convenience
+  const typeFilter = document.getElementById("migFilterType");
+  if (typeFilter) typeFilter.value = "PROJECT";
+
+  const searchInput = document.getElementById("migSearchInput");
+  if (searchInput) searchInput.value = "";
+
+  _migSelectedWoKeys = new Set();
+  renderMigrationWorkOrdersList();
+
+  const modal = document.getElementById("workOrderMigrationModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function renderMigrationWorkOrdersList() {
+  const container = document.getElementById("migrationWorkOrdersContainer");
+  if (!container) return;
+
+  const zoneFilter = (document.getElementById("migFilterZone") || {}).value || "ALL";
+  const typeFilter = (document.getElementById("migFilterType") || {}).value || "ALL";
+  const statusFilter = (document.getElementById("migFilterStatus") || {}).value || "ALL";
+  const query = ((document.getElementById("migSearchInput") || {}).value || "").trim().toLowerCase();
+
+  const filtered = store.workOrders.filter((wo) => {
+    // Zone filter
+    if (zoneFilter !== "ALL" && wo.zone_id !== zoneFilter) return false;
+
+    // Type filter
+    if (typeFilter === "ASSIGN") {
+      if (!wo.assign_type) return false;
+    } else if (typeFilter !== "ALL") {
+      if (wo.assign_type || wo.type !== typeFilter) return false;
+    }
+
+    // Status filter
+    if (statusFilter !== "ALL" && wo.status !== statusFilter) return false;
+
+    // Search query (English & Sinhala)
+    if (query) {
+      const desc = (wo.description || "").toLowerCase();
+      const ref = (wo.reference_no || "").toLowerCase();
+      const zone = (wo.zone_id || "").toLowerCase();
+      if (!desc.includes(query) && !ref.includes(query) && !zone.includes(query)) return false;
+    }
+
+    return true;
+  });
+
+  const totalEl = document.getElementById("migTotalFoundCount");
+  if (totalEl) totalEl.textContent = `${filtered.length} found`;
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="text-center py-8 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+        <p class="text-slate-400 text-sm font-medium">No work orders matching filter criteria</p>
+      </div>
+    `;
+    updateMigrationSelectedCount();
+    return;
+  }
+
+  container.innerHTML = filtered.map((wo) => {
+    const woKey = String(wo._fbKey || wo.id);
+    const isChecked = _migSelectedWoKeys.has(woKey);
+    const assignedCount = (wo.assigned || []).length;
+    const jc = getJobCardForWorkOrder(wo._fbKey || wo.id);
+
+    let typeBadge = "";
+    if (wo.assign_type) {
+      typeBadge = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">💼 ${escapeHtml(wo.assign_type)}</span>`;
+    } else if (wo.type === "PROJECT") {
+      typeBadge = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">📋 PROJECT</span>`;
+    } else if (wo.type === "JOB") {
+      typeBadge = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">🔧 JOB</span>`;
+    } else {
+      typeBadge = `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200">⚡ TASK</span>`;
+    }
+
+    return `
+      <div class="p-3 rounded-xl border transition-all flex items-center justify-between gap-3 ${isChecked ? 'bg-indigo-50/60 border-indigo-300 shadow-xs' : 'bg-white border-slate-200 hover:border-slate-300'}">
+        <div class="flex items-center gap-3 flex-1 min-w-0">
+          <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleMigrationWoSelection('${woKey}', this.checked)" class="rounded text-indigo-600 focus:ring-indigo-500 w-4 h-4 cursor-pointer flex-shrink-0">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap mb-0.5">
+              ${typeBadge}
+              <span class="text-[11px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">${escapeHtml(wo.zone_id || store.currentZone)}</span>
+              ${wo.reference_no ? `<span class="text-[11px] text-slate-600 font-mono">${escapeHtml(wo.reference_no)}</span>` : ''}
+              ${jc ? `<span class="text-[10px] font-mono text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">${escapeHtml(jc.job_number)}</span>` : ''}
+              <span class="text-[10px] font-semibold text-slate-400">• ${assignedCount} assigned</span>
+            </div>
+            <p class="text-xs font-bold text-slate-800 truncate" title="${escapeHtml(wo.description)}">${escapeHtml(wo.description)}</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 flex-shrink-0">
+          <span class="text-[11px] px-2 py-0.5 rounded-full font-medium ${wo.status === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}">${wo.status}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  updateMigrationSelectedCount();
+}
+
+function toggleMigrationWoSelection(woKey, isChecked) {
+  if (isChecked) {
+    _migSelectedWoKeys.add(String(woKey));
+  } else {
+    _migSelectedWoKeys.delete(String(woKey));
+  }
+  updateMigrationSelectedCount();
+}
+
+function toggleSelectAllMigrationWorkOrders(checked) {
+  const container = document.getElementById("migrationWorkOrdersContainer");
+  if (!container) return;
+  const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+  checkboxes.forEach((cb) => {
+    cb.checked = checked;
+    const match = cb.getAttribute("onchange");
+    if (match) {
+      const keyMatch = match.match(/'([^']+)'/);
+      if (keyMatch && keyMatch[1]) {
+        if (checked) _migSelectedWoKeys.add(keyMatch[1]);
+        else _migSelectedWoKeys.delete(keyMatch[1]);
+      }
+    }
+  });
+  updateMigrationSelectedCount();
+  renderMigrationWorkOrdersList();
+}
+
+function updateMigrationSelectedCount() {
+  const el = document.getElementById("migSelectedCount");
+  if (el) el.textContent = _migSelectedWoKeys.size;
+  const selectAllCb = document.getElementById("migSelectAllCb");
+  if (selectAllCb) {
+    const container = document.getElementById("migrationWorkOrdersContainer");
+    const count = container ? container.querySelectorAll('input[type="checkbox"]').length : 0;
+    selectAllCb.checked = count > 0 && _migSelectedWoKeys.size >= count;
+  }
+}
+
+function handleMigTargetTypeChange(val) {
+  const wrapper = document.getElementById("migAssignTypeWrapper");
+  const unlinkWrapper = document.getElementById("migUnlinkJobCardWrapper");
+  if (wrapper) wrapper.classList.toggle("hidden", val !== "ASSIGNMENT");
+  if (unlinkWrapper) unlinkWrapper.classList.toggle("hidden", val !== "ASSIGNMENT");
+}
+
+function executeBatchWorkOrderMigration() {
+  if (_migSelectedWoKeys.size === 0) {
+    showToast("⚠️ Please select at least one work order to migrate.", "warning");
+    return;
+  }
+
+  const targetType = document.getElementById("migTargetType").value;
+  const targetAssignType = (document.getElementById("migAssignTypeSelect") || {}).value || "In Charge";
+  const unlinkJobCards = (document.getElementById("migUnlinkJobCardsCb") || {}).checked;
+
+  const count = _migSelectedWoKeys.size;
+  const targetLabel = targetType === "ASSIGNMENT" ? `Assignment (${targetAssignType})` : targetType;
+
+  if (!confirm(`Are you sure you want to migrate ${count} selected work order(s) to ${targetLabel}?`)) {
+    return;
+  }
+
+  const btn = document.getElementById("btnExecuteBatchMigration");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span>⏳</span> Migrating ${count} Work Orders...`;
+  }
+
+  const selectedKeys = Array.from(_migSelectedWoKeys);
+  let successCount = 0;
+
+  selectedKeys.forEach((key) => {
+    const wo = store.workOrders.find(
+      (w) => String(w._fbKey) === String(key) || String(w.id) === String(key)
+    );
+    if (wo) {
+      let newType = "PROJECT";
+      let newAssignType = null;
+
+      if (targetType === "ASSIGNMENT") {
+        newType = "TASK";
+        newAssignType = targetAssignType;
+      } else if (targetType === "JOB") {
+        newType = "JOB";
+        newAssignType = null;
+      } else if (targetType === "TASK") {
+        newType = "TASK";
+        newAssignType = null;
+      } else {
+        newType = "PROJECT";
+        newAssignType = null;
+      }
+
+      wo.type = newType;
+      wo.assign_type = newAssignType;
+
+      const targetFbKey = wo._fbKey || wo.id;
+      if (targetFbKey) {
+        opsDB.ref(`work_orders/${targetFbKey}`).update({
+          type: newType,
+          assign_type: newAssignType,
+          updated_at: Date.now()
+        }).catch(console.warn);
+      }
+
+      // Handle job card removal if requested
+      if (targetType === "ASSIGNMENT" && unlinkJobCards) {
+        const jc = getJobCardForWorkOrder(wo._fbKey || wo.id);
+        if (jc) {
+          const cost = computeJobCardCost(jc);
+          if (cost.total === 0) {
+            if (jc._fbKey) {
+              opsDB.ref(`job_cards/${jc._fbKey}`).remove().catch(console.warn);
+            }
+            store.jobCards = store.jobCards.filter(
+              (j) => String(j.id) !== String(jc.id) && String(j._fbKey) !== String(jc._fbKey)
+            );
+          }
+        }
+      }
+
+      successCount++;
+    }
+  });
+
+  setTimeout(() => {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span>⚡</span> Execute Total Migration`;
+    }
+    _migSelectedWoKeys.clear();
+    closeModal("workOrderMigrationModal");
+    refreshCurrentViewImmediately();
+    showToast(`🚀 Successfully migrated ${successCount} work order(s) to ${targetLabel}!`, "success", 6000);
+  }, 600);
+}
+
+// ─────────────────────────────────────────────
+// OFFICER REVIEW & FORWARDING WORKFLOWS
+// ─────────────────────────────────────────────
+function toggleWoOfficerForwardPanel() {
+  const panel = document.getElementById("woDetailForwardPanel");
+  if (panel) panel.classList.toggle("hidden");
+}
+
+function submitForwardWorkOrderToOfficer() {
+  const woKey = store.selectedWorkOrder;
+  if (!woKey) return;
+  const wo = store.workOrders.find(
+    (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey)
+  );
+  if (!wo) return;
+
+  const selectEl = document.getElementById("woDetailForwardOfficerSelect");
+  const officerId = selectEl ? selectEl.value : "";
+  if (!officerId) {
+    showToast("Please select an Officer to forward to", "warning");
+    return;
+  }
+  const selectedOption = selectEl.options[selectEl.selectedIndex];
+  const officerName = selectedOption ? selectedOption.textContent.replace(/^[^\s]+\s+/, "") : "Officer";
+  const remarks = (document.getElementById("woDetailForwardRemarks")?.value || "").trim();
+
+  wo.officer_review_status = "Pending Review";
+  wo.forwarded_to_officer_id = officerId;
+  wo.forwarded_to_officer_name = officerName;
+  wo.forwarded_at = Date.now();
+  wo.incharge_forward_remarks = remarks;
+
+  const targetFbKey = wo._fbKey || wo.id;
+  if (targetFbKey) {
+    opsDB.ref(`work_orders/${targetFbKey}`).update({
+      officer_review_status: "Pending Review",
+      forwarded_to_officer_id: officerId,
+      forwarded_to_officer_name: officerName,
+      forwarded_at: Date.now(),
+      incharge_forward_remarks: remarks,
+      updated_at: Date.now()
+    }).then(() => {
+      showToast(`📤 Forwarded Work Order to ${officerName} for review!`, "success");
+    }).catch(console.warn);
+  }
+
+  refreshCurrentViewImmediately();
+  openWorkOrderDetail(targetFbKey);
+  updateGlobalOfficerHubBadge();
+}
+
+function officerApproveCurrentWorkOrder() {
+  const woKey = store.selectedWorkOrder;
+  if (!woKey) return;
+  const wo = store.workOrders.find(
+    (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey)
+  );
+  if (!wo) return;
+
+  const officer = getCurrentOfficer();
+  const officerName = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : (store.activeProfileName || "Command Officer");
+
+  // Save current modal edits first
+  saveWorkOrderChanges(false);
+
+  wo.officer_review_status = "Approved";
+  wo.officer_approved_by = officerName;
+  wo.officer_approved_at = Date.now();
+  wo.officer_remarks = "";
+
+  const targetFbKey = wo._fbKey || wo.id;
+  if (targetFbKey) {
+    opsDB.ref(`work_orders/${targetFbKey}`).update({
+      officer_review_status: "Approved",
+      officer_approved_by: officerName,
+      officer_approved_at: Date.now(),
+      officer_remarks: "",
+      updated_at: Date.now()
+    }).then(() => {
+      showToast(`🛡️ Work Order approved & cleared by ${officerName}!`, "success");
+    }).catch(console.warn);
+  }
+
+  refreshCurrentViewImmediately();
+  openWorkOrderDetail(targetFbKey);
+  updateGlobalOfficerHubBadge();
+}
+
+function officerRequestChangesForCurrentWorkOrder() {
+  const woKey = store.selectedWorkOrder;
+  if (!woKey) return;
+  const wo = store.workOrders.find(
+    (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey)
+  );
+  if (!wo) return;
+
+  const remarks = prompt("Please enter revision instructions/remarks for In-Charge:", wo.officer_remarks || "");
+  if (remarks === null) return;
+
+  const officer = getCurrentOfficer();
+  const officerName = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : (store.activeProfileName || "Officer");
+
+  wo.officer_review_status = "Changes Requested";
+  wo.officer_remarks = remarks;
+  wo.officer_reviewed_by = officerName;
+
+  const targetFbKey = wo._fbKey || wo.id;
+  if (targetFbKey) {
+    opsDB.ref(`work_orders/${targetFbKey}`).update({
+      officer_review_status: "Changes Requested",
+      officer_remarks: remarks,
+      officer_reviewed_by: officerName,
+      updated_at: Date.now()
+    }).then(() => {
+      showToast(`↩️ Revision requested from In-Charge.`, "info");
+    }).catch(console.warn);
+  }
+
+  refreshCurrentViewImmediately();
+  openWorkOrderDetail(targetFbKey);
+  updateGlobalOfficerHubBadge();
+}
+
+// ─────────────────────────────────────────────
+// JOB CARD MATERIAL CLEARANCE & LMD WORKFLOWS
+// ─────────────────────────────────────────────
+function forwardCurrentJobCardToOfficer() {
+  const jcId = document.getElementById("editJcId")?.value;
+  if (!jcId) return;
+  const jc = store.jobCards.find(
+    (j) => String(j.id) === String(jcId) || String(j._fbKey) === String(jcId)
+  );
+  if (!jc) return;
+
+  jc.officer_clearance_status = "Pending Clearance";
+  jc.forwarded_at = Date.now();
+
+  const jcKey = jc._fbKey || jc.id;
+  if (jcKey) {
+    opsDB.ref(`job_cards/${jcKey}`).update({
+      officer_clearance_status: "Pending Clearance",
+      forwarded_at: Date.now(),
+      updated_at: Date.now()
+    }).then(() => {
+      showToast(`📤 Job Card ${jc.job_number} forwarded to Officer for Material Clearance & LMD!`, "success");
+      const badge = document.getElementById("editJcOfficerStatusBadge");
+      if (badge) {
+        badge.textContent = "⏳ Pending Clearance";
+        badge.className = "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 animate-pulse";
+      }
+    }).catch(console.warn);
+  }
+  updateGlobalOfficerHubBadge();
+}
+
+function officerAuthorizeJobCardAndSendLmd() {
+  const jcId = document.getElementById("editJcId")?.value;
+  if (!jcId) return;
+  const jc = store.jobCards.find(
+    (j) => String(j.id) === String(jcId) || String(j._fbKey) === String(jcId)
+  );
+  if (!jc) return;
+
+  const officer = getCurrentOfficer();
+  const officerName = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : (store.activeProfileName || "Officer");
+
+  jc.officer_clearance_status = "Cleared";
+  jc.officer_cleared_by = officerName;
+  jc.officer_cleared_at = Date.now();
+  jc.status = "Completed";
+
+  const jcKey = jc._fbKey || jc.id;
+  if (jcKey) {
+    opsDB.ref(`job_cards/${jcKey}`).update({
+      officer_clearance_status: "Cleared",
+      officer_cleared_by: officerName,
+      officer_cleared_at: Date.now(),
+      status: "Completed",
+      updated_at: Date.now()
+    }).then(() => {
+      showToast(`🚀 Job Card ${jc.job_number} authorized by ${officerName} & Dispatched to LMD!`, "success", 5000);
+      closeModal("editJobCardModal");
+      refreshCurrentViewImmediately();
+    }).catch(console.warn);
+  }
+  updateGlobalOfficerHubBadge();
+}
+
+// ─────────────────────────────────────────────
+// INVENTORY & ESTIMATES OFFICER ACTIONS
+// ─────────────────────────────────────────────
+function officerVerifyInventoryAdjustment(recordId) {
+  const officer = getCurrentOfficer();
+  const officerName = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : (store.activeProfileName || "Officer");
+
+  if (recordId) {
+    opsDB.ref(`inventory_audit/${recordId}`).update({
+      verified_by: officerName,
+      verified_at: Date.now(),
+      status: "Verified"
+    }).then(() => {
+      showToast(`✓ Inventory adjustment verified by ${officerName}!`, "success");
+      renderOfficerHubContent();
+    }).catch(console.warn);
+  }
+  updateGlobalOfficerHubBadge();
+}
+
+function officerApproveEstimate(estId) {
+  const est = (store.estimates || []).find(e => String(e.id || e._fbKey) === String(estId));
+  if (!est) return;
+
+  const officer = getCurrentOfficer();
+  const officerName = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : (store.activeProfileName || "Officer");
+
+  est.approval_status = "Approved";
+  est.status = "Approved";
+  est.approved_by_officer = officerName;
+  est.approved_at = Date.now();
+
+  const estKey = est._fbKey || est.id;
+  if (estKey) {
+    opsDB.ref(`estimates/${estKey}`).update({
+      approval_status: "Approved",
+      status: "Approved",
+      approved_by_officer: officerName,
+      approved_at: Date.now(),
+      updated_at: Date.now()
+    }).then(() => {
+      showToast(`✅ Estimate ${est.project_name || est.reference_no || ''} approved by ${officerName}!`, "success");
+      renderOfficerHubContent();
+      if (typeof renderEstimates === "function") renderEstimates();
+    }).catch(console.warn);
+  }
+  updateGlobalOfficerHubBadge();
+}
+
+function officerRejectEstimate(estId) {
+  const remarks = prompt("Please enter revision instructions for this estimate:");
+  if (remarks === null) return;
+
+  const est = (store.estimates || []).find(e => String(e.id || e._fbKey) === String(estId));
+  if (!est) return;
+
+  const officer = getCurrentOfficer();
+  const officerName = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : (store.activeProfileName || "Officer");
+
+  est.approval_status = "Revision Requested";
+  est.officer_remarks = remarks;
+
+  const estKey = est._fbKey || est.id;
+  if (estKey) {
+    opsDB.ref(`estimates/${estKey}`).update({
+      approval_status: "Revision Requested",
+      officer_remarks: remarks,
+      reviewed_by: officerName,
+      updated_at: Date.now()
+    }).then(() => {
+      showToast(`↩️ Revision requested for estimate.`, "info");
+      renderOfficerHubContent();
+      if (typeof renderEstimates === "function") renderEstimates();
+    }).catch(console.warn);
+  }
+  updateGlobalOfficerHubBadge();
+}
+
+// ─────────────────────────────────────────────
+// OFFICER ACTION & APPROVALS HUB MODAL
+// ─────────────────────────────────────────────
+let _activeOfficerHubTab = "work_orders";
+
+function openOfficerApprovalsHubModal() {
+  const modal = document.getElementById("officerApprovalsHubModal");
+  if (!modal) return;
+
+  const officer = getCurrentOfficer();
+  const officerTitle = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : "Officer In-Charge";
+  const subEl = document.getElementById("officerHubSubtitle");
+  if (subEl) {
+    subEl.textContent = `Logged in as ${officerTitle} • Action pending clearances across all 4 operational modules`;
+  }
+
+  updateGlobalOfficerHubBadge();
+  switchOfficerHubTab(_activeOfficerHubTab);
+  modal.classList.remove("hidden");
+}
+
+function switchOfficerHubTab(tabName) {
+  _activeOfficerHubTab = tabName;
+  document.querySelectorAll(".hub-tab-btn").forEach((b) => {
+    b.className = "hub-tab-btn px-4 py-2.5 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-700 flex items-center gap-2";
+  });
+  const activeBtn = document.getElementById(`btnHubTab-${tabName}`);
+  if (activeBtn) {
+    activeBtn.className = "hub-tab-btn px-4 py-2.5 text-xs font-bold border-b-2 border-teal-600 text-teal-700 flex items-center gap-2";
+  }
+  renderOfficerHubContent();
+}
+
+function updateGlobalOfficerHubBadge() {
+  const pendingWos = (store.workOrders || []).filter(w => w.officer_review_status === "Pending Review").length;
+  const pendingJcs = (store.jobCards || []).filter(j => j.officer_clearance_status === "Pending Clearance").length;
+  const pendingEsts = (store.estimates || []).filter(e => e.approval_status === "Pending Approval" || e.status === "Pending").length;
+  const pendingInv = 0;
+
+  const totalPending = pendingWos + pendingJcs + pendingEsts + pendingInv;
+
+  const bWo = document.getElementById("hubBadge-work_orders");
+  if (bWo) bWo.textContent = String(pendingWos);
+  const bJc = document.getElementById("hubBadge-job_cards");
+  if (bJc) bJc.textContent = String(pendingJcs);
+  const bEst = document.getElementById("hubBadge-estimates");
+  if (bEst) bEst.textContent = String(pendingEsts);
+  const bInv = document.getElementById("hubBadge-inventory");
+  if (bInv) bInv.textContent = String(pendingInv);
+
+  const globalBadge = document.getElementById("officerHubGlobalBadge");
+  if (globalBadge) {
+    if (totalPending > 0) {
+      globalBadge.textContent = String(totalPending);
+      globalBadge.classList.remove("hidden");
+    } else {
+      globalBadge.classList.add("hidden");
+    }
+  }
+}
+
+function renderOfficerHubContent() {
+  const container = document.getElementById("officerHubContentArea");
+  if (!container) return;
+
+  if (_activeOfficerHubTab === "work_orders") {
+    const pendingWos = (store.workOrders || []).filter(w => w.officer_review_status === "Pending Review");
+    if (pendingWos.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <p class="text-slate-400 text-sm font-medium">✨ All work orders are clear. No pending work order clearances.</p>
+        </div>
+      `;
+      return;
+    }
+    container.innerHTML = pendingWos.map(wo => {
+      const woKey = wo._fbKey || wo.id;
+      const typeBadge = wo.assign_type
+        ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">💼 ${escapeHtml(wo.assign_type)}</span>`
+        : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">📋 ${escapeHtml(wo.type)}</span>`;
+      return `
+        <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/40 hover:bg-amber-50/70 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap mb-1">
+              ${typeBadge}
+              <span class="text-[11px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">${escapeHtml(wo.zone_id || store.currentZone)}</span>
+              ${wo.reference_no ? `<span class="text-[11px] font-mono text-slate-700">${escapeHtml(wo.reference_no)}</span>` : ''}
+              <span class="text-[11px] text-amber-800 font-semibold">• Forwarded by In-Charge</span>
+            </div>
+            <p class="text-sm font-bold text-slate-900">${escapeHtml(wo.description)}</p>
+            ${wo.incharge_forward_remarks ? `<p class="text-xs text-amber-700 mt-1 italic">Note: "${escapeHtml(wo.incharge_forward_remarks)}"</p>` : ''}
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button" onclick="closeModal('officerApprovalsHubModal'); openWorkOrderDetail('${woKey}');" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1">
+              <span>✏️</span> Review & Edit
+            </button>
+            <button type="button" onclick="officerApproveWorkOrderById('${woKey}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1">
+              <span>✅</span> Approve
+            </button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  } else if (_activeOfficerHubTab === "job_cards") {
+    const pendingJcs = (store.jobCards || []).filter(j => j.officer_clearance_status === "Pending Clearance");
+    if (pendingJcs.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <p class="text-slate-400 text-sm font-medium">✨ All Job Cards are clear. No pending material or LMD clearances.</p>
+        </div>
+      `;
+      return;
+    }
+    container.innerHTML = pendingJcs.map(jc => {
+      const cost = computeJobCardCost(jc);
+      return `
+        <div class="p-4 rounded-xl border border-teal-200 bg-teal-50/40 hover:bg-teal-50/70 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap mb-1">
+              <span class="text-xs font-mono font-bold text-teal-900 bg-white px-2 py-0.5 rounded border border-teal-200">${escapeHtml(jc.job_number)}</span>
+              <span class="text-[11px] font-bold text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">${escapeHtml(jc.zone_id || store.currentZone)}</span>
+              <span class="text-xs font-bold text-emerald-700">${formatCurrency(cost.total)}</span>
+            </div>
+            <p class="text-sm font-bold text-slate-900">${escapeHtml(jc.description)}</p>
+            <p class="text-xs text-slate-500 mt-1">Materials: ${formatCurrency(cost.material)} • Labour: ${formatCurrency(cost.labor)}</p>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button" onclick="closeModal('officerApprovalsHubModal'); openEditJobCardModal('${jc._fbKey || jc.id}');" class="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1">
+              <span>🔍</span> Inspect Materials
+            </button>
+            <button type="button" onclick="officerAuthorizeJobCardById('${jc._fbKey || jc.id}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1">
+              <span>🚀</span> Authorize LMD
+            </button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  } else if (_activeOfficerHubTab === "estimates") {
+    const pendingEsts = (store.estimates || []).filter(e => e.approval_status === "Pending Approval" || e.status === "Pending");
+    if (pendingEsts.length === 0) {
+      container.innerHTML = `
+        <div class="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+          <p class="text-slate-400 text-sm font-medium">✨ All Project Estimates are reviewed and approved.</p>
+        </div>
+      `;
+      return;
+    }
+    container.innerHTML = pendingEsts.map(est => {
+      const itemsCount = (est.items || []).length;
+      return `
+        <div class="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 hover:bg-indigo-50/70 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap mb-1">
+              <span class="text-xs font-bold text-indigo-900 bg-white px-2 py-0.5 rounded border border-indigo-200">${escapeHtml(est.project_name || est.title || 'Estimate')}</span>
+              <span class="text-[11px] font-mono text-slate-600">${escapeHtml(est.estimate_no || est.reference_no || '')}</span>
+              <span class="text-xs font-extrabold text-indigo-700">Rs. ${(est.total_cost || est.budget || 0).toLocaleString()}</span>
+            </div>
+            <p class="text-xs text-slate-600 mt-1">${itemsCount} Line Items listed • Prepared by Planning Desk</p>
+          </div>
+          <div class="flex items-center gap-2 flex-shrink-0">
+            <button type="button" onclick="closeModal('officerApprovalsHubModal'); if(typeof openEstimateModal === 'function') openEstimateModal('${est._fbKey || est.id}');" class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1">
+              <span>✏️</span> Edit Items
+            </button>
+            <button type="button" onclick="officerApproveEstimate('${est._fbKey || est.id}')" class="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition-all flex items-center gap-1">
+              <span>✅</span> Sanction
+            </button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  } else {
+    container.innerHTML = `
+      <div class="text-center py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+        <p class="text-slate-400 text-sm font-medium">📦 All inventory stock movements are verified and in sync.</p>
+      </div>
+    `;
+  }
+}
+
+function officerApproveWorkOrderById(woKey) {
+  const wo = store.workOrders.find(
+    (w) => String(w._fbKey) === String(woKey) || String(w.id) === String(woKey)
+  );
+  if (!wo) return;
+  const officer = getCurrentOfficer();
+  const officerName = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : (store.activeProfileName || "Command Officer");
+
+  wo.officer_review_status = "Approved";
+  wo.officer_approved_by = officerName;
+  wo.officer_approved_at = Date.now();
+
+  const targetFbKey = wo._fbKey || wo.id;
+  if (targetFbKey) {
+    opsDB.ref(`work_orders/${targetFbKey}`).update({
+      officer_review_status: "Approved",
+      officer_approved_by: officerName,
+      officer_approved_at: Date.now(),
+      updated_at: Date.now()
+    }).catch(console.warn);
+  }
+  showToast(`🛡️ Work Order approved by ${officerName}!`, "success");
+  refreshCurrentViewImmediately();
+  renderOfficerHubContent();
+  updateGlobalOfficerHubBadge();
+}
+
+function officerAuthorizeJobCardById(jcKey) {
+  const jc = store.jobCards.find(
+    (j) => String(j._fbKey) === String(jcKey) || String(j.id) === String(jcKey)
+  );
+  if (!jc) return;
+  const officer = getCurrentOfficer();
+  const officerName = officer ? `${officer.rank || ''} ${officer.name || ''}`.trim() : (store.activeProfileName || "Officer");
+
+  jc.officer_clearance_status = "Cleared";
+  jc.officer_cleared_by = officerName;
+  jc.officer_cleared_at = Date.now();
+  jc.status = "Completed";
+
+  const targetFbKey = jc._fbKey || jc.id;
+  if (targetFbKey) {
+    opsDB.ref(`job_cards/${targetFbKey}`).update({
+      officer_clearance_status: "Cleared",
+      officer_cleared_by: officerName,
+      officer_cleared_at: Date.now(),
+      status: "Completed",
+      updated_at: Date.now()
+    }).catch(console.warn);
+  }
+  showToast(`🚀 Job Card ${jc.job_number} authorized & Dispatched to LMD!`, "success");
+  refreshCurrentViewImmediately();
+  renderOfficerHubContent();
+  updateGlobalOfficerHubBadge();
 }
 
 function openJobCardForTask(workOrderId) {
@@ -6962,6 +8008,44 @@ function openEditJobCardModal(id) {
 
   renderEditJcCurrentSailors();
   renderEditJcAvailableSailors();
+
+  // Officer Material Clearance & LMD logic
+  const isOfficer = isOfficerLoggedIn();
+  const clBadge = document.getElementById("editJcOfficerStatusBadge");
+  const fwdBtn = document.getElementById("btnJcForwardToOfficer");
+  const authBtn = document.getElementById("btnJcOfficerAuthorizeLmd");
+  const auditText = document.getElementById("editJcOfficerAuditText");
+
+  const clStatus = jc.officer_clearance_status || "Draft";
+  if (clBadge) {
+    if (clStatus === "Pending Clearance") {
+      clBadge.textContent = "⏳ Pending Officer Clearance";
+      clBadge.className =
+        "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 animate-pulse";
+    } else if (clStatus === "Cleared") {
+      clBadge.textContent = `✅ Cleared (${jc.officer_cleared_by || "Officer"})`;
+      clBadge.className =
+        "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300";
+    } else {
+      clBadge.textContent = "In-Charge Draft / Pending Review";
+      clBadge.className =
+        "text-xs font-extrabold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300";
+    }
+  }
+
+  if (fwdBtn) fwdBtn.classList.toggle("hidden", isOfficer && clStatus === "Cleared");
+  if (authBtn) authBtn.classList.toggle("hidden", !isOfficer);
+
+  if (auditText) {
+    if (jc.officer_cleared_by) {
+      auditText.textContent = `Material clearance authorized by ${jc.officer_cleared_by} on ${new Date(
+        jc.officer_cleared_at || Date.now(),
+      ).toLocaleDateString()}`;
+      auditText.classList.remove("hidden");
+    } else {
+      auditText.classList.add("hidden");
+    }
+  }
 
   document.getElementById("editJobCardModal").classList.remove("hidden");
 }
@@ -11951,6 +13035,12 @@ function saveMaintenanceRecord(event) {
 } // =============================================
 // ZONE MANAGEMENT (req 10 - add / remove zones)
 // =============================================
+function isSbsZone(zoneIdOrName) {
+  if (!zoneIdOrName) return false;
+  const str = String(zoneIdOrName).trim().toUpperCase();
+  return str === "SBS" || str === "SBS-ZONE" || str === "SBS ZONE" || str === "SPECIAL BOAT SQUADRON";
+}
+
 function openZoneManager() {
   document.getElementById("newZoneName").value = "";
   renderZoneManagerList();
@@ -11958,8 +13048,9 @@ function openZoneManager() {
 }
 function renderZoneManagerList() {
   const container = document.getElementById("zoneManagerList");
+  const validZones = store.zones.filter((z) => !isSbsZone(z.id) && !isSbsZone(z.name));
   container.innerHTML =
-    store.zones
+    validZones
       .map((z) => {
         const locCount = store.locations.filter(
           (l) => l.zone_id === z.id,
@@ -11980,6 +13071,10 @@ function addZone() {
   const name = document.getElementById("newZoneName").value.trim();
   if (!name) {
     showToast("Enter a zone name", "info");
+    return;
+  }
+  if (isSbsZone(name)) {
+    showToast("SBS is reserved as a Book / Register and cannot be added as an operational zone", "warning");
     return;
   }
   const id = name.replace(/\s+/g, "-");
@@ -12020,6 +13115,14 @@ function removeZone(zoneId) {
   showToast("Zone removed");
 } // Rebuild every zone-bound <select> from store.zones, preserving valid selections
 function renderZoneSelectors() {
+  // Cleanse SBS if it exists in store.zones
+  if (Array.isArray(store.zones) && store.zones.some((z) => isSbsZone(z.id) || isSbsZone(z.name))) {
+    store.zones = store.zones.filter((z) => !isSbsZone(z.id) && !isSbsZone(z.name));
+    if (opsDB && opsDB.ref) {
+      opsDB.ref("settings/zones").set(store.zones).catch(console.warn);
+    }
+  }
+
   // Determine if the current officer has access to "All Zone" (Admin-&-Staff-Duties)
   let hasAllZoneAccess = true;
   let allowedZones = store.zones.map((z) => z.id); // default all
@@ -12044,7 +13147,7 @@ function renderZoneSelectors() {
     allowedZones = [store.activeProfileZone];
     hasAllZoneAccess = false;
   }
-  const visibleZones = store.zones.filter((z) => allowedZones.includes(z.id));
+  const visibleZones = store.zones.filter((z) => allowedZones.includes(z.id) && !isSbsZone(z.id) && !isSbsZone(z.name));
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   let zonesToRender = [...visibleZones];
@@ -12130,15 +13233,21 @@ function renderZoneSelectors() {
       } else if (localStorage.getItem("ncw_saved_zone")) {
         prev = localStorage.getItem("ncw_saved_zone");
       }
-      
-      // Prevent overwriting a valid saved zone before Firebase zones load
-      if (prev && !visibleZones.some((z) => z.id === prev) && !isAdminStaffDuties(prev)) {
-        optionsHtml += `<option value="${prev}">${prev}</option>`;
-        visibleZones.push({ id: prev, name: prev });
-      }
     }
-    sel.innerHTML = optionsHtml;
-    if (
+
+    let finalOptionsHtml = optionsHtml;
+    if (isSbsZone(prev)) {
+      finalOptionsHtml = `<option value="SBS" selected>📖 SBS Record Book</option>` + optionsHtml;
+    }
+    
+    sel.innerHTML = finalOptionsHtml;
+
+    if (isSbsZone(prev)) {
+      sel.value = "SBS";
+      if (selId === "zoneSelector") {
+        store.currentZone = "SBS";
+      }
+    } else if (
       visibleZones.some((z) => z.id === prev) ||
       (isAdminStaffDuties(prev) && hasAllZoneAccess)
     ) {
@@ -13072,7 +14181,8 @@ let _cfgSelectedZone = null;
 function renderSettingsZoneSelectorList() {
   const container = document.getElementById("settingsZoneSelectorList");
   if (!container) return;
-  const zones = store.zones || store.settings.zones || [];
+  const rawZones = store.zones || store.settings.zones || [];
+  const zones = rawZones.filter(z => !isSbsZone(z.id) && !isSbsZone(z.name));
   const badge = document.getElementById("cfgZonesCountBadge");
   if (badge) badge.textContent = `${zones.length} Zones`;
 
@@ -13718,7 +14828,7 @@ function initSettingsListener() {
       renderZoneSelectors();
     } else {
       const s = store.settings;
-      store.zones = s.zones || defaultSettings.zones;
+      store.zones = (s.zones || defaultSettings.zones).filter(z => !isSbsZone(z.id) && !isSbsZone(z.name));
       if (typeof _currentSettingsTab !== "undefined" && _currentSettingsTab === "identity") {
         renderSettingsOicProfilesList();
       }
@@ -13731,7 +14841,11 @@ function initSettingsListener() {
 } // ── Apply loaded settings to the live UI ──
 function applySettings() {
   const s = store.settings; // Sync store arrays from settings
-  store.zones = s.zones || defaultSettings.zones;
+  store.zones = (s.zones || defaultSettings.zones).filter(z => !isSbsZone(z.id) && !isSbsZone(z.name));
+  if (isSbsZone(store.currentZone)) {
+    store.currentZone = store.zones[0]?.id || "A Zone";
+    localStorage.setItem("ncw_saved_zone", store.currentZone);
+  }
   store.offChargeDestinations =
     s.offChargeDestinations || defaultSettings.offChargeDestinations;
   store.approvalAuthorities =
@@ -13835,12 +14949,13 @@ function switchSettingsTab(tab) {
     // Populate Zone dropdown
     const zoneDropdown = document.getElementById("cfg-userZone");
     if (zoneDropdown) {
+      const validZones = (store.zones || []).filter(z => !isSbsZone(z.id) && !isSbsZone(z.name));
       zoneDropdown.innerHTML =
         '<option value="">-- Select Zone --</option>' +
-        store.zones
+        validZones
           .map((z) => `<option value="${z.id}">${z.name}</option>`)
           .join("");
-      zoneDropdown.value = s.selectedSettingsZone || (store.zones[0] ? store.zones[0].id : "");
+      zoneDropdown.value = s.selectedSettingsZone || (validZones[0] ? validZones[0].id : "");
     }
     changeSettingsUserZone(zoneDropdown ? zoneDropdown.value : s.selectedSettingsZone);
   } else if (tab === "zones") {
@@ -13913,6 +15028,7 @@ function changeSettingsUserZone(zoneId) {
   }
   renderSettingsSupervisorsList(zoneId);
   renderSettingsZoneTeamList(zoneId);
+  renderSettingsZoneOfficersList(zoneId);
 }
 
 function renderSettingsSupervisorsList(zoneId) {
@@ -14225,6 +15341,164 @@ function toggleSailorZoneRelease(sailorId) {
   renderSettingsZoneTeamList(zid);
   showToast(item.releasedForOtherZones ? `Sailor released for deployment to other zones` : `Sailor marked as In-Zone only`);
 }
+
+function populateSettingsZoneOfficersDropdowns(zoneId) {
+  const profileSelect = document.getElementById("cfg-addZoneOfficerProfileSelect");
+  const locSelect = document.getElementById("cfg-addZoneOfficerLocationSelect");
+  
+  if (profileSelect) {
+    const profs = getOicProfiles();
+    let html = '<option value="">-- Choose Officer --</option>';
+    profs.forEach(p => {
+      html += `<option value="${p.id}">${p.rank || ''} ${p.name} (${p.serviceNo || ''})</option>`;
+    });
+    profileSelect.innerHTML = html;
+  }
+
+  if (locSelect) {
+    const zid = zoneId || document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+    const locs = (store.locations || []).filter(l => l.zone_id === zid);
+    let html = `
+      <optgroup label="Functional / Work Scope">
+        <option value="All CE Works in AOR">🌐 All CE Works in AOR</option>
+        <option value="Road Network">🛣️ Road Network</option>
+        <option value="Marine Construction">⚓ Marine Construction</option>
+        <option value="Water Distribution">💧 Water Distribution</option>
+        <option value="Construction">🏗️ Construction</option>
+        <option value="Renovation">🔨 Renovation</option>
+      </optgroup>
+    `;
+    if (locs.length > 0) {
+      html += '<optgroup label="Specific Buildings / Locations in Zone">';
+      locs.forEach(l => {
+        const locId = l.id || l._fbKey;
+        html += `<option value="${locId}">🏢 ${l.building_name} (${l.sub_location || 'General'})</option>`;
+      });
+      html += '</optgroup>';
+    }
+    locSelect.innerHTML = html;
+  }
+}
+
+function renderSettingsZoneOfficersList(zoneId) {
+  const container = document.getElementById("cfgZoneOfficersList");
+  if (!container) return;
+  const zid = zoneId || document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) {
+    container.innerHTML = '<span class="text-xs text-slate-400 italic col-span-full">Select a Zone above to view appointed officers</span>';
+    const badge = document.getElementById("cfgZoneOfficersCountBadge");
+    if (badge) badge.textContent = "0 Officers";
+    return;
+  }
+  const inc = (store.settings.zoneInCharges || {})[zid] || {};
+  const officers = Array.isArray(inc.officers) ? inc.officers : [];
+
+  const badge = document.getElementById("cfgZoneOfficersCountBadge");
+  if (badge) badge.textContent = `${officers.length} Officer${officers.length === 1 ? '' : 's'}`;
+
+  populateSettingsZoneOfficersDropdowns(zid);
+
+  if (officers.length === 0) {
+    container.innerHTML = '<span class="text-xs text-slate-400 italic col-span-full">No officers appointed to this zone yet. Choose an officer above to appoint.</span>';
+    return;
+  }
+
+  container.innerHTML = officers.map(off => {
+    const cleanNo = off.serviceNo ? off.serviceNo.replace(/[^a-zA-Z0-9]/g, "") : "";
+    const shortRank = off.rank ? off.rank.replace(/[a-z\s()]/gi, "").substring(0, 3) : "OIC";
+    const fallbackText = `<div class="w-8 h-8 rounded-full bg-indigo-100 text-indigo-800 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
+    const avatarHtml = cleanNo
+      ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-indigo-200" onerror="handleProfilePicError(this, '${cleanNo}')">`
+      : fallbackText;
+
+    const locText = off.locationName || off.locationId || "All CE Works in AOR";
+
+    return `
+      <div class="p-3 bg-indigo-50/50 rounded-xl border border-indigo-200 flex items-center justify-between gap-2 shadow-2xs">
+        <div class="flex items-center gap-2.5 min-w-0">
+          ${avatarHtml}
+          <div class="min-w-0 text-left">
+            <p class="text-xs font-bold text-slate-900 truncate">${escapeHtml(off.rank)} ${escapeHtml(off.name)}</p>
+            <div class="flex items-center gap-1.5 flex-wrap mt-0.5">
+              <span class="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800">${escapeHtml(off.role)}</span>
+              <span class="text-[9px] text-slate-500 font-mono">${escapeHtml(off.serviceNo)}</span>
+            </div>
+            <p class="text-[10px] text-indigo-600 font-medium truncate mt-0.5">📍 ${escapeHtml(locText)}</p>
+          </div>
+        </div>
+        <button type="button" onclick="removeOfficerFromCurrentZone('${off.id}')" class="text-indigo-400 hover:text-red-600 p-1 font-bold text-xs" title="Remove Officer Appointment">✕</button>
+      </div>
+    `;
+  }).join("");
+}
+
+function addOfficerToCurrentZone() {
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid) {
+    showToast("Please select a Zone first", "error");
+    return;
+  }
+  const profId = document.getElementById("cfg-addZoneOfficerProfileSelect")?.value;
+  if (!profId) {
+    showToast("Please select an Officer Profile", "warning");
+    return;
+  }
+  const role = document.getElementById("cfg-addZoneOfficerRoleSelect")?.value || "OIC";
+  const locId = document.getElementById("cfg-addZoneOfficerLocationSelect")?.value || "All CE Works in AOR";
+
+  const profs = getOicProfiles();
+  const prof = profs.find(p => p.id === profId);
+  if (!prof) return;
+
+  if (!store.settings.zoneInCharges) store.settings.zoneInCharges = {};
+  if (!store.settings.zoneInCharges[zid]) store.settings.zoneInCharges[zid] = {};
+
+  let officers = Array.isArray(store.settings.zoneInCharges[zid].officers)
+    ? [...store.settings.zoneInCharges[zid].officers]
+    : [];
+
+  let locName = locId;
+  const locObj = (store.locations || []).find(l => String(l.id || l._fbKey) === String(locId));
+  if (locObj) {
+    locName = `${locObj.building_name} (${locObj.sub_location || 'General'})`;
+  }
+
+  const existingIdx = officers.findIndex(o => o.id === profId && o.locationId === locId);
+  if (existingIdx >= 0) {
+    officers[existingIdx].role = role;
+    officers[existingIdx].locationId = locId;
+    officers[existingIdx].locationName = locName;
+  } else {
+    officers.push({
+      id: profId,
+      name: prof.name,
+      rank: prof.rank,
+      serviceNo: prof.serviceNo,
+      role: role,
+      locationId: locId,
+      locationName: locName,
+      appointedAt: Date.now()
+    });
+  }
+
+  store.settings.zoneInCharges[zid].officers = officers;
+  opsDB.ref(`settings/zoneInCharges/${zid}/officers`).set(officers);
+  renderSettingsZoneOfficersList(zid);
+  showToast(`🎖️ Appointed ${prof.rank} ${prof.name} as ${role} for ${zid}!`, "success");
+}
+
+function removeOfficerFromCurrentZone(officerId) {
+  const zid = document.getElementById("cfg-userZone")?.value || store.settings.selectedSettingsZone;
+  if (!zid || !store.settings.zoneInCharges || !store.settings.zoneInCharges[zid]) return;
+
+  let officers = (store.settings.zoneInCharges[zid].officers || []).filter(
+    o => o.id !== officerId
+  );
+  store.settings.zoneInCharges[zid].officers = officers;
+  opsDB.ref(`settings/zoneInCharges/${zid}/officers`).set(officers);
+  renderSettingsZoneOfficersList(zid);
+  showToast("Officer appointment removed", "info");
+}
 function getEcSailors() {
   return store.sailors.filter((sailor) => {
     const offNo = (
@@ -14267,6 +15541,21 @@ function isCurrentMasterAdmin() {
     if (p && isMasterAdmin(p)) return true;
   }
   return false;
+}
+
+function getCurrentOfficer() {
+  if (store.activeProfileType === "OIC" && store.activeOicProfileId) {
+    const profs = typeof getOicProfiles === "function" ? getOicProfiles() : [];
+    return profs.find((p) => p.id === store.activeOicProfileId) || null;
+  }
+  if (store.currentUser && isMasterAdmin(store.currentUser)) {
+    return store.currentUser;
+  }
+  return null;
+}
+
+function isOfficerLoggedIn() {
+  return Boolean(getCurrentOfficer()) || isCurrentMasterAdmin() || store.activeProfileType === "OIC";
 }
 
 function getAuthorityBadge(authKey, serviceNo = "") {
@@ -16839,7 +18128,28 @@ function renderProfileDropdown() {
   const list = document.getElementById("profileOptionsList");
   if (!list) return;
   const s = store.settings || {};
-  let html = ""; // 1. Command / OIC Profiles List
+  let html = "";
+
+  // 0. Quick Shortcut: Officer Approvals Hub
+  const pendingWos = (store.workOrders || []).filter(w => w.officer_review_status === "Pending Review").length;
+  const pendingJcs = (store.jobCards || []).filter(j => j.officer_clearance_status === "Pending Clearance").length;
+  const pendingEsts = (store.estimates || []).filter(e => e.approval_status === "Pending Approval" || e.status === "Pending").length;
+  const totalPending = pendingWos + pendingJcs + pendingEsts;
+
+  html += `
+    <div onclick="toggleProfileDropdown(); openOfficerApprovalsHubModal();" class="px-4 py-2.5 bg-gradient-to-r from-teal-50 to-indigo-50 hover:from-teal-100 hover:to-indigo-100 cursor-pointer border-b border-slate-200 transition-colors flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <span class="text-base">🎖️</span>
+        <div class="text-left">
+          <p class="text-xs font-extrabold text-slate-800">Officer Approvals Hub</p>
+          <p class="text-[10px] text-teal-700 font-medium">Review pending clearances</p>
+        </div>
+      </div>
+      <span class="text-xs font-black px-2 py-0.5 rounded-full ${totalPending > 0 ? 'bg-amber-400 text-slate-900 animate-pulse' : 'bg-slate-200 text-slate-600'}">${totalPending}</span>
+    </div>
+  `;
+
+  // 1. Command / OIC Profiles List
   const oicProfs = getOicProfiles();
   oicProfs.forEach((p) => {
     const isThisOicActive =
@@ -26496,17 +27806,26 @@ function filterTempIssues() {
 }
 
 function getAllAvailableZonesAndWorkshops() {
+  let zones = [];
   if (store.zones && store.zones.length > 0) {
-    return store.zones.map((z) => ({ id: z.id, name: z.name || z.id }));
+    zones = store.zones.map((z) => ({ id: z.id, name: z.name || z.id }));
+  } else {
+    zones = [
+      { id: "A-Zone", name: "A Zone" },
+      { id: "B-Zone", name: "B Zone" },
+      { id: "C-Zone", name: "C Zone" },
+      { id: "D-Zone", name: "D Zone" },
+      { id: "E-Zone", name: "E Zone" },
+      { id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" }
+    ];
   }
-  return [
-    { id: "A-Zone", name: "A Zone" },
-    { id: "B-Zone", name: "B Zone" },
-    { id: "C-Zone", name: "C Zone" },
-    { id: "D-Zone", name: "D Zone" },
-    { id: "E-Zone", name: "E Zone" },
-    { id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" }
-  ];
+
+  // Include SBS in Temporary Issues so tools/machinery/items can be issued to/from SBS
+  if (!zones.some((z) => isSbsZone(z.id) || isSbsZone(z.name))) {
+    zones.push({ id: "SBS", name: "SBS" });
+  }
+
+  return zones;
 }
 
 // ── Open Add / Edit Temporary Issue Modal ──
