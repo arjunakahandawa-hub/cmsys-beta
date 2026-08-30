@@ -99,6 +99,24 @@ function isAdminStaffDuties(zoneIdOrName) {
   const normalized = zoneIdOrName.toLowerCase().replace(/[-&\s]+/g, "");
   return normalized === "adminstaffduties";
 }
+
+function isZoneMatch(z1, z2) {
+  if (!z1 && !z2) return true;
+  if (!z1 || !z2) return false;
+  if (z1 === z2) return true;
+  if (isAdminStaffDuties(z1) && isAdminStaffDuties(z2)) return true;
+  if (typeof isSbsZone === "function" && isSbsZone(z1) && isSbsZone(z2)) return true;
+
+  const s1 = String(z1).trim().toLowerCase().replace(/[-_\s]+/g, "");
+  const s2 = String(z2).trim().toLowerCase().replace(/[-_\s]+/g, "");
+  if (s1 === s2) return true;
+
+  const letterMap = { a: "azone", b: "bzone", c: "czone", d: "dzone", e: "ezone", g: "gzone" };
+  const norm1 = letterMap[s1] || s1;
+  const norm2 = letterMap[s2] || s2;
+  return norm1 === norm2;
+}
+
 function formatZoneDisplayName(zoneId) {
   if (!zoneId) return "";
   if (isAdminStaffDuties(zoneId)) return "Admin & Staff Duties";
@@ -1590,7 +1608,7 @@ function switchView(view, preventPushState = false) {
     t.classList.remove("tab-active");
   });
   const activeTab = document.getElementById(`tab-${view}`);
-  if (activeTab) activeTab.classList.add("tab-active"); // Update bottom nav tabs active styles
+  // Update bottom nav tabs active styles
   document.querySelectorAll('[id^="mobile-tab-"]').forEach((btn) => {
     btn.classList.remove("text-teal-400");
     btn.classList.add("text-slate-400");
@@ -1607,6 +1625,20 @@ function switchView(view, preventPushState = false) {
         moreBtn.classList.remove("text-slate-400");
         moreBtn.classList.add("text-teal-400");
       }
+    }
+  }
+
+  // Update mobile top nav ribbon tabs active styles
+  document.querySelectorAll('[id^="mobile-top-"]').forEach((btn) => {
+    btn.classList.remove("bg-teal-800/80", "text-teal-200", "font-bold", "border", "border-teal-500/40");
+    btn.classList.add("text-slate-300", "font-medium");
+  });
+  const activeMobileTopTab = document.getElementById(`mobile-top-${view}`);
+  if (activeMobileTopTab) {
+    activeMobileTopTab.classList.remove("text-slate-300", "font-medium");
+    activeMobileTopTab.classList.add("bg-teal-800/80", "text-teal-200", "font-bold", "border", "border-teal-500/40");
+    if (typeof activeMobileTopTab.scrollIntoView === "function") {
+      activeMobileTopTab.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     }
   }
   switch (view) {
@@ -2019,9 +2051,24 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
   const today = getLocalDateString();
   if (!dateStr) dateStr = today;
 
-  const hasAllocations = (store.dailyAllocations || []).some(
-    (a) => a.date === dateStr && String(a.work_order_id) === String(wo.id),
-  );
+  const woIdStr = String(wo.id || "");
+  const woFbKeyStr = String(wo._fbKey || "");
+  const woRefStr = String(wo.reference_no || "");
+  const woJobNoStr = String(wo.job_no || "");
+  const woDescStr = String(wo.description || "").trim().toLowerCase();
+
+  const hasAllocations = (store.dailyAllocations || []).some((a) => {
+    if (!a || a.date !== dateStr || a.status === "Cancelled") return false;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    return (
+      (woIdStr && aWoId === woIdStr) ||
+      (woFbKeyStr && aWoId === woFbKeyStr) ||
+      (woRefStr && aWoId === woRefStr) ||
+      (woJobNoStr && aWoId === woJobNoStr) ||
+      (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)))
+    );
+  });
   if (hasAllocations) return true;
 
   // 1-Day Lifecycle for Tasks: Tasks created on previous days do not persist to subsequent dates without active allocations
@@ -2533,7 +2580,7 @@ function renderWorkOrders() {
       (wo) =>
         wo.type === type &&
         !wo.assign_type &&
-        (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
+        isZoneMatch(wo.zone_id, store.currentZone) &&
         isWorkOrderActiveOnDate(wo, dateVal),
     );
     columns[type].innerHTML = orders
@@ -2599,7 +2646,7 @@ function renderQuickAssignments() {
   const quickOrders = store.workOrders.filter(
     (wo) =>
       wo.assign_type &&
-      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
+      isZoneMatch(wo.zone_id, store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   );
   const badge = document.getElementById("quickAssignCountBadge");
@@ -2619,27 +2666,27 @@ function updateBoardEmptyState() {
     (wo) =>
       wo.type === "PROJECT" &&
       !wo.assign_type &&
-      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
+      isZoneMatch(wo.zone_id, store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   ).length;
   const jobs = store.workOrders.filter(
     (wo) =>
       wo.type === "JOB" &&
       !wo.assign_type &&
-      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
+      isZoneMatch(wo.zone_id, store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   ).length;
   const tasks = store.workOrders.filter(
     (wo) =>
       wo.type === "TASK" &&
       !wo.assign_type &&
-      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
+      isZoneMatch(wo.zone_id, store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   ).length;
   const assigns = store.workOrders.filter(
     (wo) =>
       wo.assign_type &&
-      (isSbsZone(store.currentZone) ? isSbsZone(wo.zone_id) : wo.zone_id === store.currentZone) &&
+      isZoneMatch(wo.zone_id, store.currentZone) &&
       isWorkOrderActiveOnDate(wo, dateVal),
   ).length; // Explicitly toggle hidden class on wrappers to ensure they are hidden on mobile
   const projWrapper = document.getElementById("projectColumnWrapper");
@@ -2704,12 +2751,24 @@ function isWorkOrderCommittedToday(wo, dateVal) {
   const today = getLocalDateString();
   if (!dateVal) dateVal = store.dashboardDate || today;
   if (wo.last_committed_date === dateVal) return true;
-  return (store.dailyAllocations || []).some(
-    (a) =>
-      a.date === dateVal &&
-      (String(a.work_order_id) === String(wo.id) || String(a.work_order_id) === String(wo._fbKey)) &&
-      a.status !== "Cancelled"
-  );
+  const woIdStr = String(wo.id || "");
+  const woFbKeyStr = String(wo._fbKey || "");
+  const woRefStr = String(wo.reference_no || "");
+  const woJobNoStr = String(wo.job_no || "");
+  const woDescStr = String(wo.description || "").trim().toLowerCase();
+
+  return (store.dailyAllocations || []).some((a) => {
+    if (!a || a.date !== dateVal || a.status === "Cancelled") return false;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    return (
+      (woIdStr && aWoId === woIdStr) ||
+      (woFbKeyStr && aWoId === woFbKeyStr) ||
+      (woRefStr && aWoId === woRefStr) ||
+      (woJobNoStr && aWoId === woJobNoStr) ||
+      (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)))
+    );
+  });
 }
 
 function getWorkOrderAssignedSailors(wo, dateVal) {
@@ -2719,57 +2778,96 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
   const isToday = dateVal === today;
   const isCommitted = isWorkOrderCommittedToday(wo, dateVal);
 
-  if (isToday) {
-    if (wo.status === "Completed" || wo.status === "Hold" || wo.status === "Cancelled" || wo.status === "Draft") {
-      return { sailors: [], source: "completed", isCommitted: false };
+  const extractKeys = (val) => {
+    const keys = [];
+    if (!val) return keys;
+    if (Array.isArray(val)) {
+      val.forEach((item) => {
+        if (!item) return;
+        if (typeof item === "object") {
+          if (item.id) keys.push(String(item.id));
+          if (item._fbKey) keys.push(String(item._fbKey));
+          if (item.sailor_id) keys.push(String(item.sailor_id));
+          if (item.official_number) keys.push(String(item.official_number));
+          if (item.service_no) keys.push(String(item.service_no));
+        } else {
+          keys.push(String(item).trim());
+        }
+      });
+    } else if (typeof val === "object") {
+      Object.keys(val).forEach((k) => keys.push(String(k).trim()));
+      Object.values(val).forEach((v) => {
+        if (!v) return;
+        if (typeof v === "object") {
+          if (v.id) keys.push(String(v.id));
+          if (v._fbKey) keys.push(String(v._fbKey));
+          if (v.sailor_id) keys.push(String(v.sailor_id));
+          if (v.official_number) keys.push(String(v.official_number));
+          if (v.service_no) keys.push(String(v.service_no));
+        } else if (typeof v === "string" || typeof v === "number") {
+          keys.push(String(v).trim());
+        }
+      });
     }
-    const assignedIds = new Set((wo.assigned || []).map(String));
-    (store.dailyAllocations || []).forEach((a) => {
-      if (
-        a.date === today &&
-        (String(a.work_order_id) === String(wo.id) ||
-          String(a.work_order_id) === String(wo._fbKey)) &&
-        a.status !== "Cancelled"
-      ) {
-        if (a.sailor_id) assignedIds.add(String(a.sailor_id));
-      }
-    });
-    const sailors = store.sailors.filter(
-      (s) =>
-        assignedIds.has(String(s.id)) ||
-        assignedIds.has(String(s._fbKey)) ||
-        (s.official_number && assignedIds.has(String(s.official_number))),
-    );
-    return { sailors, source: "live", isCommitted };
+    return keys;
+  };
+
+  const assignedKeys = new Set();
+
+  // If today, include live wo.assigned
+  if (isToday) {
+    extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
   }
 
-  // Back-date / Historical Mode resolution:
-  const dailyIds = (store.dailyAllocations || [])
-    .filter(
-      (a) => a.date === dateVal && (String(a.work_order_id) === String(wo.id) || String(a.work_order_id) === String(wo._fbKey)) && a.status !== "Cancelled",
-    )
-    .map((a) => String(a.sailor_id));
+  // Find daily allocations for the target date
+  const targetDate = dateVal || today;
+  const woIdStr = String(wo.id || "");
+  const woFbKeyStr = String(wo._fbKey || "");
+  const woRefStr = String(wo.reference_no || "");
+  const woJobNoStr = String(wo.job_no || "");
+  const woDescStr = String(wo.description || "").trim().toLowerCase();
 
-  if (dailyIds.length > 0) {
-    const sailors = store.sailors.filter(
-      (s) =>
-        dailyIds.includes(String(s.id)) ||
-        dailyIds.includes(String(s._fbKey)),
-    );
-    return { sailors, source: "daily_record", isCommitted: true };
+  let hasDailyRecordForDate = false;
+  (store.dailyAllocations || []).forEach((a) => {
+    if (!a || a.date !== targetDate || a.status === "Cancelled") return;
+
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+
+    const isWoMatch =
+      (woIdStr && aWoId === woIdStr) ||
+      (woFbKeyStr && aWoId === woFbKeyStr) ||
+      (woRefStr && aWoId === woRefStr) ||
+      (woJobNoStr && aWoId === woJobNoStr) ||
+      (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)));
+
+    if (isWoMatch) {
+      hasDailyRecordForDate = true;
+      if (a.sailor_id) assignedKeys.add(String(a.sailor_id));
+      if (a.sailorId) assignedKeys.add(String(a.sailorId));
+      if (a.official_number) assignedKeys.add(String(a.official_number));
+      if (a.offNo) assignedKeys.add(String(a.offNo));
+    }
+  });
+
+  // If historical date and no explicit daily snapshot found, fall back to wo.assigned
+  if (!isToday && assignedKeys.size === 0 && !hasDailyRecordForDate && (wo.status === "Active" || wo.status === "Pending")) {
+    extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
   }
 
-  if (wo.assigned && wo.assigned.length > 0) {
-    const assignedIds = (wo.assigned || []).map(String);
-    const sailors = store.sailors.filter(
-      (s) =>
-        assignedIds.includes(String(s.id)) ||
-        assignedIds.includes(String(s._fbKey)),
-    );
-    return { sailors, source: "current_assigned", isCommitted: false };
-  }
+  const sailors = (store.sailors || []).filter((s) => {
+    if (!s) return false;
+    const sid = String(s.id);
+    const sfb = String(s._fbKey || "");
+    const soff = String(s.official_number || s.service_no || "");
+    return assignedKeys.has(sid) || (sfb && assignedKeys.has(sfb)) || (soff && assignedKeys.has(soff));
+  });
 
-  return { sailors: [], source: "", isCommitted: false };
+  return {
+    sailors,
+    source: hasDailyRecordForDate ? "daily_record" : isToday ? "live" : "work_order_crew",
+    isCommitted: hasDailyRecordForDate || isCommitted,
+  };
 }
 
 function commitDailyLabourForWorkOrder(event, woKey) {
@@ -2781,66 +2879,59 @@ function commitDailyLabourForWorkOrder(event, woKey) {
     (w) => String(w.id) === String(woKey) || String(w._fbKey) === String(woKey)
   );
   if (!wo) return;
-
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
-  const { sailors: plannedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
-
-  if (plannedSailors.length === 0) {
-    showToast("Please assign at least one sailor to this work order before proceeding!", "warning");
+  const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
+  if (assignedSailors.length === 0) {
+    showToast("No planned sailors found to commit!", "warning");
     return;
   }
 
   const [yyyy, mm, dd] = dateVal.split("-");
   const monthKey = `${yyyy}-${mm}`;
   const dayKey = parseInt(dd, 10).toString();
-
   const isLeaveCode = (val) => {
     if (!val) return false;
     const str = typeof val === "string" ? val.trim() : String(val).trim();
     return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
   };
 
-  let committedCount = 0;
-  let skippedLeaveCount = 0;
-
-  plannedSailors.forEach((sailor) => {
-    const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][sailor._fbKey] : null;
-    const isLeave = isLeaveCode(sailor.status) || isLeaveCode(sailor.attendance) || isLeaveCode(fbStatus);
-
-    if (isLeave) {
-      skippedLeaveCount++;
-      return;
-    }
-
-    const allocKey = `${dateVal}_${sanitizeFbKey(sailor.id)}`;
-    const alloc = {
-      id: Date.now() + Math.random(),
-      date: dateVal,
-      sailor_id: sailor.id,
-      work_order_id: wo.id || wo._fbKey,
-      role_today: "Worker",
-      assigned_by: (store.currentUser && store.currentUser.name) ? store.currentUser.name : "Officer",
-      status: "Active",
-      assigned_at: Date.now()
-    };
-
-    if (!store.dailyAllocations) store.dailyAllocations = [];
-    store.dailyAllocations = store.dailyAllocations.filter(
-      (a) => !(a.date === dateVal && String(a.sailor_id) === String(sailor.id))
-    );
-    store.dailyAllocations.push(alloc);
-    opsDB.ref(`daily_allocations/${allocKey}`).set(alloc);
-
-    sailor.status = "Assigned";
-    committedCount++;
+  const activeSailorsToCommit = assignedSailors.filter((s) => {
+    const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][s._fbKey] : null;
+    return !isLeaveCode(s.status) && !isLeaveCode(s.attendance) && !isLeaveCode(fbStatus);
   });
 
-  wo.last_committed_date = dateVal;
-  wo.last_assigned_date = dateVal;
+  if (activeSailorsToCommit.length === 0) {
+    showToast("All assigned sailors are on leave/sick today!", "error");
+    return;
+  }
+
+  // Create daily allocations
+  if (!store.dailyAllocations) store.dailyAllocations = [];
+  activeSailorsToCommit.forEach((s) => {
+    const sid = s.id || s._fbKey;
+    const alloc = {
+      id: Date.now() + Math.floor(Math.random() * 1000),
+      date: dateVal,
+      sailor_id: sid,
+      official_number: s.official_number || s.service_no || "",
+      work_order_id: wo.id || wo._fbKey,
+      role_today: "Worker",
+      assigned_by: store.currentUser && store.currentUser.name ? store.currentUser.name : "Officer",
+      status: "Active"
+    };
+    store.dailyAllocations = store.dailyAllocations.filter(
+      (a) => !(a.date === dateVal && (String(a.sailor_id) === String(s.id) || String(a.sailor_id) === String(s._fbKey)))
+    );
+    store.dailyAllocations.push(alloc);
+    opsDB.ref(`daily_allocations/${dateVal}_${sanitizeFbKey(sid)}`).set(alloc);
+  });
+
   if (window.safeFbAssignSailor && wo.assigned && wo.assigned.length > 0) {
     wo.assigned.forEach((sid) => safeFbAssignSailor(wo._fbKey || wo.id, sid, dateVal));
   }
+
+  wo.last_committed_date = dateVal;
   if (wo._fbKey) {
     opsDB.ref(`work_orders/${wo._fbKey}`).update({
       last_committed_date: dateVal,
@@ -2848,12 +2939,9 @@ function commitDailyLabourForWorkOrder(event, woKey) {
     });
   }
 
+  showToast(`⚡ Daily Labour committed for ${activeSailorsToCommit.length} sailor(s)!`, "success");
+  refreshDailyCommitmentCache(dateVal);
   renderDashboard();
-  let msg = `✓ Successfully committed ${committedCount} sailor(s) for "${wo.description}"!`;
-  if (skippedLeaveCount > 0) {
-    msg += ` (${skippedLeaveCount} on leave/sick skipped)`;
-  }
-  showToast(msg, "success");
 }
 
 function commitAllZoneWorkOrders() {
@@ -3048,10 +3136,12 @@ function renderWorkOrderCard(wo) {
                                   ? "bg-red-100 text-red-700 opacity-75" 
                                   : (isCommitted ? (s.evaluated ? "bg-teal-100 text-teal-700" : "bg-blue-100 text-blue-700") : "bg-slate-100 text-slate-700 border border-dashed border-slate-300");
                                 const leaveIcon = isLeave ? "🛌 " : "";
+                                const shortName = s.name ? (s.name.split(" ").length > 1 ? s.name.split(" ").slice(-1)[0] : s.name) : (s.official_number || "Sailor");
+                                const scoreNum = typeof s.avgScore === "number" ? s.avgScore : (typeof s.score === "number" ? s.score : 7.0);
                                 return `
                             <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${colorClasses}" title="${isLeave ? 'On Leave/Sick' : (isCommitted ? 'Active Today' : 'Planned / Standby')}">
-                                ${leaveIcon}${s.name.split(" ").slice(1, 2).join("")}
-                                <span class="${getPerformanceColor(s.avgScore)} px-1 rounded-full text-[9px]">${s.avgScore.toFixed(1)}</span>
+                                ${leaveIcon}${shortName}
+                                <span class="${getPerformanceColor(scoreNum)} px-1 rounded-full text-[9px]">${scoreNum.toFixed(1)}</span>
                             </span>`;
                               }
                             )
@@ -3627,7 +3717,10 @@ function handleDropOnCard(event, workOrderId) {
 }
 function removeSailorFromOrder(sailorId, workOrderId) {
   const sailor = store.sailors.find(
-    (s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId),
+    (s) =>
+      String(s.id) === String(sailorId) ||
+      String(s._fbKey) === String(sailorId) ||
+      (s.official_number && String(s.official_number) === String(sailorId)),
   );
   const workOrder = store.workOrders.find(
     (wo) =>
@@ -3640,57 +3733,68 @@ function removeSailorFromOrder(sailorId, workOrderId) {
     showToast("Historical data is read-only!", "error");
     return;
   }
-  if (sailor && workOrder) {
-    const allocSnapshot = (store.dailyAllocations || []).find(
-      (a) => a.date === today && String(a.sailor_id) === String(sailorId)
-    );
-
-    _lastActionUndo = {
-      type: "REMOVE_SAILOR",
-      sailorId: sailorId,
-      workOrderId: workOrder.id || workOrder._fbKey,
-      prevWoAssigned: [...(workOrder.assigned || [])],
-      sailorPrevStatus: sailor.status,
-      sailorPrevZone: sailor.zone_id || store.currentZone,
-      dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
-    };
-
+  if (workOrder) {
     const idsToRemove = new Set([
       String(sailorId),
-      String(sailor.id || ""),
-      String(sailor._fbKey || ""),
-      String(sailor.official_number || "")
-    ]);
+      sailor ? String(sailor.id || "") : "",
+      sailor ? String(sailor._fbKey || "") : "",
+      sailor ? String(sailor.official_number || "") : "",
+      sailor ? String(sailor.service_no || "") : "",
+    ].filter(Boolean));
 
     workOrder.assigned = (workOrder.assigned || []).filter(
       (id) => !idsToRemove.has(String(id)),
     );
-    sailor.status = "Available";
+    if (workOrder.last_assigned) {
+      workOrder.last_assigned = (workOrder.last_assigned || []).filter(
+        (id) => !idsToRemove.has(String(id)),
+      );
+    }
+    if (sailor) {
+      sailor.status = "Available";
+    }
     workOrder.last_assigned_date = today;
+
+    // Remove from daily allocations
     store.dailyAllocations = (store.dailyAllocations || []).filter(
-      (a) => !(a.date === today && idsToRemove.has(String(a.sailor_id)))
+      (a) =>
+        !(
+          a.date === today &&
+          idsToRemove.has(String(a.sailor_id)) &&
+          (String(a.work_order_id) === String(workOrder.id) ||
+            String(a.work_order_id) === String(workOrder._fbKey))
+        ),
     );
+
     idsToRemove.forEach((id) => {
       if (id) opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(id)}`).remove();
     });
+
+    if (workOrder._fbKey) {
+      opsDB.ref(`work_orders/${workOrder._fbKey}/assigned`).set(
+        workOrder.assigned.length > 0 ? workOrder.assigned : null,
+      );
+      if (workOrder.last_assigned) {
+        opsDB.ref(`work_orders/${workOrder._fbKey}/last_assigned`).set(
+          workOrder.last_assigned.length > 0 ? workOrder.last_assigned : null,
+        );
+      }
+    }
+
     if (window.safeFbRemoveSailor) {
       safeFbRemoveSailor(workOrder._fbKey || workOrder.id, sailorId, today);
-      setTimeout(() => {
-        renderDashboard();
-        showToast(
-          `${sailor.name} removed from assignment <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
-          "warning",
-          6000
-        );
-      }, 50);
-    } else {
-      renderDashboard();
-      showToast(
-        `${sailor.name} removed from assignment <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
-        "warning",
-        6000
-      );
     }
+
+    // Refresh views immediately
+    renderDashboard();
+    const modalEl = document.getElementById("workOrderDetailModal");
+    if (modalEl && !modalEl.classList.contains("hidden")) {
+      openWorkOrderDetail(workOrder._fbKey || workOrder.id);
+    }
+    showToast(
+      `${sailor ? sailor.name : "Sailor"} removed from assignment`,
+      "info",
+    );
   }
 } // =============================================
 // FILTERS
@@ -5382,23 +5486,6 @@ function openWorkOrderDetail(workOrderId) {
   }
   document.getElementById("woDetailArtificer").innerHTML = artificerOptions;
   const { sailors: assignedSailors, source: historicalSource } = getWorkOrderAssignedSailors(wo, dateVal);
-  if (isToday && assignedSailors.length > 0) {
-    const currentAssignedKeys = assignedSailors.map((s) => s.id || s._fbKey);
-    const existingAssigned = (wo.assigned || []).map(String);
-    let needsUpdate = false;
-    currentAssignedKeys.forEach((key) => {
-      if (!existingAssigned.includes(String(key))) {
-        existingAssigned.push(key);
-        needsUpdate = true;
-      }
-    });
-    if (needsUpdate) {
-      wo.assigned = existingAssigned;
-      if (wo._fbKey) {
-        opsDB.ref(`work_orders/${wo._fbKey}/assigned`).set(wo.assigned);
-      }
-    }
-  }
   const tradeCounts = {};
   assignedSailors.forEach((s) => {
     tradeCounts[s.trade] = (tradeCounts[s.trade] || 0) + 1;
@@ -7113,7 +7200,8 @@ function saveWorkOrderChanges(autoClose = true) {
         progress: wo.progress,
         incharge: wo.incharge,
         supervisor: wo.supervisor,
-        project_artificer: wo.project_artificer
+        project_artificer: wo.project_artificer,
+        assigned: wo.assigned && wo.assigned.length > 0 ? wo.assigned : null
       });
     } else if (window.fbSaveWorkOrder) {
       fbSaveWorkOrder(wo);
@@ -10610,9 +10698,37 @@ function saveInventoryItem(event) {
 function renderEstimates() {
   renderIncomingJobMinutesInEstimates();
   const container = document.getElementById("estimatesList");
-  const filteredEstimates = store.estimates.filter(
-    (e) => !e.zone_id || e.zone_id === store.currentZone,
-  );
+  if (!container) return;
+
+  const currentZone = store.currentZone || "A-Zone";
+  const cleanZoneStr = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  
+  const isEstimateZoneMatch = (est) => {
+    if (!est) return false;
+    if (isAdminStaffDuties(currentZone)) return true; // Admin & Staff Duties sees all estimates
+    const estZone = est.zone_id || est.zone || "";
+    if (!estZone) return true; // Estimates without a strict zone are visible everywhere
+    const cleanEst = cleanZoneStr(estZone);
+    const cleanCur = cleanZoneStr(currentZone);
+    return cleanEst === cleanCur || cleanEst.includes(cleanCur) || cleanCur.includes(cleanEst);
+  };
+
+  const filteredEstimates = (store.estimates || []).filter(isEstimateZoneMatch);
+
+  // If selected estimate is not in the filtered list, pick the first one
+  if (filteredEstimates.length > 0) {
+    const isCurrentSelectedValid = filteredEstimates.some(e => String(e.id) === String(store.selectedEstimate));
+    if (!isCurrentSelectedValid) {
+      selectEstimate(filteredEstimates[0].id);
+    }
+  } else {
+    store.selectedEstimate = null;
+    const estNumEl = document.getElementById("selectedEstimateNumber");
+    if (estNumEl) estNumEl.textContent = "Select an Estimate";
+    const contentEl = document.getElementById("estimateContent");
+    if (contentEl) contentEl.innerHTML = '<p class="text-slate-400 text-center py-12">Select an estimate to view details</p>';
+  }
+
   container.innerHTML =
     filteredEstimates
       .map((e) => {
@@ -10684,10 +10800,20 @@ function toggleEstimatePrintSelection(id) {
   document.getElementById("bulkPrintCount").textContent =
     store.selectedEstimatesForPrint.length;
 }
+function findEstimateById(id) {
+  if (!id && id !== 0) return null;
+  return (store.estimates || []).find((e) => e && (
+    String(e.id) === String(id) ||
+    String(e._fbKey) === String(id) ||
+    String(e.estimate_number) === String(id)
+  )) || null;
+}
+
 function selectEstimate(id) {
   var _est$materials, _est$labor;
   store.selectedEstimate = id;
-  const est = store.estimates.find((e) => e.id === id);
+  const est = findEstimateById(id);
+  if (!est) return;
   document.getElementById("selectedEstimateNumber").textContent =
     est.estimate_number;
   document.getElementById("editEstimateBtn").style.display =
@@ -10940,25 +11066,26 @@ function onEstLocation2Change(selectedLoc2) {
 }
 
 function openNewEstimateModal() {
-  document.getElementById("estId").value = "";
-  document.getElementById("estDescription").value = "";
+  const setVal = (id, v) => {
+    const el = document.getElementById(id);
+    if (el) el.value = v;
+  };
+
+  setVal("estId", "");
+  setVal("estDescription", "");
   const refTypeSelect = document.getElementById("estRefType");
   if (refTypeSelect) refTypeSelect.value = "Minute Sheet";
-  document.getElementById("estReference").value = "";
+  setVal("estReference", "");
   const projTypeSelect = document.getElementById("estProjectType");
   if (projTypeSelect) projTypeSelect.value = "PROJECT";
-  document.getElementById("estLocation").value = "";
-  const loc2Input = document.getElementById("estLocation2");
-  if (loc2Input) loc2Input.value = "";
-  document.getElementById("estEndUser").value = "";
+  setVal("estLocation", "");
+  setVal("estLocation2", "");
+  setVal("estEndUser", "");
 
   // Created By (Sailor) - default empty or current logged-in user
-  document.getElementById("estCreatedName").value =
-    store.currentUser?.name || "";
-  document.getElementById("estCreatedRank").value =
-    store.currentUser?.rank || "";
-  document.getElementById("estCreatedSvc").value =
-    store.currentUser?.serviceNo || store.currentUser?.official_number || "";
+  setVal("estCreatedName", store.currentUser?.name || "");
+  setVal("estCreatedRank", store.currentUser?.rank || "");
+  setVal("estCreatedSvc", store.currentUser?.serviceNo || store.currentUser?.official_number || "");
 
   // Checked By (Zone In-Charge)
   const inc = (store.settings?.zoneInCharges || {})[store.currentZone];
@@ -10970,36 +11097,41 @@ function openNewEstimateModal() {
         String(s._fbKey) === String(inc.woInchargeId),
     );
   }
-  document.getElementById("estCheckedName").value = incSailor
-    ? incSailor.name
-    : inc?.name || "";
-  document.getElementById("estCheckedRank").value = incSailor
-    ? incSailor.rank || ""
-    : inc?.rank || "";
-  document.getElementById("estCheckedSvc").value = incSailor
-    ? incSailor.official_number || incSailor.service_no || ""
-    : inc?.serviceNo || "";
+  setVal("estCheckedName", incSailor ? incSailor.name : inc?.name || "");
+  setVal("estCheckedRank", incSailor ? incSailor.rank || "" : inc?.rank || "");
+  setVal("estCheckedSvc", incSailor ? incSailor.official_number || incSailor.service_no || "" : inc?.serviceNo || "");
 
   // Approved By (Optional CE Officer)
-  document.getElementById("estApprovedName").value = "";
-  document.getElementById("estApprovedRank").value = "";
-  document.getElementById("estApprovedSvc").value = "";
+  setVal("estApprovedName", "");
+  setVal("estApprovedRank", "");
+  setVal("estApprovedSvc", "");
 
   // Clear dynamic scopes container and add one default section
-  document.getElementById("estWorkScopesContainer").innerHTML = "";
-  estWorkScopeCounter = 0;
-  addWorkScopeBlock();
-  updateEstimateTotals();
-  populateEstLocationsDatalist();
-  populateSignatoryDropdowns();
-  populateIncomingMinutesInEstimateModal();
-  document.getElementById("newEstimateModal").classList.remove("hidden");
+  const scopesContainer = document.getElementById("estWorkScopesContainer");
+  if (scopesContainer) {
+    scopesContainer.innerHTML = "";
+    estWorkScopeCounter = 0;
+    addWorkScopeBlock();
+  }
+  if (typeof updateEstimateTotals === "function") updateEstimateTotals();
+  if (typeof populateEstLocationsDatalist === "function") populateEstLocationsDatalist();
+  if (typeof populateSignatoryDropdowns === "function") populateSignatoryDropdowns();
+  if (typeof populateIncomingMinutesInEstimateModal === "function") populateIncomingMinutesInEstimateModal();
+  const modal = document.getElementById("newEstimateModal");
+  if (modal) modal.classList.remove("hidden");
 }
 
 function editEstimate() {
-  const est = store.estimates.find((e) => e.id === store.selectedEstimate);
-  if (!est || est.status !== "Pending") return;
-  document.getElementById("estId").value = est.id;
+  const est = findEstimateById(store.selectedEstimate);
+  if (!est) {
+    showToast("Please select an estimate first", "error");
+    return;
+  }
+  if (est.status === "Linked") {
+    showToast("This estimate is linked to a Job Card and cannot be edited", "warning");
+    return;
+  }
+  document.getElementById("estId").value = est.id || est._fbKey || "";
   document.getElementById("estDescription").value = est.description || "";
   const refTypeSelect = document.getElementById("estRefType");
   if (refTypeSelect)
@@ -11833,13 +11965,13 @@ function populateSignatoryDropdowns() {
   setupSignatoryAutocomplete("Approved");
 } // ---- Approval (req 9) ----
 function approveEstimate() {
-  const est = store.estimates.find((e) => e.id === store.selectedEstimate);
+  const est = findEstimateById(store.selectedEstimate);
   if (!est) {
     showToast("Select an estimate first", "error");
     return;
   }
   if (est.status === "Approved") {
-    showToast("Already approved", "info");
+    showToast("This estimate is already approved", "info");
     return;
   }
   document.getElementById("apvEstNumber").textContent = est.estimate_number;
@@ -11848,20 +11980,20 @@ function approveEstimate() {
 }
 function submitApproval(event) {
   event.preventDefault();
-  const est = store.estimates.find((e) => e.id === store.selectedEstimate);
+  const est = findEstimateById(store.selectedEstimate);
   if (!est) return;
   const authority = document.getElementById("apvAuthority").value;
   est.status = "Approved";
   est.approvedAuthority = authority;
   if (window.fbSaveEstimate) fbSaveEstimate(est);
   closeModal("approvalModal");
-  selectEstimate(est.id);
+  selectEstimate(est.id || est._fbKey);
   showToast(`Estimate ${est.estimate_number} approved by ${authority}`);
 }
 function deleteEstimate() {
   const estId = store.selectedEstimate;
   if (!estId) return;
-  const est = store.estimates.find((e) => e.id === estId);
+  const est = findEstimateById(estId);
   if (!est) return;
   if (
     confirm(
@@ -12108,13 +12240,16 @@ function buildEstimatePrintHTML(est, isBulk = false) {
 }
 
 function printEstimatesByIds(ids, settings = null) {
-  // Only print estimates belonging to the current zone
-  const ests = store.estimates.filter(
-    (e) =>
-      ids.includes(e.id) && (!e.zone_id || e.zone_id === store.currentZone),
+  if (!ids || ids.length === 0) {
+    showToast("No estimate selected to print", "error");
+    return;
+  }
+  const idSet = new Set(ids.map((id) => String(id)));
+  const ests = (store.estimates || []).filter((e) =>
+    e && (idSet.has(String(e.id)) || idSet.has(String(e._fbKey)) || idSet.has(String(e.estimate_number)))
   );
   if (ests.length === 0) {
-    showToast("No estimates found for this zone to print", "error");
+    showToast("Estimate details not found to print", "error");
     return;
   }
   let sheetsHtml = "";
@@ -12227,12 +12362,16 @@ function printEstimatesByIds(ids, settings = null) {
 }
 
 function exportEstimatesToPDFByIds(ids) {
-  const ests = store.estimates.filter(
-    (e) =>
-      ids.includes(e.id) && (!e.zone_id || e.zone_id === store.currentZone),
+  if (!ids || ids.length === 0) {
+    showToast("No estimate selected to export", "error");
+    return;
+  }
+  const idSet = new Set(ids.map((id) => String(id)));
+  const ests = (store.estimates || []).filter((e) =>
+    e && (idSet.has(String(e.id)) || idSet.has(String(e._fbKey)) || idSet.has(String(e.estimate_number)))
   );
   if (ests.length === 0) {
-    showToast("No estimates found for this zone to export", "error");
+    showToast("Estimate details not found to export", "error");
     return;
   }
   if (typeof html2pdf === "undefined") {
@@ -12321,46 +12460,53 @@ function exportEstimatePDF() {
   exportEstimatesToPDFByIds([store.selectedEstimate]);
 }
 function openBulkPrintSettings() {
-  if (store.selectedEstimatesForPrint.length === 0) {
-    showToast("Tick the estimates you want to print first", "error");
+  if (!store.selectedEstimatesForPrint || store.selectedEstimatesForPrint.length === 0) {
+    showToast("Tick the estimates you want to print first", "info");
     return;
   }
-  document.getElementById("bpsPageSize").value = "A4";
-  document.getElementById("bpsOrientation").value = "landscape";
-  document.getElementById("bpsTiled").checked = false;
+  const bpsPageSize = document.getElementById("bpsPageSize");
+  if (bpsPageSize) bpsPageSize.value = "A4";
+  const bpsOrientation = document.getElementById("bpsOrientation");
+  if (bpsOrientation) bpsOrientation.value = "landscape";
+  const bpsTiled = document.getElementById("bpsTiled");
+  if (bpsTiled) bpsTiled.checked = false;
   toggleTiledPrintOption();
-  document.getElementById("bulkPrintSettingsModal").classList.remove("hidden");
+  const modal = document.getElementById("bulkPrintSettingsModal");
+  if (modal) modal.classList.remove("hidden");
 }
 function toggleTiledPrintOption() {
-  const orientation = document.getElementById("bpsOrientation").value;
-  const tiledContainer = document.getElementById("tiledOptionContainer"); // Tiled option is only available if orientation is landscape AND there are 2 or more documents
+  const orientation = document.getElementById("bpsOrientation")?.value || "landscape";
+  const tiledContainer = document.getElementById("tiledOptionContainer");
+  if (!tiledContainer) return;
   if (
     orientation === "landscape" &&
+    store.selectedEstimatesForPrint &&
     store.selectedEstimatesForPrint.length >= 2
   ) {
     tiledContainer.classList.remove("hidden");
   } else {
     tiledContainer.classList.add("hidden");
-    document.getElementById("bpsTiled").checked = false;
+    const bpsTiled = document.getElementById("bpsTiled");
+    if (bpsTiled) bpsTiled.checked = false;
   }
 }
 function executeBulkPrint() {
   closeModal("bulkPrintSettingsModal");
-  const pageSize = document.getElementById("bpsPageSize").value;
-  const orientation = document.getElementById("bpsOrientation").value;
-  const isTiled = document.getElementById("bpsTiled").checked;
-  printEstimatesByIds([...store.selectedEstimatesForPrint], {
+  const pageSize = document.getElementById("bpsPageSize")?.value || "A4";
+  const orientation = document.getElementById("bpsOrientation")?.value || "landscape";
+  const isTiled = document.getElementById("bpsTiled")?.checked || false;
+  printEstimatesByIds([...(store.selectedEstimatesForPrint || [])], {
     pageSize,
     orientation,
     isTiled,
   });
 }
 function bulkExportEstimatesPDF() {
-  if (store.selectedEstimatesForPrint.length === 0) {
-    showToast("Tick the estimates you want to export first", "error");
+  if (!store.selectedEstimatesForPrint || store.selectedEstimatesForPrint.length === 0) {
+    showToast("Tick the estimates you want to export first", "info");
     return;
   }
-  exportEstimatesToPDFByIds([...store.selectedEstimatesForPrint]);
+  exportEstimatesToPDFByIds([...(store.selectedEstimatesForPrint || [])]);
 } // =============================================
 // LOCATIONS & MAINTENANCE (LMD)
 // =============================================
@@ -13115,12 +13261,11 @@ function removeZone(zoneId) {
   showToast("Zone removed");
 } // Rebuild every zone-bound <select> from store.zones, preserving valid selections
 function renderZoneSelectors() {
+  store.zones = ensureAllStandardZones(store.zones || []);
+
   // Cleanse SBS if it exists in store.zones
   if (Array.isArray(store.zones) && store.zones.some((z) => isSbsZone(z.id) || isSbsZone(z.name))) {
     store.zones = store.zones.filter((z) => !isSbsZone(z.id) && !isSbsZone(z.name));
-    if (opsDB && opsDB.ref) {
-      opsDB.ref("settings/zones").set(store.zones).catch(console.warn);
-    }
   }
 
   // Determine if the current officer has access to "All Zone" (Admin-&-Staff-Duties)
@@ -13147,7 +13292,14 @@ function renderZoneSelectors() {
     allowedZones = [store.activeProfileZone];
     hasAllZoneAccess = false;
   }
-  const visibleZones = store.zones.filter((z) => allowedZones.includes(z.id) && !isSbsZone(z.id) && !isSbsZone(z.name));
+  const visibleZones = store.zones.filter(
+    (z) =>
+      allowedZones.includes(z.id) &&
+      z.status !== "Inactive" &&
+      z.active !== false &&
+      !isSbsZone(z.id) &&
+      !isSbsZone(z.name),
+  );
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   let zonesToRender = [...visibleZones];
@@ -13171,11 +13323,7 @@ function renderZoneSelectors() {
       const isZoneMatch = (zoneId) => {
           if (!zoneId) return false;
           if (isThisZoneAdmin) {
-              const matchedByOther = zonesToRender.some(otherZ => {
-                  if (isAdminStaffDuties(otherZ.id)) return false;
-                  return cleanZoneStr(zoneId) === cleanZoneStr(otherZ.id) || cleanZoneStr(zoneId) === cleanZoneStr(otherZ.name);
-              });
-              return !matchedByOther;
+              return isAdminStaffDuties(zoneId);
           }
           return cleanZoneStr(zoneId) === cleanZoneStr(z.id) || cleanZoneStr(zoneId) === cleanZoneStr(z.name);
       };
@@ -14181,8 +14329,10 @@ let _cfgSelectedZone = null;
 function renderSettingsZoneSelectorList() {
   const container = document.getElementById("settingsZoneSelectorList");
   if (!container) return;
-  const rawZones = store.zones || store.settings.zones || [];
-  const zones = rawZones.filter(z => !isSbsZone(z.id) && !isSbsZone(z.name));
+  const rawZones = ensureAllStandardZones(store.settings.zones || store.zones || []);
+  store.settings.zones = rawZones;
+  store.zones = rawZones;
+  const zones = rawZones.filter((z) => !isSbsZone(z.id) && !isSbsZone(z.name));
   const badge = document.getElementById("cfgZonesCountBadge");
   if (badge) badge.textContent = `${zones.length} Zones`;
 
@@ -14195,22 +14345,40 @@ function renderSettingsZoneSelectorList() {
       .map((z, idx) => {
         const zid = z.id || z.name;
         const isSelected = _cfgSelectedZone === zid;
+        const isActive = z.status !== "Inactive" && z.active !== false;
         const locCount = (store.locations || []).filter(
           (l) => l.zone_id === zid,
         ).length;
         return `
-      <div onclick="selectSettingsZone('${zid}')" class="flex items-center gap-2 px-3.5 py-2 rounded-xl cursor-pointer transition-all border ${
+      <div onclick="selectSettingsZone('${zid}')" class="flex items-center gap-2 px-3 py-1.5 rounded-xl cursor-pointer transition-all border ${
         isSelected
           ? "bg-teal-600 text-white border-teal-700 shadow-md ring-2 ring-teal-300 font-bold"
-          : "bg-white hover:bg-slate-100 text-slate-700 border-slate-200"
+          : isActive
+            ? "bg-white hover:bg-slate-50 text-slate-700 border-slate-200"
+            : "bg-slate-100 hover:bg-slate-200 text-slate-400 border-slate-200 opacity-75"
       }">
-        <span class="text-xs">🏢 ${z.name || z.id}</span>
+        <span class="text-xs ${!isActive ? "line-through text-slate-400" : ""}">🏢 ${z.name || z.id}</span>
         <span class="text-[11px] px-2 py-0.5 rounded-full font-bold ${
           isSelected
             ? "bg-teal-800 text-teal-100"
             : "bg-slate-100 text-slate-600"
         }">${locCount}</span>
-        <button onclick="event.stopPropagation(); removeZoneFromSettings(${idx})" class="p-0.5 rounded hover:bg-red-500/20 text-red-300 hover:text-white" title="Remove Zone">
+        
+        <!-- Active / Inactive Status Toggle Button -->
+        <button type="button" onclick="event.stopPropagation(); toggleZoneStatusInSettings(${idx})" class="text-[10px] font-bold px-2 py-0.5 rounded-full transition-all cursor-pointer shadow-xs ${
+          isActive
+            ? isSelected
+              ? "bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+              : "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border border-emerald-300"
+            : "bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-300"
+        }" title="${isActive ? "Click to Deactivate zone (Hide from operational dropdown)" : "Click to Activate zone"}">
+          ${isActive ? "🟢 Active" : "⚪ Inactive"}
+        </button>
+
+        <!-- Remove Zone Button -->
+        <button type="button" onclick="event.stopPropagation(); removeZoneFromSettings(${idx})" class="p-1 rounded hover:bg-red-500/20 ${
+          isSelected ? "text-red-200 hover:text-white" : "text-red-400 hover:text-red-600"
+        } cursor-pointer text-xs" title="Remove Zone">
           ✕
         </button>
       </div>
@@ -14219,7 +14387,66 @@ function renderSettingsZoneSelectorList() {
       .join("") ||
     '<p class="text-xs text-slate-400 italic">No zones configured yet.</p>';
 
+  // Render SBS Book (Register) status toggle card in settings
+  const isSbsOn = isSbsBookActive();
+  const sbsPillHtml = `
+    <div class="flex items-center gap-2 px-3 py-1.5 rounded-xl border ${
+      isSbsOn
+        ? "bg-teal-50 border-teal-300 text-teal-900 shadow-xs"
+        : "bg-slate-100 border-slate-200 text-slate-400 opacity-75"
+    }">
+      <span class="text-xs ${!isSbsOn ? "line-through text-slate-400" : "font-bold text-teal-900"}">📖 SBS Book (Register)</span>
+      <button type="button" onclick="toggleSbsBookActiveStatus()" class="text-[10px] font-bold px-2 py-0.5 rounded-full transition-all cursor-pointer shadow-xs ${
+        isSbsOn
+          ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 border border-emerald-300"
+          : "bg-rose-100 text-rose-700 hover:bg-rose-200 border border-rose-300"
+      }" title="${isSbsOn ? "Click to Deactivate SBS Book" : "Click to Activate SBS Book"}">
+        ${isSbsOn ? "🟢 Active" : "⚪ Inactive"}
+      </button>
+    </div>
+  `;
+
+  container.innerHTML += sbsPillHtml;
+
   updateSelectedZoneLocationsView();
+}
+
+function isSbsBookActive() {
+  if (store.settings?.sbsBookActive === false || store.settings?.sbsActive === false) {
+    return false;
+  }
+  return true;
+}
+
+function toggleSbsBookActiveStatus() {
+  const current = isSbsBookActive();
+  const newStatus = !current;
+  if (!store.settings) store.settings = {};
+  store.settings.sbsBookActive = newStatus;
+  store.settings.sbsActive = newStatus;
+  saveSettingField("sbsBookActive", newStatus);
+  renderSettingsZoneSelectorList();
+  toggleViewsBasedOnZone();
+  showToast(`SBS Book is now ${newStatus ? "Active" : "Inactive"}`, "info");
+}
+
+function toggleZoneStatusInSettings(index) {
+  const zones = [...(store.settings.zones || store.zones || [])];
+  if (!zones[index]) return;
+  const currentStatus = zones[index].status !== "Inactive" && zones[index].active !== false;
+  const newActive = !currentStatus;
+  zones[index] = {
+    ...zones[index],
+    active: newActive,
+    status: newActive ? "Active" : "Inactive",
+  };
+  store.settings.zones = zones;
+  store.zones = zones;
+  saveSettingsArray("zones", zones);
+  renderSettingsZoneSelectorList();
+  renderZoneSelectors();
+  toggleViewsBasedOnZone();
+  showToast(`Zone "${zones[index].name}" is now ${newActive ? "Active" : "Inactive"}`);
 }
 
 function selectSettingsZone(zoneId) {
@@ -14693,6 +14920,44 @@ function resetBulkUploadBtn() {
 } // =============================================
 // SETTINGS
 // =============================================
+function ensureAllStandardZones(existingZones = []) {
+  const standardList = [
+    { id: "A-Zone", name: "A-Zone", status: "Active", active: true },
+    { id: "B-Zone", name: "B-Zone", status: "Active", active: true },
+    { id: "BC-Zone", name: "BC-Zone", status: "Active", active: true },
+    { id: "C-Zone", name: "C-Zone", status: "Active", active: true },
+    { id: "D-Zone", name: "D-Zone", status: "Active", active: true },
+    { id: "E-Zone", name: "E-Zone", status: "Active", active: true },
+    { id: "G-Zone", name: "G-Zone", status: "Active", active: true },
+    { id: "FH-Zone", name: "FH-Zone", status: "Active", active: true },
+    { id: "OTW", name: "OTW", status: "Active", active: true },
+    { id: "Supply-School", name: "Supply School", status: "Active", active: true },
+    { id: "Main-Store", name: "Main Store", status: "Active", active: true },
+    { id: "Carpentry-Shop", name: "Carpentry Shop", status: "Active", active: true },
+    { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
+    { id: "Aluminium-Workshop", name: "Aluminium Workshop", status: "Active", active: true }
+  ];
+
+  if (!existingZones || !Array.isArray(existingZones) || existingZones.length === 0) {
+    return standardList;
+  }
+
+  return existingZones
+    .filter((z) => z && (z.id || z.name) && !isSbsZone(z.id || z.name))
+    .map((z) => {
+      const zid = z.id || z.name;
+      const zname = z.name || z.id;
+      const isInactive = z.status === "Inactive" || z.active === false;
+      return {
+        ...z,
+        id: zid,
+        name: zname,
+        status: isInactive ? "Inactive" : "Active",
+        active: !isInactive,
+      };
+    });
+}
+
 // Default settings (used if Firebase has nothing)
 const defaultSettings = {
   systemTitle: "CMSys v2.6",
@@ -14708,10 +14973,20 @@ const defaultSettings = {
   dateFormat: "YYYY-MM-DD",
   lowStockLevel: 10,
   zones: [
-    { id: "A-Zone", name: "A-Zone" },
-    { id: "BC-Zone", name: "BC-Zone" },
-    { id: "Carpentry-Shop", name: "Carpentry Shop" },
-    { id: "Welding-Shop", name: "Welding Shop" },
+    { id: "A-Zone", name: "A-Zone", status: "Active", active: true },
+    { id: "B-Zone", name: "B-Zone", status: "Active", active: true },
+    { id: "BC-Zone", name: "BC-Zone", status: "Active", active: true },
+    { id: "C-Zone", name: "C-Zone", status: "Active", active: true },
+    { id: "D-Zone", name: "D-Zone", status: "Active", active: true },
+    { id: "E-Zone", name: "E-Zone", status: "Active", active: true },
+    { id: "G-Zone", name: "G-Zone", status: "Active", active: true },
+    { id: "FH-Zone", name: "FH-Zone", status: "Active", active: true },
+    { id: "OTW", name: "OTW", status: "Active", active: true },
+    { id: "Supply-School", name: "Supply School", status: "Active", active: true },
+    { id: "Main-Store", name: "Main Store", status: "Active", active: true },
+    { id: "Carpentry-Shop", name: "Carpentry Shop", status: "Active", active: true },
+    { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
+    { id: "Aluminium-Workshop", name: "Aluminium Workshop", status: "Active", active: true }
   ],
   offChargeDestinations: [
     "SLNS Tissa",
@@ -14828,7 +15103,7 @@ function initSettingsListener() {
       renderZoneSelectors();
     } else {
       const s = store.settings;
-      store.zones = (s.zones || defaultSettings.zones).filter(z => !isSbsZone(z.id) && !isSbsZone(z.name));
+      store.zones = ensureAllStandardZones(s.zones || defaultSettings.zones);
       if (typeof _currentSettingsTab !== "undefined" && _currentSettingsTab === "identity") {
         renderSettingsOicProfilesList();
       }
@@ -14841,7 +15116,7 @@ function initSettingsListener() {
 } // ── Apply loaded settings to the live UI ──
 function applySettings() {
   const s = store.settings; // Sync store arrays from settings
-  store.zones = (s.zones || defaultSettings.zones).filter(z => !isSbsZone(z.id) && !isSbsZone(z.name));
+  store.zones = ensureAllStandardZones(s.zones || defaultSettings.zones);
   if (isSbsZone(store.currentZone)) {
     store.currentZone = store.zones[0]?.id || "A Zone";
     localStorage.setItem("ncw_saved_zone", store.currentZone);
@@ -14895,8 +15170,8 @@ function saveSettingField(key, value) {
 function saveSettingsArray(key, arr) {
   store.settings[key] = arr;
   opsDB
-    .ref("settings")
-    .update({ [key]: arr })
+    .ref(`settings/${key}`)
+    .set(arr)
     .then(() => {
       applySettings();
       renderZoneSelectors();
@@ -16626,7 +16901,10 @@ function selectWoSupervisor(sailorId, displayName) {
 function renderSettingsZoneList() {
   const container = document.getElementById("settingsZoneList");
   if (!container) return;
-  const zones = store.settings.zones || [];
+  const rawZones = ensureAllStandardZones(store.settings.zones || store.zones || []);
+  store.settings.zones = rawZones;
+  store.zones = rawZones;
+  const zones = rawZones.filter((z) => !isSbsZone(z.id) && !isSbsZone(z.name));
   container.innerHTML =
     zones
       .map(
@@ -16645,26 +16923,61 @@ function renderSettingsZoneList() {
 }
 function addZoneFromSettings() {
   const input = document.getElementById("newZoneNameSettings");
-  const name = input.value.trim();
+  const name = input ? input.value.trim() : "";
   if (!name) return;
-  const zones = [...(store.settings.zones || [])];
+  if (isSbsZone(name)) {
+    showToast("SBS is reserved as a Book / Register and cannot be added as an operational zone", "warning");
+    return;
+  }
+  const zones = [...(store.settings.zones || store.zones || [])];
   const id = name.replace(/\s+/g, "-");
-  if (zones.find((z) => z.id === id)) {
+  if (zones.find((z) => (z.id || z.name).toLowerCase() === id.toLowerCase() || (z.name || z.id).toLowerCase() === name.toLowerCase())) {
     showToast("Zone already exists", "error");
     return;
   }
-  zones.push({ id, name });
+  zones.push({ id, name, status: "Active", active: true });
+  store.settings.zones = zones;
+  store.zones = zones;
   saveSettingsArray("zones", zones);
-  input.value = "";
+  if (input) input.value = "";
+  _cfgSelectedZone = id;
   renderSettingsZoneList();
-  showToast(`Zone "${name}" added`);
+  renderSettingsZoneSelectorList();
+  renderZoneSelectors();
+  showToast(`Zone "${name}" added successfully!`);
 }
+
 function removeZoneFromSettings(index) {
-  const zones = [...(store.settings.zones || [])];
-  const removed = zones.splice(index, 1)[0];
+  const zones = [...(store.settings.zones || store.zones || [])];
+  if (!zones[index]) return;
+  const removed = zones[index];
+  const locCount = (store.locations || []).filter(
+    (l) => l.zone_id === removed.id || l.zone_id === removed.name
+  ).length;
+
+  if (
+    !confirm(
+      `⚠️ Are you sure you want to remove the zone "${removed.name}"?` +
+        (locCount > 0 ? `\n\nNote: It currently has ${locCount} assigned location(s).` : "")
+    )
+  ) {
+    return;
+  }
+
+  zones.splice(index, 1);
+  store.settings.zones = zones;
+  store.zones = zones;
+  if (store.currentZone === removed.id || store.currentZone === removed.name) {
+    store.currentZone = zones[0]?.id || "A-Zone";
+  }
+  if (_cfgSelectedZone === removed.id || _cfgSelectedZone === removed.name) {
+    _cfgSelectedZone = zones[0]?.id || null;
+  }
   saveSettingsArray("zones", zones);
   renderSettingsZoneList();
-  showToast(`Zone "${removed.name}" removed`);
+  renderSettingsZoneSelectorList();
+  renderZoneSelectors();
+  showToast(`Zone "${removed.name}" removed successfully!`);
 } // ── Off-Charge Destinations ──
 function renderSettingsOffChargeList() {
   const container = document.getElementById("settingsOffChargeList");
@@ -19100,40 +19413,42 @@ function toggleLeftSidebar(open) {
 let _lmdExportAction = "csv";
 function toggleViewsBasedOnZone() {
   var _document$getElementB13;
-  const isSpecialZone = isAdminStaffDuties(store.currentZone); // Normal tabs to toggle
-  const specialTabs = [
-    "tab-jobcards",
-    "tab-inventory",
-    "tab-estimates",
-    "tab-maintenance",
-    "tab-settings",
-  ];
-  const mobileSpecialTabs = [
-    "mobile-tab-jobcards",
-    "mobile-tab-inventory",
-    "mobile-tab-estimates",
-    "mobile-tab-maintenance",
-    "mobile-tab-settings",
-  ];
-  specialTabs.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isSpecialZone ? "none" : "";
+  const isSpecialZone = isAdminStaffDuties(store.currentZone);
+  const sbsActive = typeof isSbsBookActive === "function" ? isSbsBookActive() : true;
+
+  // Exact Tab Visibility Configuration:
+  // 1. Zone: Dashboard, Job Card, Inventory, Estimates, Documents, Sailors, LMD, Reports
+  // 2. Admin & Staff Duties: Dashboard, Documents, SBS Book (if active), Sailors, Projects
+  const tabVisibility = {
+    "tab-dashboard": true,
+    "tab-jobcards": !isSpecialZone,
+    "tab-inventory": !isSpecialZone,
+    "tab-estimates": !isSpecialZone,
+    "tab-documents": true,
+    "tab-sbs-book": isSpecialZone && sbsActive,
+    "tab-sailors": true,
+    "tab-maintenance": !isSpecialZone,
+    "tab-reports": !isSpecialZone,
+    "tab-projects": isSpecialZone,
+    "tab-nastatus": false,
+    "tab-dailydetails": false,
+    "tab-summary": false,
+    "tab-settings": true,
+  };
+
+  Object.entries(tabVisibility).forEach(([tabId, isVisible]) => {
+    const el = document.getElementById(tabId);
+    if (el) {
+      el.style.display = isVisible ? "" : "none";
+    }
   });
-  mobileSpecialTabs.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isSpecialZone ? "none" : "";
-  }); // Admin & Staff Duties specific tabs
-  const adminTabs = ["tab-nastatus", "tab-dailydetails", "tab-summary", "tab-projects"];
-  const mobileAdminTabs = ["mobile-tab-nastatus", "mobile-tab-dailydetails", "mobile-tab-summary"];
-  adminTabs.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isSpecialZone ? "block" : "none";
-  });
-  mobileAdminTabs.forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = isSpecialZone ? "flex" : "none";
-  });
-  if (!isSpecialZone && store.currentView === "nastatus") {
+
+  // Allowed Views check and auto-fallback
+  const allowedViews = isSpecialZone
+    ? ["dashboard", "documents", sbsActive ? "sbs-book" : null, "sailors", "projects", "settings"].filter(Boolean)
+    : ["dashboard", "jobcards", "inventory", "estimates", "documents", "sailors", "maintenance", "reports", "settings"];
+
+  if (!allowedViews.includes(store.currentView)) {
     switchView("dashboard");
   } // Revert sidebar, sidebar toggle, mainPanel and boardGrid display changes (always use normal layout)
   const leftSidebar = document.getElementById("leftSidebarContainer");
@@ -20839,13 +21154,9 @@ function shareLmdWhatsApp(scope, selectedZone) {
   shareViaWhatsAppOrSystem(text, `LMD_Report_${dateVal}.txt`);
 }
 function shareEstimateWhatsApp() {
-  if (!store.selectedEstimate) {
-    showToast("No estimate selected to share!", "error");
-    return;
-  }
-  const est = store.estimates.find((e) => e.id === store.selectedEstimate);
+  const est = findEstimateById(store.selectedEstimate);
   if (!est) {
-    showToast("Estimate not found!", "error");
+    showToast("Please select an estimate to share!", "error");
     return;
   }
   let text = `*⚓ SRI LANKA NAVY - COST ESTIMATE*\n`;
