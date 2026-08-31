@@ -17095,11 +17095,27 @@ function renderSettingsInventoryStoresList() {
     const sAbbr = String(st.abbr || "").trim();
     const isActive = st.active !== false;
 
-    // Count connecting inventory items in stock
+    // Count connecting inventory items in stock (matches by Location name, Abbreviation, or Zone ID)
     const connectedCount = inventoryItems.filter(item => {
       const itemLoc = String(item.location || item.store_location || item.store || "").toLowerCase().trim();
-      if (!itemLoc) return false;
-      return itemLoc === sName.toLowerCase() || (sAbbr && itemLoc === sAbbr.toLowerCase());
+      const itemZone = String(item.zone_id || item.zone || "").trim();
+
+      // 1. Direct Location match (e.g., Timber Yard, Ready Use Store, Workshop Store)
+      if (itemLoc && (itemLoc === sName.toLowerCase() || (sAbbr && itemLoc === sAbbr.toLowerCase()))) {
+        return true;
+      }
+
+      // 2. Zone match (e.g., A-Zone, B-Zone, BC-Zone, C-Zone, D-Zone)
+      if (itemZone && (isZoneMatch(itemZone, sName) || (sAbbr && isZoneMatch(itemZone, sAbbr)))) {
+        return true;
+      }
+
+      // 3. Exact or Normalized Name match
+      if (sName.toLowerCase() === "zone store" && itemLoc === "zone store") {
+        return true;
+      }
+
+      return false;
     }).length;
 
     const connectionBadge = connectedCount > 0
