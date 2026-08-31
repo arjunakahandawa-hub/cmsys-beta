@@ -664,7 +664,7 @@
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5 sm:gap-2">
-                            <h1 class="text-xs sm:text-[15px] font-bold text-white tracking-wide">CMSys <span class="text-teal-400 font-extrabold text-[10px] sm:text-[12px] bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-500/30 font-mono">v5.24.48</span></h1>
+                            <h1 class="text-xs sm:text-[15px] font-bold text-white tracking-wide">CMSys <span class="text-teal-400 font-extrabold text-[10px] sm:text-[12px] bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-500/30 font-mono">v5.24.57</span></h1>
                         </div>
                         <p class="brand-tag leading-none hidden md:block">CE Management · Trincomalee</p>
                     </div>
@@ -1935,14 +1935,14 @@
                 </div>
                 <div class="flex gap-3">
                     <div class="flex gap-2">
-                        <button onclick="openBulkPrintSettings()" id="bulkPrintBtn" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        <button type="button" onclick="openBulkPrintSettings()" id="bulkPrintBtn" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all">
                             🖨️ Bulk Print (<span id="bulkPrintCount">0</span>)
                         </button>
-                        <button onclick="bulkExportEstimatesPDF()" id="bulkPdfBtn" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                        <button type="button" onclick="bulkExportEstimatesPDF()" id="bulkPdfBtn" class="bg-slate-600 hover:bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium cursor-pointer transition-all">
                             📄 Bulk PDF
                         </button>
                     </div>
-                    <button onclick="openNewEstimateModal()" class="text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md" style="background:linear-gradient(135deg,#059669,#0d9488)">
+                    <button type="button" id="newEstimateBtn" onclick="openNewEstimateModal()" class="text-white px-4 py-2.5 rounded-xl text-sm font-semibold shadow-md cursor-pointer hover:opacity-90 transition-all flex items-center gap-1.5" style="background:linear-gradient(135deg,#059669,#0d9488)">
                         + New Estimate
                     </button>
                 </div>
@@ -1966,29 +1966,29 @@
                 <!-- Estimate Details -->
                 <div class="col-span-12 md:col-span-8">
                     <div class="glass-card overflow-hidden" id="estimateDetailsPanel">
-                        <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-4">
-                            <div class="flex items-center justify-between">
+                        <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-3.5 sm:p-5 rounded-t-2xl">
+                            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                                 <div>
-                                    <p class="text-sm text-amber-200">Estimate</p>
-                                    <h3 class="text-xl font-bold" id="selectedEstimateNumber">Select an Estimate</h3>
+                                    <p class="text-[11px] sm:text-xs text-amber-100 font-bold uppercase tracking-wider">Estimate</p>
+                                    <h3 class="text-base sm:text-xl font-black tracking-tight" id="selectedEstimateNumber">Select an Estimate</h3>
                                 </div>
-                                <div class="flex gap-2">
-                                    <button onclick="editEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm" id="editEstimateBtn">
+                                <div class="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                                    <button type="button" onclick="editEstimate()" class="bg-white/20 hover:bg-white/30 text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm cursor-pointer transition-all font-semibold inline-flex items-center gap-1 shadow-xs active:scale-95" id="editEstimateBtn">
                                         ✏️ Edit
                                     </button>
-                                    <button onclick="approveEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm" id="approveEstimateBtn">
+                                    <button type="button" onclick="approveEstimate()" class="bg-white/20 hover:bg-white/30 text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm cursor-pointer transition-all font-semibold inline-flex items-center gap-1 shadow-xs active:scale-95" id="approveEstimateBtn">
                                         ✅ Approve
                                     </button>
-                                    <button onclick="deleteEstimate()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg text-sm" id="deleteEstimateBtn" style="display: none;">
+                                    <button type="button" onclick="deleteEstimate()" class="bg-red-600 hover:bg-red-700 text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm cursor-pointer transition-all font-semibold inline-flex items-center gap-1 shadow-xs active:scale-95" id="deleteEstimateBtn" style="display: none;">
                                         🗑️ Delete
                                     </button>
-                                    <button onclick="printEstimate()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm">
-                                        🖨️ Print This
+                                    <button type="button" onclick="printEstimate()" class="bg-white/20 hover:bg-white/30 text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm cursor-pointer transition-all font-semibold inline-flex items-center gap-1 shadow-xs active:scale-95">
+                                        🖨️ Print
                                     </button>
-                                    <button onclick="exportEstimatePDF()" class="bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded-lg text-sm">
-                                        📄 Export PDF
+                                    <button type="button" onclick="exportEstimatePDF()" class="bg-white/20 hover:bg-white/30 text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm cursor-pointer transition-all font-semibold inline-flex items-center gap-1 shadow-xs active:scale-95">
+                                        📄 PDF
                                     </button>
-                                    <button onclick="shareEstimateWhatsApp()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm flex items-center gap-1">
+                                    <button type="button" onclick="shareEstimateWhatsApp()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-sm cursor-pointer transition-all font-semibold inline-flex items-center gap-1 shadow-xs active:scale-95">
                                         💬 Share
                                     </button>
                                 </div>
@@ -5863,6 +5863,9 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
     <!-- ==================== OFFICER ACTION & APPROVALS HUB MODAL ==================== -->
     <div id="officerApprovalsHubModal" class="fixed inset-0 bg-black/60 z-50 hidden flex items-center justify-center p-3 sm:p-4 modal-overlay backdrop-blur-xs">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden border border-slate-200">
@@ -5973,7 +5976,7 @@
                   </div>
 
     <!-- Bulk Print Settings Modal -->
-    <div id="bulkPrintSettingsModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+    <div id="bulkPrintSettingsModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-[99999] hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
             <div class="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-700">
                 <h3 class="text-lg font-bold text-white flex items-center gap-2">
@@ -6242,7 +6245,7 @@
     </div>
 
     <!-- New Estimate Modal -->
-    <div id="newEstimateModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+    <div id="newEstimateModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-[99999] hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between sticky top-0 z-10">
                 <h2 class="font-bold text-lg">New Estimate</h2>
@@ -6945,7 +6948,7 @@
     </div>
 
     <!-- ==================== ESTIMATE APPROVAL MODAL (req 9) ==================== -->
-    <div id="approvalModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay">
+    <div id="approvalModal" class="fixed inset-0 bg-black/60 backdrop-blur-xs z-[99999] hidden flex items-center justify-center p-4 modal-overlay">
         <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div class="bg-gradient-to-r from-green-600 to-emerald-500 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
                 <h2 class="font-bold text-lg">Approve Estimate</h2>
@@ -6987,10 +6990,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-teal-400 font-bold z-[9999] bg-slate-900/90 border border-teal-500/30 px-2 py-1 rounded-lg shadow pointer-events-none font-mono">
-        App Version: v5.24.48
+        App Version: v5.24.57
     </div>
 
-    <script src="app.js?v=5.24.48"></script>
+    <script src="app.js?v=5.24.57"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

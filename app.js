@@ -10702,14 +10702,15 @@ function renderEstimates() {
 
   const currentZone = store.currentZone || "A-Zone";
   const cleanZoneStr = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const cleanCur = cleanZoneStr(currentZone);
+  const isAdminZone = typeof isAdminStaffDuties === "function" && isAdminStaffDuties(currentZone);
   
   const isEstimateZoneMatch = (est) => {
     if (!est) return false;
-    if (isAdminStaffDuties(currentZone)) return true; // Admin & Staff Duties sees all estimates
+    if (isAdminZone) return true; // Admin & Staff Duties sees all estimates
     const estZone = est.zone_id || est.zone || "";
     if (!estZone) return true; // Estimates without a strict zone are visible everywhere
     const cleanEst = cleanZoneStr(estZone);
-    const cleanCur = cleanZoneStr(currentZone);
     return cleanEst === cleanCur || cleanEst.includes(cleanCur) || cleanCur.includes(cleanEst);
   };
 
@@ -10740,15 +10741,17 @@ function renderEstimates() {
           : `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full ${isApproved ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}">
                 ${isApproved ? "✓ Approved" : "⏳ Pending"}
             </span>`;
+        const estKey = String(e.id || e._fbKey || e.estimate_number || "");
+        const isChecked = (store.selectedEstimatesForPrint || []).some(x => String(x) === estKey);
         return `
         <div class="p-3.5 border-b border-slate-100 hover:bg-teal-50/40 cursor-pointer transition-all
             ${isSelected ? "bg-amber-50 border-l-4 border-amber-400 shadow-sm" : ""}"
             >
             <div class="flex items-start gap-3">
                 <input type="checkbox" class="mt-1 w-4 h-4 accent-teal-600 cursor-pointer flex-shrink-0"
-                    ${store.selectedEstimatesForPrint.includes(e.id) ? "checked" : ""}
-                    onclick="event.stopPropagation(); toggleEstimatePrintSelection(${e.id})" title="Select for bulk print">
-                <div class="flex-1 min-w-0" onclick="selectEstimate(${e.id})">
+                    ${isChecked ? "checked" : ""}
+                    onclick="event.stopPropagation(); toggleEstimatePrintSelection('${estKey}')" title="Select for bulk print">
+                <div class="flex-1 min-w-0" onclick="selectEstimate('${estKey}')">
                     <div class="flex items-center justify-between mb-1">
                         <span class="mono text-xs font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded">${e.estimate_number}</span>
                         ${statusBadge}
@@ -10790,15 +10793,20 @@ function renderEstimates() {
       })
       .join("") ||
     '<p class="text-slate-500 text-center py-8">No estimates</p>';
-  document.getElementById("bulkPrintCount").textContent =
-    store.selectedEstimatesForPrint.length;
+  const countEl = document.getElementById("bulkPrintCount");
+  if (countEl) countEl.textContent = (store.selectedEstimatesForPrint || []).length;
 }
 function toggleEstimatePrintSelection(id) {
-  const idx = store.selectedEstimatesForPrint.indexOf(id);
-  if (idx >= 0) store.selectedEstimatesForPrint.splice(idx, 1);
-  else store.selectedEstimatesForPrint.push(id);
-  document.getElementById("bulkPrintCount").textContent =
-    store.selectedEstimatesForPrint.length;
+  if (!store.selectedEstimatesForPrint) store.selectedEstimatesForPrint = [];
+  const sId = String(id);
+  const idx = store.selectedEstimatesForPrint.findIndex(x => String(x) === sId);
+  if (idx >= 0) {
+    store.selectedEstimatesForPrint.splice(idx, 1);
+  } else {
+    store.selectedEstimatesForPrint.push(id);
+  }
+  const countEl = document.getElementById("bulkPrintCount");
+  if (countEl) countEl.textContent = store.selectedEstimatesForPrint.length;
 }
 function findEstimateById(id) {
   if (!id && id !== 0) return null;
@@ -10816,12 +10824,20 @@ function selectEstimate(id) {
   if (!est) return;
   document.getElementById("selectedEstimateNumber").textContent =
     est.estimate_number;
-  document.getElementById("editEstimateBtn").style.display =
-    est.status === "Pending" ? "inline-block" : "none";
-  document.getElementById("approveEstimateBtn").style.display =
-    est.status === "Pending" ? "inline-block" : "none";
-  document.getElementById("deleteEstimateBtn").style.display =
-    est.status === "Pending" ? "inline-block" : "none";
+  const editBtn = document.getElementById("editEstimateBtn");
+  if (editBtn) editBtn.style.display = est.status === "Pending" ? "inline-flex" : "none";
+  const apvBtn = document.getElementById("approveEstimateBtn");
+  if (apvBtn) apvBtn.style.display = est.status === "Pending" ? "inline-flex" : "none";
+  const delBtn = document.getElementById("deleteEstimateBtn");
+  if (delBtn) delBtn.style.display = est.status === "Pending" ? "inline-flex" : "none";
+
+  // Smooth scroll to details on mobile screen when selected
+  if (window.innerWidth < 768) {
+    const detailsPanel = document.getElementById("estimateDetailsPanel");
+    if (detailsPanel) {
+      detailsPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }
   const sigBlock = (label, p) => `
         <div class="text-center">
             <div class="h-12 border-b border-slate-400 mb-1"></div>
@@ -11066,59 +11082,73 @@ function onEstLocation2Change(selectedLoc2) {
 }
 
 function openNewEstimateModal() {
-  const setVal = (id, v) => {
-    const el = document.getElementById(id);
-    if (el) el.value = v;
-  };
-
-  setVal("estId", "");
-  setVal("estDescription", "");
-  const refTypeSelect = document.getElementById("estRefType");
-  if (refTypeSelect) refTypeSelect.value = "Minute Sheet";
-  setVal("estReference", "");
-  const projTypeSelect = document.getElementById("estProjectType");
-  if (projTypeSelect) projTypeSelect.value = "PROJECT";
-  setVal("estLocation", "");
-  setVal("estLocation2", "");
-  setVal("estEndUser", "");
-
-  // Created By (Sailor) - default empty or current logged-in user
-  setVal("estCreatedName", store.currentUser?.name || "");
-  setVal("estCreatedRank", store.currentUser?.rank || "");
-  setVal("estCreatedSvc", store.currentUser?.serviceNo || store.currentUser?.official_number || "");
-
-  // Checked By (Zone In-Charge)
-  const inc = (store.settings?.zoneInCharges || {})[store.currentZone];
-  let incSailor = null;
-  if (inc && inc.woInchargeId) {
-    incSailor = (store.sailors || []).find(
-      (s) =>
-        String(s.id) === String(inc.woInchargeId) ||
-        String(s._fbKey) === String(inc.woInchargeId),
-    );
-  }
-  setVal("estCheckedName", incSailor ? incSailor.name : inc?.name || "");
-  setVal("estCheckedRank", incSailor ? incSailor.rank || "" : inc?.rank || "");
-  setVal("estCheckedSvc", incSailor ? incSailor.official_number || incSailor.service_no || "" : inc?.serviceNo || "");
-
-  // Approved By (Optional CE Officer)
-  setVal("estApprovedName", "");
-  setVal("estApprovedRank", "");
-  setVal("estApprovedSvc", "");
-
-  // Clear dynamic scopes container and add one default section
-  const scopesContainer = document.getElementById("estWorkScopesContainer");
-  if (scopesContainer) {
-    scopesContainer.innerHTML = "";
-    estWorkScopeCounter = 0;
-    addWorkScopeBlock();
-  }
-  if (typeof updateEstimateTotals === "function") updateEstimateTotals();
-  if (typeof populateEstLocationsDatalist === "function") populateEstLocationsDatalist();
-  if (typeof populateSignatoryDropdowns === "function") populateSignatoryDropdowns();
-  if (typeof populateIncomingMinutesInEstimateModal === "function") populateIncomingMinutesInEstimateModal();
+  console.log("👉 [New Estimate Button] openNewEstimateModal triggered");
   const modal = document.getElementById("newEstimateModal");
-  if (modal) modal.classList.remove("hidden");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.setProperty("display", "flex", "important");
+    modal.style.setProperty("visibility", "visible", "important");
+    modal.style.setProperty("opacity", "1", "important");
+    modal.style.setProperty("z-index", "99999", "important");
+  } else {
+    console.error("❌ newEstimateModal element not found in DOM!");
+  }
+
+  try {
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v;
+    };
+
+    setVal("estId", "");
+    setVal("estDescription", "");
+    const refTypeSelect = document.getElementById("estRefType");
+    if (refTypeSelect) refTypeSelect.value = "Minute Sheet";
+    setVal("estReference", "");
+    const projTypeSelect = document.getElementById("estProjectType");
+    if (projTypeSelect) projTypeSelect.value = "PROJECT";
+    setVal("estLocation", "");
+    setVal("estLocation2", "");
+    setVal("estEndUser", "");
+
+    // Created By (Sailor) - default empty or current logged-in user
+    setVal("estCreatedName", store.currentUser?.name || "");
+    setVal("estCreatedRank", store.currentUser?.rank || "");
+    setVal("estCreatedSvc", store.currentUser?.serviceNo || store.currentUser?.official_number || "");
+
+    // Checked By (Zone In-Charge)
+    const inc = (store.settings?.zoneInCharges || {})[store.currentZone];
+    let incSailor = null;
+    if (inc && inc.woInchargeId) {
+      incSailor = (store.sailors || []).find(
+        (s) =>
+          String(s.id) === String(inc.woInchargeId) ||
+          String(s._fbKey) === String(inc.woInchargeId),
+      );
+    }
+    setVal("estCheckedName", incSailor ? incSailor.name : inc?.name || "");
+    setVal("estCheckedRank", incSailor ? incSailor.rank || "" : inc?.rank || "");
+    setVal("estCheckedSvc", incSailor ? incSailor.official_number || incSailor.service_no || "" : inc?.serviceNo || "");
+
+    // Approved By (Optional CE Officer)
+    setVal("estApprovedName", "");
+    setVal("estApprovedRank", "");
+    setVal("estApprovedSvc", "");
+
+    // Clear dynamic scopes container and add one default section
+    const scopesContainer = document.getElementById("estWorkScopesContainer");
+    if (scopesContainer) {
+      scopesContainer.innerHTML = "";
+      estWorkScopeCounter = 0;
+      addWorkScopeBlock();
+    }
+    if (typeof updateEstimateTotals === "function") updateEstimateTotals();
+    if (typeof populateEstLocationsDatalist === "function") populateEstLocationsDatalist();
+    if (typeof populateSignatoryDropdowns === "function") populateSignatoryDropdowns();
+    if (typeof populateIncomingMinutesInEstimateModal === "function") populateIncomingMinutesInEstimateModal();
+  } catch (err) {
+    console.error("Error initializing new estimate modal:", err);
+  }
 }
 
 function editEstimate() {
@@ -11131,57 +11161,80 @@ function editEstimate() {
     showToast("This estimate is linked to a Job Card and cannot be edited", "warning");
     return;
   }
-  document.getElementById("estId").value = est.id || est._fbKey || "";
-  document.getElementById("estDescription").value = est.description || "";
-  const refTypeSelect = document.getElementById("estRefType");
-  if (refTypeSelect)
-    refTypeSelect.value = est.ref_type || est.reference_type || "Minute Sheet";
-  document.getElementById("estReference").value =
-    est.reference_doc || est.reference_no || "";
-  const projTypeSelect = document.getElementById("estProjectType");
-  if (projTypeSelect)
-    projTypeSelect.value = est.project_type || est.type || "PROJECT";
-  document.getElementById("estLocation").value = est.location || "";
-  const loc2Input = document.getElementById("estLocation2");
-  if (loc2Input) loc2Input.value = est.location2 || est.sub_location || "";
-  document.getElementById("estEndUser").value = est.endUser || "";
 
-  document.getElementById("estCreatedName").value = est.createdBy?.name || "";
-  document.getElementById("estCreatedRank").value = est.createdBy?.rank || "";
-  document.getElementById("estCreatedSvc").value =
-    est.createdBy?.serviceNo || "";
-
-  document.getElementById("estCheckedName").value = est.checkedBy?.name || "";
-  document.getElementById("estCheckedRank").value = est.checkedBy?.rank || "";
-  document.getElementById("estCheckedSvc").value =
-    est.checkedBy?.serviceNo || "";
-
-  document.getElementById("estApprovedName").value =
-    est.approvedBy?.name || "";
-  document.getElementById("estApprovedRank").value =
-    est.approvedBy?.rank || "";
-  document.getElementById("estApprovedSvc").value =
-    est.approvedBy?.serviceNo || "";
-
-  document.getElementById("estWorkScopesContainer").innerHTML = "";
-  estWorkScopeCounter = 0;
-  if (est.workScopes && est.workScopes.length > 0) {
-    est.workScopes.forEach((s) => {
-      addWorkScopeBlock(s);
-    });
-  } else {
-    // Backward compatibility: load flat lists as a single section
-    addWorkScopeBlock({
-      description: est.workScope || "Default Work Scope Section",
-      materials: est.materials || [],
-      labor: est.labor || [],
-    });
+  const modal = document.getElementById("newEstimateModal");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.setProperty("display", "flex", "important");
+    modal.style.setProperty("visibility", "visible", "important");
+    modal.style.setProperty("opacity", "1", "important");
+    modal.style.setProperty("z-index", "99999", "important");
   }
-  updateEstimateTotals();
-  populateEstLocationsDatalist();
-  onEstLocationChange(est.location || "");
-  populateSignatoryDropdowns();
-  document.getElementById("newEstimateModal").classList.remove("hidden");
+
+  try {
+    const setVal = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v;
+    };
+
+    setVal("estId", est.id || est._fbKey || "");
+    setVal("estDescription", est.description || "");
+    const refTypeSelect = document.getElementById("estRefType");
+    if (refTypeSelect)
+      refTypeSelect.value = est.ref_type || est.reference_type || "Minute Sheet";
+    setVal("estReference", est.reference_doc || est.reference_no || "");
+    const projTypeSelect = document.getElementById("estProjectType");
+    if (projTypeSelect)
+      projTypeSelect.value = est.project_type || est.type || "PROJECT";
+    
+    if (typeof populateEstLocationsDatalist === "function") {
+      populateEstLocationsDatalist(est.location || "");
+    }
+    setVal("estLocation", est.location || "");
+    setVal("estLocation2", est.location2 || est.sub_location || "");
+    setVal("estEndUser", est.endUser || "");
+
+    // Created By
+    const created = est.createdBy || {};
+    setVal("estCreatedName", typeof created === "string" ? created : (created.name || ""));
+    setVal("estCreatedRank", created.rank || "");
+    setVal("estCreatedSvc", created.serviceNo || created.official_number || "");
+
+    // Checked By
+    const checked = est.checkedBy || {};
+    setVal("estCheckedName", typeof checked === "string" ? checked : (checked.name || ""));
+    setVal("estCheckedRank", checked.rank || "");
+    setVal("estCheckedSvc", checked.serviceNo || checked.official_number || "");
+
+    // Approved By
+    const approved = est.approvedBy || {};
+    setVal("estApprovedName", typeof approved === "string" ? approved : (approved.name || ""));
+    setVal("estApprovedRank", approved.rank || "");
+    setVal("estApprovedSvc", approved.serviceNo || approved.official_number || "");
+
+    const scopesContainer = document.getElementById("estWorkScopesContainer");
+    if (scopesContainer) {
+      scopesContainer.innerHTML = "";
+      estWorkScopeCounter = 0;
+      if (est.workScopes && est.workScopes.length > 0) {
+        est.workScopes.forEach((s) => {
+          addWorkScopeBlock(s);
+        });
+      } else {
+        // Backward compatibility: load flat lists as a single section
+        addWorkScopeBlock({
+          description: est.workScope || "Default Work Scope Section",
+          materials: est.materials || [],
+          labor: est.labor || [],
+        });
+      }
+    }
+    if (typeof updateEstimateTotals === "function") updateEstimateTotals();
+    if (typeof onEstLocationChange === "function") onEstLocationChange(est.location || "");
+    if (typeof populateSignatoryDropdowns === "function") populateSignatoryDropdowns();
+  } catch (err) {
+    console.error("Error populating estimate edit modal:", err);
+  }
 }
 function addWorkScopeBlock(data = null) {
   estWorkScopeCounter++;
@@ -11466,56 +11519,37 @@ function updateEstimateTotals() {
   let grandLaborTotal = 0;
   const blocks = document.querySelectorAll(".est-scope-block");
   blocks.forEach((b) => {
-    var _b$querySelector, _b$querySelector2, _b$querySelector3;
     const sId = b.id.replace("estScopeBlock-", "");
     let scopeMatTotal = 0;
     let scopeLabTotal = 0;
     b.querySelectorAll(`#estScopeMaterialsBody-${sId} tr`).forEach((row) => {
-      var _row$querySelector, _row$querySelector2, _row$querySelector3;
-      const qty =
-        parseFloat(
-          (_row$querySelector = row.querySelector(".est-mat-qty")) === null ||
-            _row$querySelector === void 0
-            ? void 0
-            : _row$querySelector.value,
-        ) || 0;
-      const cost =
-        parseFloat(
-          (_row$querySelector2 = row.querySelector(".est-mat-cost")) === null ||
-            _row$querySelector2 === void 0
-            ? void 0
-            : _row$querySelector2.value,
-        ) || 0;
+      const qtyInput = row.querySelector(".est-mat-qty");
+      const costInput = row.querySelector(".est-mat-cost");
+      const qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+      const cost = parseFloat(costInput ? costInput.value : 0) || 0;
       const lineTotal = qty * cost;
       scopeMatTotal += lineTotal;
       const totalCell = row.querySelector(".est-mat-total");
       if (totalCell) totalCell.textContent = formatCurrency(lineTotal);
     });
     b.querySelectorAll(`#estScopeLaborBody-${sId} tr`).forEach((row) => {
-      var _row$querySelector$va;
-      const days =
-        parseFloat(
-          (_row$querySelector$va = row.querySelector(".est-lab-days").value) !==
-            null && _row$querySelector$va !== void 0
-            ? _row$querySelector$va
-            : 0,
-        ) || 0;
+      const daysInput = row.querySelector(".est-lab-days");
+      const days = parseFloat(daysInput ? daysInput.value : 0) || 0;
       scopeLabTotal += days;
     });
-    const matTotalEl = document.getElementById(
-      `estScopeMaterialsTotal-${sId}`,
-    );
+    const matTotalEl = document.getElementById(`estScopeMaterialsTotal-${sId}`);
     if (matTotalEl) matTotalEl.textContent = formatCurrency(scopeMatTotal);
     const labTotalEl = document.getElementById(`estScopeLaborTotal-${sId}`);
     if (labTotalEl) labTotalEl.textContent = `${scopeLabTotal} Man-Days`;
     grandMaterialsTotal += scopeMatTotal;
     grandLaborTotal += scopeLabTotal;
   });
-  document.getElementById("estSummaryMaterials").textContent =
-    formatCurrency(grandMaterialsTotal);
-  document.getElementById("estSummaryLabor").textContent = grandLaborTotal;
-  document.getElementById("estSummaryTotal").textContent =
-    formatCurrency(grandMaterialsTotal);
+  const smEl = document.getElementById("estSummaryMaterials");
+  if (smEl) smEl.textContent = formatCurrency(grandMaterialsTotal);
+  const slEl = document.getElementById("estSummaryLabor");
+  if (slEl) slEl.textContent = grandLaborTotal;
+  const stEl = document.getElementById("estSummaryTotal");
+  if (stEl) stEl.textContent = formatCurrency(grandMaterialsTotal);
 }
 
 function saveEstimate(event) {
@@ -11974,9 +12008,18 @@ function approveEstimate() {
     showToast("This estimate is already approved", "info");
     return;
   }
-  document.getElementById("apvEstNumber").textContent = est.estimate_number;
-  document.getElementById("apvAuthority").value = "";
-  document.getElementById("approvalModal").classList.remove("hidden");
+  const modal = document.getElementById("approvalModal");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.setProperty("display", "flex", "important");
+    modal.style.setProperty("visibility", "visible", "important");
+    modal.style.setProperty("opacity", "1", "important");
+    modal.style.setProperty("z-index", "99999", "important");
+  }
+  const apvNum = document.getElementById("apvEstNumber");
+  if (apvNum) apvNum.textContent = est.estimate_number || "—";
+  const apvAuth = document.getElementById("apvAuthority");
+  if (apvAuth) apvAuth.value = "";
 }
 function submitApproval(event) {
   event.preventDefault();
@@ -12461,8 +12504,14 @@ function exportEstimatePDF() {
 }
 function openBulkPrintSettings() {
   if (!store.selectedEstimatesForPrint || store.selectedEstimatesForPrint.length === 0) {
-    showToast("Tick the estimates you want to print first", "info");
-    return;
+    if (store.selectedEstimate) {
+      store.selectedEstimatesForPrint = [store.selectedEstimate];
+      const countEl = document.getElementById("bulkPrintCount");
+      if (countEl) countEl.textContent = store.selectedEstimatesForPrint.length;
+    } else {
+      showToast("Please tick the estimates you want to print from the list checkboxes first", "info");
+      return;
+    }
   }
   const bpsPageSize = document.getElementById("bpsPageSize");
   if (bpsPageSize) bpsPageSize.value = "A4";
@@ -12470,9 +12519,14 @@ function openBulkPrintSettings() {
   if (bpsOrientation) bpsOrientation.value = "landscape";
   const bpsTiled = document.getElementById("bpsTiled");
   if (bpsTiled) bpsTiled.checked = false;
-  toggleTiledPrintOption();
   const modal = document.getElementById("bulkPrintSettingsModal");
-  if (modal) modal.classList.remove("hidden");
+  if (modal) {
+    modal.classList.remove("hidden");
+    modal.style.setProperty("display", "flex", "important");
+    modal.style.setProperty("visibility", "visible", "important");
+    modal.style.setProperty("opacity", "1", "important");
+    modal.style.setProperty("z-index", "99999", "important");
+  }
 }
 function toggleTiledPrintOption() {
   const orientation = document.getElementById("bpsOrientation")?.value || "landscape";
@@ -12503,7 +12557,11 @@ function executeBulkPrint() {
 }
 function bulkExportEstimatesPDF() {
   if (!store.selectedEstimatesForPrint || store.selectedEstimatesForPrint.length === 0) {
-    showToast("Tick the estimates you want to export first", "info");
+    if (store.selectedEstimate) {
+      exportEstimatesToPDFByIds([store.selectedEstimate]);
+      return;
+    }
+    showToast("Please tick the estimates you want to export from the list checkboxes first", "info");
     return;
   }
   exportEstimatesToPDFByIds([...(store.selectedEstimatesForPrint || [])]);
@@ -24740,7 +24798,7 @@ function renderIncomingJobMinutesInEstimates() {
             <p class="text-[11px] text-teal-200/80">Directed from Document Management for Estimation & Scope Assessment</p>
           </div>
         </div>
-        <button onclick="openNewEstimateModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5">
+        <button type="button" onclick="openNewEstimateModal()" class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-md transition-all cursor-pointer flex items-center gap-1.5">
           <span>+</span> Create Blank Estimate
         </button>
       </div>
@@ -24773,7 +24831,7 @@ function renderIncomingJobMinutesInEstimates() {
                 <span class="text-[10px] text-slate-400 font-mono">
                   ${m.date_received || ""}
                 </span>
-                <button onclick="createEstimateFromIncomingMinute('${m.id}')" class="px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 transition-all cursor-pointer flex items-center gap-1.5 shadow-md transform active:scale-95">
+                <button type="button" onclick="createEstimateFromIncomingMinute('${m.id}')" class="px-3 py-1.5 rounded-xl text-xs font-black bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 transition-all cursor-pointer flex items-center gap-1.5 shadow-md transform active:scale-95">
                   <span>📐</span> ${m.linked_estimate_id ? "View/Edit Estimate" : "Prepare Estimate"}
                 </button>
               </div>
@@ -29335,7 +29393,46 @@ function exportTempIssuesCsv() {
   link.setAttribute("download", `Temporary_Issue_Book_${getLocalDateString()}.csv`);
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
   showToast("Temporary Issue Book exported to CSV!", "success");
+}
+
+// Global Window Bindings for Estimates & Minutes
+window.openNewEstimateModal = openNewEstimateModal;
+window.openBulkPrintSettings = openBulkPrintSettings;
+window.bulkExportEstimatesPDF = bulkExportEstimatesPDF;
+window.editEstimate = editEstimate;
+window.approveEstimate = approveEstimate;
+window.deleteEstimate = deleteEstimate;
+window.saveEstimate = saveEstimate;
+window.addWorkScopeBlock = addWorkScopeBlock;
+window.removeWorkScopeBlock = removeWorkScopeBlock;
+window.addScopeMaterialRow = addScopeMaterialRow;
+window.addScopeLaborRow = addScopeLaborRow;
+window.createEstimateFromIncomingMinute = createEstimateFromIncomingMinute;
+window.autoFillEstimateFromMinute = autoFillEstimateFromMinute;
+window.populateIncomingMinutesInEstimateModal = populateIncomingMinutesInEstimateModal;
+
+// Resilient Event Listener for New Estimate Buttons
+function initEstimateButtonBindings() {
+  const newEstBtn = document.getElementById("newEstimateBtn");
+  if (newEstBtn) {
+    newEstBtn.onclick = (e) => {
+      e.preventDefault();
+      openNewEstimateModal();
+    };
+  }
+  const bulkPrintBtn = document.getElementById("bulkPrintBtn");
+  if (bulkPrintBtn) {
+    bulkPrintBtn.onclick = (e) => {
+      e.preventDefault();
+      openBulkPrintSettings();
+    };
+  }
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initEstimateButtonBindings);
+} else {
+  initEstimateButtonBindings();
 }
 
