@@ -15236,13 +15236,16 @@ function saveSettingField(key, value) {
       .ref("settings")
       .update({ [key]: value })
       .then(() => {
+        const isSettingsOpen = store.currentView === "settings" || !document.getElementById("view-settings")?.classList.contains("hidden");
         const statusEl = document.getElementById("settingsSaveStatus");
         if (statusEl) {
           statusEl.classList.remove("hidden");
           setTimeout(() => statusEl.classList.add("hidden"), 2500);
         }
-        applySettings();
-        renderZoneSelectors();
+        if (!isSettingsOpen) {
+          applySettings();
+          renderZoneSelectors();
+        }
       });
   }, 800);
 } // ── Save full array to Firebase ──
@@ -15252,8 +15255,11 @@ function saveSettingsArray(key, arr) {
     .ref(`settings/${key}`)
     .set(arr)
     .then(() => {
-      applySettings();
-      renderZoneSelectors();
+      const isSettingsOpen = store.currentView === "settings" || !document.getElementById("view-settings")?.classList.contains("hidden");
+      if (!isSettingsOpen) {
+        applySettings();
+        renderZoneSelectors();
+      }
       const statusEl = document.getElementById("settingsSaveStatus");
       if (statusEl) {
         statusEl.classList.remove("hidden");
@@ -19882,6 +19888,10 @@ function toggleViewsBasedOnZone() {
   const allowedViews = isSpecialZone
     ? ["dashboard", "dailydetails", "summary", "nastatus", "documents", sbsActive ? "sbs-book" : null, "sailors", "projects", "settings"].filter(Boolean)
     : ["dashboard", "dailydetails", "summary", "nastatus", "jobcards", "inventory", "estimates", "documents", "sailors", "maintenance", "reports", "settings"];
+
+  if (store.currentView === "settings" || store.currentView === "documents") {
+    return;
+  }
 
   if (!allowedViews.includes(store.currentView)) {
     switchView("dashboard");
