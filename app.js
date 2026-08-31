@@ -10325,18 +10325,17 @@ function openOffChargeModal(itemId) {
     "Base Store",
     "Civil Engineering Dept",
   ];
-  const dests =
-    store.settings &&
-    store.settings.offChargeDestinations &&
-    store.settings.offChargeDestinations.length > 0
-      ? store.settings.offChargeDestinations
-      : store.offChargeDestinations && store.offChargeDestinations.length > 0
-        ? store.offChargeDestinations
-        : defaultDests;
+  const destsList = typeof getOnOffChargeDestinationsList === "function" 
+    ? getOnOffChargeDestinationsList().filter(d => d.active !== false && d.type !== "On-Charge")
+    : defaultDests;
 
   document.getElementById("ocDest").innerHTML =
     '<option value="">Select destination...</option>' +
-    dests.map((d) => `<option value="${d}">${d}</option>`).join("");
+    destsList.map((d) => {
+      const name = typeof d === "string" ? d : (d.name || d.location || d.destination || "");
+      const abbr = typeof d === "object" && d.abbr ? ` (${d.abbr})` : "";
+      return `<option value="${name}">${name}${abbr}</option>`;
+    }).join("");
   closeModal("inventoryDetailModal");
   document.getElementById("offChargeModal").classList.remove("hidden");
 }
@@ -10586,6 +10585,13 @@ function openAddInventoryModal() {
     .join("");
   document.getElementById("invZone").innerHTML = zoneOpts;
   document.getElementById("invZone").value = store.currentZone;
+  const locDatalist = document.getElementById("invLocationDatalist");
+  if (locDatalist && typeof getInventoryStoresList === "function") {
+    locDatalist.innerHTML = getInventoryStoresList()
+      .filter(s => s.active !== false)
+      .map(s => `<option value="${s.name}">${s.abbr ? s.abbr + ' - ' : ''}${s.name}</option>`)
+      .join("");
+  }
   document.getElementById("inventoryModal").classList.remove("hidden");
 }
 function editInventoryItem(itemId) {
@@ -10625,6 +10631,13 @@ function editInventoryItem(itemId) {
     .join("");
   document.getElementById("invZone").innerHTML = zoneOpts;
   document.getElementById("invZone").value = item.zone_id || store.currentZone;
+  const locDatalist = document.getElementById("invLocationDatalist");
+  if (locDatalist && typeof getInventoryStoresList === "function") {
+    locDatalist.innerHTML = getInventoryStoresList()
+      .filter(s => s.active !== false)
+      .map(s => `<option value="${s.name}">${s.abbr ? s.abbr + ' - ' : ''}${s.name}</option>`)
+      .join("");
+  }
   populateProjectDropdown();
   document.getElementById("invRequirement").value = item.requirement || "";
   document.getElementById("inventoryModal").classList.remove("hidden");
@@ -15302,8 +15315,9 @@ function switchSettingsTab(tab) {
   } else if (tab === "zones") {
     renderSettingsZoneSelectorList();
     renderSettingsLocationsTable();
-  } else if (tab === "offcharge") {
-    renderSettingsOffChargeList();
+  } else if (tab === "inventory" || tab === "offcharge") {
+    renderSettingsInventoryStoresList();
+    renderSettingsOnOffChargeList();
   } else if (tab === "workorder") {
     renderSettingsAuthList();
     renderSettingsWoTypeList();
@@ -17044,52 +17058,391 @@ function removeZoneFromSettings(index) {
   renderSettingsZoneSelectorList();
   renderZoneSelectors();
   showToast(`Zone "${removed.name}" removed successfully!`);
-} // ── Off-Charge Destinations ──
-function renderSettingsOffChargeList() {
-  const container = document.getElementById("settingsOffChargeList");
+} // ── Inventory Stores & Stock Locations Management ──
+function getInventoryStoresList() {
+  if (Array.isArray(store.settings.inventoryStores) && store.settings.inventoryStores.length > 0) {
+    return store.settings.inventoryStores;
+  }
+  // Initialize default inventory stores list
+  const defaultStores = [
+    { id: "store_zs", name: "Zone Store", abbr: "ZS", active: true, remarks: "Main Zone Store" },
+    { id: "store_rus", name: "Ready Use Store", abbr: "RUS", active: true, remarks: "Immediate Issue Stock" },
+    { id: "store_bs", name: "Balance Store", abbr: "BS", active: true, remarks: "Surplus / Balance Return Items" },
+    { id: "store_ws", name: "Workshop Store", abbr: "WS", active: true, remarks: "General Workshop Materials" },
+    { id: "store_ms", name: "Main Store", abbr: "MS", active: true, remarks: "Central Depot Store" },
+    { id: "store_ty", name: "Timber Yard", abbr: "TY", active: true, remarks: "Wood, Boards & Plywood" },
+    { id: "store_es", name: "Electrical Store", abbr: "ES", active: true, remarks: "Electrical & Fittings" },
+    { id: "store_ps", name: "Paint Store", abbr: "PS", active: true, remarks: "Paints, Solvents & Brushes" },
+    { id: "store_py", name: "Precast Yard", abbr: "PY", active: true, remarks: "Precast Concrete Blocks & Kerbs" },
+    { id: "store_aw", name: "Aluminium Workshop", abbr: "AW", active: true, remarks: "Aluminium Profiles & Glazing" },
+    { id: "store_cs", name: "Carpentry Shop", abbr: "CS", active: true, remarks: "Carpentry Tools & Hardware" },
+    { id: "store_weld", name: "Welding Shop", abbr: "WS", active: true, remarks: "Steel & Welding Consumables" }
+  ];
+  return defaultStores;
+}
+
+function renderSettingsInventoryStoresList() {
+  const container = document.getElementById("settingsInventoryStoresList");
   if (!container) return;
-  const dests = store.settings.offChargeDestinations || [];
-  container.innerHTML =
-    dests
-      .map(
-        (d, i) => `
-        <div class="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-            <span class="flex-1 text-sm text-slate-700">${d}</span>
-            <button onclick="editOffChargeDest(${i})" class="text-blue-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 text-xs font-medium">Edit</button>
-            <button onclick="removeOffChargeDest(${i})" class="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+  const storesList = getInventoryStoresList();
+  const countBadge = document.getElementById("cfgInventoryStoresCountBadge");
+  if (countBadge) countBadge.textContent = `${storesList.length} Stores`;
+
+  const inventoryItems = store.inventory || [];
+
+  container.innerHTML = storesList.map((st, i) => {
+    const sName = String(st.name || st || "").trim();
+    const sAbbr = String(st.abbr || "").trim();
+    const isActive = st.active !== false;
+
+    // Count connecting inventory items in stock
+    const connectedCount = inventoryItems.filter(item => {
+      const itemLoc = String(item.location || item.store_location || item.store || "").toLowerCase().trim();
+      if (!itemLoc) return false;
+      return itemLoc === sName.toLowerCase() || (sAbbr && itemLoc === sAbbr.toLowerCase());
+    }).length;
+
+    const connectionBadge = connectedCount > 0
+      ? `<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-xs">
+           <span>📦</span> <span>${connectedCount} Items Stocked</span>
+         </span>`
+      : `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] text-slate-400 bg-slate-100 font-medium">0 Items</span>`;
+
+    const statusBadge = isActive
+      ? `<button type="button" onclick="toggleInventoryStoreActive(${i})" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 transition-all cursor-pointer">
+           🟢 Active
+         </button>`
+      : `<button type="button" onclick="toggleInventoryStoreActive(${i})" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-300 hover:bg-slate-200 transition-all cursor-pointer">
+           ⚪ Inactive
+         </button>`;
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition-colors">
+        <td class="px-3.5 py-3">
+          <div class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+            <span>🏢</span>
+            <span>${sName}</span>
+          </div>
+          ${st.remarks ? `<p class="text-[10px] text-slate-400 mt-0.5">${st.remarks}</p>` : ""}
+        </td>
+        <td class="px-3 py-3 text-center">
+          <span class="font-mono text-[11px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">${sAbbr || "—"}</span>
+        </td>
+        <td class="px-3.5 py-3 text-center">
+          ${connectionBadge}
+        </td>
+        <td class="px-3 py-3 text-center">
+          ${statusBadge}
+        </td>
+        <td class="px-3.5 py-3 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            <button type="button" onclick="editInventoryStoreLocation(${i})" class="text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 text-xs font-semibold transition-all">
+              ✏️ Edit
             </button>
-        </div>
-    `,
-      )
-      .join("") ||
-    '<p class="text-sm text-slate-400 italic p-2">No destinations defined</p>';
+            <button type="button" onclick="removeInventoryStoreLocation(${i})" class="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 transition-all" title="Delete Store">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("") || '<tr><td colspan="5" class="text-center py-6 text-slate-400 italic">No inventory stores defined yet</td></tr>';
 }
-function addOffChargeDestination() {
-  const input = document.getElementById("newOffChargeDest");
-  const val = input.value.trim();
-  if (!val) return;
-  const dests = [...(store.settings.offChargeDestinations || [])];
-  dests.push(val);
-  saveSettingsArray("offChargeDestinations", dests);
-  input.value = "";
-  renderSettingsOffChargeList();
-  showToast(`"${val}" added`);
+
+function addInventoryStoreLocation() {
+  const nameInput = document.getElementById("newInvStoreName");
+  const abbrInput = document.getElementById("newInvStoreAbbr");
+  const activeInput = document.getElementById("newInvStoreActive");
+  const name = (nameInput ? nameInput.value : "").trim();
+  const abbr = (abbrInput ? abbrInput.value : "").trim().toUpperCase();
+  const active = activeInput ? activeInput.value === "true" : true;
+
+  if (!name) {
+    showToast("Please enter a Store / Location name", "warning");
+    return;
+  }
+
+  const list = [...getInventoryStoresList()];
+  list.push({
+    id: "store_" + Date.now(),
+    name: name,
+    abbr: abbr || name.substring(0, 3).toUpperCase(),
+    active: active,
+    remarks: ""
+  });
+
+  store.settings.inventoryStores = list;
+  saveSettingsArray("inventoryStores", list);
+  if (nameInput) nameInput.value = "";
+  if (abbrInput) abbrInput.value = "";
+  renderSettingsInventoryStoresList();
+  showToast(`Store "${name}" added successfully!`, "success");
 }
-function editOffChargeDest(index) {
-  const dests = [...(store.settings.offChargeDestinations || [])];
-  const newVal = prompt("Edit destination:", dests[index]);
-  if (newVal && newVal.trim()) {
-    dests[index] = newVal.trim();
-    saveSettingsArray("offChargeDestinations", dests);
-    renderSettingsOffChargeList();
+
+function editInventoryStoreLocation(index) {
+  const list = [...getInventoryStoresList()];
+  const item = list[index];
+  if (!item) return;
+
+  const currentName = typeof item === "string" ? item : (item.name || "");
+  const currentAbbr = typeof item === "object" ? (item.abbr || "") : "";
+
+  const newName = prompt("Edit Store / Location Name:", currentName);
+  if (newName === null) return;
+  const trimmedName = newName.trim();
+  if (!trimmedName) {
+    showToast("Store name cannot be empty", "error");
+    return;
+  }
+
+  const newAbbr = prompt("Edit Store Abbreviation / Code:", currentAbbr);
+  const trimmedAbbr = newAbbr !== null ? newAbbr.trim().toUpperCase() : currentAbbr;
+
+  list[index] = {
+    ...(typeof item === "object" ? item : {}),
+    id: item.id || ("store_" + Date.now()),
+    name: trimmedName,
+    abbr: trimmedAbbr,
+    active: item.active !== false
+  };
+
+  store.settings.inventoryStores = list;
+  saveSettingsArray("inventoryStores", list);
+  renderSettingsInventoryStoresList();
+  showToast(`Store updated to "${trimmedName}"`, "success");
+}
+
+function toggleInventoryStoreActive(index) {
+  const list = [...getInventoryStoresList()];
+  const item = list[index];
+  if (!item) return;
+  const newActive = item.active === false ? true : false;
+  list[index] = {
+    ...(typeof item === "object" ? item : { name: item }),
+    id: item.id || ("store_" + Date.now()),
+    name: typeof item === "string" ? item : item.name,
+    abbr: item.abbr || "",
+    active: newActive
+  };
+  store.settings.inventoryStores = list;
+  saveSettingsArray("inventoryStores", list);
+  renderSettingsInventoryStoresList();
+  showToast(`Store "${list[index].name}" marked ${newActive ? "Active" : "Inactive"}`);
+}
+
+function removeInventoryStoreLocation(index) {
+  const list = [...getInventoryStoresList()];
+  const item = list[index];
+  if (!item) return;
+  const name = typeof item === "string" ? item : (item.name || "");
+  if (confirm(`Are you sure you want to delete store "${name}"?`)) {
+    list.splice(index, 1);
+    store.settings.inventoryStores = list;
+    saveSettingsArray("inventoryStores", list);
+    renderSettingsInventoryStoresList();
+    showToast(`Store "${name}" removed`);
   }
 }
+
+// ── On-Charge & Off-Charge Destinations & Locations Management ──
+function getOnOffChargeDestinationsList() {
+  const rawList = store.settings.offChargeDestinations || [];
+  if (rawList.length > 0) {
+    return rawList.map((d, idx) => {
+      if (typeof d === "string") {
+        return {
+          id: "dest_" + idx,
+          name: d,
+          abbr: d.substring(0, 3).toUpperCase(),
+          type: "Both",
+          active: true,
+          remarks: ""
+        };
+      }
+      return {
+        id: d.id || ("dest_" + idx),
+        name: d.name || d.location || d.destination || "Destination " + (idx + 1),
+        abbr: d.abbr || (d.name ? d.name.substring(0, 3).toUpperCase() : ""),
+        type: d.type || "Both",
+        active: d.active !== false,
+        remarks: d.remarks || ""
+      };
+    });
+  }
+  // Default on/off charge destinations
+  return [
+    { id: "dest_tis", name: "SLNS Tissa", abbr: "TIS", type: "Both", active: true },
+    { id: "dest_vij", name: "SLNS Vijaya", abbr: "VIJ", type: "Both", active: true },
+    { id: "dest_gem", name: "SLNS Gemunu", abbr: "GEM", type: "Both", active: true },
+    { id: "dest_ran", name: "SLNS Rangalla", abbr: "RAN", type: "Both", active: true },
+    { id: "dest_bcz", name: "BC-Zone", abbr: "BCZ", type: "Both", active: true },
+    { id: "dest_az", name: "A-Zone", abbr: "AZ", type: "Both", active: true },
+    { id: "dest_carp", name: "Carpentry-Shop", abbr: "CS", type: "Both", active: true },
+    { id: "dest_weld", name: "Welding-Shop", abbr: "WS", type: "Both", active: true },
+    { id: "dest_pub", name: "Public Supply (Town)", abbr: "PST", type: "Off-Charge", active: true }
+  ];
+}
+
+function renderSettingsOnOffChargeList() {
+  const container = document.getElementById("settingsOffChargeList");
+  if (!container) return;
+  const list = getOnOffChargeDestinationsList();
+  const countBadge = document.getElementById("cfgOnOffChargeCountBadge");
+  if (countBadge) countBadge.textContent = `${list.length} Locations`;
+
+  container.innerHTML = list.map((d, i) => {
+    const sName = d.name || "—";
+    const sAbbr = d.abbr || "—";
+    const sType = d.type || "Both";
+    const isActive = d.active !== false;
+
+    const typeBadge = sType === "Off-Charge"
+      ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-700 border border-rose-200">🚢 Off-Charge Only</span>`
+      : sType === "On-Charge"
+      ? `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">📥 On-Charge Only</span>`
+      : `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-700 border border-indigo-200">🔄 Both (On/Off)</span>`;
+
+    const statusBadge = isActive
+      ? `<button type="button" onclick="toggleOnOffChargeActive(${i})" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 transition-all cursor-pointer">
+           🟢 Active
+         </button>`
+      : `<button type="button" onclick="toggleOnOffChargeActive(${i})" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-500 border border-slate-300 hover:bg-slate-200 transition-all cursor-pointer">
+           ⚪ Inactive
+         </button>`;
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition-colors">
+        <td class="px-3.5 py-3">
+          <div class="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+            <span>⚓</span>
+            <span>${sName}</span>
+          </div>
+          ${d.remarks ? `<p class="text-[10px] text-slate-400 mt-0.5">${d.remarks}</p>` : ""}
+        </td>
+        <td class="px-3 py-3 text-center">
+          <span class="font-mono text-[11px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">${sAbbr}</span>
+        </td>
+        <td class="px-3.5 py-3 text-center">
+          ${typeBadge}
+        </td>
+        <td class="px-3 py-3 text-center">
+          ${statusBadge}
+        </td>
+        <td class="px-3.5 py-3 text-right">
+          <div class="flex items-center justify-end gap-1.5">
+            <button type="button" onclick="editOnOffChargeDestination(${i})" class="text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50 text-xs font-semibold transition-all">
+              ✏️ Edit
+            </button>
+            <button type="button" onclick="removeOnOffChargeDestination(${i})" class="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 transition-all" title="Delete Location">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("") || '<tr><td colspan="5" class="text-center py-6 text-slate-400 italic">No On/Off charge destinations defined</td></tr>';
+}
+
+function addOnOffChargeDestination() {
+  const nameInput = document.getElementById("newOnOffChargeName");
+  const abbrInput = document.getElementById("newOnOffChargeAbbr");
+  const typeSelect = document.getElementById("newOnOffChargeType");
+  const name = (nameInput ? nameInput.value : "").trim();
+  const abbr = (abbrInput ? abbrInput.value : "").trim().toUpperCase();
+  const type = typeSelect ? typeSelect.value : "Both";
+
+  if (!name) {
+    showToast("Please enter a Destination / Base name", "warning");
+    return;
+  }
+
+  const list = [...getOnOffChargeDestinationsList()];
+  list.push({
+    id: "dest_" + Date.now(),
+    name: name,
+    abbr: abbr || name.substring(0, 3).toUpperCase(),
+    type: type,
+    active: true,
+    remarks: ""
+  });
+
+  store.settings.offChargeDestinations = list;
+  saveSettingsArray("offChargeDestinations", list);
+  if (nameInput) nameInput.value = "";
+  if (abbrInput) abbrInput.value = "";
+  renderSettingsOnOffChargeList();
+  showToast(`Destination "${name}" added successfully!`, "success");
+}
+
+function editOnOffChargeDestination(index) {
+  const list = [...getOnOffChargeDestinationsList()];
+  const item = list[index];
+  if (!item) return;
+
+  const newName = prompt("Edit Destination / Base Name:", item.name || "");
+  if (newName === null) return;
+  const trimmedName = newName.trim();
+  if (!trimmedName) {
+    showToast("Destination name cannot be empty", "error");
+    return;
+  }
+
+  const newAbbr = prompt("Edit Abbreviation / Code:", item.abbr || "");
+  const trimmedAbbr = newAbbr !== null ? newAbbr.trim().toUpperCase() : (item.abbr || "");
+
+  list[index] = {
+    ...item,
+    name: trimmedName,
+    abbr: trimmedAbbr
+  };
+
+  store.settings.offChargeDestinations = list;
+  saveSettingsArray("offChargeDestinations", list);
+  renderSettingsOnOffChargeList();
+  showToast(`Destination updated to "${trimmedName}"`, "success");
+}
+
+function toggleOnOffChargeActive(index) {
+  const list = [...getOnOffChargeDestinationsList()];
+  const item = list[index];
+  if (!item) return;
+  const newActive = item.active === false ? true : false;
+  list[index] = {
+    ...item,
+    active: newActive
+  };
+  store.settings.offChargeDestinations = list;
+  saveSettingsArray("offChargeDestinations", list);
+  renderSettingsOnOffChargeList();
+  showToast(`Destination "${list[index].name}" marked ${newActive ? "Active" : "Inactive"}`);
+}
+
+function removeOnOffChargeDestination(index) {
+  const list = [...getOnOffChargeDestinationsList()];
+  const item = list[index];
+  if (!item) return;
+  const name = item.name || "";
+  if (confirm(`Are you sure you want to delete destination "${name}"?`)) {
+    list.splice(index, 1);
+    store.settings.offChargeDestinations = list;
+    saveSettingsArray("offChargeDestinations", list);
+    renderSettingsOnOffChargeList();
+    showToast(`Destination "${name}" removed`);
+  }
+}
+
+// Backward Compatibility Aliases
+function renderSettingsOffChargeList() {
+  renderSettingsOnOffChargeList();
+}
+function addOffChargeDestination() {
+  addOnOffChargeDestination();
+}
+function editOffChargeDest(index) {
+  editOnOffChargeDestination(index);
+}
 function removeOffChargeDest(index) {
-  const dests = [...(store.settings.offChargeDestinations || [])];
-  dests.splice(index, 1);
-  saveSettingsArray("offChargeDestinations", dests);
-  renderSettingsOffChargeList();
+  removeOnOffChargeDestination(index);
 } // ── Approval Authorities ──
 function renderSettingsAuthList() {
   const container = document.getElementById("settingsAuthList");
@@ -29411,6 +29764,16 @@ window.addScopeLaborRow = addScopeLaborRow;
 window.createEstimateFromIncomingMinute = createEstimateFromIncomingMinute;
 window.autoFillEstimateFromMinute = autoFillEstimateFromMinute;
 window.populateIncomingMinutesInEstimateModal = populateIncomingMinutesInEstimateModal;
+window.addInventoryStoreLocation = addInventoryStoreLocation;
+window.editInventoryStoreLocation = editInventoryStoreLocation;
+window.toggleInventoryStoreActive = toggleInventoryStoreActive;
+window.removeInventoryStoreLocation = removeInventoryStoreLocation;
+window.addOnOffChargeDestination = addOnOffChargeDestination;
+window.editOnOffChargeDestination = editOnOffChargeDestination;
+window.toggleOnOffChargeActive = toggleOnOffChargeActive;
+window.removeOnOffChargeDestination = removeOnOffChargeDestination;
+window.renderSettingsInventoryStoresList = renderSettingsInventoryStoresList;
+window.renderSettingsOnOffChargeList = renderSettingsOnOffChargeList;
 
 // Resilient Event Listener for New Estimate Buttons
 function initEstimateButtonBindings() {
