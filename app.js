@@ -20618,94 +20618,88 @@ function printLmdDetails(scope, selectedZone) {
   const dateVal = store.dashboardDate || today;
   let zones = [];
   if (scope === "all") {
-    zones = store.zones;
+    zones = [...(store.zones || [])];
+    if (!zones.some((z) => isAdminStaffDuties(z.id || z.name))) {
+      zones.push({ id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" });
+    }
   } else {
-    const z = store.zones.find((x) => x.id === selectedZone);
-    if (z) zones.push(z);
+    const targetZone = selectedZone || store.currentZone;
+    const z = (store.zones || []).find((x) => isZoneMatch(x.id, targetZone) || isZoneMatch(x.name, targetZone));
+    if (z) {
+      zones.push(z);
+    } else if (targetZone) {
+      zones.push({ id: targetZone, name: formatZoneDisplayName(targetZone) || targetZone });
+    }
   }
+
   let rowsHtml = "";
   zones.forEach((z) => {
-    const wos = store.workOrders.filter(
-      (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
-    );
+    const allWorks = [
+      ...(store.workOrders || []).filter(
+        (wo) => isZoneMatch(wo.zone_id, z.id) && isWorkOrderActiveOnDate(wo, dateVal)
+      ),
+      ...(store.jobCards || []).filter(
+        (jc) => isZoneMatch(jc.zone_id, z.id) && isWorkOrderActiveOnDate(jc, dateVal)
+      )
+    ];
+
+    const seenWorkIds = new Set();
+    const wos = allWorks.filter((w) => {
+      const wid = String(w.id || w._fbKey || "");
+      if (!wid || seenWorkIds.has(wid)) return false;
+      seenWorkIds.add(wid);
+      return true;
+    });
+
     wos.sort((a, b) => {
-      const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
-      const bInCharge = (b.description || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
+      const aInCharge = (a.description || a.title || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
+      const bInCharge = (b.description || b.title || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
       if (aInCharge && !bInCharge) return -1;
       if (!aInCharge && bInCharge) return 1;
       return 0;
-    }); // Check if zone has active allocations
-    let zoneHasAllocations = false;
-    wos.forEach((wo) => {
-      let assignedCount = 0;
-      if (dateVal === today) {
-        assignedCount = (wo.assigned || []).length;
-      } else {
-        assignedCount = (store.dailyAllocations || []).filter(
-          (a) =>
-            a.date === dateVal && String(a.work_order_id) === String(wo.id),
-        ).length;
-      }
-      if (assignedCount > 0) zoneHasAllocations = true;
     });
-    if (zoneHasAllocations) {
-      // Add Zone section row in the printed table
+
+    let zoneRowsHtml = "";
+    wos.forEach((wo) => {
+      const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
+      if (sailors && sailors.length > 0) {
+        const workTitle = (wo.description || wo.title || wo.reference_no || wo.job_no || "Active Work").trim();
+        zoneRowsHtml += `
+          <tr style="background-color: #f1f5f9; font-weight: bold;">
+            <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
+              📋 ${escapeHtml(workTitle.toUpperCase())}
+            </td>
+          </tr>
+        `;
+        sailors.forEach((s, idx) => {
+          const serNo = String(idx + 1).padStart(2, "0");
+          const parsedOffNo = parseOfficialNumber(
+            s.official_number || s.service_no || s.offNo || ""
+          );
+          zoneRowsHtml += `
+            <tr>
+              <td style="text-align:center;">${serNo}</td>
+              <td>${escapeHtml(s.rank || "AB")}</td>
+              <td>${escapeHtml(s.name || "")}</td>
+              <td style="text-align:center;">${escapeHtml(parsedOffNo.type)}</td>
+              <td>${escapeHtml(parsedOffNo.num)}</td>
+              <td style="text-align:center;">${escapeHtml(s.trade || "—")}</td>
+            </tr>
+          `;
+        });
+      }
+    });
+
+    if (zoneRowsHtml) {
+      const zoneDisplayName = formatZoneDisplayName(z.name || z.id) || (z.name || z.id);
       rowsHtml += `
-                <tr style="background-color: #0f172a; color: white; font-weight: bold;">
-                    <td colspan="6" style="padding: 8px 12px; font-size: 13px; text-transform: uppercase;">
-                        🗺️ ZONE: ${z.name.toUpperCase()}
-                    </td>
-                </tr>
-            `;
-      wos.forEach((wo) => {
-        let assignedSailors = [];
-        if (dateVal === today) {
-          const assignedIds = (wo.assigned || []).map(String);
-          assignedSailors = store.sailors.filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)),
-          );
-        } else {
-          const assignedIds = (store.dailyAllocations || [])
-            .filter(
-              (a) =>
-                a.date === dateVal && String(a.work_order_id) === String(wo.id),
-            )
-            .map((a) => String(a.sailor_id));
-          assignedSailors = store.sailors.filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)),
-          );
-        }
-        if (assignedSailors.length > 0) {
-          // Add sub-header separator row for work order
-          rowsHtml += `
-                        <tr style="background-color: #f1f5f9; font-weight: bold;">
-                            <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
-                                📋 ${wo.description.toUpperCase()}
-                            </td>
-                        </tr>
-                    `;
-          assignedSailors.forEach((s, idx) => {
-            const serNo = String(idx + 1).padStart(2, "0");
-            const parsedOffNo = parseOfficialNumber(
-              s.official_number || s.service_no,
-            );
-            rowsHtml += `
-                            <tr>
-                                <td style="text-align:center;">${serNo}</td>
-                                <td>${s.rank || "AB"}</td>
-                                <td>${s.name}</td>
-                                <td style="text-align:center;">${parsedOffNo.type}</td>
-                                <td>${parsedOffNo.num}</td>
-                                <td style="text-align:center;">${s.trade || "—"}</td>
-                            </tr>
-                        `;
-          });
-        }
-      });
+        <tr style="background-color: #0f172a; color: white; font-weight: bold;">
+          <td colspan="6" style="padding: 8px 12px; font-size: 13px; text-transform: uppercase;">
+            🗺️ ZONE: ${escapeHtml(zoneDisplayName.toUpperCase())}
+          </td>
+        </tr>
+        ${zoneRowsHtml}
+      `;
     }
   });
   if (!rowsHtml) {
@@ -23300,92 +23294,83 @@ window.addEventListener("click", function (e) {
 // =============================================
 function generateWorkOrdersPdfBlob(dateVal) {
   const today = getLocalDateString();
-  const targetDate = dateVal || store.dashboardDate || today; // Generate the exact same HTML rows as printLmdDetails but for all zones
+  const targetDate = dateVal || store.dashboardDate || today;
   let rowsHtml = "";
-  const zones = store.zones;
+  const zones = [...(store.zones || [])];
+  if (!zones.some((z) => isAdminStaffDuties(z.id || z.name))) {
+    zones.push({ id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" });
+  }
+
   zones.forEach((z) => {
-    const wos = store.workOrders.filter(
-      (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, targetDate),
-    );
+    const allWorks = [
+      ...(store.workOrders || []).filter(
+        (wo) => isZoneMatch(wo.zone_id, z.id) && isWorkOrderActiveOnDate(wo, targetDate)
+      ),
+      ...(store.jobCards || []).filter(
+        (jc) => isZoneMatch(jc.zone_id, z.id) && isWorkOrderActiveOnDate(jc, targetDate)
+      )
+    ];
+
+    const seenWorkIds = new Set();
+    const wos = allWorks.filter((w) => {
+      const wid = String(w.id || w._fbKey || "");
+      if (!wid || seenWorkIds.has(wid)) return false;
+      seenWorkIds.add(wid);
+      return true;
+    });
+
     wos.sort((a, b) => {
-      const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
-      const bInCharge = (b.description || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
+      const aInCharge = (a.description || a.title || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
+      const bInCharge = (b.description || b.title || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
       if (aInCharge && !bInCharge) return -1;
       if (!aInCharge && bInCharge) return 1;
       return 0;
     });
-    let zoneHasAllocations = false;
+
+    let zoneRowsHtml = "";
     wos.forEach((wo) => {
-      let assignedCount = 0;
-      if (targetDate === today) {
-        assignedCount = (wo.assigned || []).length;
-      } else {
-        assignedCount = (store.dailyAllocations || []).filter(
-          (a) =>
-            a.date === targetDate && String(a.work_order_id) === String(wo.id),
-        ).length;
+      const { sailors } = getWorkOrderAssignedSailors(wo, targetDate);
+      if (sailors && sailors.length > 0) {
+        const workTitle = (wo.description || wo.title || wo.reference_no || wo.job_no || "Active Work").trim();
+        zoneRowsHtml += `
+          <tr style="background-color: #f1f5f9; font-weight: bold;">
+            <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
+              📋 ${escapeHtml(workTitle.toUpperCase())}
+            </td>
+          </tr>
+        `;
+        sailors.forEach((s, idx) => {
+          const serNo = String(idx + 1).padStart(2, "0");
+          const parsedOffNo = parseOfficialNumber(
+            s.official_number || s.service_no || s.offNo || ""
+          );
+          zoneRowsHtml += `
+            <tr>
+              <td style="text-align:center;">${serNo}</td>
+              <td>${escapeHtml(s.rank || "AB")}</td>
+              <td>${escapeHtml(s.name || "")}</td>
+              <td style="text-align:center;">${escapeHtml(parsedOffNo.type)}</td>
+              <td>${escapeHtml(parsedOffNo.num)}</td>
+              <td style="text-align:center;">${escapeHtml(s.trade || "—")}</td>
+            </tr>
+          `;
+        });
       }
-      if (assignedCount > 0) zoneHasAllocations = true;
     });
-    if (zoneHasAllocations) {
+
+    if (zoneRowsHtml) {
+      const zoneDisplayName = formatZoneDisplayName(z.name || z.id) || (z.name || z.id);
       rowsHtml += `
-                <tr style="background-color: #0f172a; color: white; font-weight: bold;">
-                    <td colspan="6" style="padding: 8px 12px; font-size: 13px; text-transform: uppercase;">
-                        🗺️ ZONE: ${z.name.toUpperCase()}
-                    </td>
-                </tr>
-            `;
-      wos.forEach((wo) => {
-        let assignedSailors = [];
-        if (targetDate === today) {
-          const assignedIds = (wo.assigned || []).map(String);
-          assignedSailors = store.sailors.filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)),
-          );
-        } else {
-          const assignedIds = (store.dailyAllocations || [])
-            .filter(
-              (a) =>
-                a.date === targetDate &&
-                String(a.work_order_id) === String(wo.id),
-            )
-            .map((a) => String(a.sailor_id));
-          assignedSailors = store.sailors.filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)),
-          );
-        }
-        if (assignedSailors.length > 0) {
-          rowsHtml += `
-                        <tr style="background-color: #f1f5f9; font-weight: bold;">
-                            <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
-                                📋 ${wo.description.toUpperCase()}
-                            </td>
-                        </tr>
-                    `;
-          assignedSailors.forEach((s, idx) => {
-            const serNo = String(idx + 1).padStart(2, "0");
-            const parsedOffNo = parseOfficialNumber(
-              s.official_number || s.service_no,
-            );
-            rowsHtml += `
-                            <tr>
-                                <td style="text-align:center;">${serNo}</td>
-                                <td>${s.rank || "AB"}</td>
-                                <td>${s.name}</td>
-                                <td style="text-align:center;">${parsedOffNo.type}</td>
-                                <td>${parsedOffNo.num}</td>
-                                <td style="text-align:center;">${s.trade || "—"}</td>
-                            </tr>
-                        `;
-          });
-        }
-      });
+        <tr style="background-color: #0f172a; color: white; font-weight: bold;">
+          <td colspan="6" style="padding: 8px 12px; font-size: 13px; text-transform: uppercase;">
+            🗺️ ZONE: ${escapeHtml(zoneDisplayName.toUpperCase())}
+          </td>
+        </tr>
+        ${zoneRowsHtml}
+      `;
     }
   });
+
   if (!rowsHtml) {
     rowsHtml = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #64748b;">No allocations found for this selection on this date.</td></tr>`;
   }
