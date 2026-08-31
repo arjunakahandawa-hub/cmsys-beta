@@ -14932,6 +14932,7 @@ function ensureAllStandardZones(existingZones = []) {
     { id: "FH-Zone", name: "FH-Zone", status: "Active", active: true },
     { id: "OTW", name: "OTW", status: "Active", active: true },
     { id: "Supply-School", name: "Supply School", status: "Active", active: true },
+    { id: "Pump-House", name: "Pump House", status: "Active", active: true },
     { id: "Main-Store", name: "Main Store", status: "Active", active: true },
     { id: "Carpentry-Shop", name: "Carpentry Shop", status: "Active", active: true },
     { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
@@ -14942,7 +14943,7 @@ function ensureAllStandardZones(existingZones = []) {
     return standardList;
   }
 
-  return existingZones
+  const result = existingZones
     .filter((z) => z && (z.id || z.name) && !isSbsZone(z.id || z.name))
     .map((z) => {
       const zid = z.id || z.name;
@@ -14956,6 +14957,12 @@ function ensureAllStandardZones(existingZones = []) {
         active: !isInactive,
       };
     });
+
+  if (!result.some((z) => isZoneMatch(z.id, "Pump-House") || isZoneMatch(z.name, "Pump House"))) {
+    result.push({ id: "Pump-House", name: "Pump House", status: "Active", active: true });
+  }
+
+  return result;
 }
 
 // Default settings (used if Firebase has nothing)
@@ -14983,6 +14990,7 @@ const defaultSettings = {
     { id: "FH-Zone", name: "FH-Zone", status: "Active", active: true },
     { id: "OTW", name: "OTW", status: "Active", active: true },
     { id: "Supply-School", name: "Supply School", status: "Active", active: true },
+    { id: "Pump-House", name: "Pump House", status: "Active", active: true },
     { id: "Main-Store", name: "Main Store", status: "Active", active: true },
     { id: "Carpentry-Shop", name: "Carpentry Shop", status: "Active", active: true },
     { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
