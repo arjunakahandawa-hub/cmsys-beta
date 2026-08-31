@@ -19483,10 +19483,13 @@ function toggleViewsBasedOnZone() {
   const sbsActive = typeof isSbsBookActive === "function" ? isSbsBookActive() : true;
 
   // Exact Tab Visibility Configuration:
-  // 1. Zone: Dashboard, Job Card, Inventory, Estimates, Documents, Sailors, LMD, Reports
-  // 2. Admin & Staff Duties: Dashboard, Documents, SBS Book (if active), Sailors, Projects
+  // 1. Zone: Dashboard, Daily Details, Summary, N/A Status, Job Card, Inventory, Estimates, Documents, Sailors, LMD, Reports, Settings
+  // 2. Admin & Staff Duties: Dashboard, Daily Details, Summary, N/A Status, Documents, SBS Book (if active), Sailors, Projects, Settings
   const tabVisibility = {
     "tab-dashboard": true,
+    "tab-dailydetails": true,
+    "tab-summary": true,
+    "tab-nastatus": true,
     "tab-jobcards": !isSpecialZone,
     "tab-inventory": !isSpecialZone,
     "tab-estimates": !isSpecialZone,
@@ -19496,9 +19499,6 @@ function toggleViewsBasedOnZone() {
     "tab-maintenance": !isSpecialZone,
     "tab-reports": !isSpecialZone,
     "tab-projects": isSpecialZone,
-    "tab-nastatus": false,
-    "tab-dailydetails": false,
-    "tab-summary": false,
     "tab-settings": true,
   };
 
@@ -19511,8 +19511,8 @@ function toggleViewsBasedOnZone() {
 
   // Allowed Views check and auto-fallback
   const allowedViews = isSpecialZone
-    ? ["dashboard", "documents", sbsActive ? "sbs-book" : null, "sailors", "projects", "settings"].filter(Boolean)
-    : ["dashboard", "jobcards", "inventory", "estimates", "documents", "sailors", "maintenance", "reports", "settings"];
+    ? ["dashboard", "dailydetails", "summary", "nastatus", "documents", sbsActive ? "sbs-book" : null, "sailors", "projects", "settings"].filter(Boolean)
+    : ["dashboard", "dailydetails", "summary", "nastatus", "jobcards", "inventory", "estimates", "documents", "sailors", "maintenance", "reports", "settings"];
 
   if (!allowedViews.includes(store.currentView)) {
     switchView("dashboard");
