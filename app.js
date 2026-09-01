@@ -107,9 +107,11 @@ function isZoneMatch(z1, z2) {
   if (isAdminStaffDuties(z1) && isAdminStaffDuties(z2)) return true;
   if (typeof isSbsZone === "function" && isSbsZone(z1) && isSbsZone(z2)) return true;
 
-  const s1 = String(z1).trim().toLowerCase().replace(/[-_\s]+/g, "");
-  const s2 = String(z2).trim().toLowerCase().replace(/[-_\s]+/g, "");
+  const s1 = String(z1).trim().toLowerCase().replace(/[-_\s&]+/g, "");
+  const s2 = String(z2).trim().toLowerCase().replace(/[-_\s&]+/g, "");
   if (s1 === s2) return true;
+
+  if ((s1.startsWith("carpenter") || s1.startsWith("carpentry")) && (s2.startsWith("carpenter") || s2.startsWith("carpentry"))) return true;
 
   const letterMap = { a: "azone", b: "bzone", c: "czone", d: "dzone", e: "ezone", g: "gzone" };
   const norm1 = letterMap[s1] || s1;
@@ -202,7 +204,7 @@ const store = {
   zones: [
     { id: "A-Zone", name: "A-Zone" },
     { id: "BC-Zone", name: "BC-Zone" },
-    { id: "Carpentry-Shop", name: "Carpentry Shop" },
+    { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop" },
     { id: "Welding-Shop", name: "Welding Shop" },
   ],
   offChargeDestinations: [
@@ -10130,7 +10132,7 @@ function renderInventoryTable() {
                 <span class="font-bold text-sm ${isLow ? "text-rose-600" : "text-slate-800"}">${item.totalQty}</span>
                 ${isLow ? '<span class="ml-1 text-[10px] text-rose-500 font-medium">⚠ Low</span>' : ""}
             </td>
-            <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm">${formatCurrency(item.cost_per_unit)}</td>
+            <td onclick="quickEditUnitCost('${rowId}', event)" class="px-4 py-2.5 text-right font-medium text-slate-700 text-sm hover:text-emerald-700 hover:font-bold cursor-pointer transition-colors" title="Click to quickly edit Unit Cost">${formatCurrency(item.cost_per_unit || item.cost || 0)}</td>
             <td onclick="quickEditBookNo('${rowId}', event)" class="px-4 py-2.5 text-center" title="Click to set/change Book No"><span class="mono text-xs font-semibold px-2 py-0.5 rounded bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 cursor-pointer transition-all shadow-2xs">${item.book_no ? item.book_no : '<span class="text-amber-600 font-bold underline decoration-dotted">+ Set Book</span>'}</span></td>
             <td onclick="showInventoryDetail('${rowId}')" class="px-4 py-2.5 text-center"><span class="text-[11px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">${item.location}${item.zone_id && item.zone_id !== store.currentZone ? ` (${item.zone_id})` : ""}</span></td>
             <td class="px-4 py-2.5 text-center">
@@ -10389,6 +10391,57 @@ function openOffChargeModal(itemId) {
   document.getElementById("offChargeModal").classList.remove("hidden");
 }
 
+function printNav254HtmlDirect(htmlContent) {
+  let iframe = document.getElementById("nav254PrintIframe");
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.id = "nav254PrintIframe";
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    document.body.appendChild(iframe);
+  }
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html lang="si">
+      <head>
+        <title></title>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          @page { size: auto; margin: 0; }
+          @media print {
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+            .no-print { display: none !important; }
+          }
+          body { font-family: 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; margin: 0; padding: 12mm 15mm; background: #fff; color: #000; }
+        </style>
+      </head>
+      <body>
+        <div style="width: 100%;">
+          ${htmlContent}
+        </div>
+      </body>
+    </html>
+  `);
+  doc.close();
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (e) {
+      console.warn("Iframe direct print error:", e);
+    }
+  }, 400);
+}
+
 function printOffChargeNav254(itemId, recordIndex) {
   const item = store.inventory.find(
     (i) => String(i._fbKey) === String(itemId) || String(i.id) === String(itemId)
@@ -10409,12 +10462,6 @@ function printOffChargeNav254(itemId, recordIndex) {
   const unitCost = parseFloat(item.cost_per_unit || item.cost || 0);
   const qty = parseFloat(rec.qty || 0);
   const totalVal = unitCost * qty;
-
-  const printWindow = window.open("", "_blank", "width=880,height=750");
-  if (!printWindow) {
-    window.print();
-    return;
-  }
 
   const nav254Content = generateOfficialNav254Html({
     ref_no: rec.ref || `CCED/CE/FD/OUT/${new Date().getFullYear()}`,
@@ -10437,34 +10484,13 @@ function printOffChargeNav254(itemId, recordIndex) {
     expected_return_date: "—"
   });
 
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html lang="si">
-      <head>
-        <title></title>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
-        <style>
-          @page { size: auto; margin: 0; }
-          @media print {
-            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
-            .no-print { display: none !important; }
-          }
-          body { margin: 0; padding: 12mm 15mm; background: #fff; display: flex; justify-content: center; font-family: 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; }
-        </style>
-      </head>
-      <body>
-        <div style="width: 100%;">
-          ${nav254Content}
-        </div>
-        <script>
-          window.onload = function() {
-            setTimeout(function() { window.print(); window.close(); }, 300);
-          };
-        </script>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
+  const printDocContainer = document.getElementById("nav254PrintDocument");
+  if (printDocContainer) {
+    printDocContainer.innerHTML = nav254Content;
+    document.getElementById("nav254PrintModal").classList.remove("hidden");
+  }
+
+  printNav254HtmlDirect(nav254Content);
 }
 
 function submitOffCharge(event) {
@@ -11154,7 +11180,7 @@ function populateEstLocationsDatalist(selectedVal = "") {
     ),
   ].sort((a, b) => a.localeCompare(b));
 
-  let optionsHtml = '<option value="">-- Select Location 1 --</option>';
+  let optionsHtml = '<option value="">-- Select Location (Optional) --</option>';
   uniqueBuildings.forEach((b) => {
     optionsHtml += `<option value="${b}">${b}</option>`;
   });
@@ -11485,77 +11511,99 @@ function renumberWorkScopes() {
 }
 
 // --- Custom Autocomplete for Materials ---
-let activeMaterialAutocompleteDropdown = null;
+// --- Custom Autocomplete for Materials ---
 function setupMaterialAutocomplete(inputElement, onSelectCallback) {
-  if (!inputElement || inputElement.hasAttribute("data-autocomplete-init"))
-    return;
+  if (!inputElement || inputElement.hasAttribute("data-autocomplete-init")) return;
   inputElement.setAttribute("data-autocomplete-init", "true");
   inputElement.setAttribute("autocomplete", "off");
   inputElement.removeAttribute("list");
 
-  const dropdown = document.createElement("div");
+  let dropdown = document.createElement("div");
   dropdown.className =
-    "hidden absolute z-[9999] w-[350px] bg-white border border-slate-300 rounded-lg shadow-2xl max-h-60 overflow-y-auto text-left";
+    "mat-autocomplete-dropdown hidden fixed z-[99999999] bg-white border border-slate-300 rounded-xl shadow-2xl max-h-60 overflow-y-auto text-left pointer-events-auto";
   document.body.appendChild(dropdown);
 
-  const closeDropdown = () => dropdown.classList.add("hidden");
+  let currentMatches = [];
+
+  const closeDropdown = () => {
+    dropdown.classList.add("hidden");
+  };
+
   const updatePosition = () => {
+    if (dropdown.classList.contains("hidden")) return;
     const rect = inputElement.getBoundingClientRect();
-    dropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
-    dropdown.style.left = `${rect.left + window.scrollX}px`;
-    if (rect.left + 350 > window.innerWidth) {
-      dropdown.style.left = `${window.innerWidth - 360}px`;
+    if (rect.width === 0 && rect.height === 0) {
+      closeDropdown();
+      return;
+    }
+    dropdown.style.position = "fixed";
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.width = `${Math.max(340, rect.width)}px`;
+    dropdown.style.zIndex = "99999999";
+
+    const dropdownHeight = 220;
+    if (rect.bottom + dropdownHeight > window.innerHeight && rect.top > dropdownHeight) {
+      dropdown.style.top = `${rect.top - dropdownHeight - 4}px`;
+    } else {
+      dropdown.style.top = `${rect.bottom + 4}px`;
     }
   };
 
   const renderResults = (query) => {
     const lowerQuery = (query || "").toLowerCase().trim();
-    let count = 0;
-    const maxResults = 50;
-    let html = "";
     const items = (store.inventory || []).filter((i) => i.category !== "Tools");
+    currentMatches = [];
+    let html = "";
+    const maxResults = 40;
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (
         !lowerQuery ||
-        (item.description || "").toLowerCase().includes(lowerQuery)
+        (item.description || "").toLowerCase().includes(lowerQuery) ||
+        (item.category || "").toLowerCase().includes(lowerQuery) ||
+        (item.book_no || "").toLowerCase().includes(lowerQuery)
       ) {
-        html += `<div class="px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-id="${item.id || item._fbKey}" data-desc="${item.description}">
-            <div class="text-xs font-semibold text-slate-800 leading-tight mb-0.5">${item.description}</div>
-            <div class="text-[11px] text-slate-500 font-mono">Avail: ${item.quantity || 0} ${item.deno || ""} @ Rs. ${formatCurrency(item.cost_per_unit || 0)}</div>
+        const matchIdx = currentMatches.length;
+        currentMatches.push(item);
+        const unitCostVal = parseFloat(item.cost_per_unit || item.cost || 0);
+        html += `<div class="px-3 py-2 hover:bg-teal-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item transition-colors" data-match-idx="${matchIdx}">
+            <div class="text-xs font-bold text-slate-800 leading-tight mb-0.5 pointer-events-none">${item.description}</div>
+            <div class="text-[11px] text-slate-500 font-mono flex items-center justify-between pointer-events-none">
+              <span>Avail: <strong class="text-slate-700">${item.quantity || 0} ${item.deno || ""}</strong></span>
+              <span class="text-emerald-700 font-semibold">${formatCurrency(unitCostVal)}</span>
+            </div>
         </div>`;
-        count++;
-        if (count >= maxResults) break;
+        if (currentMatches.length >= maxResults) break;
       }
     }
 
-    if (count === 0) {
-      html = `<div class="px-3 py-2 text-xs text-slate-500 italic">No matching inventory items</div>`;
+    if (currentMatches.length === 0) {
+      html = `<div class="px-3 py-2 text-xs text-slate-500 italic">No matching inventory items (type freely)</div>`;
     }
 
     dropdown.innerHTML = html;
-    updatePosition();
     dropdown.classList.remove("hidden");
+    updatePosition();
 
     dropdown.querySelectorAll(".autocomplete-item").forEach((el) => {
-      el.addEventListener("mousedown", (e) => {
+      const handleSelect = (e) => {
         e.preventDefault();
-        inputElement.value = el.getAttribute("data-desc") || "";
-        closeDropdown();
-        if (onSelectCallback) onSelectCallback(inputElement.value);
-      });
+        e.stopPropagation();
+        const idx = parseInt(el.getAttribute("data-match-idx"), 10);
+        const selectedItem = currentMatches[idx];
+        if (selectedItem) {
+          inputElement.value = selectedItem.description || "";
+          closeDropdown();
+          if (onSelectCallback) onSelectCallback(selectedItem);
+        }
+      };
+      el.addEventListener("mousedown", handleSelect);
+      el.addEventListener("click", handleSelect);
     });
   };
 
   inputElement.addEventListener("focus", () => {
-    if (
-      activeMaterialAutocompleteDropdown &&
-      activeMaterialAutocompleteDropdown !== dropdown
-    ) {
-      activeMaterialAutocompleteDropdown.classList.add("hidden");
-    }
-    activeMaterialAutocompleteDropdown = dropdown;
     renderResults(inputElement.value);
   });
 
@@ -11564,19 +11612,11 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
   });
 
   inputElement.addEventListener("blur", () => {
-    setTimeout(closeDropdown, 150);
+    setTimeout(closeDropdown, 250);
   });
 
-  window.addEventListener("resize", () => {
-    if (!dropdown.classList.contains("hidden")) updatePosition();
-  });
-  document.addEventListener(
-    "scroll",
-    () => {
-      if (!dropdown.classList.contains("hidden")) updatePosition();
-    },
-    true,
-  );
+  document.addEventListener("scroll", updatePosition, true);
+  window.addEventListener("resize", updatePosition);
 }
 
 function addScopeMaterialRow(sId, data = null) {
@@ -11605,14 +11645,16 @@ function addScopeMaterialRow(sId, data = null) {
     `;
   tbody.appendChild(tr);
   const inputEl = tr.querySelector(".est-mat-select");
-  setupMaterialAutocomplete(inputEl, () => {
-    const item = store.inventory.find(
-      (i) => i.description === inputEl.value && i.category !== "Tools",
-    );
-    if (item) {
-      tr.querySelector(".est-mat-avail").textContent = item.quantity || 0;
-      tr.querySelector(".est-mat-unit").value = item.deno || "";
-      tr.querySelector(".est-mat-cost").value = item.cost_per_unit || 0;
+  setupMaterialAutocomplete(inputEl, (selectedItem) => {
+    if (selectedItem) {
+      tr.querySelector(".est-mat-avail").textContent = `${selectedItem.quantity || 0} ${selectedItem.deno || ""}`;
+      tr.querySelector(".est-mat-unit").value = selectedItem.deno || "";
+      tr.querySelector(".est-mat-cost").value = selectedItem.cost_per_unit || selectedItem.cost || 0;
+      const qtyInp = tr.querySelector(".est-mat-qty");
+      if (qtyInp) {
+        qtyInp.focus();
+        qtyInp.select();
+      }
       updateEstimateTotals();
     }
   });
@@ -11893,27 +11935,38 @@ function saveEstimate(event) {
 }
 
 // Signatory Dropdown Helper
-let activeSignatoryDropdown = null;
 function setupSignatoryAutocomplete(prefix) {
   const inputElement = document.getElementById(`est${prefix}Name`);
   const rankEl = document.getElementById(`est${prefix}Rank`);
   const svcEl = document.getElementById(`est${prefix}Svc`);
-  if (!inputElement || inputElement.hasAttribute("data-autocomplete-init"))
-    return;
+  if (!inputElement || inputElement.hasAttribute("data-autocomplete-init")) return;
   inputElement.setAttribute("data-autocomplete-init", "true");
 
-  const dropdown = document.createElement("div");
-  dropdown.className =
-    "hidden absolute z-[9999] w-[360px] bg-white border border-slate-300 rounded-lg shadow-2xl max-h-60 overflow-y-auto text-left";
+  let dropdown = document.createElement("div");
+  dropdown.className = `sig-autocomplete-dropdown-${prefix} hidden fixed z-[99999999] bg-white border border-slate-300 rounded-xl shadow-2xl max-h-60 overflow-y-auto text-left pointer-events-auto`;
   document.body.appendChild(dropdown);
 
-  const closeDropdown = () => dropdown.classList.add("hidden");
+  const closeDropdown = () => {
+    dropdown.classList.add("hidden");
+  };
+
   const updatePosition = () => {
+    if (dropdown.classList.contains("hidden")) return;
     const rect = inputElement.getBoundingClientRect();
-    dropdown.style.top = `${rect.bottom + window.scrollY + 4}px`;
-    dropdown.style.left = `${rect.left + window.scrollX}px`;
-    if (rect.left + 360 > window.innerWidth) {
-      dropdown.style.left = `${window.innerWidth - 370}px`;
+    if (rect.width === 0 && rect.height === 0) {
+      closeDropdown();
+      return;
+    }
+    dropdown.style.position = "fixed";
+    dropdown.style.left = `${rect.left}px`;
+    dropdown.style.width = `${Math.max(320, rect.width)}px`;
+    dropdown.style.zIndex = "99999999";
+
+    const dropdownHeight = 220;
+    if (rect.bottom + dropdownHeight > window.innerHeight && rect.top > dropdownHeight) {
+      dropdown.style.top = `${rect.top - dropdownHeight - 4}px`;
+    } else {
+      dropdown.style.top = `${rect.bottom + 4}px`;
     }
   };
 
@@ -11922,75 +11975,65 @@ function setupSignatoryAutocomplete(prefix) {
     let items = [];
 
     if (prefix === "Created") {
-      // Created By -> ALL Sailors in store
+      // Created By -> All Sailors + Current User
       items = (store.sailors || []).map((s) => {
-        const offNo = s.official_number || s.service_no || "";
-        const rank = s.rank || s.trade || "-";
+        const offNo = s.official_number || s.off_no || s.service_no || s.id || "";
+        const rank = s.rank || s.trade || "Sailor";
         return {
           name: s.name,
           rank: rank,
           svc: offNo,
-          label: `${s.name}`,
+          label: s.name,
           sub: `${rank} • ${offNo} (${s.trade || "Sailor"})`,
           badge: s.trade || "Sailor",
           badgeColor: "bg-blue-100 text-blue-800",
         };
       });
     } else if (prefix === "Checked") {
-      // Checked By -> Zone In-Charge, EC/AC sailors & OIC profiles
-      const inc = (store.settings?.zoneInCharges || {})[store.currentZone];
-      if (inc && inc.name) {
-        items.push({
-          name: inc.name,
-          rank: inc.rank || "In-Charge",
-          svc: inc.serviceNo || inc.official_number || "",
-          label: `${inc.name}`,
-          sub: `${inc.rank || "In-Charge"} • ${inc.serviceNo || ""} (Zone In-Charge)`,
-          badge: "Zone In-Charge",
-          badgeColor: "bg-amber-100 text-amber-800",
-        });
-      }
-
-      // OIC profiles
-      const oicProfiles =
-        typeof getOicProfiles === "function" ? getOicProfiles() : [];
-      oicProfiles.forEach((p) => {
-        items.push({
-          name: p.name,
-          rank: p.rank || "OIC",
-          svc: p.serviceNo || "",
-          label: `${p.name}`,
-          sub: `${p.rank || "OIC"} • ${p.serviceNo || ""}`,
-          badge: "OIC",
-          badgeColor: "bg-indigo-100 text-indigo-800",
-        });
+      // Checked By -> Zone In-Charge, Supervisors, & All Sailors
+      const incMap = store.settings?.zoneInCharges || {};
+      Object.values(incMap).forEach((inc) => {
+        if (inc && inc.name) {
+          items.push({
+            name: inc.name,
+            rank: inc.rank || "In-Charge",
+            svc: inc.serviceNo || inc.service_no || inc.official_number || "",
+            label: inc.name,
+            sub: `${inc.rank || "In-Charge"} • ${inc.serviceNo || ""} (Zone In-Charge)`,
+            badge: "Zone In-Charge",
+            badgeColor: "bg-amber-100 text-amber-800",
+          });
+        }
+        if (Array.isArray(inc?.supervisors)) {
+          inc.supervisors.forEach((sp) => {
+            if (sp && sp.name) {
+              items.push({
+                name: sp.name,
+                rank: sp.rank || "Supervisor",
+                svc: sp.serviceNo || sp.service_no || "",
+                label: sp.name,
+                sub: `${sp.rank || "Supervisor"} • ${sp.serviceNo || ""}`,
+                badge: "Supervisor",
+                badgeColor: "bg-indigo-100 text-indigo-800",
+              });
+            }
+          });
+        }
       });
 
-      // EC/AC/MA sailors
-      (store.sailors || [])
-        .filter((s) => {
-          const off = String(s.official_number || s.service_no || "")
-            .trim()
-            .toUpperCase();
-          return (
-            off.startsWith("EC") ||
-            off.startsWith("AC") ||
-            s.trade === "MA" ||
-            s.trade === "CA"
-          );
-        })
-        .forEach((s) => {
-          const offNo = s.official_number || s.service_no || "";
-          items.push({
-            name: s.name,
-            rank: s.rank || s.trade || "-",
-            svc: offNo,
-            label: `${s.name}`,
-            sub: `${s.rank || "-"} • ${offNo} (${s.trade || "Staff"})`,
-            badge: s.trade || "Staff",
-            badgeColor: "bg-slate-100 text-slate-700",
-          });
+      // All Sailors
+      (store.sailors || []).forEach((s) => {
+        const offNo = s.official_number || s.off_no || s.service_no || s.id || "";
+        items.push({
+          name: s.name,
+          rank: s.rank || s.trade || "Staff",
+          svc: offNo,
+          label: s.name,
+          sub: `${s.rank || "Staff"} • ${offNo} (${s.trade || "Staff"})`,
+          badge: s.trade || "Staff",
+          badgeColor: "bg-slate-100 text-slate-700",
         });
+      });
     } else if (prefix === "Approved") {
       // Approved By -> Specific CE Officers list + Option to leave blank
       items.push({
@@ -12004,60 +12047,15 @@ function setupSignatoryAutocomplete(prefix) {
       });
 
       const ceOfficersList = [
-        {
-          rank: "CAPTAIN (CE)",
-          name: "BGL BALASURIYA",
-          svc: "NRC 1843",
-          desig: "CCED(E)",
-        },
-        {
-          rank: "CDR (CE)",
-          name: "TM VITHARANA",
-          svc: "NRC 2541",
-          desig: "CCEO(E)",
-        },
-        {
-          rank: "LCDR (CE)",
-          name: "JAJD SENARATHNA",
-          svc: "NRC 3068",
-          desig: "SCE(M)",
-        },
-        {
-          rank: "LCDR (CE)",
-          name: "JATK JAYAKODI",
-          svc: "NRC 3542",
-          desig: "SCE(P&P)",
-        },
-        {
-          rank: "LCDR (CE)",
-          name: "KMAU KAHANDAWA",
-          svc: "NRC 3576",
-          desig: "SCE(W/W)",
-        },
-        {
-          rank: "LCDR (CE)",
-          name: "HMMI JAYATHUNGA",
-          svc: "NRC 3977",
-          desig: "CE (W/W), CE (P&P)",
-        },
-        {
-          rank: "LT (CE)",
-          name: "WP DARSHANA",
-          svc: "NRC 4126",
-          desig: "QS (E)",
-        },
-        {
-          rank: "LT (CE)",
-          name: "JADU JAYASINGHE",
-          svc: "NRC 4310",
-          desig: "CE(M)I",
-        },
-        {
-          rank: "LT (CE)",
-          name: "PHKR KUMARA",
-          svc: "NRC 4570",
-          desig: "CE(M) II",
-        },
+        { rank: "CAPTAIN (CE)", name: "BGL BALASURIYA", svc: "NRC 1843", desig: "CCED(E)" },
+        { rank: "CDR (CE)", name: "TM VITHARANA", svc: "NRC 2541", desig: "CCEO(E)" },
+        { rank: "LCDR (CE)", name: "JAJD SENARATHNA", svc: "NRC 3068", desig: "SCE(M)" },
+        { rank: "LCDR (CE)", name: "JATK JAYAKODI", svc: "NRC 3542", desig: "SCE(P&P)" },
+        { rank: "LCDR (CE)", name: "KMAU KAHANDAWA", svc: "NRC 3576", desig: "SCE(W/W)" },
+        { rank: "LCDR (CE)", name: "HMMI JAYATHUNGA", svc: "NRC 3977", desig: "CE (W/W), CE (P&P)" },
+        { rank: "LT (CE)", name: "WP DARSHANA", svc: "NRC 4126", desig: "QS (E)" },
+        { rank: "LT (CE)", name: "JADU JAYASINGHE", svc: "NRC 4310", desig: "CE(M) I" },
+        { rank: "LT (CE)", name: "PHKR KUMARA", svc: "NRC 4570", desig: "CE(M) II" },
       ];
 
       ceOfficersList.forEach((off) => {
@@ -12071,54 +12069,80 @@ function setupSignatoryAutocomplete(prefix) {
           badgeColor: "bg-emerald-100 text-emerald-800",
         });
       });
+
+      // Also add any other officers from users
+      (store.users || []).forEach((u) => {
+        if (u.role === "Admin" || u.role === "Officer" || (u.rank && u.rank.includes("LT"))) {
+          items.push({
+            name: u.name,
+            rank: u.rank || "Officer",
+            svc: u.serviceNo || u.official_number || "",
+            label: `${u.rank || ""} ${u.name}`.trim(),
+            sub: `${u.rank || "Officer"} • ${u.serviceNo || ""}`,
+            badge: "Officer",
+            badgeColor: "bg-teal-100 text-teal-800",
+          });
+        }
+      });
     }
 
     if (lowerQuery) {
       items = items.filter((it) => {
-        const text =
-          `${it.name} ${it.rank} ${it.svc} ${it.sub}`.toLowerCase();
+        const text = `${it.name} ${it.rank} ${it.svc} ${it.sub}`.toLowerCase();
         return text.includes(lowerQuery);
       });
     }
 
-    const visibleItems = items.slice(0, 40);
+    // Deduplicate by name + svc
+    const seen = new Set();
+    items = items.filter((it) => {
+      const key = `${it.name}_${it.svc}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const visibleItems = items.slice(0, 30);
     if (visibleItems.length === 0) {
       dropdown.innerHTML = `<div class="px-3 py-2 text-xs text-slate-500 italic">No matching records (type freely)</div>`;
     } else {
       dropdown.innerHTML = visibleItems
         .map(
-          (it) => `
-        <div class="px-3 py-2 hover:bg-amber-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item" data-name="${it.name}" data-rank="${it.rank}" data-svc="${it.svc}">
-            <div class="flex items-center justify-between gap-1">
-                <span class="text-xs font-semibold text-slate-800">${it.label}</span>
+          (it, idx) => `
+        <div class="px-3 py-2 hover:bg-teal-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item transition-colors" data-sig-idx="${idx}">
+            <div class="flex items-center justify-between gap-1 pointer-events-none">
+                <span class="text-xs font-bold text-slate-800">${it.label}</span>
                 <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${it.badgeColor}">${it.badge}</span>
             </div>
-            <div class="text-[11px] text-slate-500">${it.sub}</div>
+            <div class="text-[11px] text-slate-500 font-mono pointer-events-none">${it.sub}</div>
         </div>
       `,
         )
         .join("");
     }
 
-    updatePosition();
     dropdown.classList.remove("hidden");
+    updatePosition();
 
     dropdown.querySelectorAll(".autocomplete-item").forEach((el) => {
-      el.addEventListener("mousedown", (e) => {
+      const handleSelect = (e) => {
         e.preventDefault();
-        inputElement.value = el.getAttribute("data-name") || "";
-        if (rankEl) rankEl.value = el.getAttribute("data-rank") || "";
-        if (svcEl) svcEl.value = el.getAttribute("data-svc") || "";
-        closeDropdown();
-      });
+        e.stopPropagation();
+        const idx = parseInt(el.getAttribute("data-sig-idx"), 10);
+        const it = visibleItems[idx];
+        if (it) {
+          inputElement.value = it.name || "";
+          if (rankEl) rankEl.value = it.rank || "";
+          if (svcEl) svcEl.value = it.svc || "";
+          closeDropdown();
+        }
+      };
+      el.addEventListener("mousedown", handleSelect);
+      el.addEventListener("click", handleSelect);
     });
   };
 
   inputElement.addEventListener("focus", () => {
-    if (activeSignatoryDropdown && activeSignatoryDropdown !== dropdown) {
-      activeSignatoryDropdown.classList.add("hidden");
-    }
-    activeSignatoryDropdown = dropdown;
     renderResults(inputElement.value);
   });
 
@@ -12127,19 +12151,11 @@ function setupSignatoryAutocomplete(prefix) {
   });
 
   inputElement.addEventListener("blur", () => {
-    setTimeout(closeDropdown, 150);
+    setTimeout(closeDropdown, 200);
   });
 
-  window.addEventListener("resize", () => {
-    if (!dropdown.classList.contains("hidden")) updatePosition();
-  });
-  document.addEventListener(
-    "scroll",
-    () => {
-      if (!dropdown.classList.contains("hidden")) updatePosition();
-    },
-    true,
-  );
+  document.addEventListener("scroll", updatePosition, true);
+  window.addEventListener("resize", updatePosition);
 }
 
 function populateSignatoryDropdowns() {
@@ -14954,6 +14970,41 @@ function quickEditBookNo(itemId, event) {
   }
 }
 
+function quickEditUnitCost(itemId, event) {
+  if (event) event.stopPropagation();
+  const item = (store.inventory || []).find(
+    (i) => String(i.id) === String(itemId) || String(i._fbKey) === String(itemId)
+  );
+  if (!item) return;
+
+  const currentCost = parseFloat(item.cost_per_unit || item.cost || 0);
+  const newCostStr = prompt(
+    `💰 Enter Unit Cost (Rs) for:\n"${item.description}"`,
+    currentCost > 0 ? currentCost : ""
+  );
+  if (newCostStr === null) return;
+
+  const parsedCost = parseFloat(newCostStr.trim());
+  if (isNaN(parsedCost) || parsedCost < 0) {
+    showToast("Invalid cost value entered", "error");
+    return;
+  }
+
+  const fbKey = item._fbKey || item.id;
+  item.cost_per_unit = parsedCost;
+  item.cost = parsedCost;
+  renderInventoryTable();
+
+  if (fbKey && typeof opsDB !== "undefined") {
+    opsDB.ref(`inventory/${fbKey}`).update({ cost_per_unit: parsedCost, cost: parsedCost })
+      .then(() => showToast(`Updated Cost to Rs. ${parsedCost.toFixed(2)} for ${item.description}`, "success"))
+      .catch((err) => {
+        console.error("Error saving cost_per_unit:", err);
+        showToast("Failed to update Cost in database", "error");
+      });
+  }
+}
+
 function openBatchAssignBookNosModal() {
   const currentZoneItems = store.inventory.filter(
     (i) => !i.zone_id || i.zone_id === store.currentZone
@@ -15141,7 +15192,7 @@ function ensureAllStandardZones(existingZones = []) {
     { id: "Supply-School", name: "Supply School", status: "Active", active: true },
     { id: "Pump-House", name: "Pump House", status: "Active", active: true },
     { id: "Main-Store", name: "Main Store", status: "Active", active: true },
-    { id: "Carpentry-Shop", name: "Carpentry Shop", status: "Active", active: true },
+    { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop", status: "Active", active: true },
     { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
     { id: "Aluminium-Workshop", name: "Aluminium Workshop", status: "Active", active: true }
   ];
@@ -15154,7 +15205,10 @@ function ensureAllStandardZones(existingZones = []) {
     .filter((z) => z && (z.id || z.name) && !isSbsZone(z.id || z.name))
     .map((z) => {
       const zid = z.id || z.name;
-      const zname = z.name || z.id;
+      let zname = z.name || z.id;
+      if (isZoneMatch(zid, "Carpentry-Shop") || isZoneMatch(zname, "Carpentry Shop")) {
+        zname = "Carpentry Shop & Painter Shop";
+      }
       const isInactive = z.status === "Inactive" || z.active === false;
       return {
         ...z,
@@ -15199,7 +15253,7 @@ const defaultSettings = {
     { id: "Supply-School", name: "Supply School", status: "Active", active: true },
     { id: "Pump-House", name: "Pump House", status: "Active", active: true },
     { id: "Main-Store", name: "Main Store", status: "Active", active: true },
-    { id: "Carpentry-Shop", name: "Carpentry Shop", status: "Active", active: true },
+    { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop", status: "Active", active: true },
     { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
     { id: "Aluminium-Workshop", name: "Aluminium Workshop", status: "Active", active: true }
   ],
@@ -18875,32 +18929,7 @@ function renderNav254PrintDocument(v) {
 function printCurrentNav254() {
   const content = document.getElementById("nav254PrintDocument");
   if (!content) return;
-
-  const printWindow = window.open("", "_blank");
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <title></title>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
-        <style>
-          @page { size: auto; margin: 0; }
-          @media print {
-            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
-            .no-print { display: none !important; }
-          }
-          body { font-family: 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; margin: 0; padding: 12mm 15mm; color: #000; background: #fff; }
-        </style>
-      </head>
-      <body>
-        ${content.innerHTML}
-        <script>
-          window.onload = function() { window.print(); window.close(); }
-        </script>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
+  printNav254HtmlDirect(content.innerHTML);
 }
 
 function deleteNav254Voucher(voucherId) {
@@ -29769,12 +29798,6 @@ function printTempIssueSlip(issueId) {
   const issue = (store.tempIssues || []).find((i) => (i.id || i._fbKey) === issueId);
   if (!issue) return;
 
-  const printWindow = window.open("", "_blank", "width=880,height=750");
-  if (!printWindow) {
-    window.print();
-    return;
-  }
-
   const nav254Content = generateOfficialNav254Html({
     ref_no: issue.ref_no,
     supplied_by: `Civil Engineering Department (${issue.origin_zone || store.currentZone || 'CE Dept'})`,
@@ -29794,34 +29817,13 @@ function printTempIssueSlip(issueId) {
     is_returnable: issue.is_returnable
   });
 
-  printWindow.document.write(`
-    <!DOCTYPE html>
-    <html lang="si">
-      <head>
-        <title></title>
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
-        <style>
-          @page { size: auto; margin: 0; }
-          @media print {
-            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
-            .no-print { display: none !important; }
-          }
-          body { margin: 0; padding: 12mm 15mm; background: #fff; display: flex; justify-content: center; font-family: 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; }
-        </style>
-      </head>
-      <body>
-        <div style="width: 100%;">
-          ${nav254Content}
-        </div>
-        <script>
-          window.onload = function() {
-            setTimeout(function() { window.print(); window.close(); }, 300);
-          };
-        </script>
-      </body>
-    </html>
-  `);
-  printWindow.document.close();
+  const printDocContainer = document.getElementById("nav254PrintDocument");
+  if (printDocContainer) {
+    printDocContainer.innerHTML = nav254Content;
+    document.getElementById("nav254PrintModal").classList.remove("hidden");
+  }
+
+  printNav254HtmlDirect(nav254Content);
 }
 
 // ── Print Tabular Temporary Issues Register ──
@@ -29987,6 +29989,7 @@ window.removeOnOffChargeDestination = removeOnOffChargeDestination;
 window.renderSettingsInventoryStoresList = renderSettingsInventoryStoresList;
 window.renderSettingsOnOffChargeList = renderSettingsOnOffChargeList;
 window.printOffChargeNav254 = printOffChargeNav254;
+window.quickEditUnitCost = quickEditUnitCost;
 
 // Resilient Event Listener for New Estimate Buttons
 function initEstimateButtonBindings() {
