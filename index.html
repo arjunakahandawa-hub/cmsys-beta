@@ -673,9 +673,6 @@
                     <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300 tab-active">
                         <span>📊 </span>Dashboard
                     </button>
-                    <button onclick="switchView('nastatus')" id="tab-nastatus" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>🛌 </span>N/A Status
-                    </button>
                     <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
                         <span>📋 </span>Daily Details
                     </button>
@@ -1586,7 +1583,7 @@
             </div>
 
             <!-- Sub-Tabs Navigation Ribbon -->
-            <div class="flex items-center gap-2 border-b border-slate-200 pb-2">
+            <div class="flex items-center gap-2 border-b border-slate-200 pb-2 flex-wrap">
                 <button type="button" onclick="switchInventorySubTab('stock')" id="invSubTab-stock" class="px-4 py-2 rounded-xl text-xs font-bold bg-teal-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer">
                     <span>📦</span> Stock Balance & Materials
                 </button>
@@ -1594,36 +1591,13 @@
                     <span>📑</span> Temporary Issue Book (TIB)
                     <span id="tibPendingReceiptBadge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500 text-white animate-pulse">0 Pending</span>
                 </button>
+                <button type="button" onclick="switchInventorySubTab('precast')" id="invSubTab-precast" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <span>🧱</span> Pre-Cast Yard & Production (G Zone)
+                </button>
             </div>
 
             <!-- ==================== SUB-PANEL 1: STOCK BALANCE ==================== -->
             <div id="invPanel-stock" class="space-y-4">
-                <!-- Cement Pre-Cast Workshop Banner (Shown only in G Zone / Cement Pre-Cast Workshop) -->
-                <div id="cementPrecastWorkshopBanner" class="hidden mb-4 p-4 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                        <div class="w-12 h-12 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-2xl">
-                            🧱
-                        </div>
-                        <div>
-                            <div class="flex items-center gap-2">
-                                <h3 class="font-bold text-sm text-white">Cement Pre-Cast Workshop (G Zone)</h3>
-                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Production & Dispatch</span>
-                            </div>
-                            <p class="text-xs text-indigo-200 mt-0.5">Produce Cement/Paving blocks, lintels & fence posts • Off-charge raw materials & issue to other Zones via NAV 254</p>
-                        </div>
-                    </div>
-                    <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
-                        <button onclick="openPrecastProductionModal()" class="flex-1 md:flex-initial bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5">
-                            <span>➕ Log Production Batch</span>
-                        </button>
-                        <button onclick="openNav254Modal()" class="flex-1 md:flex-initial bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5">
-                            <span>📜 Issue via NAV 254</span>
-                        </button>
-                        <button onclick="openNav254HistoryModal()" class="flex-1 md:flex-initial bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1">
-                            <span>📋 NAV 254 History</span>
-                        </button>
-                    </div>
-                </div>
 
                 <!-- Simplified Unified Category & Search Bar -->
                 <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-3.5 mb-4 space-y-3">
@@ -1917,6 +1891,106 @@
                             </thead>
                             <tbody id="tempIssuesTableBody" class="divide-y divide-slate-100 bg-white">
                                 <!-- Dynamic records rendered via renderTempIssuesTable() -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== SUB-PANEL 3: PRE-CAST PRODUCTION & INVENTORY (G ZONE) ==================== -->
+            <div id="invPanel-precast" class="hidden space-y-6">
+                <!-- Cement Pre-Cast Workshop Banner -->
+                <div class="p-4 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl bg-indigo-600/30 border border-indigo-400/40 flex items-center justify-center text-2xl shadow-inner">
+                            🧱
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-bold text-sm text-white">Cement Pre-Cast Workshop (G Zone)</h3>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">Production & Dispatch</span>
+                            </div>
+                            <p class="text-xs text-indigo-200 mt-0.5">Produce Cement/Paving blocks, lintels & fence posts • Off-charge raw materials & issue to other Zones via NAV 254</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
+                        <button onclick="openPrecastProductionModal()" class="flex-1 md:flex-initial bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span>➕ Log Production Batch</span>
+                        </button>
+                        <button onclick="openNav254Modal()" class="flex-1 md:flex-initial bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span>📜 Issue via NAV 254</span>
+                        </button>
+                        <button onclick="openNav254HistoryModal()" class="flex-1 md:flex-initial bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer">
+                            <span>📋 NAV 254 History</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Pre-Cast KPI Summary Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="precastKpiCards">
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-lg">🧱</div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Pre-Cast Stock</div>
+                            <div class="text-lg font-extrabold text-slate-800" id="pcKpiTotalStock">0 Nos</div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-lg">⚙️</div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Products In Stock</div>
+                            <div class="text-lg font-extrabold text-emerald-700" id="pcKpiProductsCount">0 Items</div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-lg">📜</div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">NAV 254 Dispatched</div>
+                            <div class="text-lg font-extrabold text-amber-700" id="pcKpiNavDispatched">0 Vouchers</div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-lg">📦</div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Raw Cement Bags</div>
+                            <div class="text-lg font-extrabold text-teal-700" id="pcKpiRawCement">0 Bags</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Pre-Cast Inventory & Stock Register -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-4">
+                    <div class="flex flex-col sm:flex-row gap-2.5 items-center justify-between">
+                        <div>
+                            <h4 class="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                                <span>🧱</span> Pre-Cast Yard Finished Products Inventory
+                            </h4>
+                            <p class="text-xs text-slate-500">Live stock of manufactured cement blocks, paving blocks, lintels, fence posts & concrete items</p>
+                        </div>
+                        <div class="relative w-full sm:w-64">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none text-xs">🔍</span>
+                            <input type="text" id="precastInventorySearch" placeholder="Search precast items..." 
+                                class="w-full pl-8 pr-3 py-1.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 text-xs font-medium"
+                                onkeyup="renderPrecastInventoryTable()">
+                        </div>
+                    </div>
+
+                    <!-- Pre-Cast Stock Table -->
+                    <div class="overflow-x-auto rounded-xl border border-slate-200">
+                        <table class="w-full text-xs text-left border-collapse" id="precastInventoryTable">
+                            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                                <tr>
+                                    <th class="px-3.5 py-3 text-left">Item Description</th>
+                                    <th class="px-3.5 py-3 text-center">Category</th>
+                                    <th class="px-3.5 py-3 text-center">Location / Yard</th>
+                                    <th class="px-3.5 py-3 text-center">Current Stock (Qty)</th>
+                                    <th class="px-3.5 py-3 text-right">Unit Cost</th>
+                                    <th class="px-3.5 py-3 text-right">Total Value</th>
+                                    <th class="px-3.5 py-3 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="precastInventoryTableBody" class="divide-y divide-slate-100 bg-white">
+                                <!-- Populated dynamically via renderPrecastInventoryTable() -->
                             </tbody>
                         </table>
                     </div>
@@ -4197,10 +4271,6 @@
                     <span class="text-xl mb-1">🏗️</span>
                     <span class="text-[10px] font-bold">Projects</span>
                 </button>
-                <button onclick="switchView('nastatus'); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
-                    <span class="text-xl mb-1">🛌</span>
-                    <span class="text-[10px] font-bold">N/A Status</span>
-                </button>
                 <button onclick="openSettingsView(); toggleMobileMoreMenuSheet();" class="flex flex-col items-center justify-center p-2.5 rounded-2xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/50 text-slate-200 active:scale-95 transition-all">
                     <span class="text-xl mb-1">⚙️</span>
                     <span class="text-[10px] font-bold">Settings</span>
@@ -6403,15 +6473,16 @@
 
                 <div class="grid grid-cols-12 gap-3">
                     <div class="col-span-5">
-                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location <span class="text-[10px] text-slate-500 font-normal">(Optional)</span></label>
-                        <select id="estLocation" onchange="onEstLocationChange(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-medium">
-                            <option value="">-- Select Location (Optional) --</option>
-                        </select>
+                        <label class="block text-xs font-semibold text-slate-700 mb-1">Location <span class="text-[10px] text-slate-500 font-normal">(Select / Type)</span></label>
+                        <div class="relative">
+                            <input list="estLocationDatalist" id="estLocation" placeholder="Select or type Location / Building..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white font-medium" autocomplete="off" oninput="onEstLocationChange(this.value)" onchange="onEstLocationChange(this.value)">
+                            <datalist id="estLocationDatalist"></datalist>
+                        </div>
                     </div>
                     <div class="col-span-4">
                         <label class="block text-xs font-semibold text-slate-700 mb-1">Location 2 <span class="text-[10px] text-slate-500 font-normal">(Select / Type)</span></label>
                         <div class="relative">
-                            <input list="estLocation2Datalist" id="estLocation2" oninput="onEstLocation2Change(this.value)" onchange="onEstLocation2Change(this.value)" placeholder="Select or type Location 2..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" autocomplete="off">
+                            <input list="estLocation2Datalist" id="estLocation2" placeholder="Select or type Location 2..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white" autocomplete="off" oninput="onEstLocation2Change(this.value)" onchange="onEstLocation2Change(this.value)">
                             <datalist id="estLocation2Datalist"></datalist>
                         </div>
                     </div>

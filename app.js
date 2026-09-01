@@ -1288,6 +1288,12 @@ function fbSaveMaintenanceRecord(data) {
 } // Save location
 function fbSaveLocation(data) {
   const { _fbKey, ...clean } = data;
+  if (clean.id === undefined || clean.id === null || Number.isNaN(clean.id)) {
+    const validIds = (store.locations || [])
+      .map((l) => parseInt(l.id, 10))
+      .filter((n) => !Number.isNaN(n) && Number.isFinite(n));
+    clean.id = validIds.length > 0 ? Math.max(...validIds) + 1 : Date.now();
+  }
   if (_fbKey) {
     return opsDB.ref(`locations/${_fbKey}`).update(clean);
   }
@@ -2224,7 +2230,12 @@ function getSailorLastAssignedTask(sailor) {
   // 1. Check yesterdayJob first
   if (sailor.yesterdayJob) {
     const text = getSailorYesterdayJobText(sailor);
-    if (text && text !== "-") return { title: text, type: "Yesterday" };
+    let yZone = sailor.yesterdayZone || sailor.last_zone || sailor.zone_assigned || "";
+    if (!yZone && store.workOrders) {
+      const wo = store.workOrders.find(w => (w.id === sailor.yesterdayJob || w._fbKey === sailor.yesterdayJob || w.description === text || w.title === text));
+      if (wo) yZone = wo.zone || wo.zone_id || "";
+    }
+    if (text && text !== "-") return { title: text, type: "Yesterday", zone: yZone };
   }
 
   // 2. Check dailyAllocations sorted by date descending (excluding today if checking previous)
@@ -2237,16 +2248,23 @@ function getSailorLastAssignedTask(sailor) {
     if (pastAllocs.length > 0) {
       const alloc = pastAllocs[0];
       let taskName = alloc.work_order_title || alloc.title || alloc.location || alloc.work_order_no || "";
-      if (!taskName && alloc.work_order_id) {
+      let allocZone = alloc.zone || alloc.zone_id || "";
+      if (alloc.work_order_id) {
         const wo = (store.workOrders || []).find(w => String(w.id || w._fbKey) === String(alloc.work_order_id));
-        if (wo) taskName = wo.description || wo.title || wo.work_order_no;
+        if (wo) {
+          if (!taskName) taskName = wo.description || wo.title || wo.work_order_no;
+          if (!allocZone) allocZone = wo.zone || wo.zone_id || "";
+        }
       }
-      if (!taskName && alloc.work_order_id) {
+      if (alloc.work_order_id) {
         const jc = (store.jobCards || []).find(j => String(j.id || j._fbKey) === String(alloc.work_order_id));
-        if (jc) taskName = jc.description || jc.title || jc.job_card_no;
+        if (jc) {
+          if (!taskName) taskName = jc.description || jc.title || jc.job_card_no;
+          if (!allocZone) allocZone = jc.zone || jc.zone_id || "";
+        }
       }
       if (taskName) {
-        return { title: taskName, date: alloc.date, zone: alloc.zone || "" };
+        return { title: taskName, date: alloc.date, zone: allocZone || sailor.zone_assigned || "" };
       }
     }
   }
@@ -2255,7 +2273,7 @@ function getSailorLastAssignedTask(sailor) {
   if (store.workOrders) {
     const wo = store.workOrders.find(w => w.assigned && (w.assigned.includes(sId) || w.assigned.includes(sFb) || w.assigned.includes(sOff)));
     if (wo) {
-      return { title: wo.description || wo.title || wo.work_order_no || "Civil Work", zone: wo.zone || "" };
+      return { title: wo.description || wo.title || wo.work_order_no || "Civil Work", zone: wo.zone || wo.zone_id || sailor.zone_assigned || "" };
     }
   }
 
@@ -2458,14 +2476,25 @@ function renderAvailableSailors() {
 
       const lastTask = getSailorLastAssignedTask(sailor);
       const sailorLoc = sailor.zone_assigned || sailor.location || sailor.zone || (sailor.isZoneTeam ? store.currentZone : "") || "Civil Dept";
+      const cleanNo = (sailor.official_number || "").replace(/[^a-zA-Z0-9]/g, "");
 
       if (assignment) {
         return `
-            <div class="sailor-card rounded-xl p-3 border bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed select-none relative group"
+            <div class="sailor-card rounded-xl p-3 border bg-slate-100/70 border-slate-200 opacity-60 cursor-not-allowed select-none relative group flex flex-col gap-2"
                 title="Already assigned to ${assignment.ref} in ${assignment.zone}: ${assignment.title}">
                 <div class="flex items-center gap-3">
-                    <div class="relative flex-shrink-0">
-                        <div class="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-sm bg-slate-400">${sailor.trade}</div>
+                    <div class="relative flex-shrink-0 w-11 h-11 rounded-xl overflow-hidden shadow-xs border border-slate-300 bg-slate-200 flex items-center justify-center">
+                        ${cleanNo ? `
+                        <img src="images/${cleanNo}.JPG" 
+                             data-fallback="<div class='w-full h-full flex items-center justify-center text-xs font-bold text-white bg-slate-400'>${sailor.trade}</div>" 
+                             class="w-full h-full object-cover" 
+                             onerror="handleProfilePicError(this, '${cleanNo}')">
+                        ` : `
+                        <div class="w-full h-full flex items-center justify-center text-sm font-bold text-white bg-slate-400">${sailor.trade}</div>
+                        `}
+                        <span class="absolute bottom-0 right-0 px-1 py-0.2 rounded-tl text-[8px] font-black text-white bg-slate-900/80 backdrop-blur-xs leading-none">
+                            ${sailor.trade}
+                        </span>
                         ${sailor.isZoneTeam ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 rounded-full flex items-center justify-center text-white text-[9px] shadow">★</span>' : ""}
                     </div>
                     <div class="flex-1 min-w-0">
@@ -2482,43 +2511,65 @@ function renderAvailableSailors() {
                             ` : ''}
                         </div>
                         <div class="text-[11px] text-slate-500 mt-0.5 truncate">${assignment.ref}${assignment.title ? ' · ' + assignment.title : ''}</div>
-                        ${lastTask ? `
-                        <div class="text-[10px] text-slate-500 mt-1 flex items-center gap-1 truncate bg-white/60 px-1.5 py-0.5 rounded border border-slate-200/80" title="Last Assigned Task: ${lastTask.title}">
-                            <span class="text-teal-700 font-bold flex-shrink-0">🔨 Last:</span>
-                            <span class="truncate font-medium text-slate-600">${lastTask.title}</span>
-                        </div>
-                        ` : ''}
                     </div>
                     <div class="text-right flex-shrink-0">
                         <div class="text-base font-extrabold text-slate-400">${sailor.avgScore.toFixed(1)}</div>
                         <div class="text-[10px] text-slate-400 mt-0.5">${sailor.category}</div>
                     </div>
                 </div>
+                ${lastTask ? `
+                <div class="bg-white/80 rounded-lg p-2 border border-slate-200/90 w-full space-y-1 text-left" title="Last Assigned Task: ${lastTask.zone ? '[' + (formatZoneDisplayName(lastTask.zone) || lastTask.zone) + '] ' : ''}${lastTask.title}">
+                    <div class="flex items-center gap-1.5 text-[10.5px]">
+                        <span class="text-teal-700 font-extrabold flex-shrink-0 flex items-center gap-0.5 text-[10px]">
+                            <span>🔨</span> Last:
+                        </span>
+                        <span class="font-extrabold px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/60 text-[9.5px] uppercase tracking-tight truncate">
+                            📍 ${formatZoneDisplayName(lastTask.zone) || lastTask.zone || "Civil Dept"}
+                        </span>
+                        ${lastTask.date ? `<span class="text-[10px] text-slate-400 font-mono ml-auto flex-shrink-0">${lastTask.date}</span>` : ''}
+                    </div>
+                    <div class="text-[11px] font-medium text-slate-600 truncate flex items-center gap-1">
+                        <span class="text-slate-400 text-[10px]">↳</span>
+                        <span class="truncate">${lastTask.title}</span>
+                    </div>
+                </div>
+                ` : ''}
             </div>
             `;
       }
       return `
-        <div class="sailor-card rounded-xl p-3 hover:shadow-md transition-all border"
+        <div class="sailor-card rounded-xl p-3 hover:shadow-md transition-all border flex flex-col gap-2"
             style="background:rgba(255,255,255,0.88);border-color:rgba(255,255,255,0.7);backdrop-filter:blur(6px)"
             draggable="${isToday ? "true" : "false"}"
             ondragstart="handleDragStart(event, '${sailor.id || sailor._fbKey}')"
             ondragend="handleDragEnd(event)">
             <div class="flex items-center gap-3">
-                <div class="relative flex-shrink-0">
-                    <div class="w-11 h-11 rounded-xl flex items-center justify-center text-sm font-bold text-white shadow-sm"
-                        style="background:${tradeBg}">${sailor.trade}</div>
+                <div class="relative flex-shrink-0 w-11 h-11 rounded-xl overflow-hidden shadow-xs border border-slate-200/90 flex items-center justify-center" style="background:${tradeBg}">
+                    ${cleanNo ? `
+                    <img src="images/${cleanNo}.JPG" 
+                         data-fallback="<div class='w-full h-full flex items-center justify-center text-xs font-bold text-white' style='background:${tradeBg}'>${sailor.trade}</div>" 
+                         class="w-full h-full object-cover" 
+                         onerror="handleProfilePicError(this, '${cleanNo}')">
+                    ` : `
+                    <div class="w-full h-full flex items-center justify-center text-xs font-bold text-white" style="background:${tradeBg}">
+                        ${sailor.trade}
+                    </div>
+                    `}
+                    <span class="absolute bottom-0 right-0 px-1 py-0.2 rounded-tl text-[8px] font-black text-white bg-slate-950/80 backdrop-blur-xs leading-none">
+                        ${sailor.trade}
+                    </span>
                     ${sailor.isZoneTeam ? '<span class="absolute -top-1 -right-1 w-4 h-4 bg-teal-500 rounded-full flex items-center justify-center text-white text-[9px] shadow">★</span>' : ""}
                 </div>
                 <div class="flex-1 min-w-0">
-                    <p class="font-semibold text-slate-800 text-sm truncate leading-tight flex items-center justify-between gap-1">
+                    <p class="font-bold text-slate-800 text-sm truncate leading-tight flex items-center justify-between gap-1">
                         <span>${sailor.name}</span>
                         <button onclick="event.stopPropagation(); openSailorProfile('${(_sailor$id3 = sailor.id) !== null && _sailor$id3 !== void 0 ? _sailor$id3 : sailor._fbKey}')" class="text-teal-600 hover:text-teal-800 text-xs p-0.5 cursor-pointer font-bold transition-transform hover:scale-115" title="View Profile">
                             👤
                         </button>
                     </p>
                     <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span class="text-[11px] text-slate-600 mono font-bold">${sailor.official_number}</span>
-                        <span class="text-[11px] text-slate-500">${sailor.rank}</span>
+                        <span class="text-[11px] text-slate-700 mono font-bold">${sailor.official_number}</span>
+                        <span class="text-[11px] text-slate-500 font-semibold">${sailor.rank}</span>
                         ${sailor.isZoneTeam ? `
                         <span class="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-semibold border border-teal-200/80 flex items-center gap-0.5" title="Zone Team">
                             <span>★</span> Zone Team
@@ -2530,18 +2581,29 @@ function renderAvailableSailors() {
                         `}
                         ${sailor.yesterdayJob ? '<span class="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold border border-purple-200">↻ Cont</span>' : ""}
                     </div>
-                    ${lastTask ? `
-                    <div class="text-[10px] text-slate-600 mt-1 flex items-center gap-1 truncate bg-slate-50/90 px-1.5 py-0.5 rounded border border-slate-200" title="Last Assigned Task: ${lastTask.title}">
-                        <span class="text-teal-700 font-bold flex-shrink-0">🔨 Last:</span>
-                        <span class="truncate font-medium text-slate-700">${lastTask.title}</span>
-                    </div>
-                    ` : ''}
                 </div>
                 <div class="text-right flex-shrink-0">
                     <div class="text-base font-extrabold" style="color:${scoreColor}">${sailor.avgScore.toFixed(1)}</div>
                     <div class="text-[10px] text-slate-400 mt-0.5">${sailor.category}</div>
                 </div>
             </div>
+            ${lastTask ? `
+            <div class="bg-slate-50/95 hover:bg-slate-100/90 rounded-lg p-2 border border-slate-200/90 transition-colors w-full space-y-1 text-left" title="Last Attended Task: ${lastTask.zone ? '[' + (formatZoneDisplayName(lastTask.zone) || lastTask.zone) + '] ' : ''}${lastTask.title}">
+                <div class="flex items-center gap-1.5 text-[10.5px]">
+                    <span class="text-teal-700 font-extrabold flex-shrink-0 text-[10px] flex items-center gap-0.5">
+                        <span>🔨</span> Last:
+                    </span>
+                    <span class="font-extrabold px-1.5 py-0.2 rounded bg-indigo-100/80 text-indigo-800 border border-indigo-200/60 text-[9.5px] uppercase tracking-tight truncate">
+                        📍 ${formatZoneDisplayName(lastTask.zone) || lastTask.zone || "Civil Dept"}
+                    </span>
+                    ${lastTask.date ? `<span class="text-[10px] text-slate-400 font-mono ml-auto flex-shrink-0">${lastTask.date}</span>` : ''}
+                </div>
+                <div class="text-[11px] font-medium text-slate-700 truncate flex items-center gap-1">
+                    <span class="text-slate-400 text-[10px]">↳</span>
+                    <span class="truncate">${lastTask.title}</span>
+                </div>
+            </div>
+            ` : ''}
         </div>
         `;
     })
@@ -11165,8 +11227,8 @@ function selectEstimate(id) {
 let estWorkScopeCounter = 0;
 
 function populateEstLocationsDatalist(selectedVal = "") {
-  const locSelect = document.getElementById("estLocation");
-  if (!locSelect) return;
+  const locInput = document.getElementById("estLocation");
+  const locDatalist = document.getElementById("estLocationDatalist");
   const currentZoneLocs = (store.locations || []).filter(
     (l) => !l.zone_id || l.zone_id === store.currentZone,
   );
@@ -11180,14 +11242,192 @@ function populateEstLocationsDatalist(selectedVal = "") {
     ),
   ].sort((a, b) => a.localeCompare(b));
 
-  let optionsHtml = '<option value="">-- Select Location (Optional) --</option>';
-  uniqueBuildings.forEach((b) => {
-    optionsHtml += `<option value="${b}">${b}</option>`;
-  });
-  locSelect.innerHTML = optionsHtml;
-  if (selectedVal) {
-    locSelect.value = selectedVal;
+  if (locDatalist) {
+    locDatalist.innerHTML = uniqueBuildings.map((b) => `<option value="${b}">${b}</option>`).join("");
+  }
+  if (selectedVal && locInput) {
+    locInput.value = selectedVal;
     onEstLocationChange(selectedVal);
+  }
+  setupEstLocationAutocompletes();
+}
+
+function setupEstLocationAutocompletes() {
+  const locInput = document.getElementById("estLocation");
+  const loc2Input = document.getElementById("estLocation2");
+  const endUserEl = document.getElementById("estEndUser");
+
+  // Smart floating autocomplete for Location 1 (Building)
+  if (locInput && !locInput.hasAttribute("data-autocomplete-init")) {
+    locInput.setAttribute("data-autocomplete-init", "true");
+    let dropdown1 = document.createElement("div");
+    dropdown1.className = "est-loc-autocomplete hidden fixed z-[99999999] bg-white border border-slate-300 rounded-xl shadow-2xl max-h-60 overflow-y-auto text-left pointer-events-auto";
+    document.body.appendChild(dropdown1);
+
+    const closeDropdown1 = () => dropdown1.classList.add("hidden");
+    const updatePos1 = () => {
+      if (dropdown1.classList.contains("hidden")) return;
+      const rect = locInput.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) { closeDropdown1(); return; }
+      dropdown1.style.position = "fixed";
+      dropdown1.style.left = `${rect.left}px`;
+      dropdown1.style.width = `${Math.max(280, rect.width)}px`;
+      dropdown1.style.zIndex = "99999999";
+      const h = 200;
+      if (rect.bottom + h > window.innerHeight && rect.top > h) {
+        dropdown1.style.top = `${rect.top - h - 4}px`;
+      } else {
+        dropdown1.style.top = `${rect.bottom + 4}px`;
+      }
+    };
+
+    const renderResults1 = (query) => {
+      const q = (query || "").toLowerCase().trim();
+      const currentZoneLocs = (store.locations || []).filter(
+        (l) => !l.zone_id || l.zone_id === store.currentZone,
+      );
+      const locPool = currentZoneLocs.length > 0 ? currentZoneLocs : (store.locations || []);
+      const uniqueBuildings = [
+        ...new Set(
+          locPool
+            .map((l) => (l.building_name || l.name || "").trim())
+            .filter(Boolean),
+        ),
+      ].sort((a, b) => a.localeCompare(b));
+
+      const matches = q
+        ? uniqueBuildings.filter((b) => b.toLowerCase().includes(q))
+        : uniqueBuildings;
+
+      if (matches.length === 0) {
+        dropdown1.innerHTML = `<div class="px-3 py-2 text-xs text-slate-500 italic">No existing building matches (type freely to add new)</div>`;
+      } else {
+        dropdown1.innerHTML = matches.slice(0, 30).map((b) => `
+          <div class="px-3 py-2 hover:bg-teal-50 cursor-pointer border-b border-slate-100 last:border-0 loc-item transition-colors" data-val="${b.replace(/"/g, "&quot;")}">
+            <div class="text-xs font-bold text-slate-800 flex items-center gap-1.5 pointer-events-none">
+              <span>🏢</span> ${b}
+            </div>
+          </div>
+        `).join("");
+      }
+      dropdown1.classList.remove("hidden");
+      updatePos1();
+
+      dropdown1.querySelectorAll(".loc-item").forEach((el) => {
+        const handleSelect = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const val = el.getAttribute("data-val");
+          locInput.value = val;
+          closeDropdown1();
+          onEstLocationChange(val);
+        };
+        el.addEventListener("mousedown", handleSelect);
+        el.addEventListener("click", handleSelect);
+      });
+    };
+
+    locInput.addEventListener("focus", () => renderResults1(locInput.value));
+    locInput.addEventListener("input", () => renderResults1(locInput.value));
+    locInput.addEventListener("blur", () => setTimeout(closeDropdown1, 250));
+    document.addEventListener("scroll", updatePos1, true);
+    window.addEventListener("resize", updatePos1);
+  }
+
+  // Smart floating autocomplete for Location 2 (Sub-location / Room)
+  if (loc2Input && !loc2Input.hasAttribute("data-autocomplete-init")) {
+    loc2Input.setAttribute("data-autocomplete-init", "true");
+    let dropdown2 = document.createElement("div");
+    dropdown2.className = "est-loc2-autocomplete hidden fixed z-[99999999] bg-white border border-slate-300 rounded-xl shadow-2xl max-h-60 overflow-y-auto text-left pointer-events-auto";
+    document.body.appendChild(dropdown2);
+
+    const closeDropdown2 = () => dropdown2.classList.add("hidden");
+    const updatePos2 = () => {
+      if (dropdown2.classList.contains("hidden")) return;
+      const rect = loc2Input.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) { closeDropdown2(); return; }
+      dropdown2.style.position = "fixed";
+      dropdown2.style.left = `${rect.left}px`;
+      dropdown2.style.width = `${Math.max(280, rect.width)}px`;
+      dropdown2.style.zIndex = "99999999";
+      const h = 200;
+      if (rect.bottom + h > window.innerHeight && rect.top > h) {
+        dropdown2.style.top = `${rect.top - h - 4}px`;
+      } else {
+        dropdown2.style.top = `${rect.bottom + 4}px`;
+      }
+    };
+
+    const renderResults2 = (query) => {
+      const q = (query || "").toLowerCase().trim();
+      const selectedLoc1 = (locInput?.value || "").toLowerCase().trim();
+
+      const currentZoneLocs = (store.locations || []).filter(
+        (l) => !l.zone_id || l.zone_id === store.currentZone,
+      );
+      const locPool = currentZoneLocs.length > 0 ? currentZoneLocs : (store.locations || []);
+
+      let filteredPool = selectedLoc1
+        ? locPool.filter((l) => (l.building_name || l.name || "").toLowerCase().trim() === selectedLoc1)
+        : locPool;
+
+      if (filteredPool.length === 0) filteredPool = locPool;
+
+      const subLocList = [];
+      const seen = new Set();
+      filteredPool.forEach((l) => {
+        const sub = (l.sub_location || l.location2 || "").trim();
+        if (sub && !seen.has(sub.toLowerCase())) {
+          seen.add(sub.toLowerCase());
+          subLocList.push({ sub, end_user: l.end_user || "", building: l.building_name || "" });
+        }
+      });
+
+      const matches = q
+        ? subLocList.filter((s) => s.sub.toLowerCase().includes(q) || (s.end_user && s.end_user.toLowerCase().includes(q)))
+        : subLocList;
+
+      if (matches.length === 0) {
+        dropdown2.innerHTML = `<div class="px-3 py-2 text-xs text-slate-500 italic">No existing sub-location matches (type freely to add new)</div>`;
+      } else {
+        dropdown2.innerHTML = matches.slice(0, 30).map((s, idx) => `
+          <div class="px-3 py-2 hover:bg-teal-50 cursor-pointer border-b border-slate-100 last:border-0 loc2-item transition-colors" data-idx="${idx}">
+            <div class="text-xs font-bold text-slate-800 flex items-center justify-between pointer-events-none">
+              <span>📍 ${s.sub}</span>
+              ${s.building && !selectedLoc1 ? `<span class="text-[10px] text-slate-400 font-normal">(${s.building})</span>` : ""}
+            </div>
+            ${s.end_user ? `<div class="text-[11px] text-emerald-700 font-mono pointer-events-none">👤 End-User: ${s.end_user}</div>` : ""}
+          </div>
+        `).join("");
+      }
+      dropdown2.classList.remove("hidden");
+      updatePos2();
+
+      dropdown2.querySelectorAll(".loc2-item").forEach((el) => {
+        const handleSelect = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const idx = parseInt(el.getAttribute("data-idx"), 10);
+          const chosen = matches[idx];
+          if (chosen) {
+            loc2Input.value = chosen.sub;
+            if (chosen.end_user && endUserEl && (!endUserEl.value || endUserEl.value.trim() === "")) {
+              endUserEl.value = chosen.end_user;
+            }
+            closeDropdown2();
+            onEstLocation2Change(chosen.sub);
+          }
+        };
+        el.addEventListener("mousedown", handleSelect);
+        el.addEventListener("click", handleSelect);
+      });
+    };
+
+    loc2Input.addEventListener("focus", () => renderResults2(loc2Input.value));
+    loc2Input.addEventListener("input", () => renderResults2(loc2Input.value));
+    loc2Input.addEventListener("blur", () => setTimeout(closeDropdown2, 250));
+    document.addEventListener("scroll", updatePos2, true);
+    window.addEventListener("resize", updatePos2);
   }
 }
 
@@ -11227,8 +11467,8 @@ function onEstLocationChange(selectedLoc) {
   }
 
   // Auto appear respective End User from Location details
-  const matchWithEndUser = matchingLocs.find(l => l.end_user && l.end_user.trim()) || locPool.find(l => (l.building_name || l.name || "").toLowerCase().trim() === q && l.end_user);
-  if (matchWithEndUser && matchWithEndUser.end_user && endUserEl) {
+  const matchWithEndUser = matchingLocs.find((l) => l.end_user && l.end_user.trim()) || locPool.find((l) => (l.building_name || l.name || "").toLowerCase().trim() === q && l.end_user);
+  if (matchWithEndUser && matchWithEndUser.end_user && endUserEl && (!endUserEl.value || endUserEl.value.trim() === "")) {
     endUserEl.value = matchWithEndUser.end_user;
   }
 }
@@ -11250,7 +11490,7 @@ function onEstLocation2Change(selectedLoc2) {
   );
   if (exactMatch && exactMatch.end_user) {
     const endUserEl = document.getElementById("estEndUser");
-    if (endUserEl) {
+    if (endUserEl && (!endUserEl.value || endUserEl.value.trim() === "")) {
       endUserEl.value = exactMatch.end_user;
     }
   }
@@ -11551,7 +11791,16 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
 
   const renderResults = (query) => {
     const lowerQuery = (query || "").toLowerCase().trim();
-    const items = (store.inventory || []).filter((i) => i.category !== "Tools");
+    const curZone = store.currentEstimateZone || store.currentZone;
+    
+    // Filter inventory strictly by the currently logged-in / active zone
+    const zoneInventory = (store.inventory || []).filter((i) => {
+      if (i.category === "Tools") return false;
+      if (!i.zone_id && !i.zone) return true; // General items
+      return isZoneMatch(i.zone_id || i.zone, curZone);
+    });
+
+    const items = zoneInventory.length > 0 ? zoneInventory : (store.inventory || []).filter((i) => i.category !== "Tools");
     currentMatches = [];
     let html = "";
     const maxResults = 40;
@@ -11568,7 +11817,10 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
         currentMatches.push(item);
         const unitCostVal = parseFloat(item.cost_per_unit || item.cost || 0);
         html += `<div class="px-3 py-2 hover:bg-teal-50 cursor-pointer border-b border-slate-100 last:border-0 autocomplete-item transition-colors" data-match-idx="${matchIdx}">
-            <div class="text-xs font-bold text-slate-800 leading-tight mb-0.5 pointer-events-none">${item.description}</div>
+            <div class="text-xs font-bold text-slate-800 leading-tight mb-0.5 pointer-events-none flex items-center justify-between">
+              <span>${item.description}</span>
+              ${item.location ? `<span class="text-[10px] text-slate-400 font-normal">📍 ${item.location}</span>` : ""}
+            </div>
             <div class="text-[11px] text-slate-500 font-mono flex items-center justify-between pointer-events-none">
               <span>Avail: <strong class="text-slate-700">${item.quantity || 0} ${item.deno || ""}</strong></span>
               <span class="text-emerald-700 font-semibold">${formatCurrency(unitCostVal)}</span>
@@ -11579,7 +11831,7 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
     }
 
     if (currentMatches.length === 0) {
-      html = `<div class="px-3 py-2 text-xs text-slate-500 italic">No matching inventory items (type freely)</div>`;
+      html = `<div class="px-3 py-2 text-xs text-slate-500 italic">No matching inventory items in ${curZone || "this zone"} (type freely)</div>`;
     }
 
     dropdown.innerHTML = html;
@@ -11930,6 +12182,35 @@ function saveEstimate(event) {
     }
     showToast("Estimate created!");
   }
+
+  // Auto-save Location & Location 2 into Database so it is remembered and suggested for future estimates
+  if (location) {
+    const zid = store.currentZone || "A-Zone";
+    const locPool = store.locations || [];
+    const loc1Lower = location.toLowerCase().trim();
+    const loc2Lower = (location2 || "").toLowerCase().trim();
+    const exists = locPool.some((l) =>
+      (l.building_name || l.name || "").toLowerCase().trim() === loc1Lower &&
+      (l.sub_location || l.location2 || "").toLowerCase().trim() === loc2Lower
+    );
+    if (!exists) {
+      const validIds = locPool
+        .map((l) => parseInt(l.id, 10))
+        .filter((n) => !Number.isNaN(n) && Number.isFinite(n));
+      const maxId = validIds.length > 0 ? Math.max(...validIds) : 0;
+      const newLoc = {
+        id: maxId + 1,
+        zone_id: zid,
+        building_name: location,
+        sub_location: location2 || "",
+        end_user: endUser || "",
+        description: "Auto-saved from Estimate",
+        created_at: Date.now(),
+      };
+      fbSaveLocation(newLoc);
+    }
+  }
+
   closeModal("newEstimateModal");
   renderEstimates();
 }
@@ -13324,11 +13605,12 @@ function saveLocation(event) {
   };
   if (fbKeyVal) {
     locData._fbKey = fbKeyVal;
-    locData.id = parseInt(idVal);
+    locData.id = parseInt(idVal, 10) || Date.now();
   } else {
-    const maxId = store.locations.length
-      ? Math.max(...store.locations.map((l) => l.id || 0))
-      : 0;
+    const validIds = (store.locations || [])
+      .map((l) => parseInt(l.id, 10))
+      .filter((n) => !Number.isNaN(n) && Number.isFinite(n));
+    const maxId = validIds.length > 0 ? Math.max(...validIds) : 0;
     locData.id = maxId + 1;
   }
   fbSaveLocation(locData)
@@ -14729,9 +15011,10 @@ function quickSaveLocation(event) {
     return;
   }
 
-  const maxId = store.locations.length
-    ? Math.max(...store.locations.map((l) => l.id || 0))
-    : 0;
+  const validIds = (store.locations || [])
+    .map((l) => parseInt(l.id, 10))
+    .filter((n) => !Number.isNaN(n) && Number.isFinite(n));
+  const maxId = validIds.length > 0 ? Math.max(...validIds) : 0;
 
   const locData = {
     id: maxId + 1,
@@ -20028,13 +20311,13 @@ function toggleViewsBasedOnZone() {
   const sbsActive = typeof isSbsBookActive === "function" ? isSbsBookActive() : true;
 
   // Exact Tab Visibility Configuration:
-  // 1. Zone: Dashboard, Daily Details, Summary, N/A Status, Job Card, Inventory, Estimates, Documents, Sailors, LMD, Reports, Settings
-  // 2. Admin & Staff Duties: Dashboard, Daily Details, Summary, N/A Status, Documents, SBS Book (if active), Sailors, Projects, Settings
+  // 1. Zone: Dashboard, Daily Details, Summary, Job Card, Inventory, Estimates, Documents, Sailors, LMD, Reports, Settings
+  // 2. Admin & Staff Duties: Dashboard, Daily Details, Summary, Documents, SBS Book (if active), Sailors, Projects, Settings
   const tabVisibility = {
     "tab-dashboard": true,
     "tab-dailydetails": true,
     "tab-summary": true,
-    "tab-nastatus": true,
+    "tab-nastatus": false,
     "tab-jobcards": !isSpecialZone,
     "tab-inventory": !isSpecialZone,
     "tab-estimates": !isSpecialZone,
@@ -20056,8 +20339,8 @@ function toggleViewsBasedOnZone() {
 
   // Allowed Views check and auto-fallback
   const allowedViews = isSpecialZone
-    ? ["dashboard", "dailydetails", "summary", "nastatus", "documents", sbsActive ? "sbs-book" : null, "sailors", "projects", "settings"].filter(Boolean)
-    : ["dashboard", "dailydetails", "summary", "nastatus", "jobcards", "inventory", "estimates", "documents", "sailors", "maintenance", "reports", "settings"];
+    ? ["dashboard", "dailydetails", "summary", "documents", sbsActive ? "sbs-book" : null, "sailors", "projects", "settings"].filter(Boolean)
+    : ["dashboard", "dailydetails", "summary", "jobcards", "inventory", "estimates", "documents", "sailors", "maintenance", "reports", "settings"];
 
   if (store.currentView === "settings" || store.currentView === "documents") {
     return;
@@ -22673,12 +22956,17 @@ function renderSailorsView() {
           switch (col.id) {
             case "off_no":
               return `<td class="py-3 px-4 font-mono font-bold text-xs text-slate-800 whitespace-nowrap">${s.offNo}</td>`;
-            case "name":
+            case "name": {
+              const cleanNo = s.offNo ? s.offNo.replace(/[^a-zA-Z0-9]/g, "") : "";
+              const fallbackText = `<div class="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-[11px] flex-shrink-0 shadow-xs">${shortRank}</div>`;
+              const avatarHtml = cleanNo
+                ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-slate-200/90 shadow-xs" onerror="handleProfilePicError(this, '${cleanNo}')">`
+                : fallbackText;
               return `
                 <td class="py-3 px-4">
                     <div class="flex items-center gap-3">
-                        <div class="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center font-black text-[11px] flex-shrink-0 shadow-xs">
-                            ${shortRank}
+                        <div class="relative flex-shrink-0">
+                            ${avatarHtml}
                         </div>
                         <div class="min-w-0">
                             <p class="font-bold text-xs text-slate-900 truncate hover:text-teal-600 cursor-pointer" onclick="openSailorProfile('${sId}')">${s.name || "-"}</p>
@@ -22686,6 +22974,7 @@ function renderSailorsView() {
                         </div>
                     </div>
                 </td>`;
+            }
             case "trade":
               return `
                 <td class="py-3 px-4">
@@ -23003,34 +23292,34 @@ function openSailorProfile(sailorId) {
   setText("profDetName", sailor.name);
   setText("profDetRank", sailor.rank);
   setText("profDetOffNo", sailor.official_number);
-  setText("profDetContact", sailor.contact_no || sailor.phone || sailor.mobile || "071-2346068");
-  setText("profDetTrade", sailor.trade);
+  setText("profDetContact", sailor.contact_no || sailor.phone || sailor.mobile || "—");
+  setText("profDetTrade", sailor.trade || "—");
   
   const rollVal = sailor.roll || (sailor.official_number && sailor.official_number.startsWith("VAS") ? "VAS" : sailor.official_number && sailor.official_number.startsWith("EC") ? "EC" : "REG");
   setText("profDetRoll", rollVal);
-  setText("profDetBlood", sailor.blood_group || "B+");
-  setText("profDetNok", sailor.nok_name || "BC SUWIMALI");
-  setText("profDetSkill", sailor.special_skill || sailor.skills || "DIPLOMA IN INFORMATION TECHNOLOGY – FACULTY OF INFORMATION TECHNOLOGY (FIT). SPECIALIZATION: SOFTWARE & HARDWARE ENGINEERING. CORE COMPETENCIES: FULL-STACK WEB SYSTEMS DEVELOPMENT (COMMERCIAL & FINANCIAL APPLICATIONS). SOFTWARE PROFICIENCY: ADVANCED MS OFFICE (WORD, EXCEL). LANGUAGES: FLUENT IN ENGLISH & SINHALA.");
-  setText("profDetJoinDate", sailor.join_date || "2026-04-30");
-  setText("profDetIdExpiry", sailor.id_expiry || "2027-04-01");
+  setText("profDetBlood", sailor.blood_group || "—");
+  setText("profDetNok", sailor.nok_name || "—");
+  setText("profDetSkill", sailor.special_skill || sailor.skills || "—");
+  setText("profDetJoinDate", sailor.join_date || "—");
+  setText("profDetIdExpiry", sailor.id_expiry || "—");
   setText("profDetBMed", sailor.next_b_medical_date || "—");
   setText("profDetGCB", sailor.next_gcb_date || "—");
   setText("profDetNAV3", sailor.next_nav3_date || "—");
   setText("profDetRMed", sailor.next_r_medical_date || "—");
 
   // OTHER INFORMATION
-  setText("profOtherAddress", sailor.address || "UDAKENDAGOLLA, GALEDANDA, VIA WELIMADA, DIYATHALAWA, BADULLA");
-  setText("profOtherAddressLine", sailor.address_line || sailor.address || "UDAKENDAGOLLA, GALEDANDA, VIA WELIMADA");
-  setText("profOtherDistrict", sailor.district || "BADULLA");
-  setText("profOtherPolice", sailor.police_station || "DIYATHALAWA");
+  setText("profOtherAddress", sailor.address || "—");
+  setText("profOtherAddressLine", sailor.address_line || "—");
+  setText("profOtherDistrict", sailor.district || "—");
+  setText("profOtherPolice", sailor.police_station || "—");
 
   // PHYSICAL FITNESS & LIVE BMI CALCULATOR (No Fabricated Data)
   currentSailorProfileId = sailor.id !== undefined ? sailor.id : (sailor._fbKey || sailor.official_number);
 
   const wInput = document.getElementById("profInputWeight");
-  if (wInput) wInput.value = sailor.weight ? sailor.weight : "68.0";
+  if (wInput) wInput.value = sailor.weight ? sailor.weight : "";
   const hInput = document.getElementById("profInputHeight");
-  if (hInput) hInput.value = sailor.height ? sailor.height : "172.0";
+  if (hInput) hInput.value = sailor.height ? sailor.height : "";
 
   calculateSailorLiveBMI();
 
@@ -27945,28 +28234,170 @@ function switchInventorySubTab(subTab) {
   store.inventorySubTab = subTab;
   const tabStock = document.getElementById("invSubTab-stock");
   const tabTIB = document.getElementById("invSubTab-tempissues");
+  const tabPrecast = document.getElementById("invSubTab-precast");
   const panelStock = document.getElementById("invPanel-stock");
   const panelTIB = document.getElementById("invPanel-tempissues");
+  const panelPrecast = document.getElementById("invPanel-precast");
   const mainStockActions = document.getElementById("invMainStockActions");
 
-  if (subTab === "tempissues") {
-    if (tabStock) tabStock.className = "px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer";
-    if (tabTIB) tabTIB.className = "px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
-    if (panelStock) panelStock.classList.add("hidden");
-    if (panelTIB) panelTIB.classList.remove("hidden");
-    if (mainStockActions) mainStockActions.classList.add("hidden");
+  const inactiveBtn = "px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer";
+  const activeStockBtn = "px-4 py-2 rounded-xl text-xs font-bold bg-teal-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
+  const activeTibBtn = "px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
+  const activePrecastBtn = "px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
 
+  if (panelStock) panelStock.classList.toggle("hidden", subTab !== "stock");
+  if (panelTIB) panelTIB.classList.toggle("hidden", subTab !== "tempissues");
+  if (panelPrecast) panelPrecast.classList.toggle("hidden", subTab !== "precast");
+
+  if (mainStockActions) mainStockActions.classList.toggle("hidden", subTab !== "stock");
+
+  if (tabStock) tabStock.className = subTab === "stock" ? activeStockBtn : inactiveBtn;
+  if (tabTIB) tabTIB.className = subTab === "tempissues" ? activeTibBtn : inactiveBtn;
+  if (tabPrecast) tabPrecast.className = subTab === "precast" ? activePrecastBtn : inactiveBtn;
+
+  if (subTab === "tempissues") {
     renderTempIssuesDashboard();
     renderTempIssuesTable();
-  } else {
-    if (tabStock) tabStock.className = "px-4 py-2 rounded-xl text-xs font-bold bg-teal-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
-    if (tabTIB) tabTIB.className = "px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer";
-    if (panelStock) panelStock.classList.remove("hidden");
-    if (panelTIB) panelTIB.classList.add("hidden");
-    if (mainStockActions) mainStockActions.classList.remove("hidden");
+  } else if (subTab === "precast") {
+    renderPrecastInventoryTable();
   }
 
   updateTibPendingBadge();
+}
+
+function renderPrecastInventoryTable() {
+  const tbody = document.getElementById("precastInventoryTableBody");
+  if (!tbody) return;
+
+  const searchVal = (document.getElementById("precastInventorySearch")?.value || "").toLowerCase().trim();
+
+  // Find all items related to precast
+  const isPrecastProduct = (item) => {
+    if (!item) return false;
+    const desc = (item.description || "").toLowerCase();
+    const cat = (item.category || "").toLowerCase();
+    const loc = (item.location || "").toLowerCase();
+    if (cat.includes("pre-cast") || cat.includes("precast")) return true;
+    if (loc.includes("pre-cast") || loc.includes("precast") || loc.includes("g zone") || loc.includes("g-zone")) return true;
+    return /cement block|paving|lintel|fence post|curb stone|drain cover|solid block|kerb|concrete ring|unipave|zigzag/i.test(desc);
+  };
+
+  const rawInv = store.inventory || [];
+  let precastItems = rawInv.filter(isPrecastProduct);
+
+  // If no items in database yet, provide standard default precast catalogue
+  if (precastItems.length === 0) {
+    const defaults = [
+      { description: "4 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 85, location: "G Zone - Pre-Cast Yard" },
+      { description: "6 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 120, location: "G Zone - Pre-Cast Yard" },
+      { description: "8 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 160, location: "G Zone - Pre-Cast Yard" },
+      { description: "Paving Blocks (Unipave / Rectangular)", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 65, location: "G Zone - Pre-Cast Yard" },
+      { description: "Pre-Cast Concrete Lintel (4' x 9\")", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 850, location: "G Zone - Pre-Cast Yard" },
+      { description: "Pre-Cast Concrete Fence Post (6' R/C)", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 950, location: "G Zone - Pre-Cast Yard" },
+      { description: "Pre-Cast Concrete Curb Stone", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 620, location: "G Zone - Pre-Cast Yard" },
+      { description: "Pre-Cast Drain Cover Slab (2' x 1.5')", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 780, location: "G Zone - Pre-Cast Yard" }
+    ];
+    precastItems = defaults;
+  }
+
+  // Calculate KPIs
+  let totalStock = 0;
+  let productsWithStock = 0;
+  precastItems.forEach(i => {
+    const q = parseFloat(i.quantity) || 0;
+    totalStock += q;
+    if (q > 0) productsWithStock++;
+  });
+
+  const cementItem = rawInv.find(i => (i.description || "").toLowerCase().includes("cement") && !(i.description || "").toLowerCase().includes("block"));
+  const cementBags = cementItem ? (cementItem.quantity || 0) : 0;
+  const navDispatchedCount = (store.nav254Vouchers || []).length;
+
+  const kpiTotalStock = document.getElementById("pcKpiTotalStock");
+  if (kpiTotalStock) kpiTotalStock.textContent = `${totalStock.toLocaleString()} Nos`;
+
+  const kpiProdCount = document.getElementById("pcKpiProductsCount");
+  if (kpiProdCount) kpiProdCount.textContent = `${precastItems.length} Products (${productsWithStock} Active)`;
+
+  const kpiNavDisp = document.getElementById("pcKpiNavDispatched");
+  if (kpiNavDisp) kpiNavDisp.textContent = `${navDispatchedCount} Vouchers`;
+
+  const kpiRawCement = document.getElementById("pcKpiRawCement");
+  if (kpiRawCement) kpiRawCement.textContent = `${cementBags} Bags`;
+
+  // Search Filter
+  if (searchVal) {
+    precastItems = precastItems.filter(i => 
+      (i.description || "").toLowerCase().includes(searchVal) ||
+      (i.location || "").toLowerCase().includes(searchVal) ||
+      (i.category || "").toLowerCase().includes(searchVal)
+    );
+  }
+
+  if (precastItems.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center py-6 text-slate-400 font-medium italic">No precast items match your search.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = precastItems.map(item => {
+    const qty = parseFloat(item.quantity) || 0;
+    const unitCost = parseFloat(item.cost_per_unit || item.cost || 0);
+    const totalVal = qty * unitCost;
+    const itemId = item.id || item._fbKey || "";
+
+    const stockColor = qty > 50 ? "bg-emerald-100 text-emerald-800 border-emerald-300" : (qty > 0 ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-rose-100 text-rose-800 border-rose-300");
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition-colors">
+        <td class="px-3.5 py-3">
+          <div class="font-bold text-slate-800 flex items-center gap-1.5">
+            <span>🧱</span> ${item.description}
+          </div>
+          <div class="text-[10px] text-slate-400 font-mono mt-0.5">Ref: ${item.on_charge_ref || item.book_no || "Pre-Cast"}</div>
+        </td>
+        <td class="px-3.5 py-3 text-center">
+          <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+            ${item.category || "Pre-Cast Products"}
+          </span>
+        </td>
+        <td class="px-3.5 py-3 text-center text-slate-600 font-medium">
+          📍 ${item.location || "G Zone - Pre-Cast Yard"}
+        </td>
+        <td class="px-3.5 py-3 text-center">
+          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold border ${stockColor}">
+            ${qty.toLocaleString()} ${item.deno || "Nos"}
+          </span>
+        </td>
+        <td class="px-3.5 py-3 text-right">
+          ${itemId ? `
+          <button onclick="quickEditUnitCost('${itemId}', event)" class="font-semibold text-slate-700 hover:text-emerald-700 hover:underline cursor-pointer" title="Click to edit unit price">
+            ${formatCurrency(unitCost)}
+          </button>
+          ` : `
+          <span class="font-semibold text-slate-700">${formatCurrency(unitCost)}</span>
+          `}
+        </td>
+        <td class="px-3.5 py-3 text-right font-bold text-emerald-800">
+          ${formatCurrency(totalVal)}
+        </td>
+        <td class="px-3.5 py-3 text-center">
+          <div class="flex items-center justify-center gap-1.5">
+            <button onclick="openPrecastProductionModal(); document.getElementById('pcProductSelect').value='${item.description}'; autoCalculatePrecastRawMaterials();" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-xs cursor-pointer flex items-center gap-1" title="Produce more batch for this item">
+              <span>➕ Batch</span>
+            </button>
+            <button onclick="openNav254Modal();" class="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] shadow-xs cursor-pointer flex items-center gap-1" title="Issue to another zone via NAV 254">
+              <span>📜 Issue</span>
+            </button>
+            ${itemId ? `
+            <button onclick="openInventoryCard('${itemId}')" class="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 cursor-pointer" title="View Stock Card & History">
+              📋
+            </button>
+            ` : ''}
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
 }
 
 // Inward Pending Receipt Badge and Notification Alert updater
