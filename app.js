@@ -18745,10 +18745,15 @@ function printCurrentNav254() {
     <!DOCTYPE html>
     <html>
       <head>
-        <title>NAV 254 - ${_currentNav254Voucher?.voucher_no || "Voucher"}</title>
+        <title></title>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
         <style>
-          @page { size: A4; margin: 15mm; }
-          body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 0; color: #000; }
+          @page { size: auto; margin: 0; }
+          @media print {
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+            .no-print { display: none !important; }
+          }
+          body { font-family: 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; margin: 0; padding: 12mm 15mm; color: #000; background: #fff; }
         </style>
       </head>
       <body>
@@ -29433,17 +29438,16 @@ function generateOfficialNav254Html(data) {
           <div style="font-size: 26px; font-weight: 900; line-height: 1;">} 254</div>
         </div>
 
-        <!-- Center-Right Form Info (Pic 3) -->
+        <!-- Center-Right Form Info -->
         <div style="text-align: right; font-size: 10px; line-height: 1.35;">
           <div style="display: flex; align-items: flex-start; justify-content: flex-end; gap: 14px;">
-            <span style="font-size: 9.5px; color: #1e293b; font-family: monospace;">H 029858 — 1500 (2007/12) P</span>
             <div style="text-align: right;">
-              <div style="font-weight: bold;">ශ්‍රී ලංකා රජයේ මුද්‍රණ දෙපාර්තමේන්තුව</div>
+              <div style="font-weight: bold; font-family: monospace; font-size: 9.5px; color: #000;">H 029858 — 1500 (2007/12) P</div>
               <div>ශ්‍රී ලං. නා. හ. 64</div>
               <div>(Bond Quintuplicate 7 ½” x 10”)</div>
               <div>සිං/ඉං 5/67</div>
             </div>
-            <!-- Fold triangle marker in top right corner (Pic 3) -->
+            <!-- Fold triangle marker in top right corner -->
             <div style="width: 0; height: 0; border-top: 28px solid #475569; border-left: 28px solid transparent;"></div>
           </div>
         </div>
@@ -29612,15 +29616,15 @@ function printTempIssueSlip(issueId) {
     <!DOCTYPE html>
     <html lang="si">
       <head>
-        <title>NAV 254 - ${issue.ref_no}</title>
+        <title></title>
         <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
         <style>
-          @page { size: A4 portrait; margin: 10mm 15mm; }
+          @page { size: auto; margin: 0; }
           @media print {
-            body { margin: 0; padding: 0; background: #fff !important; }
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
             .no-print { display: none !important; }
           }
-          body { margin: 0; padding: 20px; background: #f8fafc; display: flex; justify-content: center; }
+          body { margin: 0; padding: 12mm 15mm; background: #fff; display: flex; justify-content: center; font-family: 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; }
         </style>
       </head>
       <body>
