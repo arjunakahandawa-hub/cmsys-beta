@@ -1853,7 +1853,7 @@ function renderNastatusView() {
   const isLeaveState = (val) => {
     if (!val) return false;
     const s = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
+    return /^(Leave|Days Leave|Weekend|Half Day|Sick|Sick Report|Sick Leave|SIQ|Medical|MED|M\/C|NGH|Admit|ADM|Run|AWOL|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SL|R|Off|Holiday|Absent|නිවාඩු|ගිලන්)/i.test(s);
   };
 
   const naSailors = store.sailors.filter(s => isLeaveState(s.status) || isLeaveState(s.attendance));
@@ -9881,6 +9881,7 @@ function renderInventory() {
     }
   }
 
+  populateInventoryLocationDropdown();
   renderInventoryCategories();
   renderInventoryTable();
   populateProjectDropdown();
@@ -9888,9 +9889,39 @@ function renderInventory() {
     updateTibPendingBadge();
   }
 }
+
+function populateInventoryLocationDropdown() {
+  const select = document.getElementById("inventoryLocation");
+  if (!select) return;
+  const currentVal = select.value;
+  const currentZoneDisplay = formatZoneDisplayName(store.currentZone) || "Current Zone";
+  
+  let options = `
+    <option value="">Current Zone (${currentZoneDisplay})</option>
+    <option value="ALL_ZONES">🌐 All Locations & Zones</option>
+  `;
+
+  if (typeof getInventoryStoresList === "function") {
+    const activeStores = getInventoryStoresList().filter(s => s.active !== false);
+    if (activeStores.length > 0) {
+      options += `<optgroup label="🏢 Inventory Stores & Locations">`;
+      activeStores.forEach(st => {
+        const sName = st.name || st;
+        const sAbbr = st.abbr ? ` (${st.abbr})` : "";
+        options += `<option value="${sName}">${sName}${sAbbr}</option>`;
+      });
+      options += `</optgroup>`;
+    }
+  }
+
+  select.innerHTML = options;
+  if (currentVal !== undefined && currentVal !== null) {
+    select.value = currentVal;
+  }
+}
 function populateProjectDropdown() {
   const projects = store.workOrders.filter(
-    (wo) => wo.type === "PROJECT" && wo.zone_id === store.currentZone,
+    (wo) => wo.type === "PROJECT" && isZoneMatch(wo.zone_id, store.currentZone),
   );
   document.getElementById("invRequirement").innerHTML =
     '<option value="">-- Select Project --</option>' +
@@ -9899,7 +9930,7 @@ function populateProjectDropdown() {
       .join("") +
     store.jobCards
       .filter(
-        (jc) => jc.status === "Completed" && jc.zone_id === store.currentZone,
+        (jc) => jc.status === "Completed" && isZoneMatch(jc.zone_id, store.currentZone),
       )
       .map(
         (jc) =>
@@ -9998,13 +10029,13 @@ function renderInventoryTable() {
   // Filter by current zone or allow cross-zone query if ALL_ZONES is selected
   if (location === "ALL_ZONES") {
     if (store.currentUser && store.currentUser.permAllInvZones === false && Array.isArray(store.currentUser.allowedInvZones)) {
-      items = store.inventory.filter((i) => store.currentUser.allowedInvZones.includes(i.zone_id));
+      items = store.inventory.filter((i) => store.currentUser.allowedInvZones.some(z => isZoneMatch(z, i.zone_id)));
     } else {
       items = [...store.inventory];
     }
   } else {
     items = store.inventory.filter(
-      (i) => !i.zone_id || i.zone_id === store.currentZone,
+      (i) => !i.zone_id || isZoneMatch(i.zone_id, store.currentZone),
     );
   }
 
@@ -10126,7 +10157,7 @@ function renderInventoryTable() {
     0,
   );
   const grandTotalItems = store.inventory.filter(
-    (i) => !i.zone_id || i.zone_id === store.currentZone,
+    (i) => !i.zone_id || isZoneMatch(i.zone_id, store.currentZone),
   );
   const grandTotalValuation = grandTotalItems.reduce(
     (sum, item) =>
@@ -10258,32 +10289,45 @@ function showInventoryDetail(itemId) {
 
             <!-- Off Charge Records (req 4) -->
             <div class="border-t pt-4">
-                <h4 class="font-semibold text-slate-700 mb-2 flex items-center gap-2">📤 Off-Charge Records</h4>
+                <h4 class="font-semibold text-slate-700 mb-2 flex items-center justify-between">
+                    <span class="flex items-center gap-2">📤 Off-Charge Records</span>
+                    <span class="text-xs text-slate-400 font-normal">NAV 254 Demand/Supply Slip</span>
+                </h4>
                 <div class="space-y-2">
                     ${
                       item.off_charge_records && item.off_charge_records.length
                         ? item.off_charge_records
                             .map(
-                              (r) => `
-                        <div class="flex items-center justify-between p-2 bg-rose-50 rounded">
-                            <div>
-                                <span class="mono text-sm text-rose-700">${r.ref}</span>
-                                ${r.dest ? `<span class="block text-[11px] text-slate-500">→ ${r.dest}</span>` : ""}
+                              (r, idx) => `
+                        <div class="flex items-center justify-between p-2.5 bg-rose-50/80 rounded-xl border border-rose-100/80 hover:bg-rose-50 transition-colors">
+                            <div class="flex-1 pr-2">
+                                <div class="flex items-center gap-2">
+                                    <span class="mono text-xs font-bold text-rose-800">${r.ref || "NAV 254 Slip"}</span>
+                                    ${r.dest ? `<span class="text-[11px] font-semibold text-slate-700 bg-white px-2 py-0.5 rounded border border-rose-200">→ ${r.dest}</span>` : ""}
+                                </div>
+                                ${r.remarks ? `<p class="text-[10.5px] text-slate-500 mt-0.5 italic">"${r.remarks}"</p>` : ""}
                             </div>
-                            <span class="text-sm text-rose-600">−${r.qty} ${item.deno}</span>
-                            <span class="text-xs text-slate-500">${r.date}</span>
+                            <div class="flex items-center gap-2.5">
+                                <div class="text-right">
+                                    <span class="text-xs font-black text-rose-600 block">−${r.qty} ${item.deno}</span>
+                                    <span class="text-[10px] text-slate-400 font-mono">${r.date || "—"}</span>
+                                </div>
+                                <button type="button" onclick="printOffChargeNav254('${item._fbKey || item.id || ""}', ${idx})" class="px-2.5 py-1.5 bg-white hover:bg-rose-600 text-rose-700 hover:text-white rounded-lg border border-rose-300 text-xs font-bold shadow-2xs transition-all flex items-center gap-1 cursor-pointer" title="Print / Export NAV 254 Slip">
+                                    <span>🖨️</span> <span>Print NAV 254</span>
+                                </button>
+                            </div>
                         </div>
                     `,
                             )
                             .join("")
-                        : '<p class="text-xs text-slate-400 italic p-2">No off-charge records yet</p>'
+                        : '<p class="text-xs text-slate-400 italic p-2 bg-slate-50 rounded-lg">No off-charge records yet</p>'
                     }
                 </div>
             </div>
 
             <!-- Off-Charge action (req 5) -->
             <div class="border-t pt-4">
-                <button onclick="openOffChargeModal('${item._fbKey || item.id || ""}')" class="w-full bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-lg font-medium text-sm transition-all shadow-sm flex items-center justify-center gap-2">
+                <button onclick="openOffChargeModal('${item._fbKey || item.id || ""}')" class="w-full bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white px-4 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-2">
                     <span>📇 Off-Charge to Base / Zone (Nav 254)</span>
                 </button>
             </div>
@@ -10308,7 +10352,12 @@ function openOffChargeModal(itemId) {
     `${item.quantity} ${item.deno}`;
   document.getElementById("ocQty").value = "";
   document.getElementById("ocQty").max = item.quantity;
-  document.getElementById("ocRef").value = "";
+  
+  // Suggest automatic official NAV 254 Ref pattern if empty
+  const year = new Date().getFullYear();
+  const randNum = String(Math.floor(10 + Math.random() * 90)).padStart(2, "0");
+  const defaultRef = `CCED/CE/FD/OUT/${randNum}/${year}`;
+  document.getElementById("ocRef").value = defaultRef;
   document.getElementById("ocRemarks").value = "";
   document.getElementById("ocDate").value = new Date()
     .toISOString()
@@ -10339,6 +10388,85 @@ function openOffChargeModal(itemId) {
   closeModal("inventoryDetailModal");
   document.getElementById("offChargeModal").classList.remove("hidden");
 }
+
+function printOffChargeNav254(itemId, recordIndex) {
+  const item = store.inventory.find(
+    (i) => String(i._fbKey) === String(itemId) || String(i.id) === String(itemId)
+  );
+  if (!item) {
+    showToast("Inventory item not found", "error");
+    return;
+  }
+
+  const rec = (item.off_charge_records || [])[recordIndex] || {
+    ref: item.off_charge_ref || `CCED/CE/FD/OUT/254/${new Date().getFullYear()}`,
+    qty: item.quantity || 1,
+    dest: "Base / Zone",
+    date: getLocalDateString(),
+    remarks: "Off-Charge Material Issue"
+  };
+
+  const unitCost = parseFloat(item.cost_per_unit || item.cost || 0);
+  const qty = parseFloat(rec.qty || 0);
+  const totalVal = unitCost * qty;
+
+  const printWindow = window.open("", "_blank", "width=880,height=750");
+  if (!printWindow) {
+    window.print();
+    return;
+  }
+
+  const nav254Content = generateOfficialNav254Html({
+    ref_no: rec.ref || `CCED/CE/FD/OUT/${new Date().getFullYear()}`,
+    supplied_by: `Civil Engineering Department (${item.zone_id || store.currentZone || "CE Dept"})`,
+    received_by: rec.dest || "Respective Unit / Base",
+    date: rec.date || getLocalDateString(),
+    items: [
+      {
+        description: item.description,
+        deno: item.deno || "Nos",
+        qty_supplied: qty,
+        qty_received: qty,
+        total_value: totalVal
+      }
+    ],
+    issued_to: rec.dest || "Receiving Officer / Base In-Charge",
+    trade: "CE Section",
+    issued_by: store.activeProfileName || "Store In-Charge (CE Dept)",
+    purpose: rec.remarks || "Off-Charge Transfer to Base / Zone",
+    expected_return_date: "—"
+  });
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="si">
+      <head>
+        <title></title>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          @page { size: auto; margin: 0; }
+          @media print {
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+            .no-print { display: none !important; }
+          }
+          body { margin: 0; padding: 12mm 15mm; background: #fff; display: flex; justify-content: center; font-family: 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; }
+        </style>
+      </head>
+      <body>
+        <div style="width: 100%;">
+          ${nav254Content}
+        </div>
+        <script>
+          window.onload = function() {
+            setTimeout(function() { window.print(); window.close(); }, 300);
+          };
+        </script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
 function submitOffCharge(event) {
   event.preventDefault();
   const ocId = document.getElementById("ocItemId").value;
@@ -10353,7 +10481,7 @@ function submitOffCharge(event) {
     return;
   }
   const qty = parseFloat(document.getElementById("ocQty").value);
-  const ref = document.getElementById("ocRef").value.trim();
+  const ref = document.getElementById("ocRef").value.trim() || `CCED/CE/FD/OUT/${new Date().getFullYear()}`;
   const dest = document.getElementById("ocDest").value;
   const date = document.getElementById("ocDate").value;
   const remarks = document.getElementById("ocRemarks").value.trim();
@@ -10365,6 +10493,8 @@ function submitOffCharge(event) {
   if (!item.off_charge_records) item.off_charge_records = [];
   item.off_charge_records.push({ ref, qty, date, dest, remarks });
   item.off_charge_ref = ref;
+  const latestRecIdx = item.off_charge_records.length - 1;
+
   fbSaveInventoryItem(item)
     .then(() => {
       closeModal("offChargeModal");
@@ -10372,6 +10502,9 @@ function submitOffCharge(event) {
       showToast(
         `Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`,
       );
+      if (confirm(`Material successfully off-charged to ${dest}!\n\nDo you want to print / export the authentic NAV 254 Note now?`)) {
+        printOffChargeNav254(item._fbKey || item.id, latestRecIdx);
+      }
     })
     .catch((err) => {
       console.error(err);
@@ -10380,6 +10513,9 @@ function submitOffCharge(event) {
       showToast(
         `Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`,
       );
+      if (confirm(`Material successfully off-charged to ${dest}!\n\nDo you want to print / export the authentic NAV 254 Note now?`)) {
+        printOffChargeNav254(item._fbKey || item.id, latestRecIdx);
+      }
     });
 }
 let passwordCallback = null;
@@ -20385,7 +20521,7 @@ function renderSummaryView() {
       };
       return sections.workshop.subsections[zoneId];
     }
-    if (zoneId === "Admin-&-Staff-Duties") return sections.othersDuty;
+    if (zoneId === "Admin-&-Staff-Duties" || (zoneId && isAdminStaffDuties(zoneId))) return sections.othersDuty;
     if (zoneId === "Other-Base") {
       if (!sections.zones.subsections["Other-Base"]) {
         sections.zones.subsections["Other-Base"] = { title: "OTHER BASE (UNASSIGNED FROM PHP DB)", rows: {} };
@@ -20405,91 +20541,137 @@ function renderSummaryView() {
       return sections.zones.subsections["Housing-Project"];
     }
 
-    // Return dynamically defined zone subsection
-    if (sections.zones.subsections[zoneId]) {
-      return sections.zones.subsections[zoneId];
+    // Check existing subsections using smart zone match
+    const existingZoneKey = Object.keys(sections.zones.subsections).find(
+      (k) => isZoneMatch(k, zoneId)
+    );
+    if (existingZoneKey) {
+      return sections.zones.subsections[existingZoneKey];
     }
 
     // Fallback: create subsection on the fly if it doesn't exist
-    sections.zones.subsections[zoneId] = {
-      title: (zoneId || "ZONE").replace(/-/g, " ").toUpperCase(),
+    const normKey = (zoneId || "ZONE").trim();
+    sections.zones.subsections[normKey] = {
+      title: formatZoneDisplayName(normKey).toUpperCase(),
       rows: {},
     };
-    return sections.zones.subsections[zoneId];
+    return sections.zones.subsections[normKey];
   }
-  const zones = store.zones; // included Admin & Staff Duties
+
   const allAllocatedSailorIds = new Set();
-  zones.forEach((z) => {
-    const wos = store.workOrders.filter(
-      (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
-    );
-    const jcs = (store.jobCards || []).filter(
-      (jc) => jc.zone_id === z.id && isWorkOrderActiveOnDate(jc, dateVal),
-    );
-    const allTasks = [...wos, ...jcs];
-    allTasks.forEach((wo) => {
-      let assignedSailors = [];
-      if (dateVal === today) {
-        const assignedIds = (wo.assigned || []).map(String);
-        assignedSailors = store.sailors.filter(
-          (s) =>
-            assignedIds.includes(String(s.id)) ||
-            assignedIds.includes(String(s._fbKey)),
-        );
-      } else {
-        const assignedIds = (store.dailyAllocations || [])
-          .filter(
-            (a) =>
-              a.date === dateVal && String(a.work_order_id) === String(wo.id),
-          )
-          .map((a) => String(a.sailor_id));
-        assignedSailors = store.sailors.filter(
-          (s) =>
-            assignedIds.includes(String(s.id)) ||
-            assignedIds.includes(String(s._fbKey)),
-        );
-      }
-      if (assignedSailors.length > 0) {
-        const section = getSectionForZone(wo.zone_id);
-        const rowKey = (wo.description || "UNNAMED DUTY").toUpperCase().trim();
-        if (!section.rows[rowKey]) {
-          section.rows[rowKey] = createRowMatrix(rowKey);
-        }
-        const targetRow = section.rows[rowKey];
-        assignedSailors.forEach((sailor) => {
-          // Check fbStatus to accurately skip leaves
-          const [yyyy, mm, dd] = dateVal.split("-");
-          const monthKey = `${yyyy}-${mm}`;
-          const dayKey = parseInt(dd, 10).toString();
-          const fbStatus =
-            store.availability &&
-            store.availability[monthKey] &&
-            store.availability[monthKey][dayKey]
-              ? store.availability[monthKey][dayKey][sailor._fbKey]
-              : null; // Skip if sailor is actually on Leave/Sick/NA (they should go to the leave section)
-          const isLeaveCode = (val) => {
-            if (!val) return false;
-            const s = typeof val === "string" ? val.trim() : String(val).trim();
-            return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(
-              s,
-            );
-          };
-          const isLeave =
-            isLeaveCode(sailor.attendance) ||
-            isLeaveCode(sailor.status) ||
-            isLeaveCode(fbStatus);
-          if (isLeave) return; // Track for Leave/Sick check
-          allAllocatedSailorIds.add(String(sailor.id));
-          if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
-          const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
-          if (isVss) {
-            targetRow.vss[tradeIdx]++;
-          } else {
-            targetRow.reg[tradeIdx]++;
-          }
-        });
+  const allWorkOrders = store.workOrders || [];
+  const allJobCards = store.jobCards || [];
+  const allTasks = [...allWorkOrders, ...allJobCards].filter((t) => isWorkOrderActiveOnDate(t, dateVal));
+
+  allTasks.forEach((wo) => {
+    // 1. Gather all assigned sailor IDs for this task on dateVal
+    const assignedIdsSet = new Set();
+    (wo.assigned || []).forEach((id) => assignedIdsSet.add(String(id)));
+
+    (store.dailyAllocations || []).forEach((a) => {
+      if (
+        a.date === dateVal &&
+        (String(a.work_order_id) === String(wo.id) ||
+          (wo._fbKey && String(a.work_order_id) === String(wo._fbKey)) ||
+          (wo.description && a.description && a.description.trim().toLowerCase() === wo.description.trim().toLowerCase()))
+      ) {
+        assignedIdsSet.add(String(a.sailor_id));
       }
     });
+
+    const assignedSailors = (store.sailors || []).filter(
+      (s) =>
+        assignedIdsSet.has(String(s.id)) ||
+        (s._fbKey && assignedIdsSet.has(String(s._fbKey))),
+    );
+
+    if (assignedSailors.length > 0) {
+      const section = getSectionForZone(wo.zone_id);
+      const rowKey = (wo.description || "UNNAMED DUTY").toUpperCase().trim();
+      if (!section.rows[rowKey]) {
+        section.rows[rowKey] = createRowMatrix(rowKey);
+      }
+      const targetRow = section.rows[rowKey];
+      assignedSailors.forEach((sailor) => {
+        // Check fbStatus to accurately skip leaves
+        const [yyyy, mm, dd] = dateVal.split("-");
+        const monthKey = `${yyyy}-${mm}`;
+        const dayKey = parseInt(dd, 10).toString();
+        const fbStatus =
+          store.availability &&
+          store.availability[monthKey] &&
+          store.availability[monthKey][dayKey]
+            ? store.availability[monthKey][dayKey][sailor._fbKey]
+            : null;
+        const isLeaveCode = (val) => {
+          if (!val) return false;
+          const s = typeof val === "string" ? val.trim() : String(val).trim();
+          return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(
+            s,
+          );
+        };
+        const isLeave =
+          isLeaveCode(sailor.attendance) ||
+          isLeaveCode(sailor.status) ||
+          isLeaveCode(fbStatus);
+        if (isLeave) return;
+
+        allAllocatedSailorIds.add(String(sailor.id));
+        if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
+        const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
+        if (isVss) {
+          targetRow.vss[tradeIdx]++;
+        } else {
+          targetRow.reg[tradeIdx]++;
+        }
+      });
+    }
+  });
+
+  // 2. Also process standalone daily allocations on dateVal that weren't captured in active workOrders/jobCards
+  (store.dailyAllocations || []).forEach((alloc) => {
+    if (alloc.date !== dateVal) return;
+    const sailorId = String(alloc.sailor_id);
+    if (allAllocatedSailorIds.has(sailorId)) return; // Already counted
+
+    const sailor = (store.sailors || []).find(
+      (s) => String(s.id) === sailorId || (s._fbKey && String(s._fbKey) === sailorId),
+    );
+    if (!sailor) return;
+
+    // Check leave
+    const [yyyy, mm, dd] = dateVal.split("-");
+    const monthKey = `${yyyy}-${mm}`;
+    const dayKey = parseInt(dd, 10).toString();
+    const fbStatus =
+      store.availability &&
+      store.availability[monthKey] &&
+      store.availability[monthKey][dayKey]
+        ? store.availability[monthKey][dayKey][sailor._fbKey]
+        : null;
+    const isLeaveCode = (val) => {
+      if (!val) return false;
+      const s = typeof val === "string" ? val.trim() : String(val).trim();
+      return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
+    };
+    if (isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status) || isLeaveCode(fbStatus)) return;
+
+    const zoneId = alloc.zone_id || sailor.zone_id || store.currentZone;
+    const section = getSectionForZone(zoneId);
+    const rowKey = (alloc.description || alloc.task_name || "GENERAL DUTY").toUpperCase().trim();
+    if (!section.rows[rowKey]) {
+      section.rows[rowKey] = createRowMatrix(rowKey);
+    }
+    const targetRow = section.rows[rowKey];
+    allAllocatedSailorIds.add(String(sailor.id));
+    if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
+
+    const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
+    if (isVss) {
+      targetRow.vss[tradeIdx]++;
+    } else {
+      targetRow.reg[tradeIdx]++;
+    }
   }); // Add long term deployments to summary
   const longTerm = getLongTermAllocations();
   const processLongTermList = (list, section) => {
@@ -20546,7 +20728,7 @@ function renderSummaryView() {
     const isLeaveCode = (val) => {
       if (!val) return false;
       const s = typeof val === "string" ? val.trim() : String(val).trim();
-      return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(
+      return /^(Leave|Days Leave|Weekend|Half Day|Sick|Sick Report|Sick Leave|SIQ|Medical|MED|M\/C|NGH|Admit|ADM|Run|AWOL|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SL|R|Off|Holiday|Absent|නිවාඩු|ගිලන්)/i.test(
         s,
       );
     };
@@ -20555,37 +20737,37 @@ function renderSummaryView() {
       isLeaveCode(sailor.status) ||
       isLeaveCode(fbStatus);
 
-
-
     if (isLeave) {
       const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
+      const rawStatus = String(fbStatus || sailor.attendance || sailor.status || "").trim();
       let rowKey = "LEAVE";
-      const isSickCode = (val) => {
-        if (!val) return false;
-        const s = typeof val === "string" ? val.trim() : String(val).trim();
-        return /^(Sick|M\/D|SIQ|S\/R|SL|ADM)$/i.test(s);
-      };
-      const isWeekendCode = (val) => {
-        if (!val) return false;
-        const s = typeof val === "string" ? val.trim() : String(val).trim();
-        return /^(WE|Weekend|WEEKEND)$/i.test(s);
-      };
-      const isSick =
-        isSickCode(sailor.attendance) ||
-        isSickCode(sailor.status) ||
-        isSickCode(fbStatus);
-      const isWeekend =
-        isWeekendCode(sailor.attendance) ||
-        isWeekendCode(sailor.status) ||
-        isWeekendCode(fbStatus);
-      if (isSick) {
+
+      if (/^(S\/R|Sick Report)$/i.test(rawStatus)) {
+        rowKey = "SICK REPORT";
+      } else if (/^(SL|Sick Leave)$/i.test(rawStatus)) {
+        rowKey = "SICK LEAVE";
+      } else if (/^(SIQ)$/i.test(rawStatus)) {
+        rowKey = "SIQ";
+      } else if (/^(ADM|Admit)$/i.test(rawStatus)) {
+        rowKey = "ADMIT";
+      } else if (/^(MED|Medical|M\/C)$/i.test(rawStatus)) {
+        rowKey = "MEDICAL";
+      } else if (/^(NGH)$/i.test(rawStatus)) {
+        rowKey = "NGH";
+      } else if (/^(Run|AWOL|R)$/i.test(rawStatus)) {
+        rowKey = "RUN";
+      } else if (/^(Sick|M\/D)$/i.test(rawStatus)) {
         rowKey = "SICK";
-      } else if (isWeekend) {
+      } else if (/^(WE|Weekend)$/i.test(rawStatus)) {
         rowKey = "WEEKEND";
+      } else if (/^(DL|Days Leave)$/i.test(rawStatus)) {
+        rowKey = "DAYS LEAVE";
+      } else if (/^(HD|Half Day)$/i.test(rawStatus)) {
+        rowKey = "HALF DAY";
       } else if (
         sailor.status === "NA" &&
         (!sailor.attendance ||
-          !/^(Leave|L|DL|WE|HD|T\/D)$/i.test(
+          !/^(Leave|L|DL|Days Leave|WE|Weekend|HD|Half Day|T\/D)$/i.test(
             typeof sailor.attendance === "string"
               ? sailor.attendance.trim()
               : String(sailor.attendance).trim(),
@@ -29804,6 +29986,7 @@ window.toggleOnOffChargeActive = toggleOnOffChargeActive;
 window.removeOnOffChargeDestination = removeOnOffChargeDestination;
 window.renderSettingsInventoryStoresList = renderSettingsInventoryStoresList;
 window.renderSettingsOnOffChargeList = renderSettingsOnOffChargeList;
+window.printOffChargeNav254 = printOffChargeNav254;
 
 // Resilient Event Listener for New Estimate Buttons
 function initEstimateButtonBindings() {
