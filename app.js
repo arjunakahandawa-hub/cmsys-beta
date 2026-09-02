@@ -2562,13 +2562,13 @@ function renderAvailableSailors() {
                 </div>
                 <div class="flex-1 min-w-0">
                     <p class="font-bold text-slate-800 text-sm truncate leading-tight flex items-center justify-between gap-1">
-                        <span>${sailor.name}</span>
-                        <button onclick="event.stopPropagation(); openSailorProfile('${(_sailor$id3 = sailor.id) !== null && _sailor$id3 !== void 0 ? _sailor$id3 : sailor._fbKey}')" class="text-teal-600 hover:text-teal-800 text-xs p-0.5 cursor-pointer font-bold transition-transform hover:scale-115" title="View Profile">
+                        <span class="hover:text-teal-600 hover:underline cursor-pointer" onclick="event.stopPropagation(); openSailorProfile('${sailor.id || sailor._fbKey || sailor.official_number}')">${sailor.name}</span>
+                        <button type="button" onclick="event.stopPropagation(); openSailorProfile('${sailor.id || sailor._fbKey || sailor.official_number}')" class="text-teal-600 hover:text-teal-800 text-xs p-0.5 cursor-pointer font-bold transition-transform hover:scale-115" title="View Profile">
                             👤
                         </button>
                     </p>
                     <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span class="text-[11px] text-slate-700 mono font-bold">${sailor.official_number}</span>
+                        <span class="text-[11px] text-slate-700 mono font-bold hover:text-teal-600 cursor-pointer" onclick="event.stopPropagation(); openSailorProfile('${sailor.id || sailor._fbKey || sailor.official_number}')">${sailor.official_number}</span>
                         <span class="text-[11px] text-slate-500 font-semibold">${sailor.rank}</span>
                         ${sailor.isZoneTeam ? `
                         <span class="text-[10px] bg-teal-50 text-teal-700 px-1.5 py-0.5 rounded font-semibold border border-teal-200/80 flex items-center gap-0.5" title="Zone Team">
@@ -3659,6 +3659,7 @@ function updatePendingEvals() {
   if (evalEl) evalEl.textContent = evaluated;
   const pendingEl = document.getElementById("pendingEvals");
   if (pendingEl) pendingEl.textContent = pending;
+  if (typeof updateSundayEvaluationBadge === "function") updateSundayEvaluationBadge();
 } // =============================================
 // DRAG AND DROP
 // =============================================
@@ -5367,7 +5368,11 @@ function openWorkOrderDetail(workOrderId) {
   const btnForwardComplete = document.getElementById("btnForwardComplete");
   const btnDeleteWo = document.getElementById("btnDeleteWo");
   const btnUndoWoChanges = document.getElementById("btnUndoWoChanges");
-  if (btnSaveWoChanges) btnSaveWoChanges.classList.toggle("hidden", !isToday);
+  if (btnSaveWoChanges) {
+    btnSaveWoChanges.classList.toggle("hidden", !isToday);
+    btnSaveWoChanges.className = "flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+    btnSaveWoChanges.innerHTML = "<span>💾</span> Save Changes";
+  }
   if (btnProceedWo) btnProceedWo.classList.toggle("hidden", !isToday);
   if (btnForwardComplete)
     btnForwardComplete.classList.toggle("hidden", !isToday);
@@ -5387,7 +5392,11 @@ function openWorkOrderDetail(workOrderId) {
   ];
   inputs.forEach((id) => {
     const el = document.getElementById(id);
-    if (el) el.disabled = !isToday;
+    if (el) {
+      el.disabled = !isToday;
+      el.oninput = markWoChangesUnsaved;
+      el.onchange = markWoChangesUnsaved;
+    }
   });
 
   const isAssignmentOrAdminStaff =
@@ -6238,8 +6247,8 @@ function officerApproveCurrentWorkOrder() {
   }
 
   refreshCurrentViewImmediately();
-  openWorkOrderDetail(targetFbKey);
   updateGlobalOfficerHubBadge();
+  closeModal("workOrderDetailModal");
 }
 
 function officerRequestChangesForCurrentWorkOrder() {
@@ -7152,13 +7161,26 @@ function executeGlobalUndo() {
   }
 }
 
+function markWoChangesUnsaved() {
+  const btn = document.getElementById("btnSaveWoChanges");
+  if (!btn) return;
+  btn.className = "flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer ring-2 ring-indigo-300 animate-pulse";
+  btn.innerHTML = "<span>💾</span> Save Changes";
+}
+
+function markWoChangesSaved() {
+  const btn = document.getElementById("btnSaveWoChanges");
+  if (!btn) return;
+  btn.className = "flex-1 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer";
+  btn.innerHTML = "<span>✓</span> Saved";
+}
+
 function saveWorkOrderChanges(autoClose = true) {
   const shouldClose = typeof autoClose === "boolean" ? autoClose : true;
   const btn = document.getElementById("btnSaveWoChanges");
   if (btn) {
     if (btn.disabled) return;
     btn.disabled = true;
-    btn.dataset.originalText = btn.innerHTML;
     btn.innerHTML = "Saving...";
   }
 
@@ -7169,7 +7191,7 @@ function saveWorkOrderChanges(autoClose = true) {
   if (!wo) {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = btn.dataset.originalText;
+      btn.innerHTML = "<span>💾</span> Save Changes";
     }
     return;
   }
@@ -7271,6 +7293,8 @@ function saveWorkOrderChanges(autoClose = true) {
       fbSaveWorkOrder(wo);
     }
     
+    markWoChangesSaved();
+
     // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
     setTimeout(() => {
       refreshCurrentViewImmediately();
@@ -7283,13 +7307,15 @@ function saveWorkOrderChanges(autoClose = true) {
         );
         closeModal("workOrderDetailModal");
       }
-    }, 300);
+    }, 350);
   }
   if (btn) {
     setTimeout(() => {
       btn.disabled = false;
-      btn.innerHTML = btn.dataset.originalText;
-    }, 500);
+      if (!shouldClose) {
+        markWoChangesSaved();
+      }
+    }, 400);
   }
 }
 function deleteWorkOrder() {
@@ -7621,16 +7647,16 @@ function openEvaluationModal(sailorId, workOrderId) {
     _sailor$yesterdayScor === void 0
       ? void 0
       : _sailor$yesterdayScor.toFixed(1)) || "-"; // Reset sliders
+  // Reset 3 combined sliders
   [
-    "quality",
-    "efficiency",
-    "discipline",
-    "material",
-    "attitude",
-    "skill",
+    "qualitySkill",
+    "attitudeDiscipline",
+    "efficiencyMaterial",
   ].forEach((type) => {
-    document.getElementById(`${type}Score`).value = 5;
-    document.getElementById(`${type}Value`).textContent = 5;
+    const elScore = document.getElementById(`${type}Score`);
+    const elVal = document.getElementById(`${type}Value`);
+    if (elScore) elScore.value = 5;
+    if (elVal) elVal.textContent = 5;
   });
   document.getElementById("evaluationModal").classList.remove("hidden");
 }
@@ -7642,13 +7668,13 @@ function updateSlider(type) {
   else if (value <= 6) display.className = "text-lg font-bold text-amber-600";
   else display.className = "text-lg font-bold text-green-600"; // Check for special scores
   const allScores = [
-    "quality",
-    "efficiency",
-    "discipline",
-    "material",
-    "attitude",
-    "skill",
-  ].map((t) => parseInt(document.getElementById(`${t}Score`).value));
+    "qualitySkill",
+    "attitudeDiscipline",
+    "efficiencyMaterial",
+  ].map((t) => {
+    const el = document.getElementById(`${t}Score`);
+    return el ? parseInt(el.value) || 5 : 5;
+  });
   const has1 = allScores.includes(1);
   const has2 = allScores.includes(2);
   const has10 = allScores.includes(10);
@@ -7662,13 +7688,13 @@ function updateSlider(type) {
 function submitEvaluation(event) {
   event.preventDefault();
   const scores = [
-    "quality",
-    "efficiency",
-    "discipline",
-    "material",
-    "attitude",
-    "skill",
-  ].map((t) => parseInt(document.getElementById(`${t}Score`).value)); // Validate required reasons
+    "qualitySkill",
+    "attitudeDiscipline",
+    "efficiencyMaterial",
+  ].map((t) => {
+    const el = document.getElementById(`${t}Score`);
+    return el ? parseInt(el.value) || 5 : 5;
+  }); // Validate required reasons
   if (scores.includes(1) && !document.getElementById("score1Reason").value) {
     showToast("Reason required for score 1", "error");
     return;
@@ -7728,11 +7754,329 @@ function submitEvaluation(event) {
     }
   }
   closeModal("evaluationModal");
-  openWorkOrderDetail(store.selectedWorkOrder);
-  switchWoTab("evaluation");
+  if (store.selectedWorkOrder) {
+    openWorkOrderDetail(store.selectedWorkOrder);
+    switchWoTab("evaluation");
+  }
   updatePendingEvals();
+  if (typeof renderSundayEvaluationList === "function") renderSundayEvaluationList();
+  if (typeof updateSundayEvaluationBadge === "function") updateSundayEvaluationBadge();
   showToast(`Evaluation submitted! Score: ${avgScore.toFixed(1)}/10`);
-} // =============================================
+}
+
+// ============================================================================
+// ==================== SUNDAY WEEKLY EVALUATION MODULE =======================
+// ============================================================================
+
+let _currentSundaySummary = null;
+
+function getWeeklySailorSupervisionSummary(referenceDateStr) {
+  const refDate = referenceDateStr ? new Date(referenceDateStr) : new Date();
+  const dayOfWeek = refDate.getDay(); // 0 is Sunday, 1 is Monday, ...
+  
+  // Calculate distance back to Monday of this week
+  const distanceToMonday = (dayOfWeek === 0 ? -6 : 1 - dayOfWeek);
+  const monday = new Date(refDate);
+  monday.setDate(refDate.getDate() + distanceToMonday);
+  
+  const weekDates = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    weekDates.push(d.toISOString().slice(0, 10));
+  }
+  const sunday = weekDates[6]; // Sunday date (YYYY-MM-DD)
+  const weekRangeLabel = `${weekDates[0]} (Mon) – ${sunday} (Sun)`;
+
+  // Priority ranking weights
+  const priorityWeights = {
+    "critical": 100,
+    "emergency": 90,
+    "urgent": 80,
+    "high": 60,
+    "project": 50,
+    "medium": 40,
+    "normal": 30,
+    "routine": 20,
+    "low": 10
+  };
+
+  // 1. Gather all allocations across this 7-day week
+  const allAllocations = store.dailyAllocations || [];
+  const weekAllocations = allAllocations.filter(a => weekDates.includes(a.date));
+
+  // 2. Map supervision for each sailor in the active force
+  const sailorSupervisionMap = [];
+
+  const targetSailors = (store.sailors || []).filter(s => {
+    if (store.currentZone && s.zone && s.zone !== store.currentZone && s.zone !== "ALL") {
+      return false;
+    }
+    return true;
+  });
+
+  targetSailors.forEach(sailor => {
+    const sId = String(sailor.id || sailor._fbKey);
+    const sFb = String(sailor._fbKey || "");
+    const sOff = String(sailor.official_number || "");
+
+    // Find allocations for this sailor in this 7-day week
+    const sailorWeekAllocs = weekAllocations.filter(a => {
+      const aId = String(a.sailor_id || "");
+      return aId === sId || (sFb && aId === sFb) || (sOff && aId === sOff);
+    });
+
+    // Count attendance and track work orders
+    const woStats = {};
+    sailorWeekAllocs.forEach(a => {
+      const woId = a.work_order_id;
+      if (!woId) return;
+      if (!woStats[woId]) {
+        const wo = (store.workOrders || []).find(w => String(w.id) === String(woId) || String(w._fbKey) === String(woId));
+        const pStr = (wo?.priority || "medium").toLowerCase();
+        const pWeight = priorityWeights[pStr] || 30;
+        woStats[woId] = {
+          work_order_id: woId,
+          work_order: wo,
+          days_attended: 0,
+          priority_weight: pWeight,
+          dates_attended: []
+        };
+      }
+      woStats[woId].days_attended += 1;
+      woStats[woId].dates_attended.push(a.date);
+    });
+
+    const woList = Object.values(woStats);
+    let primaryWoStats = null;
+
+    if (woList.length > 0) {
+      // Sort by: (days_attended * 1000 + priority_weight) descending
+      woList.sort((a, b) => {
+        const scoreA = (a.days_attended * 1000) + a.priority_weight;
+        const scoreB = (b.days_attended * 1000) + b.priority_weight;
+        return scoreB - scoreA;
+      });
+      primaryWoStats = woList[0];
+    } else {
+      // Fallback: Currently assigned work order
+      const currentWo = (store.workOrders || []).find(w => w.assigned && (w.assigned.includes(sId) || w.assigned.includes(sFb) || w.assigned.includes(sOff)));
+      if (currentWo) {
+        primaryWoStats = {
+          work_order_id: currentWo.id || currentWo._fbKey,
+          work_order: currentWo,
+          days_attended: 1,
+          priority_weight: priorityWeights[(currentWo.priority || "medium").toLowerCase()] || 30,
+          dates_attended: [refDate.toISOString().slice(0, 10)]
+        };
+      }
+    }
+
+    if (primaryWoStats && primaryWoStats.work_order) {
+      const wo = primaryWoStats.work_order;
+      const supervisorName = wo.supervisor || wo.artificer || wo.in_charge || "Duty Supervisor";
+
+      // Check if already evaluated for this Sunday
+      const sundayAllocKey = `${sunday}_${sanitizeFbKey(sailor.id)}`;
+      const sundayAllocKeyFb = `${sunday}_${sanitizeFbKey(sailor._fbKey)}`;
+      const isEvaluated = Boolean(
+        sailor.evaluated || 
+        (store.dailyAllocationsMap && (store.dailyAllocationsMap[sundayAllocKey]?.evaluated || store.dailyAllocationsMap[sundayAllocKeyFb]?.evaluated))
+      );
+
+      sailorSupervisionMap.push({
+        sailor: sailor,
+        primary_work_order: wo,
+        days_attended: primaryWoStats.days_attended,
+        priority: wo.priority || "Normal",
+        supervisor: supervisorName,
+        week_dates: weekDates,
+        sunday_date: sunday,
+        is_evaluated: isEvaluated,
+        latest_score: sailor.yesterdayScore || sailor.avgScore || 0,
+        all_wo_stats: woList
+      });
+    }
+  });
+
+  return {
+    week_dates: weekDates,
+    sunday_date: sunday,
+    week_range_label: weekRangeLabel,
+    sailors: sailorSupervisionMap
+  };
+}
+
+function openSundayEvaluationModal(referenceDateStr) {
+  _currentSundaySummary = getWeeklySailorSupervisionSummary(referenceDateStr);
+  
+  const weekLabelEl = document.getElementById("sundayEvalWeekRangeText");
+  if (weekLabelEl) {
+    weekLabelEl.textContent = `📅 Active Week: ${_currentSundaySummary.week_range_label}`;
+  }
+
+  // Populate Supervisor Filter Dropdown
+  const supFilter = document.getElementById("sundaySupervisorFilter");
+  if (supFilter) {
+    const distinctSupervisors = Array.from(new Set(_currentSundaySummary.sailors.map(s => s.supervisor))).filter(Boolean);
+    let optionsHtml = `<option value="ALL">👥 All Supervisors (${distinctSupervisors.length})</option>`;
+    if (store.currentUser?.name) {
+      optionsHtml += `<option value="${store.currentUser.name}">⭐ My Assigned Sailors</option>`;
+    }
+    distinctSupervisors.forEach(sup => {
+      optionsHtml += `<option value="${sup}">⚓ ${sup}</option>`;
+    });
+    supFilter.innerHTML = optionsHtml;
+  }
+
+  renderSundayEvaluationList();
+  document.getElementById("sundayEvaluationModal")?.classList.remove("hidden");
+}
+
+function renderSundayEvaluationList() {
+  if (!_currentSundaySummary) {
+    _currentSundaySummary = getWeeklySailorSupervisionSummary();
+  }
+
+  const tbody = document.getElementById("sundayEvalTableBody");
+  if (!tbody) return;
+
+  const searchVal = (document.getElementById("sundayEvalSearch")?.value || "").toLowerCase().trim();
+  const supervisorFilter = document.getElementById("sundaySupervisorFilter")?.value || "ALL";
+  const statusFilter = document.getElementById("sundayStatusFilter")?.value || "ALL";
+
+  let list = _currentSundaySummary.sailors || [];
+
+  // Update KPI counters
+  const totalCount = list.length;
+  const doneCount = list.filter(s => s.is_evaluated).length;
+  const pendingCount = totalCount - doneCount;
+
+  if (document.getElementById("sundayEvalTotalCount")) document.getElementById("sundayEvalTotalCount").textContent = totalCount;
+  if (document.getElementById("sundayEvalDoneCount")) document.getElementById("sundayEvalDoneCount").textContent = doneCount;
+  if (document.getElementById("sundayEvalPendingCount")) document.getElementById("sundayEvalPendingCount").textContent = pendingCount;
+
+  // Filter list
+  list = list.filter(item => {
+    if (supervisorFilter !== "ALL") {
+      if (item.supervisor !== supervisorFilter && !item.supervisor.toLowerCase().includes(supervisorFilter.toLowerCase())) {
+        return false;
+      }
+    }
+    if (statusFilter === "PENDING" && item.is_evaluated) return false;
+    if (statusFilter === "DONE" && !item.is_evaluated) return false;
+
+    if (searchVal) {
+      const s = item.sailor;
+      const wo = item.primary_work_order;
+      const sName = (s.name || "").toLowerCase();
+      const sOff = (s.official_number || "").toLowerCase();
+      const sTrade = (s.trade || "").toLowerCase();
+      const woTitle = (wo.description || wo.title || "").toLowerCase();
+      const sup = (item.supervisor || "").toLowerCase();
+      if (!sName.includes(searchVal) && !sOff.includes(searchVal) && !sTrade.includes(searchVal) && !woTitle.includes(searchVal) && !sup.includes(searchVal)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center py-8 text-slate-400 font-medium italic">No sailors match the selected supervisor or filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(item => {
+    const s = item.sailor;
+    const wo = item.primary_work_order;
+    const sId = s.id || s._fbKey;
+    const woId = wo.id || wo._fbKey;
+    const cleanNo = (s.official_number || "").replace(/[^a-zA-Z0-9]/g, "");
+
+    const priorityColors = {
+      "Critical": "bg-red-100 text-red-800 border-red-300",
+      "High": "bg-amber-100 text-amber-800 border-amber-300",
+      "Project": "bg-indigo-100 text-indigo-800 border-indigo-300",
+      "Medium": "bg-blue-100 text-blue-800 border-blue-300",
+      "Routine": "bg-slate-100 text-slate-700 border-slate-300",
+      "Low": "bg-slate-100 text-slate-700 border-slate-300"
+    };
+    const pBadgeClass = priorityColors[item.priority] || "bg-slate-100 text-slate-700 border-slate-300";
+
+    return `
+      <tr class="hover:bg-slate-50/80 transition-colors">
+        <td class="px-3.5 py-3 align-middle">
+          <div class="flex items-center gap-3">
+            <img src="images/${cleanNo}.JPG" onerror="handleProfilePicError(this, '${s.name.replace(/'/g, "")}')" 
+                 class="w-9 h-9 rounded-full object-cover border border-slate-300 shadow-2xs">
+            <div>
+              <div class="font-bold text-slate-900 cursor-pointer hover:text-teal-600" onclick="openSailorProfile('${sId}')">
+                ${s.name}
+              </div>
+              <div class="text-[10px] text-slate-500 font-mono">
+                ${s.official_number || ""} • ${s.rank || ""} • <span class="font-bold text-indigo-700">${s.trade || ""}</span>
+              </div>
+            </div>
+          </div>
+        </td>
+        <td class="px-3.5 py-3 align-middle">
+          <div class="font-semibold text-slate-800 max-w-xs truncate" title="${wo.description || ""}">
+            ${wo.description || wo.title || "Assigned Work Order"}
+          </div>
+          <div class="mt-1 flex items-center gap-1.5">
+            <span class="px-2 py-0.5 rounded-full text-[9px] font-bold border ${pBadgeClass}">
+              ⚡ Priority: ${item.priority}
+            </span>
+          </div>
+        </td>
+        <td class="px-3.5 py-3 align-middle text-center font-mono">
+          <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-black bg-teal-50 text-teal-800 border border-teal-200">
+            <span>📅</span> ${item.days_attended} / 7 Days
+          </span>
+        </td>
+        <td class="px-3.5 py-3 align-middle">
+          <div class="font-bold text-slate-800 text-xs flex items-center gap-1">
+            <span>⚓</span> ${item.supervisor}
+          </div>
+          <div class="text-[10px] text-slate-400">Responsible Evaluator</div>
+        </td>
+        <td class="px-3.5 py-3 align-middle text-center whitespace-nowrap">
+          ${item.is_evaluated ? `
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+              <span>⭐</span> ${item.latest_score ? item.latest_score.toFixed(1) : '7.5'}/10 (Done)
+            </span>
+          ` : `
+            <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300 animate-pulse">
+              <span>⏳</span> Pending
+            </span>
+          `}
+        </td>
+        <td class="px-3.5 py-3 align-middle text-center whitespace-nowrap">
+          <button onclick="openEvaluationModal('${sId}', '${woId}')" class="px-3 py-1.5 rounded-lg text-xs font-bold text-white shadow-2xs transition-all flex items-center gap-1 mx-auto cursor-pointer ${item.is_evaluated ? 'bg-slate-600 hover:bg-slate-700' : 'bg-emerald-600 hover:bg-emerald-700'}" title="Evaluate Sailor Performance">
+            <span>📝</span> ${item.is_evaluated ? 'Re-evaluate' : 'Evaluate'}
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function updateSundayEvaluationBadge() {
+  const summary = getWeeklySailorSupervisionSummary();
+  const pendingCount = (summary.sailors || []).filter(s => !s.is_evaluated).length;
+  
+  const topBadge = document.getElementById("sundayEvalTopBadge");
+  if (topBadge) {
+    if (pendingCount > 0) {
+      topBadge.textContent = pendingCount;
+      topBadge.classList.remove("hidden");
+    } else {
+      topBadge.classList.add("hidden");
+    }
+  }
+}
+
+// =============================================
 // JOB CARDS
 // =============================================
 function renderJobCardsView() {
@@ -10583,10 +10927,43 @@ function submitOffCharge(event) {
   item.off_charge_ref = ref;
   const latestRecIdx = item.off_charge_records.length - 1;
 
+  // Record into Cloud NAV 254 Register
+  try {
+    const unitPrice = parseFloat(item.cost_per_unit || item.cost || 0);
+    const nav254CloudData = {
+      voucher_no: ref.startsWith("NAV") ? ref : `NAV254/${new Date().getFullYear()}/${String(Date.now()).slice(-4)}`,
+      ref_no: ref,
+      date: date || getLocalDateString(),
+      issuing_unit: `${item.zone_id || store.currentZone || "Main Store"} Store`,
+      receiving_unit: dest,
+      authority: ref,
+      issued_by: store.currentUser?.name || "Store Keeper",
+      received_by: dest,
+      items: [
+        {
+          inventory_id: item._fbKey || item.id,
+          description: item.description,
+          deno: item.deno || "Nos",
+          quantity_demanded: qty,
+          quantity_issued: qty,
+          unit_cost: unitPrice,
+          total_value: unitPrice * qty
+        }
+      ],
+      remarks: remarks,
+      source: "Store Off-Charge",
+      created_at: Date.now()
+    };
+    opsDB.ref("nav254_vouchers").push(nav254CloudData);
+  } catch (e) {
+    console.error("Error auto-recording off-charge into nav254_vouchers:", e);
+  }
+
   fbSaveInventoryItem(item)
     .then(() => {
       closeModal("offChargeModal");
       renderInventoryTable();
+      if (typeof renderNav254RegisterTable === "function") renderNav254RegisterTable();
       showToast(
         `Off-charged ${qty} ${item.deno} of ${item.description} → ${dest} (${ref})`,
       );
@@ -11885,7 +12262,7 @@ function addScopeMaterialRow(sId, data = null) {
             <input type="number" class="est-mat-qty w-full px-2 py-1 border border-slate-300 rounded text-xs text-center font-bold" min="0" step="any" value="${(data === null || data === void 0 ? void 0 : data.qty) || ""}" oninput="updateEstimateTotals()">
         </td>
         <td class="px-2 py-1.5">
-            <input type="text" class="est-mat-unit w-full px-2 py-1 border border-slate-300 rounded text-xs text-center bg-slate-50" readonly value="${(data === null || data === void 0 ? void 0 : data.unit) || ""}">
+            <input type="text" list="estUnitDatalist" class="est-mat-unit w-full px-2 py-1 border border-slate-300 rounded text-xs text-center bg-white font-medium focus:ring-1 focus:ring-amber-500 focus:border-amber-500" placeholder="Unit" value="${(data === null || data === void 0 ? void 0 : data.unit) || ""}">
         </td>
         <td class="px-2 py-1.5">
             <input type="number" class="est-mat-cost w-full px-2 py-1 border border-slate-300 rounded text-xs text-right" min="0" step="0.01" value="${(data === null || data === void 0 ? void 0 : data.cost) || ""}" oninput="updateEstimateTotals()">
@@ -18624,6 +19001,205 @@ function executeJobCardMerge(primaryJc, secondaryJcKeys) {
 // CEMENT PRE-CAST WORKSHOP & NAV 254 SYSTEM (G ZONE)
 // =============================================
 
+function populatePrecastSupervisors() {
+  const datalist = document.getElementById("pcSupervisorDatalist");
+  if (!datalist) return;
+  const regularSailors = (store.sailors || []).filter((s) => {
+    const roll = s.roll || (s.official_number && s.official_number.startsWith("VAS") ? "VAS" : s.official_number && s.official_number.startsWith("EC") ? "EC" : "REG");
+    return roll === "REG" || roll === "Regular" || !roll.startsWith("V");
+  });
+  const list = regularSailors.length > 0 ? regularSailors : store.sailors || [];
+  datalist.innerHTML = list.map((s) => {
+    const offNo = s.official_number || s.off_no || "";
+    const rank = s.rank || "";
+    const name = s.name || "";
+    const trade = s.trade || "";
+    return `<option value="${offNo} ${rank} ${name} (${trade})">${offNo} - ${name} [${trade}]</option>`;
+  }).join("");
+}
+
+function getPrecastUnitPrice(term, fallback) {
+  const item = (store.inventory || []).find((i) =>
+    (i.description || "").toLowerCase().includes(term.toLowerCase()) &&
+    i.category !== "Tools"
+  );
+  const val = item ? parseFloat(item.cost_per_unit || item.cost || 0) : 0;
+  return val > 0 ? val : fallback;
+}
+
+function calculatePrecastBatchCost() {
+  const prodQty = parseFloat(document.getElementById("pcQuantity")?.value) || 0;
+
+  // Actual quantities entered by user
+  const cementAct = parseFloat(document.getElementById("pcMatCement")?.value) || 0;
+  const qdAct = parseFloat(document.getElementById("pcMatQuarryDust")?.value) || 0;
+  const chipAct = parseFloat(document.getElementById("pcMatChipMetal")?.value) || 0;
+  const m34Act = parseFloat(document.getElementById("pcMatMetal34")?.value) || 0;
+  const torAct = parseFloat(document.getElementById("pcMatTorSteel")?.value) || 0;
+  const admAct = parseFloat(document.getElementById("pcMatAdmixture")?.value) || 0;
+
+  // Estimated quantities
+  const cementEst = parseFloat(document.getElementById("pcEstCement")?.textContent) || 0;
+  const qdEst = parseFloat(document.getElementById("pcEstQuarryDust")?.textContent) || 0;
+  const chipEst = parseFloat(document.getElementById("pcEstChipMetal")?.textContent) || 0;
+  const m34Est = parseFloat(document.getElementById("pcEstMetal34")?.textContent) || 0;
+  const torEst = parseFloat(document.getElementById("pcEstTorSteel")?.textContent) || 0;
+  const admEst = parseFloat(document.getElementById("pcEstAdmixture")?.textContent) || 0;
+
+  // Unit costs of raw materials
+  const cementPrice = getPrecastUnitPrice("Cement", 2100);
+  const qdPrice = getPrecastUnitPrice("Quarry", 9500);
+  const chipPrice = getPrecastUnitPrice("Chip", 14000);
+  const m34Price = getPrecastUnitPrice("3/4", 16000);
+  const torPrice = getPrecastUnitPrice("TOR", 290);
+  const admPrice = getPrecastUnitPrice("Admixture", 450);
+
+  // Helper to format differences & cost badges
+  const renderDiff = (elId, costId, act, est, unitPrice, isInt = false) => {
+    const el = document.getElementById(elId);
+    const costEl = document.getElementById(costId);
+    if (costEl) {
+      costEl.textContent = formatCurrency(act * unitPrice);
+    }
+    if (!el) return;
+    if (est <= 0 && act <= 0) {
+      el.innerHTML = `<span class="text-slate-300 font-normal">—</span>`;
+      return;
+    }
+    const diff = Math.round((act - est) * 100) / 100;
+    const pct = est > 0 ? Math.round(((act - est) / est) * 100) : 0;
+    if (Math.abs(diff) < 0.001) {
+      el.innerHTML = `<span class="text-slate-400 font-normal">0.0 (0%)</span>`;
+    } else if (diff > 0) {
+      el.innerHTML = `<span class="text-amber-700 bg-amber-100 px-1 py-0.5 rounded font-bold">+${isInt ? diff.toFixed(1) : diff} (+${pct}%)</span>`;
+    } else {
+      el.innerHTML = `<span class="text-emerald-700 bg-emerald-100 px-1 py-0.5 rounded font-bold">${isInt ? diff.toFixed(1) : diff} (${pct}%)</span>`;
+    }
+  };
+
+  renderDiff("pcDiffCement", "pcCostCement", cementAct, cementEst, cementPrice, true);
+  renderDiff("pcDiffQuarryDust", "pcCostQuarryDust", qdAct, qdEst, qdPrice);
+  renderDiff("pcDiffChipMetal", "pcCostChipMetal", chipAct, chipEst, chipPrice);
+  renderDiff("pcDiffMetal34", "pcCostMetal34", m34Act, m34Est, m34Price);
+  renderDiff("pcDiffTorSteel", "pcCostTorSteel", torAct, torEst, torPrice, true);
+  renderDiff("pcDiffAdmixture", "pcCostAdmixture", admAct, admEst, admPrice, true);
+
+  // Costs
+  const estTotalCost =
+    cementEst * cementPrice +
+    qdEst * qdPrice +
+    chipEst * chipPrice +
+    m34Est * m34Price +
+    torEst * torPrice +
+    admEst * admPrice;
+
+  const actualTotalCost =
+    cementAct * cementPrice +
+    qdAct * qdPrice +
+    chipAct * chipPrice +
+    m34Act * m34Price +
+    torAct * torPrice +
+    admAct * admPrice;
+
+  // Actual Unit Cost based on ACTUAL materials consumed
+  const actualUnitCost = prodQty > 0 ? actualTotalCost / prodQty : 0;
+
+  const unitCostInput = document.getElementById("pcUnitCost");
+  if (unitCostInput) {
+    unitCostInput.value = actualUnitCost > 0 ? (Math.round(actualUnitCost * 100) / 100).toFixed(2) : "";
+  }
+
+  const totalCostSpan = document.getElementById("pcTotalBatchCost");
+  if (totalCostSpan) {
+    totalCostSpan.textContent = `Total: ${formatCurrency(actualTotalCost)}`;
+  }
+
+  const estTotalSpan = document.getElementById("pcEstTotalCost");
+  if (estTotalSpan) {
+    estTotalSpan.textContent = formatCurrency(estTotalCost);
+  }
+
+  const actTotalSpan = document.getElementById("pcActualTotalCost");
+  if (actTotalSpan) {
+    actTotalSpan.textContent = formatCurrency(actualTotalCost);
+  }
+
+  // Cost Variance Badge
+  const varBadge = document.getElementById("pcCostVarianceBadge");
+  if (varBadge) {
+    if (estTotalCost > 0 && actualTotalCost > 0) {
+      const diffCost = actualTotalCost - estTotalCost;
+      const diffPct = Math.round((diffCost / estTotalCost) * 1000) / 10;
+      if (Math.abs(diffCost) < 1) {
+        varBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300";
+        varBadge.textContent = "Variance: Exact Mix (0.0%)";
+      } else if (diffCost > 0) {
+        varBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-100 text-amber-900 border border-amber-300";
+        varBadge.textContent = `Variance: +${formatCurrency(diffCost)} (+${diffPct}%)`;
+      } else {
+        varBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300";
+        varBadge.textContent = `Variance: ${formatCurrency(diffCost)} (${diffPct}%)`;
+      }
+    } else {
+      varBadge.className = "px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300";
+      varBadge.textContent = "Variance: 0.0%";
+    }
+  }
+}
+
+function calculateEstimatedFromRatios(forceActualSync = false) {
+  const qty = parseFloat(document.getElementById("pcQuantity")?.value) || 0;
+
+  const rCement = parseFloat(document.getElementById("pcRatioCement")?.value) || 0;
+  const rQD = parseFloat(document.getElementById("pcRatioQuarryDust")?.value) || 0;
+  const rChip = parseFloat(document.getElementById("pcRatioChipMetal")?.value) || 0;
+  const rM34 = parseFloat(document.getElementById("pcRatioMetal34")?.value) || 0;
+  const rTor = parseFloat(document.getElementById("pcRatioTorSteel")?.value) || 0;
+  const rAdm = parseFloat(document.getElementById("pcRatioAdmixture")?.value) || 0;
+
+  const estCement = Math.round(((qty / 100) * rCement) * 10) / 10;
+  const estQD = Math.round(((qty / 100) * rQD) * 100) / 100;
+  const estChip = Math.round(((qty / 100) * rChip) * 100) / 100;
+  const estM34 = Math.round(((qty / 100) * rM34) * 100) / 100;
+  const estTor = Math.round(((qty / 100) * rTor) * 10) / 10;
+  const estAdm = Math.round(((qty / 100) * rAdm) * 10) / 10;
+
+  if (document.getElementById("pcEstCement")) document.getElementById("pcEstCement").textContent = estCement.toFixed(1);
+  if (document.getElementById("pcEstQuarryDust")) document.getElementById("pcEstQuarryDust").textContent = estQD.toFixed(2);
+  if (document.getElementById("pcEstChipMetal")) document.getElementById("pcEstChipMetal").textContent = estChip.toFixed(2);
+  if (document.getElementById("pcEstMetal34")) document.getElementById("pcEstMetal34").textContent = estM34.toFixed(2);
+  if (document.getElementById("pcEstTorSteel")) document.getElementById("pcEstTorSteel").textContent = estTor.toFixed(1);
+  if (document.getElementById("pcEstAdmixture")) document.getElementById("pcEstAdmixture").textContent = estAdm.toFixed(1);
+
+  // Sync to actual inputs if forced or if actual is currently empty
+  const syncActual = (actId, estVal) => {
+    const actInput = document.getElementById(actId);
+    if (actInput && (forceActualSync || !actInput.value || actInput.value === "0")) {
+      actInput.value = estVal > 0 ? estVal : "";
+    }
+  };
+
+  syncActual("pcMatCement", estCement);
+  syncActual("pcMatQuarryDust", estQD);
+  syncActual("pcMatChipMetal", estChip);
+  syncActual("pcMatMetal34", estM34);
+  syncActual("pcMatTorSteel", estTor);
+  syncActual("pcMatAdmixture", estAdm);
+
+  calculatePrecastBatchCost();
+}
+
+function copyEstimatedToActualRawMaterials() {
+  document.getElementById("pcMatCement").value = document.getElementById("pcEstCement")?.textContent || "";
+  document.getElementById("pcMatQuarryDust").value = document.getElementById("pcEstQuarryDust")?.textContent || "";
+  document.getElementById("pcMatChipMetal").value = document.getElementById("pcEstChipMetal")?.textContent || "";
+  document.getElementById("pcMatMetal34").value = document.getElementById("pcEstMetal34")?.textContent || "";
+  document.getElementById("pcMatTorSteel").value = document.getElementById("pcEstTorSteel")?.textContent || "";
+  document.getElementById("pcMatAdmixture").value = document.getElementById("pcEstAdmixture")?.textContent || "";
+  calculatePrecastBatchCost();
+  showToast("Copied estimated raw material quantities to Actual Used inputs", "info");
+}
+
 function openPrecastProductionModal() {
   const modal = document.getElementById("precastProductionModal");
   if (!modal) return;
@@ -18639,7 +19215,27 @@ function openPrecastProductionModal() {
   document.getElementById("pcCustomProduct").value = "";
   document.getElementById("pcQuantity").value = "";
   document.getElementById("pcUnit").value = "Nos";
-  document.getElementById("pcSupervisor").value = store.currentUser?.name || "";
+  document.getElementById("pcUnitCost").value = "";
+  document.getElementById("pcTotalBatchCost").textContent = "Total: Rs. 0.00";
+  
+  const zoneSelect = document.getElementById("pcZone");
+  if (zoneSelect) zoneSelect.value = store.currentZone || "G-Zone";
+
+  // Populate Regular Sailors Datalist for Supervisor
+  populatePrecastSupervisors();
+
+  const supervisorInput = document.getElementById("pcSupervisor");
+  if (supervisorInput) {
+    const regSailor = (store.sailors || []).find((s) => {
+      const roll = s.roll || (s.official_number && s.official_number.startsWith("VAS") ? "VAS" : s.official_number && s.official_number.startsWith("EC") ? "EC" : "REG");
+      return (roll === "REG" || roll === "Regular") && (s.official_number === store.currentUser?.official_number || s.name === store.currentUser?.name);
+    });
+    if (regSailor) {
+      supervisorInput.value = `${regSailor.official_number || ""} ${regSailor.rank || ""} ${regSailor.name || ""} (${regSailor.trade || ""})`.trim();
+    } else {
+      supervisorInput.value = "";
+    }
+  }
   document.getElementById("pcRemarks").value = "";
 
   // Reset material fields
@@ -18650,8 +19246,11 @@ function openPrecastProductionModal() {
   document.getElementById("pcMatTorSteel").value = "";
   document.getElementById("pcMatAdmixture").value = "";
 
-  // Load and display current raw material balances in G Zone
+  // Load and display current raw material balances
   updatePrecastStockBadges();
+
+  // Initialize standard mix ratios
+  autoCalculatePrecastRawMaterials(true);
 
   modal.classList.remove("hidden");
 }
@@ -18689,67 +19288,67 @@ function handlePrecastProductSelect(val) {
     customEl.classList.add("hidden");
     customEl.required = false;
   }
-  autoCalculatePrecastRawMaterials();
+  autoCalculatePrecastRawMaterials(true);
 }
 
 function autoCalculatePrecastRawMaterials(force = false) {
   const product = document.getElementById("pcProductSelect").value;
   const qty = parseFloat(document.getElementById("pcQuantity").value) || 0;
 
-  if (qty <= 0) return;
-
-  // Recipe ratios per 100 units or standard batch
-  let cement = 0, quarryDust = 0, chipMetal = 0, metal34 = 0, torSteel = 0, admixture = 0;
+  // Recipe ratios per 100 units
+  let rCement = 0, rQD = 0, rChip = 0, rM34 = 0, rTor = 0, rAdm = 0;
 
   if (product.includes("4 inch")) {
-    cement = (qty / 100) * 1.5;
-    quarryDust = (qty / 100) * 0.12;
-    chipMetal = (qty / 100) * 0.08;
+    rCement = 1.5;
+    rQD = 0.12;
+    rChip = 0.08;
   } else if (product.includes("6 inch")) {
-    cement = (qty / 100) * 2.2;
-    quarryDust = (qty / 100) * 0.18;
-    chipMetal = (qty / 100) * 0.12;
+    rCement = 2.2;
+    rQD = 0.18;
+    rChip = 0.12;
   } else if (product.includes("8 inch")) {
-    cement = (qty / 100) * 2.0;
-    quarryDust = (qty / 100) * 0.20;
-    chipMetal = (qty / 100) * 0.10;
+    rCement = 2.0;
+    rQD = 0.20;
+    rChip = 0.10;
   } else if (product.includes("Paving") || product.includes("Unipave") || product.includes("Zigzag")) {
-    cement = (qty / 100) * 1.8;
-    quarryDust = (qty / 100) * 0.10;
-    chipMetal = (qty / 100) * 0.12;
-    admixture = (qty / 100) * 0.5;
+    rCement = 1.8;
+    rQD = 0.10;
+    rChip = 0.12;
+    rAdm = 0.5;
   } else if (product.includes("Curb Stone")) {
-    cement = (qty / 10) * 1.5;
-    quarryDust = (qty / 10) * 0.08;
-    metal34 = (qty / 10) * 0.10;
+    rCement = 15.0; // 1.5 per 10
+    rQD = 0.8;
+    rM34 = 1.0;
   } else if (product.includes("Lintel")) {
-    cement = (qty / 10) * 1.5;
-    quarryDust = (qty / 10) * 0.08;
-    metal34 = (qty / 10) * 0.10;
-    torSteel = qty * 1.6;
+    rCement = 15.0;
+    rQD = 0.8;
+    rM34 = 1.0;
+    rTor = 160.0;
   } else if (product.includes("Fence Post")) {
-    cement = (qty / 10) * 1.2;
-    quarryDust = (qty / 10) * 0.06;
-    metal34 = (qty / 10) * 0.08;
-    torSteel = qty * 1.2;
+    rCement = 12.0;
+    rQD = 0.6;
+    rM34 = 0.8;
+    rTor = 120.0;
   } else if (product.includes("Cover Slab") || product.includes("Drain")) {
-    cement = (qty / 10) * 2.0;
-    quarryDust = (qty / 10) * 0.10;
-    metal34 = (qty / 10) * 0.12;
-    torSteel = qty * 1.8;
+    rCement = 20.0;
+    rQD = 1.0;
+    rM34 = 1.2;
+    rTor = 180.0;
   } else if (product.includes("Gabion")) {
-    cement = (qty / 10) * 1.8;
-    quarryDust = (qty / 10) * 0.12;
-    chipMetal = (qty / 10) * 0.14;
+    rCement = 18.0;
+    rQD = 1.2;
+    rChip = 1.4;
   }
 
-  // Set calculated values (rounded to 2 decimal places)
-  if (cement > 0 || force) document.getElementById("pcMatCement").value = Math.round(cement * 10) / 10 || "";
-  if (quarryDust > 0 || force) document.getElementById("pcMatQuarryDust").value = Math.round(quarryDust * 100) / 100 || "";
-  if (chipMetal > 0 || force) document.getElementById("pcMatChipMetal").value = Math.round(chipMetal * 100) / 100 || "";
-  if (metal34 > 0 || force) document.getElementById("pcMatMetal34").value = Math.round(metal34 * 100) / 100 || "";
-  if (torSteel > 0 || force) document.getElementById("pcMatTorSteel").value = Math.round(torSteel * 10) / 10 || "";
-  if (admixture > 0 || force) document.getElementById("pcMatAdmixture").value = Math.round(admixture * 10) / 10 || "";
+  // Set ratios into editable ratio inputs
+  document.getElementById("pcRatioCement").value = rCement || "";
+  document.getElementById("pcRatioQuarryDust").value = rQD || "";
+  document.getElementById("pcRatioChipMetal").value = rChip || "";
+  document.getElementById("pcRatioMetal34").value = rM34 || "";
+  document.getElementById("pcRatioTorSteel").value = rTor || "";
+  document.getElementById("pcRatioAdmixture").value = rAdm || "";
+
+  calculateEstimatedFromRatios(force);
 }
 
 function submitPrecastProduction(event) {
@@ -18764,6 +19363,8 @@ function submitPrecastProduction(event) {
   }
   const qty = parseFloat(document.getElementById("pcQuantity").value) || 0;
   const unit = document.getElementById("pcUnit").value.trim() || "Nos";
+  const unitCost = parseFloat(document.getElementById("pcUnitCost").value) || 0;
+  const zone = (document.getElementById("pcZone")?.value || store.currentZone || "G-Zone").trim();
   const supervisor = document.getElementById("pcSupervisor").value.trim();
   const remarks = document.getElementById("pcRemarks").value.trim();
 
@@ -18782,7 +19383,7 @@ function submitPrecastProduction(event) {
     admixture: parseFloat(document.getElementById("pcMatAdmixture").value) || 0
   };
 
-  // 1. Deduct raw materials from G Zone inventory
+  // 1. Deduct raw materials from inventory (zone stock)
   const deductHelper = (term, amount, unitName) => {
     if (amount <= 0) return;
     const inv = (store.inventory || []).find((i) =>
@@ -18795,8 +19396,8 @@ function submitPrecastProduction(event) {
         ref: `Batch: ${batchNo}`,
         qty: amount,
         date: date,
-        dest: `Pre-Cast WS: ${product} (${qty} ${unit})`,
-        remarks: `Consumed for ${qty} ${unit} ${product}`
+        dest: `Pre-Cast (${zone}): ${product} (${qty} ${unit})`,
+        remarks: `Consumed for ${qty} ${unit} ${product} [Supervisor: ${supervisor}]`
       });
       fbSaveInventoryItem(inv);
     }
@@ -18809,17 +19410,27 @@ function submitPrecastProduction(event) {
   deductHelper("TOR", rawConsumed.tor_steel, "kg");
   deductHelper("Admixture", rawConsumed.admixture, "L");
 
-  // 2. On-charge finished precast product to inventory
-  let finishedItem = (store.inventory || []).find(
-    (i) => (i.description || "").toLowerCase().trim() === product.toLowerCase().trim()
+  // 2. On-charge finished precast product into zone inventory
+  const prodDescLower = product.toLowerCase().trim();
+  let finishedItem = (store.inventory || []).find((i) =>
+    (i.description || "").toLowerCase().trim() === prodDescLower &&
+    (isZoneMatch(i.zone_id || i.zone, zone) || (i.location || "").toLowerCase().includes(zone.toLowerCase()))
   );
 
   if (finishedItem) {
-    finishedItem.quantity = (parseFloat(finishedItem.quantity) || 0) + qty;
+    const oldQty = parseFloat(finishedItem.quantity) || 0;
+    const newQty = oldQty + qty;
+    finishedItem.quantity = newQty;
+    if (unitCost > 0) {
+      finishedItem.cost_per_unit = unitCost;
+    }
     if (!finishedItem.on_charge_records) finishedItem.on_charge_records = [];
     finishedItem.on_charge_records.push({
       date: date,
       quantity: qty,
+      unit_cost: unitCost,
+      zone: zone,
+      supervisor: supervisor,
       source: `Pre-Cast Production Batch ${batchNo}`,
       timestamp: Date.now()
     });
@@ -18828,16 +19439,20 @@ function submitPrecastProduction(event) {
     const newItem = {
       description: product,
       category: "Pre-Cast Products",
+      zone_id: zone,
       deno: unit,
       quantity: qty,
-      cost_per_unit: 0,
-      location: "G Zone - Pre-Cast Yard",
+      cost_per_unit: unitCost,
+      location: `${zone} - Pre-Cast Yard`,
       date_added: date,
       on_charge_ref: batchNo,
       on_charge_records: [
         {
           date: date,
           quantity: qty,
+          unit_cost: unitCost,
+          zone: zone,
+          supervisor: supervisor,
           source: `Pre-Cast Production Batch ${batchNo}`,
           timestamp: Date.now()
         }
@@ -18854,6 +19469,8 @@ function submitPrecastProduction(event) {
     product: product,
     quantity_produced: qty,
     unit: unit,
+    unit_cost: unitCost,
+    zone: zone,
     raw_materials: rawConsumed,
     supervisor: supervisor,
     remarks: remarks,
@@ -18863,7 +19480,8 @@ function submitPrecastProduction(event) {
   opsDB.ref("precast_batches").push(batchData).then(() => {
     closeModal("precastProductionModal");
     renderInventoryTable();
-    showToast(`✅ Production Batch "${batchNo}" recorded! (+${qty} ${unit} ${product})`, "success", 6000);
+    if (typeof renderPrecastInventoryTable === "function") renderPrecastInventoryTable();
+    showToast(`✅ Production Batch "${batchNo}" recorded! (+${qty} ${unit} ${product} @ ${formatCurrency(unitCost)} in ${zone})`, "success", 6000);
   }).catch((err) => {
     console.error("Error saving precast batch:", err);
     showToast("Error saving production batch", "error");
@@ -23219,17 +23837,145 @@ function renderSailorPerformanceSection() {
   `;
 }
 
+let _currentSailorNokRaw = "";
+let _isNokRevealed = false;
+
+function setNokMaskedState(nokVal) {
+  _currentSailorNokRaw = nokVal && nokVal !== "—" ? String(nokVal).trim() : "";
+  _isNokRevealed = false;
+
+  const nokEl = document.getElementById("profDetNok");
+  const btnEl = document.getElementById("btnRevealNok");
+  const iconEl = document.getElementById("iconRevealNok");
+  const lblEl = document.getElementById("lblRevealNok");
+
+  if (!_currentSailorNokRaw || _currentSailorNokRaw === "—") {
+    if (nokEl) {
+      nokEl.textContent = "—";
+      nokEl.className = "font-bold text-slate-400 text-right uppercase";
+    }
+    if (btnEl) btnEl.classList.add("hidden");
+    return;
+  }
+
+  if (btnEl) btnEl.classList.remove("hidden");
+  if (iconEl) iconEl.textContent = "🔒";
+  if (lblEl) lblEl.textContent = "Reveal";
+  if (nokEl) {
+    nokEl.textContent = "••••••••••••••••";
+    nokEl.className = "font-bold text-slate-500 tracking-widest text-right font-mono";
+  }
+}
+
+function toggleNokConfidentiality() {
+  const nokEl = document.getElementById("profDetNok");
+  const iconEl = document.getElementById("iconRevealNok");
+  const lblEl = document.getElementById("lblRevealNok");
+
+  if (!_currentSailorNokRaw || _currentSailorNokRaw === "—") return;
+
+  if (_isNokRevealed) {
+    // Hide back
+    _isNokRevealed = false;
+    if (iconEl) iconEl.textContent = "🔒";
+    if (lblEl) lblEl.textContent = "Reveal";
+    if (nokEl) {
+      nokEl.textContent = "••••••••••••••••";
+      nokEl.className = "font-bold text-slate-500 tracking-widest text-right font-mono";
+    }
+    showToast("Confidential details hidden", "info");
+    return;
+  }
+
+  // Ask for master password
+  const entered = prompt("🔒 Enter Master Password to reveal confidential NOK / Wife details:");
+  if (entered === null) return; // cancelled
+
+  const pwd = entered.trim();
+  const inc = (store.settings?.zoneInCharges || {})[store.currentZone] || {};
+  const zonePwd = inc.password ? String(inc.password).trim() : "";
+  const isMasterAuthorized = 
+    pwd === "MalitHZ" || 
+    pwd === "3576" || 
+    (zonePwd && pwd === zonePwd) || 
+    isMainAdminLoggedIn();
+
+  if (isMasterAuthorized) {
+    _isNokRevealed = true;
+    if (iconEl) iconEl.textContent = "🙈";
+    if (lblEl) lblEl.textContent = "Hide";
+    if (nokEl) {
+      nokEl.textContent = _currentSailorNokRaw;
+      nokEl.className = "font-bold text-rose-700 text-right uppercase";
+    }
+    showToast("Confidential NOK details unlocked!", "success");
+  } else {
+    showToast("Access Denied: Incorrect Master Password!", "error");
+  }
+}
+
+function findSailorInStore(sailorId) {
+  if (!sailorId || !store.sailors || store.sailors.length === 0) return null;
+  const rawId = String(sailorId).trim();
+  const rawIdLower = rawId.toLowerCase();
+  const cleanId = rawId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const digitsOnly = rawId.replace(/\D/g, "");
+
+  // 1. Direct exact match on id, _fbKey, official_number, or off_no
+  let found = store.sailors.find(s => {
+    if (!s) return false;
+    if (String(s.id).trim() === rawId) return true;
+    if (s._fbKey && String(s._fbKey).trim() === rawId) return true;
+    if (s.official_number && String(s.official_number).trim() === rawId) return true;
+    if (s.off_no && String(s.off_no).trim() === rawId) return true;
+    return false;
+  });
+  if (found) return found;
+
+  // 2. Clean alphanumeric match (e.g. "VAS 76193" vs "VAS76193", "EC 103756" vs "EC103756")
+  if (cleanId) {
+    found = store.sailors.find(s => {
+      if (!s) return false;
+      const sOffClean = (s.official_number || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      const sIdClean = String(s.id || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      const sFbClean = String(s._fbKey || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      const sOffNoClean = (s.off_no || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      return (sOffClean === cleanId || sIdClean === cleanId || sFbClean === cleanId || sOffNoClean === cleanId);
+    });
+    if (found) return found;
+  }
+
+  // 3. Digits-only match (e.g. "76193" matching "VAS 76193", "103756" matching "EC 103756")
+  if (digitsOnly && digitsOnly.length >= 4) {
+    found = store.sailors.find(s => {
+      if (!s) return false;
+      const sDigits = (s.official_number || "").replace(/\D/g, "");
+      const sIdDigits = String(s.id || "").replace(/\D/g, "");
+      return (sDigits === digitsOnly || sIdDigits === digitsOnly);
+    });
+    if (found) return found;
+  }
+
+  // 4. Case-insensitive exact or substring match on official_number or name
+  found = store.sailors.find(s => {
+    if (!s) return false;
+    const sOffLower = (s.official_number || "").toLowerCase().trim();
+    const sNameLower = (s.name || "").toLowerCase().trim();
+    if (sOffLower === rawIdLower || sNameLower === rawIdLower) return true;
+    if (rawIdLower.length >= 4 && (sNameLower.includes(rawIdLower) || rawIdLower.includes(sNameLower))) return true;
+    return false;
+  });
+
+  return found || null;
+}
+
 // Open Sailor Profile Modal with detailed stats matching Pic 2
 function openSailorProfile(sailorId) {
   if (_justClosedModal) return;
-  const sailor = store.sailors.find(
-    (s) =>
-      String(s.id) === String(sailorId) ||
-      String(s._fbKey) === String(sailorId) ||
-      String(s.official_number) === String(sailorId),
-  );
+  const sailor = findSailorInStore(sailorId);
   if (!sailor) {
-    showToast("Sailor profile not found", "error");
+    console.warn("Sailor profile not found for identifier:", sailorId);
+    showToast(`Sailor profile not found for "${sailorId}"`, "error");
     return;
   }
 
@@ -23298,7 +24044,7 @@ function openSailorProfile(sailorId) {
   const rollVal = sailor.roll || (sailor.official_number && sailor.official_number.startsWith("VAS") ? "VAS" : sailor.official_number && sailor.official_number.startsWith("EC") ? "EC" : "REG");
   setText("profDetRoll", rollVal);
   setText("profDetBlood", sailor.blood_group || "—");
-  setText("profDetNok", sailor.nok_name || "—");
+  setNokMaskedState(sailor.nok_name);
   setText("profDetSkill", sailor.special_skill || sailor.skills || "—");
   setText("profDetJoinDate", sailor.join_date || "—");
   setText("profDetIdExpiry", sailor.id_expiry || "—");
@@ -28235,34 +28981,277 @@ function switchInventorySubTab(subTab) {
   const tabStock = document.getElementById("invSubTab-stock");
   const tabTIB = document.getElementById("invSubTab-tempissues");
   const tabPrecast = document.getElementById("invSubTab-precast");
+  const tabNav254 = document.getElementById("invSubTab-nav254");
+
   const panelStock = document.getElementById("invPanel-stock");
   const panelTIB = document.getElementById("invPanel-tempissues");
   const panelPrecast = document.getElementById("invPanel-precast");
+  const panelNav254 = document.getElementById("invPanel-nav254");
+
   const mainStockActions = document.getElementById("invMainStockActions");
 
   const inactiveBtn = "px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer";
   const activeStockBtn = "px-4 py-2 rounded-xl text-xs font-bold bg-teal-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
   const activeTibBtn = "px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
   const activePrecastBtn = "px-4 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
+  const activeNav254Btn = "px-4 py-2 rounded-xl text-xs font-bold bg-orange-600 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer";
 
   if (panelStock) panelStock.classList.toggle("hidden", subTab !== "stock");
   if (panelTIB) panelTIB.classList.toggle("hidden", subTab !== "tempissues");
   if (panelPrecast) panelPrecast.classList.toggle("hidden", subTab !== "precast");
+  if (panelNav254) panelNav254.classList.toggle("hidden", subTab !== "nav254");
 
   if (mainStockActions) mainStockActions.classList.toggle("hidden", subTab !== "stock");
 
   if (tabStock) tabStock.className = subTab === "stock" ? activeStockBtn : inactiveBtn;
   if (tabTIB) tabTIB.className = subTab === "tempissues" ? activeTibBtn : inactiveBtn;
   if (tabPrecast) tabPrecast.className = subTab === "precast" ? activePrecastBtn : inactiveBtn;
+  if (tabNav254) tabNav254.className = subTab === "nav254" ? activeNav254Btn : inactiveBtn;
 
   if (subTab === "tempissues") {
     renderTempIssuesDashboard();
     renderTempIssuesTable();
   } else if (subTab === "precast") {
     renderPrecastInventoryTable();
+  } else if (subTab === "nav254") {
+    renderNav254RegisterTable();
   }
 
   updateTibPendingBadge();
+  updateNav254RegisterBadge();
+}
+
+function updateNav254RegisterBadge() {
+  const countBadge = document.getElementById("nav254CountBadge");
+  if (!countBadge) return;
+  const count = (store.nav254Vouchers || []).length;
+  countBadge.textContent = count;
+}
+
+function renderNav254RegisterTable() {
+  const tbody = document.getElementById("nav254RegisterTableBody");
+  if (!tbody) return;
+
+  const searchVal = (document.getElementById("nav254RegisterSearch")?.value || "").toLowerCase().trim();
+  const zoneFilter = document.getElementById("nav254ZoneFilter")?.value || "ALL";
+  const sourceFilter = document.getElementById("nav254SourceFilter")?.value || "ALL";
+
+  // 1. Gather all NAV 254 vouchers from store.nav254Vouchers
+  let allRecords = [...(store.nav254Vouchers || [])];
+
+  // 2. Also incorporate any legacy off-charge records in store.inventory if not already in nav254Vouchers
+  (store.inventory || []).forEach((inv) => {
+    if (inv.off_charge_records && Array.isArray(inv.off_charge_records)) {
+      inv.off_charge_records.forEach((rec, idx) => {
+        const refNo = rec.ref || `OFF-${inv.id || inv._fbKey}-${idx}`;
+        const alreadyExists = allRecords.some((v) => (v.voucher_no === refNo || v.ref_no === refNo));
+        if (!alreadyExists) {
+          const unitPrice = parseFloat(inv.cost_per_unit || inv.cost || 0);
+          allRecords.push({
+            id: `synth_${inv.id || inv._fbKey}_${idx}`,
+            voucher_no: refNo,
+            ref_no: refNo,
+            date: rec.date || getLocalDateString(),
+            issuing_unit: `${inv.zone_id || store.currentZone || "Main Store"} Store`,
+            receiving_unit: rec.dest || "Project / Base",
+            authority: rec.ref || "Official Off-Charge",
+            issued_by: "Store Keeper",
+            received_by: rec.dest || "Receiver",
+            items: [
+              {
+                inventory_id: inv._fbKey || inv.id,
+                description: inv.description,
+                deno: inv.deno || "Nos",
+                quantity_demanded: rec.qty || 1,
+                quantity_issued: rec.qty || 1,
+                unit_cost: unitPrice,
+                total_value: unitPrice * (rec.qty || 1)
+              }
+            ],
+            remarks: rec.remarks || "",
+            source: "Store Off-Charge",
+            created_at: rec.timestamp || Date.now()
+          });
+        }
+      });
+    }
+  });
+
+  // Calculate Metrics before filtering
+  let totalVouchers = allRecords.length;
+  let totalItemsCount = 0;
+  let totalValuation = 0;
+
+  allRecords.forEach((v) => {
+    (v.items || []).forEach((it) => {
+      const q = parseFloat(it.quantity_issued || it.quantity || it.qty || 0);
+      const val = parseFloat(it.total_value) || (q * (parseFloat(it.unit_cost) || 0));
+      totalItemsCount += q;
+      totalValuation += val;
+    });
+  });
+
+  const kpiVouchers = document.getElementById("reg254TotalVouchers");
+  if (kpiVouchers) kpiVouchers.textContent = `${totalVouchers} Vouchers`;
+
+  const kpiItems = document.getElementById("reg254TotalItems");
+  if (kpiItems) kpiItems.textContent = `${totalItemsCount.toLocaleString()} Units`;
+
+  const kpiValue = document.getElementById("reg254TotalValue");
+  if (kpiValue) kpiValue.textContent = formatCurrency(totalValuation);
+
+  updateNav254RegisterBadge();
+
+  // Filter Records
+  let filtered = allRecords.filter((v) => {
+    // Zone filter
+    if (zoneFilter !== "ALL") {
+      const matchIssuing = isZoneMatch(v.issuing_unit, zoneFilter) || (v.issuing_unit || "").toLowerCase().includes(zoneFilter.toLowerCase());
+      const matchReceiving = isZoneMatch(v.receiving_unit, zoneFilter) || (v.receiving_unit || "").toLowerCase().includes(zoneFilter.toLowerCase());
+      if (!matchIssuing && !matchReceiving) return false;
+    }
+
+    // Source filter
+    if (sourceFilter !== "ALL") {
+      const src = v.source || (v.voucher_no && v.voucher_no.startsWith("NAV") ? "NAV 254 Voucher" : "Store Off-Charge");
+      if (sourceFilter === "NAV 254 Voucher" && !src.includes("NAV")) return false;
+      if (sourceFilter === "Store Off-Charge" && !src.includes("Off-Charge")) return false;
+      if (sourceFilter === "TIB Issue" && !src.includes("TIB")) return false;
+    }
+
+    // Search filter
+    if (searchVal) {
+      const vNo = (v.voucher_no || v.ref_no || "").toLowerCase();
+      const iss = (v.issuing_unit || "").toLowerCase();
+      const rec = (v.receiving_unit || "").toLowerCase();
+      const auth = (v.authority || "").toLowerCase();
+      const by = (v.issued_by || "").toLowerCase();
+      const rBy = (v.received_by || "").toLowerCase();
+      const itemsMatch = (v.items || []).some((it) => (it.description || "").toLowerCase().includes(searchVal));
+      if (!vNo.includes(searchVal) && !iss.includes(searchVal) && !rec.includes(searchVal) && !auth.includes(searchVal) && !by.includes(searchVal) && !rBy.includes(searchVal) && !itemsMatch) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  // Sort descending by date / created_at
+  filtered.sort((a, b) => {
+    const tA = a.created_at || (a.date ? new Date(a.date).getTime() : 0);
+    const tB = b.created_at || (b.date ? new Date(b.date).getTime() : 0);
+    return tB - tA;
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-center py-8 text-slate-400 font-medium italic">No NAV 254 or Off-Charge vouchers match the search criteria.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map((v) => {
+    const vId = v.id || v._fbKey || v.voucher_no || "";
+    const itemsList = v.items || [];
+    const totalVal = itemsList.reduce((sum, it) => sum + (parseFloat(it.total_value) || ((parseFloat(it.quantity_issued || it.qty || 0)) * (parseFloat(it.unit_cost) || 0))), 0);
+    const itemsSummaryHtml = itemsList.map((it) => `
+      <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-800 text-[11px] font-medium border border-slate-200 mr-1 mb-1">
+        <span>📦</span>
+        <strong class="font-bold">${it.description}</strong>
+        <span class="text-indigo-700 font-mono font-bold">(${it.quantity_issued || it.qty || 0} ${it.deno || "Nos"})</span>
+      </div>
+    `).join("");
+
+    const srcBadge = v.source === "Store Off-Charge"
+      ? `<span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-blue-100 text-blue-800 border border-blue-200">Store Off-Charge</span>`
+      : `<span class="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300">NAV 254 Official</span>`;
+
+    return `
+      <tr class="hover:bg-amber-50/30 transition-colors">
+        <td class="px-3.5 py-3 align-top whitespace-nowrap">
+          <div class="font-mono font-black text-xs text-amber-950">${v.voucher_no || v.ref_no || "NAV254"}</div>
+          <div class="text-[10px] text-slate-400 font-mono mt-0.5">📅 ${v.date || "—"}</div>
+          <div class="mt-1">${srcBadge}</div>
+        </td>
+        <td class="px-3.5 py-3 align-top">
+          <div class="font-bold text-xs text-slate-800 flex items-center gap-1">
+            <span>🏬</span> ${v.issuing_unit || "Main Store"}
+          </div>
+          <div class="text-[10px] text-slate-500 font-mono mt-0.5">Auth: ${v.authority || "Official"}</div>
+        </td>
+        <td class="px-3.5 py-3 align-top">
+          <div class="font-bold text-xs text-indigo-900 flex items-center gap-1">
+            <span>📍</span> ${v.receiving_unit || "—"}
+          </div>
+          ${v.received_by ? `<div class="text-[10px] text-slate-500 mt-0.5">Recv: ${v.received_by}</div>` : ""}
+        </td>
+        <td class="px-3.5 py-3 align-top max-w-xs">
+          <div class="flex flex-wrap">${itemsSummaryHtml || '<span class="text-slate-400 italic">No item records</span>'}</div>
+        </td>
+        <td class="px-3.5 py-3 align-top text-right font-mono font-black text-emerald-700 whitespace-nowrap">
+          ${formatCurrency(totalVal)}
+        </td>
+        <td class="px-3.5 py-3 align-top">
+          <div class="font-semibold text-xs text-slate-800">${v.issued_by || "Store In-Charge"}</div>
+          ${v.authorized_by ? `<div class="text-[10px] text-slate-500 mt-0.5">Approved: ${v.authorized_by}</div>` : ""}
+        </td>
+        <td class="px-3.5 py-3 align-top text-center whitespace-nowrap">
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-2xs">
+            <span>☁️</span> Recorded
+          </span>
+        </td>
+        <td class="px-3.5 py-3 align-top text-center whitespace-nowrap">
+          <div class="flex items-center justify-center gap-1">
+            <button onclick="viewOrPrintNav254FromRegister('${vId}')" class="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold shadow-2xs transition-all flex items-center gap-1 cursor-pointer" title="View / Print Official NAV 254 Slip">
+              <span>🖨️</span> Print Slip
+            </button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function viewOrPrintNav254FromRegister(vId) {
+  let v = (store.nav254Vouchers || []).find((x) => String(x.id) === String(vId) || String(x._fbKey) === String(vId) || String(x.voucher_no) === String(vId));
+  
+  if (!v) {
+    // Try finding in inventory off-charge records
+    (store.inventory || []).forEach((inv) => {
+      (inv.off_charge_records || []).forEach((rec, idx) => {
+        const refNo = rec.ref || `OFF-${inv.id || inv._fbKey}-${idx}`;
+        if (refNo === vId || `synth_${inv.id || inv._fbKey}_${idx}` === vId) {
+          const unitPrice = parseFloat(inv.cost_per_unit || inv.cost || 0);
+          v = {
+            voucher_no: refNo,
+            ref_no: refNo,
+            date: rec.date || getLocalDateString(),
+            issuing_unit: `${inv.zone_id || store.currentZone || "Main Store"} Store`,
+            receiving_unit: rec.dest || "Project / Base",
+            authority: rec.ref || "Official Off-Charge",
+            issued_by: "Store Keeper",
+            received_by: rec.dest || "Receiver",
+            items: [
+              {
+                description: inv.description,
+                deno: inv.deno || "Nos",
+                quantity_demanded: rec.qty || 1,
+                quantity_issued: rec.qty || 1,
+                unit_cost: unitPrice,
+                total_value: unitPrice * (rec.qty || 1)
+              }
+            ],
+            remarks: rec.remarks || ""
+          };
+        }
+      });
+    });
+  }
+
+  if (v) {
+    _currentNav254Voucher = v;
+    renderNav254PrintDocument(v);
+    document.getElementById("nav254PrintModal")?.classList.remove("hidden");
+  } else {
+    showToast("Voucher details not found", "error");
+  }
 }
 
 function renderPrecastInventoryTable() {
@@ -28288,14 +29277,14 @@ function renderPrecastInventoryTable() {
   // If no items in database yet, provide standard default precast catalogue
   if (precastItems.length === 0) {
     const defaults = [
-      { description: "4 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 85, location: "G Zone - Pre-Cast Yard" },
-      { description: "6 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 120, location: "G Zone - Pre-Cast Yard" },
-      { description: "8 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 160, location: "G Zone - Pre-Cast Yard" },
-      { description: "Paving Blocks (Unipave / Rectangular)", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 65, location: "G Zone - Pre-Cast Yard" },
-      { description: "Pre-Cast Concrete Lintel (4' x 9\")", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 850, location: "G Zone - Pre-Cast Yard" },
-      { description: "Pre-Cast Concrete Fence Post (6' R/C)", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 950, location: "G Zone - Pre-Cast Yard" },
-      { description: "Pre-Cast Concrete Curb Stone", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 620, location: "G Zone - Pre-Cast Yard" },
-      { description: "Pre-Cast Drain Cover Slab (2' x 1.5')", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 780, location: "G Zone - Pre-Cast Yard" }
+      { description: "4 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 85, zone_id: "G-Zone", location: "G Zone - Pre-Cast Yard" },
+      { description: "6 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 120, zone_id: "G-Zone", location: "G Zone - Pre-Cast Yard" },
+      { description: "8 inch Cement Solid Block", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 160, zone_id: "G-Zone", location: "G Zone - Pre-Cast Yard" },
+      { description: "Paving Blocks (Unipave / Rectangular)", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 65, zone_id: "G-Zone", location: "G Zone - Pre-Cast Yard" },
+      { description: "Pre-Cast Concrete Lintel (4' x 9\")", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 850, zone_id: "G-Zone", location: "G Zone - Pre-Cast Yard" },
+      { description: "Pre-Cast Concrete Fence Post (6' R/C)", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 950, zone_id: "G-Zone", location: "G Zone - Pre-Cast Yard" },
+      { description: "Pre-Cast Concrete Curb Stone", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 620, zone_id: "G-Zone", location: "G Zone - Pre-Cast Yard" },
+      { description: "Pre-Cast Drain Cover Slab (2' x 1.5')", category: "Pre-Cast Products", deno: "Nos", quantity: 0, cost_per_unit: 780, zone_id: "G-Zone", location: "G Zone - Pre-Cast Yard" }
     ];
     precastItems = defaults;
   }
@@ -28303,13 +29292,13 @@ function renderPrecastInventoryTable() {
   // Calculate KPIs
   let totalStock = 0;
   let productsWithStock = 0;
-  precastItems.forEach(i => {
+  precastItems.forEach((i) => {
     const q = parseFloat(i.quantity) || 0;
     totalStock += q;
     if (q > 0) productsWithStock++;
   });
 
-  const cementItem = rawInv.find(i => (i.description || "").toLowerCase().includes("cement") && !(i.description || "").toLowerCase().includes("block"));
+  const cementItem = rawInv.find((i) => (i.description || "").toLowerCase().includes("cement") && !(i.description || "").toLowerCase().includes("block"));
   const cementBags = cementItem ? (cementItem.quantity || 0) : 0;
   const navDispatchedCount = (store.nav254Vouchers || []).length;
 
@@ -28317,7 +29306,7 @@ function renderPrecastInventoryTable() {
   if (kpiTotalStock) kpiTotalStock.textContent = `${totalStock.toLocaleString()} Nos`;
 
   const kpiProdCount = document.getElementById("pcKpiProductsCount");
-  if (kpiProdCount) kpiProdCount.textContent = `${precastItems.length} Products (${productsWithStock} Active)`;
+  if (kpiProdCount) kpiProdCount.textContent = `${precastItems.length} Records (${productsWithStock} Active)`;
 
   const kpiNavDisp = document.getElementById("pcKpiNavDispatched");
   if (kpiNavDisp) kpiNavDisp.textContent = `${navDispatchedCount} Vouchers`;
@@ -28327,9 +29316,10 @@ function renderPrecastInventoryTable() {
 
   // Search Filter
   if (searchVal) {
-    precastItems = precastItems.filter(i => 
+    precastItems = precastItems.filter((i) =>
       (i.description || "").toLowerCase().includes(searchVal) ||
       (i.location || "").toLowerCase().includes(searchVal) ||
+      (i.zone_id || "").toLowerCase().includes(searchVal) ||
       (i.category || "").toLowerCase().includes(searchVal)
     );
   }
@@ -28339,65 +29329,137 @@ function renderPrecastInventoryTable() {
     return;
   }
 
-  tbody.innerHTML = precastItems.map(item => {
-    const qty = parseFloat(item.quantity) || 0;
-    const unitCost = parseFloat(item.cost_per_unit || item.cost || 0);
-    const totalVal = qty * unitCost;
-    const itemId = item.id || item._fbKey || "";
+  // Group items merged according to Item Description
+  const groupedMap = new Map();
+  precastItems.forEach((item) => {
+    const key = (item.description || "").trim().toLowerCase();
+    if (!groupedMap.has(key)) {
+      groupedMap.set(key, {
+        description: item.description,
+        category: item.category || "Pre-Cast Products",
+        deno: item.deno || "Nos",
+        entries: [],
+      });
+    }
+    groupedMap.get(key).entries.push(item);
+  });
 
-    const stockColor = qty > 50 ? "bg-emerald-100 text-emerald-800 border-emerald-300" : (qty > 0 ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-rose-100 text-rose-800 border-rose-300");
+  let rowsHtml = "";
 
-    return `
-      <tr class="hover:bg-slate-50/80 transition-colors">
+  groupedMap.forEach((group) => {
+    const totalGroupQty = group.entries.reduce((sum, e) => sum + (parseFloat(e.quantity) || 0), 0);
+    const totalGroupVal = group.entries.reduce((sum, e) => sum + ((parseFloat(e.quantity) || 0) * (parseFloat(e.cost_per_unit || e.cost || 0))), 0);
+    const avgUnitCost = totalGroupQty > 0 ? (totalGroupVal / totalGroupQty) : (parseFloat(group.entries[0]?.cost_per_unit || group.entries[0]?.cost || 0));
+
+    const totalStockColor = totalGroupQty > 50 ? "bg-emerald-100 text-emerald-800 border-emerald-300" : (totalGroupQty > 0 ? "bg-amber-100 text-amber-800 border-amber-300" : "bg-rose-100 text-rose-800 border-rose-300");
+
+    const hasMultipleZones = group.entries.length > 1;
+
+    // Main Merged Row for Item Description
+    rowsHtml += `
+      <tr class="bg-slate-50/90 font-semibold border-t-2 border-slate-200">
         <td class="px-3.5 py-3">
-          <div class="font-bold text-slate-800 flex items-center gap-1.5">
-            <span>🧱</span> ${item.description}
+          <div class="font-extrabold text-slate-900 flex items-center gap-2 text-xs">
+            <span class="text-base">🧱</span>
+            <span>${group.description}</span>
+            ${hasMultipleZones ? `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">${group.entries.length} Zones</span>` : ''}
           </div>
-          <div class="text-[10px] text-slate-400 font-mono mt-0.5">Ref: ${item.on_charge_ref || item.book_no || "Pre-Cast"}</div>
+          <div class="text-[10px] text-slate-400 font-mono mt-0.5">Total across all workshops: <strong class="text-slate-700">${totalGroupQty.toLocaleString()} ${group.deno}</strong></div>
         </td>
         <td class="px-3.5 py-3 text-center">
           <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-            ${item.category || "Pre-Cast Products"}
+            ${group.category}
           </span>
         </td>
-        <td class="px-3.5 py-3 text-center text-slate-600 font-medium">
-          📍 ${item.location || "G Zone - Pre-Cast Yard"}
+        <td class="px-3.5 py-3 text-center text-xs text-slate-600 font-bold">
+          ${hasMultipleZones ? `<span>🌐 Combined Stock</span>` : `📍 ${group.entries[0]?.zone_id || group.entries[0]?.location || "G-Zone"}`}
         </td>
         <td class="px-3.5 py-3 text-center">
-          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-bold border ${stockColor}">
-            ${qty.toLocaleString()} ${item.deno || "Nos"}
+          <span class="px-2.5 py-1 rounded-lg text-xs font-mono font-black border ${totalStockColor}">
+            ${totalGroupQty.toLocaleString()} ${group.deno}
           </span>
         </td>
-        <td class="px-3.5 py-3 text-right">
-          ${itemId ? `
-          <button onclick="quickEditUnitCost('${itemId}', event)" class="font-semibold text-slate-700 hover:text-emerald-700 hover:underline cursor-pointer" title="Click to edit unit price">
-            ${formatCurrency(unitCost)}
-          </button>
-          ` : `
-          <span class="font-semibold text-slate-700">${formatCurrency(unitCost)}</span>
-          `}
+        <td class="px-3.5 py-3 text-right font-bold text-slate-800 text-xs">
+          ${formatCurrency(avgUnitCost)}
         </td>
-        <td class="px-3.5 py-3 text-right font-bold text-emerald-800">
-          ${formatCurrency(totalVal)}
+        <td class="px-3.5 py-3 text-right font-black text-emerald-800 text-xs">
+          ${formatCurrency(totalGroupVal)}
         </td>
         <td class="px-3.5 py-3 text-center">
           <div class="flex items-center justify-center gap-1.5">
-            <button onclick="openPrecastProductionModal(); document.getElementById('pcProductSelect').value='${item.description}'; autoCalculatePrecastRawMaterials();" class="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-xs cursor-pointer flex items-center gap-1" title="Produce more batch for this item">
+            <button onclick="openPrecastProductionModal(); document.getElementById('pcProductSelect').value='${group.description.replace(/'/g, "\\'")}'; autoCalculatePrecastRawMaterials();" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] shadow-xs cursor-pointer flex items-center gap-1" title="Log new production batch">
               <span>➕ Batch</span>
             </button>
-            <button onclick="openNav254Modal();" class="px-2 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] shadow-xs cursor-pointer flex items-center gap-1" title="Issue to another zone via NAV 254">
+            <button onclick="openNav254Modal();" class="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] shadow-xs cursor-pointer flex items-center gap-1" title="Issue via NAV 254 Voucher">
               <span>📜 Issue</span>
             </button>
-            ${itemId ? `
-            <button onclick="openInventoryCard('${itemId}')" class="p-1 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-800 cursor-pointer" title="View Stock Card & History">
-              📋
-            </button>
-            ` : ''}
           </div>
         </td>
       </tr>
     `;
-  }).join("");
+
+    // If multiple zone entries (or even single detailed entry), render clean breakdown rows
+    group.entries.forEach((entry) => {
+      const eQty = parseFloat(entry.quantity) || 0;
+      const eUnitCost = parseFloat(entry.cost_per_unit || entry.cost || 0);
+      const eTotalVal = eQty * eUnitCost;
+      const eItemId = entry.id || entry._fbKey || "";
+      const zoneName = entry.zone_id || (entry.location && entry.location.split("-")[0].trim()) || "G-Zone";
+
+      const zonePillColors = {
+        "G-Zone": "bg-amber-100 text-amber-900 border-amber-300",
+        "A-Zone": "bg-blue-100 text-blue-900 border-blue-300",
+        "B-Zone": "bg-emerald-100 text-emerald-900 border-emerald-300",
+        "C-Zone": "bg-purple-100 text-purple-900 border-purple-300",
+        "D-Zone": "bg-teal-100 text-teal-900 border-teal-300",
+        "E-Zone": "bg-rose-100 text-rose-900 border-rose-300",
+        "FH-Zone": "bg-cyan-100 text-cyan-900 border-cyan-300"
+      };
+      const zonePillClass = zonePillColors[zoneName] || "bg-slate-100 text-slate-800 border-slate-300";
+
+      rowsHtml += `
+        <tr class="hover:bg-teal-50/40 transition-colors border-b border-slate-100 bg-white text-xs">
+          <td class="px-3.5 py-2.5 pl-8 text-slate-700">
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400">↳</span>
+              <span class="font-medium">${entry.location || `${zoneName} Pre-Cast Store`}</span>
+              <span class="text-[10px] text-slate-400 font-mono">(${entry.on_charge_ref || "Stock"})</span>
+            </div>
+          </td>
+          <td class="px-3.5 py-2.5 text-center text-slate-400 text-[11px]">—</td>
+          <td class="px-3.5 py-2.5 text-center">
+            <span class="px-2 py-0.5 rounded-full text-[10px] font-black border ${zonePillClass}">
+              📍 ${zoneName}
+            </span>
+          </td>
+          <td class="px-3.5 py-2.5 text-center font-mono font-bold ${eQty > 0 ? 'text-slate-800' : 'text-slate-400'}">
+            ${eQty.toLocaleString()} ${group.deno}
+          </td>
+          <td class="px-3.5 py-2.5 text-right font-mono">
+            ${eItemId ? `
+            <button onclick="quickEditUnitCost('${eItemId}', event)" class="font-semibold text-slate-700 hover:text-emerald-700 hover:underline cursor-pointer" title="Click to edit unit price for this zone">
+              ${formatCurrency(eUnitCost)} ✏️
+            </button>
+            ` : `
+            <span class="font-semibold text-slate-700">${formatCurrency(eUnitCost)}</span>
+            `}
+          </td>
+          <td class="px-3.5 py-2.5 text-right font-mono font-semibold text-emerald-700">
+            ${formatCurrency(eTotalVal)}
+          </td>
+          <td class="px-3.5 py-2.5 text-center">
+            ${eItemId ? `
+            <button onclick="openInventoryCard('${eItemId}')" class="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-900 text-[10px] font-bold cursor-pointer transition-all" title="View Zone Stock Card">
+              📋 Card
+            </button>
+            ` : ''}
+          </td>
+        </tr>
+      `;
+    });
+  });
+
+  tbody.innerHTML = rowsHtml;
 }
 
 // Inward Pending Receipt Badge and Notification Alert updater

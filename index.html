@@ -1016,7 +1016,13 @@
                     <div id="ongoingTasksSummaryWrapper" class="rounded-xl p-4 mb-4 text-white" style="background:linear-gradient(135deg,#0a1628 0%,#152a55 50%,#0d4f6e 100%);border:1px solid rgba(13,148,136,0.35);box-shadow:0 8px 32px rgba(10,22,40,0.35)">
                         <div class="flex flex-col md:flex-row items-center justify-between gap-4">
                             <div class="text-center md:text-left">
-                                <h3 id="summaryTitle" class="font-bold text-[15px] text-teal-300">Today's Operational Summary</h3>
+                                <div class="flex items-center gap-2.5 flex-wrap">
+                                    <h3 id="summaryTitle" class="font-bold text-[15px] text-teal-300">Today's Operational Summary</h3>
+                                    <button onclick="openSundayEvaluationModal()" class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-xs transition-all flex items-center gap-1.5 cursor-pointer" title="Sunday Weekly Sailor Evaluation">
+                                        <span>📅</span> Sunday Evaluation
+                                        <span id="sundayEvalTopBadge" class="hidden px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-400 text-slate-900 animate-pulse">0</span>
+                                    </button>
+                                </div>
                                 <p class="text-xs md:text-sm text-slate-400 mt-0.5" id="workSummaryText">Naval Dockyard — Click any work order to manage</p>
                             </div>
                             <div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-3 md:gap-6 mt-4 md:mt-0 w-full md:w-auto">
@@ -1594,6 +1600,10 @@
                 <button type="button" onclick="switchInventorySubTab('precast')" id="invSubTab-precast" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
                     <span>🧱</span> Pre-Cast Yard & Production (G Zone)
                 </button>
+                <button type="button" onclick="switchInventorySubTab('nav254')" id="invSubTab-nav254" class="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all flex items-center gap-1.5 cursor-pointer">
+                    <span>📜</span> NAV 254 Register
+                    <span id="nav254CountBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">0</span>
+                </button>
             </div>
 
             <!-- ==================== SUB-PANEL 1: STOCK BALANCE ==================== -->
@@ -1991,6 +2001,116 @@
                             </thead>
                             <tbody id="precastInventoryTableBody" class="divide-y divide-slate-100 bg-white">
                                 <!-- Populated dynamically via renderPrecastInventoryTable() -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ==================== SUB-PANEL 4: NAV 254 ISSUE VOUCHER REGISTER ==================== -->
+            <div id="invPanel-nav254" class="hidden space-y-6">
+                <!-- Top Banner -->
+                <div class="p-4 rounded-2xl border border-amber-200/80 bg-gradient-to-r from-slate-900 via-amber-950 to-slate-900 text-white shadow-md flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl bg-amber-600/30 border border-amber-400/40 flex items-center justify-center text-2xl shadow-inner">
+                            📜
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h3 class="font-bold text-sm text-white">NAV 254 Issue Voucher & Off-Charge Register</h3>
+                                <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">☁️ Cloud Synced</span>
+                            </div>
+                            <p class="text-xs text-amber-200/90 mt-0.5">Centralized register of all materials issued via NAV 254, Store Off-Charges & TIB dispatches across all zones</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
+                        <button onclick="openNav254Modal()" class="flex-1 md:flex-initial bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-sm transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span>➕ Issue New NAV 254</span>
+                        </button>
+                        <button onclick="renderNav254RegisterTable()" class="flex-1 md:flex-initial bg-white/10 hover:bg-white/20 text-white border border-white/20 px-3 py-2 rounded-xl text-xs font-semibold transition-all flex items-center justify-center gap-1 cursor-pointer">
+                            <span>🔄 Refresh Register</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- NAV 254 Register KPI Cards -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center text-lg">📜</div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Total Vouchers</div>
+                            <div class="text-lg font-extrabold text-slate-800" id="reg254TotalVouchers">0 Vouchers</div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-lg">📦</div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Items Dispatched</div>
+                            <div class="text-lg font-extrabold text-indigo-700" id="reg254TotalItems">0 Units</div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-lg">💰</div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Total Valuation</div>
+                            <div class="text-lg font-extrabold text-emerald-700" id="reg254TotalValue">Rs. 0.00</div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-xs flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-lg">☁️</div>
+                        <div>
+                            <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wide">Cloud Database</div>
+                            <div class="text-sm font-black text-teal-700 flex items-center gap-1">● Live & Synced</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- NAV 254 Register Search & Table -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 space-y-4">
+                    <div class="flex flex-col sm:flex-row gap-2.5 items-center justify-between">
+                        <div class="relative flex-1 w-full sm:w-auto">
+                            <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none text-xs">🔍</span>
+                            <input type="text" id="nav254RegisterSearch" placeholder="Search by Voucher No, Store, Destination, Material or Recipient..." 
+                                class="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-amber-500 text-xs font-medium"
+                                onkeyup="renderNav254RegisterTable()">
+                        </div>
+                        <div class="flex gap-2 w-full sm:w-auto flex-wrap items-center">
+                            <select id="nav254ZoneFilter" onchange="renderNav254RegisterTable()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 font-semibold">
+                                <option value="ALL">🌐 All Stores & Zones</option>
+                                <option value="G-Zone">G-Zone (Pre-Cast WS)</option>
+                                <option value="A-Zone">A-Zone Main Store</option>
+                                <option value="B-Zone">B-Zone Store</option>
+                                <option value="C-Zone">C-Zone Store</option>
+                                <option value="D-Zone">D-Zone Store</option>
+                                <option value="E-Zone">E-Zone Store</option>
+                                <option value="FH-Zone">FH-Zone Store</option>
+                            </select>
+                            <select id="nav254SourceFilter" onchange="renderNav254RegisterTable()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 font-medium">
+                                <option value="ALL">All Types</option>
+                                <option value="NAV 254 Voucher">NAV 254 Vouchers</option>
+                                <option value="Store Off-Charge">Store Off-Charges</option>
+                                <option value="TIB Issue">TIB Issues</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Register Table -->
+                    <div class="overflow-x-auto rounded-xl border border-slate-200">
+                        <table class="w-full text-xs text-left border-collapse" id="nav254RegisterTable">
+                            <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 select-none">
+                                <tr>
+                                    <th class="px-3.5 py-3 text-left">Voucher No & Date</th>
+                                    <th class="px-3.5 py-3 text-left">Issuing Store / Zone</th>
+                                    <th class="px-3.5 py-3 text-left">Receiving Unit / Project</th>
+                                    <th class="px-3.5 py-3 text-left">Items Dispatched</th>
+                                    <th class="px-3.5 py-3 text-right">Total Value</th>
+                                    <th class="px-3.5 py-3 text-left">Authorized / Issued By</th>
+                                    <th class="px-3.5 py-3 text-center">Status</th>
+                                    <th class="px-3.5 py-3 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="nav254RegisterTableBody" class="divide-y divide-slate-100 bg-white">
+                                <!-- Populated dynamically via renderNav254RegisterTable() -->
                             </tbody>
                         </table>
                     </div>
@@ -4956,14 +5076,14 @@
                 <button id="btnUndoWoChanges" onclick="executeGlobalUndo()" class="bg-amber-100 hover:bg-amber-200 text-amber-800 border border-amber-300 px-3 py-2.5 rounded-lg text-sm font-medium transition-all" title="Revert changes made to this Work Order">
                     ↩️ Undo
                 </button>
-                <button id="btnSaveWoChanges" onclick="saveWorkOrderChanges()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-medium">
-                    💾 Save Changes
+                <button id="btnSaveWoChanges" onclick="saveWorkOrderChanges()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>💾</span> Save Changes
                 </button>
                 <button id="btnProceedWo" onclick="proceedWorkOrder()" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">
                     🚀 Proceed - Commit Daily Labour
                 </button>
-                <button id="btnOfficerApproveWoFooter" onclick="officerApproveCurrentWorkOrder()" class="hidden flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all">
-                    🛡️ Officer Approve & Save
+                <button id="btnOfficerApproveWoFooter" onclick="officerApproveCurrentWorkOrder()" class="hidden flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer">
+                    <span>🛡️</span> Approved & Close
                 </button>
                 <button id="btnForwardComplete" onclick="forwardToComplete()" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium hidden">
                     ✅ Forward to Complete
@@ -5306,49 +5426,28 @@
                     <input type="hidden" id="evalSailorId">
                     <input type="hidden" id="evalWorkOrderId">
                     
-                    <!-- Evaluation Sliders -->
+                    <!-- Evaluation Sliders (3 Combined Criteria) -->
                     <div class="space-y-4">
                         <div>
                             <div class="flex justify-between mb-1">
-                                <label class="text-sm font-medium sinhala">වැඩහි ගුණාත්මකභාවය (Quality)</label>
-                                <span class="text-lg font-bold" id="qualityValue">5</span>
+                                <label class="text-sm font-medium sinhala">ගුණාත්මකභාවය සහ නිපුණතාව (Quality & Skill)</label>
+                                <span class="text-lg font-bold" id="qualitySkillValue">5</span>
                             </div>
-                            <input type="range" id="qualityScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('quality')">
+                            <input type="range" id="qualitySkillScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('qualitySkill')">
                         </div>
                         <div>
                             <div class="flex justify-between mb-1">
-                                <label class="text-sm font-medium sinhala">කාර්යක්ෂමතාව (Efficiency)</label>
-                                <span class="text-lg font-bold" id="efficiencyValue">5</span>
+                                <label class="text-sm font-medium sinhala">ආකල්ප සහ විනය (Attitude & Discipline)</label>
+                                <span class="text-lg font-bold" id="attitudeDisciplineValue">5</span>
                             </div>
-                            <input type="range" id="efficiencyScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('efficiency')">
+                            <input type="range" id="attitudeDisciplineScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('attitudeDiscipline')">
                         </div>
                         <div>
                             <div class="flex justify-between mb-1">
-                                <label class="text-sm font-medium sinhala">විනය (Discipline)</label>
-                                <span class="text-lg font-bold" id="disciplineValue">5</span>
+                                <label class="text-sm font-medium sinhala">කාර්යක්ෂමතාව සහ ද්‍රව්‍ය පරිහරණය (Efficiency & Material Care)</label>
+                                <span class="text-lg font-bold" id="efficiencyMaterialValue">5</span>
                             </div>
-                            <input type="range" id="disciplineScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('discipline')">
-                        </div>
-                        <div>
-                            <div class="flex justify-between mb-1">
-                                <label class="text-sm font-medium sinhala">ද්‍රව්‍ය පරිහරණය (Material Care)</label>
-                                <span class="text-lg font-bold" id="materialValue">5</span>
-                            </div>
-                            <input type="range" id="materialScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('material')">
-                        </div>
-                        <div>
-                            <div class="flex justify-between mb-1">
-                                <label class="text-sm font-medium sinhala">ආකල්ප (Attitude)</label>
-                                <span class="text-lg font-bold" id="attitudeValue">5</span>
-                            </div>
-                            <input type="range" id="attitudeScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('attitude')">
-                        </div>
-                        <div>
-                            <div class="flex justify-between mb-1">
-                                <label class="text-sm font-medium sinhala">නිපුණතාව (Skill)</label>
-                                <span class="text-lg font-bold" id="skillValue">5</span>
-                            </div>
-                            <input type="range" id="skillScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('skill')">
+                            <input type="range" id="efficiencyMaterialScore" min="1" max="10" value="5" class="w-full slider-track" oninput="updateSlider('efficiencyMaterial')">
                         </div>
                     </div>
 
@@ -5378,6 +5477,108 @@
                         <button type="submit" class="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg font-medium">Submit ✓</button>
                     </div>
                 </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sunday Weekly Sailor Evaluation Modal -->
+    <div id="sundayEvaluationModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-center justify-center p-4 modal-overlay overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col my-auto">
+            <div class="bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-900 text-white px-6 py-4 rounded-t-2xl flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-xl shadow-inner">
+                        📅
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-base text-white flex items-center gap-2">
+                            <span>Sunday Weekly Sailor Evaluation</span>
+                            <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/30">ඉරිදා සතිපතා ඇගයීම</span>
+                        </h2>
+                        <p class="text-xs text-teal-200 mt-0.5" id="sundayEvalWeekRangeText">Week: Monday – Sunday</p>
+                    </div>
+                </div>
+                <button onclick="closeModal('sundayEvaluationModal')" class="text-teal-200 hover:text-white text-lg">✕</button>
+            </div>
+
+            <div class="p-6 space-y-4 overflow-y-auto flex-1">
+                <!-- Rules & Guidance Banner -->
+                <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start gap-3">
+                    <span class="text-lg">ℹ️</span>
+                    <div class="text-xs text-emerald-900 leading-relaxed">
+                        <strong>Supervision Allocation Logic:</strong> Each sailor is assigned to the supervisor of the Work Order where he attended the <strong>most days this week</strong>. In case of equal attendance across projects, the <strong>highest priority Work Order</strong> (Critical &gt; High &gt; Medium &gt; Low) takes precedence.
+                    </div>
+                </div>
+
+                <!-- KPI Summary & Filter Bar -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] uppercase font-bold text-slate-400">Total Sailors</div>
+                            <div class="text-base font-extrabold text-slate-800" id="sundayEvalTotalCount">0</div>
+                        </div>
+                        <span class="text-xl">👥</span>
+                    </div>
+                    <div class="bg-emerald-50 p-3 rounded-xl border border-emerald-200 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] uppercase font-bold text-emerald-600">Evaluated</div>
+                            <div class="text-base font-extrabold text-emerald-800" id="sundayEvalDoneCount">0</div>
+                        </div>
+                        <span class="text-xl">✅</span>
+                    </div>
+                    <div class="bg-rose-50 p-3 rounded-xl border border-rose-200 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] uppercase font-bold text-rose-600">Pending</div>
+                            <div class="text-base font-extrabold text-rose-800" id="sundayEvalPendingCount">0</div>
+                        </div>
+                        <span class="text-xl">⏳</span>
+                    </div>
+                    <div class="bg-amber-50 p-3 rounded-xl border border-amber-200 flex items-center justify-between">
+                        <div>
+                            <div class="text-[10px] uppercase font-bold text-amber-600">Evaluation Mode</div>
+                            <div class="text-xs font-bold text-amber-900 mt-0.5">3 Combined Sliders</div>
+                        </div>
+                        <span class="text-xl">⭐</span>
+                    </div>
+                </div>
+
+                <!-- Search & Supervisor Filter -->
+                <div class="flex flex-col sm:flex-row gap-2.5 items-center justify-between">
+                    <div class="relative flex-1 w-full">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400 pointer-events-none text-xs">🔍</span>
+                        <input type="text" id="sundayEvalSearch" placeholder="Search sailor by name, official number, trade or work order..." 
+                            class="w-full pl-8 pr-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 text-xs font-medium"
+                            onkeyup="renderSundayEvaluationList()">
+                    </div>
+                    <div class="flex gap-2 w-full sm:w-auto">
+                        <select id="sundaySupervisorFilter" onchange="renderSundayEvaluationList()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 font-semibold w-full sm:w-auto">
+                            <option value="ALL">👥 All Supervisors</option>
+                        </select>
+                        <select id="sundayStatusFilter" onchange="renderSundayEvaluationList()" class="px-3 py-2 border border-slate-300 rounded-xl text-xs bg-white text-slate-700 font-medium w-full sm:w-auto">
+                            <option value="ALL">All Status</option>
+                            <option value="PENDING">⏳ Pending Only</option>
+                            <option value="DONE">✅ Evaluated Only</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Sailor Supervision Table / List -->
+                <div class="overflow-x-auto rounded-xl border border-slate-200">
+                    <table class="w-full text-xs text-left border-collapse" id="sundayEvalTable">
+                        <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-200 select-none">
+                            <tr>
+                                <th class="px-3.5 py-3 text-left">Sailor (Force)</th>
+                                <th class="px-3.5 py-3 text-left">Primary Work Order (Week)</th>
+                                <th class="px-3.5 py-3 text-center">Days Attended</th>
+                                <th class="px-3.5 py-3 text-left">Assigned Supervisor</th>
+                                <th class="px-3.5 py-3 text-center">Status / Score</th>
+                                <th class="px-3.5 py-3 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sundayEvalTableBody" class="divide-y divide-slate-100 bg-white">
+                            <!-- Populated dynamically via renderSundayEvaluationList() -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -5433,20 +5634,28 @@
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Unit</label>
-                        <select id="matUnit" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
-                            <option value="Nos">Nos</option>
-                            <option value="Kg">Kg</option>
-                            <option value="g">g (Gram)</option>
-                            <option value="lft">lft (Length Feet)</option>
-                            <option value="Ft">Ft</option>
-                            <option value="Meters">Meters</option>
-                            <option value="Ltr">Ltr</option>
-                            <option value="Bags">Bags</option>
-                            <option value="Sheets">Sheets</option>
-                            <option value="Cubic M">Cubic M</option>
-                            <option value="Pkts">Pkts</option>
-                            <option value="Pairs">Pairs</option>
-                        </select>
+                        <input type="text" list="matUnitDatalist" id="matUnit" placeholder="e.g. Nos" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <datalist id="matUnitDatalist">
+                            <option value="Nos">
+                            <option value="Kg">
+                            <option value="g">
+                            <option value="lft">
+                            <option value="Ft">
+                            <option value="Meters">
+                            <option value="Ltr">
+                            <option value="Bags">
+                            <option value="Cubes">
+                            <option value="Cubic M">
+                            <option value="Sqft">
+                            <option value="Sheets">
+                            <option value="Pkts">
+                            <option value="Pairs">
+                            <option value="Rolls">
+                            <option value="Tins">
+                            <option value="Bottles">
+                            <option value="Sets">
+                            <option value="Bundles">
+                        </datalist>
                     </div>
                     <div>
                         <label class="block text-sm font-medium text-slate-700 mb-1">Unit Price (Rs)</label>
@@ -6423,6 +6632,27 @@
             </div>
             <form onsubmit="saveEstimate(event)" class="p-6 space-y-4">
                 <input type="hidden" id="estId">
+                <datalist id="estUnitDatalist">
+                    <option value="Nos">
+                    <option value="Kg">
+                    <option value="g">
+                    <option value="Ltr">
+                    <option value="Bags">
+                    <option value="Cubes">
+                    <option value="Cubic M">
+                    <option value="Ft">
+                    <option value="lft">
+                    <option value="Meters">
+                    <option value="Sqft">
+                    <option value="Sheets">
+                    <option value="Pkts">
+                    <option value="Pairs">
+                    <option value="Rolls">
+                    <option value="Tins">
+                    <option value="Bottles">
+                    <option value="Sets">
+                    <option value="Bundles">
+                </datalist>
                 
                 <!-- Link to Incoming Job Minute (Directed to this Zone/Workshop) -->
                 <div id="estIncomingMinuteSelectWrapper" class="p-3 bg-teal-50 border border-teal-200 rounded-xl flex items-center justify-between gap-3 flex-wrap">
@@ -6757,7 +6987,7 @@
                         <span class="text-[10px] text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full font-semibold">Auto On-charges to Stock</span>
                     </div>
 
-                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                         <div class="sm:col-span-2">
                             <label class="block font-semibold text-slate-700 mb-1">Product Item *</label>
                             <select id="pcProductSelect" required onchange="handlePrecastProductSelect(this.value)" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-medium text-slate-800 bg-white">
@@ -6778,69 +7008,192 @@
                             <input type="text" id="pcCustomProduct" placeholder="Enter custom item name..." class="hidden w-full px-3 py-2 mt-2 border border-slate-300 rounded-lg">
                         </div>
                         <div>
-                            <label class="block font-semibold text-slate-700 mb-1">Quantity Produced *</label>
+                            <label class="block font-semibold text-slate-700 mb-1">Quantity *</label>
                             <div class="flex gap-1.5">
                                 <input type="number" id="pcQuantity" required step="1" min="1" placeholder="e.g. 500" oninput="autoCalculatePrecastRawMaterials()" class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-emerald-700">
-                                <input type="text" id="pcUnit" value="Nos" class="w-16 px-2 py-2 border border-slate-300 rounded-lg text-center font-semibold bg-slate-100">
+                                <input type="text" id="pcUnit" value="Nos" class="w-14 px-1.5 py-2 border border-slate-300 rounded-lg text-center font-semibold bg-slate-100 text-xs">
                             </div>
                         </div>
+                        <div>
+                            <label class="block font-semibold text-slate-700 mb-1">Unit Cost (Auto) *</label>
+                            <div class="flex items-center gap-1">
+                                <span class="text-[11px] text-slate-400 font-bold">Rs.</span>
+                                <input type="number" id="pcUnitCost" step="0.01" min="0" placeholder="0.00" class="w-full px-2.5 py-2 border border-indigo-300 rounded-lg font-bold text-indigo-800 bg-white shadow-xs">
+                            </div>
+                            <span id="pcTotalBatchCost" class="text-[9px] text-indigo-600 font-mono block mt-0.5 truncate">Total: Rs. 0.00</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Raw Materials Consumed (Deduction / Off-Charge) -->
+                <!-- Raw Materials Consumed & Variance Engine -->
                 <div class="p-4 rounded-xl border border-amber-200 bg-amber-50/40 space-y-3">
-                    <div class="flex items-center justify-between">
+                    <div class="flex items-center justify-between flex-wrap gap-2">
                         <span class="font-bold text-amber-950 flex items-center gap-1.5">
-                            <span>🧪</span> Raw Materials Consumed (Deductions)
+                            <span>🧪</span> Raw Materials: Estimated vs Actual Consumed
                         </span>
-                        <button type="button" onclick="autoCalculatePrecastRawMaterials(true)" class="text-[10px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-200 px-2 py-0.5 rounded font-bold transition-colors">
-                            ⚡ Auto-Estimate Ratio
-                        </button>
+                        <div class="flex items-center gap-2">
+                            <button type="button" onclick="autoCalculatePrecastRawMaterials(true)" class="text-[10px] text-amber-800 hover:text-amber-950 bg-amber-200/70 hover:bg-amber-200 px-2 py-0.5 rounded font-bold transition-colors">
+                                ⚡ Reset to Standard Ratio
+                            </button>
+                            <button type="button" onclick="copyEstimatedToActualRawMaterials()" class="text-[10px] text-indigo-700 hover:text-indigo-950 bg-indigo-100 hover:bg-indigo-200 px-2 py-0.5 rounded font-bold transition-colors">
+                                📋 Copy Est ➔ Actual
+                            </button>
+                        </div>
                     </div>
 
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-0.5">Cement 50kg (Bags)</label>
-                            <input type="number" id="pcMatCement" step="0.1" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
-                            <span id="pcStockCement" class="text-[10px] text-slate-400 font-mono">Stock: 0 Bags</span>
+                    <!-- Comparison Table -->
+                    <div class="overflow-x-auto rounded-xl border border-amber-200 bg-white shadow-2xs">
+                        <table class="w-full text-xs text-left border-collapse">
+                            <thead class="bg-amber-100/70 text-amber-950 font-bold border-b border-amber-200 select-none">
+                                <tr>
+                                    <th class="px-2.5 py-2 text-left">Material (Stock)</th>
+                                    <th class="px-1.5 py-2 text-center w-20" title="Mix Ratio per 100 units (editable)">Ratio /100</th>
+                                    <th class="px-1.5 py-2 text-center w-20">Est Qty</th>
+                                    <th class="px-1.5 py-2 text-center w-24">Actual Used *</th>
+                                    <th class="px-1.5 py-2 text-center w-20">Diff / Var</th>
+                                    <th class="px-2 py-2 text-right w-24">Actual Cost</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-amber-100 text-[11px]">
+                                <!-- Cement -->
+                                <tr class="hover:bg-amber-50/40 transition-colors">
+                                    <td class="px-2.5 py-1.5">
+                                        <div class="font-bold text-slate-800">Cement 50kg (Bags)</div>
+                                        <div class="text-[10px] text-slate-400 font-mono" id="pcStockCement">Stock: 0 Bags</div>
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcRatioCement" step="0.01" min="0" oninput="calculateEstimatedFromRatios()" class="w-full px-1 py-1 border border-slate-200 rounded text-center font-mono font-semibold bg-slate-50 text-[11px]" placeholder="1.5">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-slate-600 bg-slate-50/50" id="pcEstCement">0.0</td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcMatCement" step="0.1" min="0" placeholder="0" oninput="calculatePrecastBatchCost()" class="w-full px-1.5 py-1 border border-amber-300 rounded font-mono font-bold text-amber-950 text-center bg-amber-50/30 text-xs">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-[10px]" id="pcDiffCement">—</td>
+                                    <td class="px-2 py-1.5 text-right font-mono font-bold text-slate-700" id="pcCostCement">Rs. 0.00</td>
+                                </tr>
+
+                                <!-- Quarry Dust -->
+                                <tr class="hover:bg-amber-50/40 transition-colors">
+                                    <td class="px-2.5 py-1.5">
+                                        <div class="font-bold text-slate-800">Quarry Dust (Cubes)</div>
+                                        <div class="text-[10px] text-slate-400 font-mono" id="pcStockQuarryDust">Stock: 0 Cubes</div>
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcRatioQuarryDust" step="0.01" min="0" oninput="calculateEstimatedFromRatios()" class="w-full px-1 py-1 border border-slate-200 rounded text-center font-mono font-semibold bg-slate-50 text-[11px]" placeholder="0.12">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-slate-600 bg-slate-50/50" id="pcEstQuarryDust">0.00</td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcMatQuarryDust" step="0.01" min="0" placeholder="0" oninput="calculatePrecastBatchCost()" class="w-full px-1.5 py-1 border border-amber-300 rounded font-mono font-bold text-amber-950 text-center bg-amber-50/30 text-xs">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-[10px]" id="pcDiffQuarryDust">—</td>
+                                    <td class="px-2 py-1.5 text-right font-mono font-bold text-slate-700" id="pcCostQuarryDust">Rs. 0.00</td>
+                                </tr>
+
+                                <!-- 1/4" Chip Metal -->
+                                <tr class="hover:bg-amber-50/40 transition-colors">
+                                    <td class="px-2.5 py-1.5">
+                                        <div class="font-bold text-slate-800">1/4" Chip Metal (Cubes)</div>
+                                        <div class="text-[10px] text-slate-400 font-mono" id="pcStockChipMetal">Stock: 0 Cubes</div>
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcRatioChipMetal" step="0.01" min="0" oninput="calculateEstimatedFromRatios()" class="w-full px-1 py-1 border border-slate-200 rounded text-center font-mono font-semibold bg-slate-50 text-[11px]" placeholder="0.08">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-slate-600 bg-slate-50/50" id="pcEstChipMetal">0.00</td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcMatChipMetal" step="0.01" min="0" placeholder="0" oninput="calculatePrecastBatchCost()" class="w-full px-1.5 py-1 border border-amber-300 rounded font-mono font-bold text-amber-950 text-center bg-amber-50/30 text-xs">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-[10px]" id="pcDiffChipMetal">—</td>
+                                    <td class="px-2 py-1.5 text-right font-mono font-bold text-slate-700" id="pcCostChipMetal">Rs. 0.00</td>
+                                </tr>
+
+                                <!-- 3/4" Metal -->
+                                <tr class="hover:bg-amber-50/40 transition-colors">
+                                    <td class="px-2.5 py-1.5">
+                                        <div class="font-bold text-slate-800">3/4" Metal (Cubes)</div>
+                                        <div class="text-[10px] text-slate-400 font-mono" id="pcStockMetal34">Stock: 0 Cubes</div>
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcRatioMetal34" step="0.01" min="0" oninput="calculateEstimatedFromRatios()" class="w-full px-1 py-1 border border-slate-200 rounded text-center font-mono font-semibold bg-slate-50 text-[11px]" placeholder="0">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-slate-600 bg-slate-50/50" id="pcEstMetal34">0.00</td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcMatMetal34" step="0.01" min="0" placeholder="0" oninput="calculatePrecastBatchCost()" class="w-full px-1.5 py-1 border border-amber-300 rounded font-mono font-bold text-amber-950 text-center bg-amber-50/30 text-xs">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-[10px]" id="pcDiffMetal34">—</td>
+                                    <td class="px-2 py-1.5 text-right font-mono font-bold text-slate-700" id="pcCostMetal34">Rs. 0.00</td>
+                                </tr>
+
+                                <!-- TOR Steel -->
+                                <tr class="hover:bg-amber-50/40 transition-colors">
+                                    <td class="px-2.5 py-1.5">
+                                        <div class="font-bold text-slate-800">TOR Steel (kg / lft)</div>
+                                        <div class="text-[10px] text-slate-400 font-mono" id="pcStockTorSteel">Stock: 0 kg</div>
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcRatioTorSteel" step="0.01" min="0" oninput="calculateEstimatedFromRatios()" class="w-full px-1 py-1 border border-slate-200 rounded text-center font-mono font-semibold bg-slate-50 text-[11px]" placeholder="0">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-slate-600 bg-slate-50/50" id="pcEstTorSteel">0.0</td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcMatTorSteel" step="0.1" min="0" placeholder="0" oninput="calculatePrecastBatchCost()" class="w-full px-1.5 py-1 border border-amber-300 rounded font-mono font-bold text-amber-950 text-center bg-amber-50/30 text-xs">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-[10px]" id="pcDiffTorSteel">—</td>
+                                    <td class="px-2 py-1.5 text-right font-mono font-bold text-slate-700" id="pcCostTorSteel">Rs. 0.00</td>
+                                </tr>
+
+                                <!-- Admixture -->
+                                <tr class="hover:bg-amber-50/40 transition-colors">
+                                    <td class="px-2.5 py-1.5">
+                                        <div class="font-bold text-slate-800">Admixture / Chem (L)</div>
+                                        <div class="text-[10px] text-slate-400 font-mono">Chemical Additive</div>
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcRatioAdmixture" step="0.01" min="0" oninput="calculateEstimatedFromRatios()" class="w-full px-1 py-1 border border-slate-200 rounded text-center font-mono font-semibold bg-slate-50 text-[11px]" placeholder="0">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-slate-600 bg-slate-50/50" id="pcEstAdmixture">0.0</td>
+                                    <td class="px-1.5 py-1.5 text-center">
+                                        <input type="number" id="pcMatAdmixture" step="0.1" min="0" placeholder="0" oninput="calculatePrecastBatchCost()" class="w-full px-1.5 py-1 border border-amber-300 rounded font-mono font-bold text-amber-950 text-center bg-amber-50/30 text-xs">
+                                    </td>
+                                    <td class="px-1.5 py-1.5 text-center font-mono font-bold text-[10px]" id="pcDiffAdmixture">—</td>
+                                    <td class="px-2 py-1.5 text-right font-mono font-bold text-slate-700" id="pcCostAdmixture">Rs. 0.00</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Cost Summary Comparison Bar -->
+                    <div class="flex items-center justify-between p-2.5 bg-amber-100/60 rounded-xl text-xs flex-wrap gap-2">
+                        <div class="flex items-center gap-3">
+                            <span>Est Total: <strong class="text-slate-700 font-mono" id="pcEstTotalCost">Rs. 0.00</strong></span>
+                            <span>Actual Total: <strong class="text-amber-950 font-mono font-black" id="pcActualTotalCost">Rs. 0.00</strong></span>
                         </div>
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-0.5">Quarry Dust (Cubes)</label>
-                            <input type="number" id="pcMatQuarryDust" step="0.01" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
-                            <span id="pcStockQuarryDust" class="text-[10px] text-slate-400 font-mono">Stock: 0 Cubes</span>
-                        </div>
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-0.5">1/4" Chip Metal (Cubes)</label>
-                            <input type="number" id="pcMatChipMetal" step="0.01" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
-                            <span id="pcStockChipMetal" class="text-[10px] text-slate-400 font-mono">Stock: 0 Cubes</span>
-                        </div>
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-0.5">3/4" Metal (Cubes)</label>
-                            <input type="number" id="pcMatMetal34" step="0.01" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
-                            <span id="pcStockMetal34" class="text-[10px] text-slate-400 font-mono">Stock: 0 Cubes</span>
-                        </div>
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-0.5">TOR Steel (kg / lft)</label>
-                            <input type="number" id="pcMatTorSteel" step="0.1" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
-                            <span id="pcStockTorSteel" class="text-[10px] text-slate-400 font-mono">Stock: 0 kg</span>
-                        </div>
-                        <div>
-                            <label class="block font-semibold text-slate-700 mb-0.5">Admixture / Chem (L)</label>
-                            <input type="number" id="pcMatAdmixture" step="0.1" min="0" placeholder="0" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white">
-                            <span class="text-[10px] text-slate-400 font-mono">Chemical Additive</span>
+                        <div id="pcCostVarianceBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                            Variance: 0.0%
                         </div>
                     </div>
                 </div>
 
-                <!-- Supervisor & Remarks -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Zone Produced, Supervisor & Remarks -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Production Supervisor / Artificer</label>
-                        <input type="text" id="pcSupervisor" placeholder="Rank & Name of In-Charge" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <label class="block font-semibold text-slate-700 mb-1">Produced Zone / Yard *</label>
+                        <select id="pcZone" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-bold text-slate-800 bg-white">
+                            <option value="G-Zone">G-Zone (Pre-Cast Yard)</option>
+                            <option value="A-Zone">A-Zone Workshop</option>
+                            <option value="B-Zone">B-Zone Workshop</option>
+                            <option value="C-Zone">C-Zone Workshop</option>
+                            <option value="D-Zone">D-Zone Workshop</option>
+                            <option value="E-Zone">E-Zone Workshop</option>
+                            <option value="FH-Zone">FH-Zone Workshop</option>
+                        </select>
                     </div>
                     <div>
-                        <label class="block font-semibold text-slate-700 mb-1">Remarks / Location Produced</label>
-                        <input type="text" id="pcRemarks" placeholder="e.g. Yard Casting Bed No 02" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
+                        <label class="block font-semibold text-slate-700 mb-1">Supervisor (Regular Sailor) *</label>
+                        <input list="pcSupervisorDatalist" id="pcSupervisor" required placeholder="Type or select Regular Sailor..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-slate-800 bg-white">
+                        <datalist id="pcSupervisorDatalist"></datalist>
+                    </div>
+                    <div>
+                        <label class="block font-semibold text-slate-700 mb-1">Remarks / Bed Location</label>
+                        <input type="text" id="pcRemarks" placeholder="e.g. Casting Bed No 02" class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                     </div>
                 </div>
 
@@ -7395,9 +7748,15 @@
                                 <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Contact No</span><span id="profDetContact" class="font-bold text-slate-800 text-right font-mono">—</span></div>
                                 <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Trade</span><span id="profDetTrade" class="font-bold text-slate-800 text-right">—</span></div>
                                 <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Roll</span><span id="profDetRoll" class="font-bold text-slate-800 text-right">—</span></div>
-                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">Blood Group</span><span id="profDetBlood" class="font-bold text-slate-800 text-right">—</span></div>
-                                <div class="py-2 flex justify-between gap-4"><span class="text-slate-400 font-medium">NOK Name</span><span id="profDetNok" class="font-bold text-slate-800 text-right uppercase">—</span></div>
-                                <div class="py-2.5 flex flex-col gap-1">
+                                <div class="py-2 flex justify-between items-center gap-2">
+                                    <span class="text-slate-400 font-medium flex-shrink-0">NOK Name</span>
+                                    <div class="flex items-center gap-2 text-right min-w-0">
+                                        <span id="profDetNok" class="font-bold text-slate-800 text-right uppercase truncate">—</span>
+                                        <button type="button" id="btnRevealNok" onclick="toggleNokConfidentiality()" class="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-700 border border-slate-200 transition-all flex items-center gap-1 cursor-pointer flex-shrink-0 shadow-xs" title="Master Password required to reveal">
+                                            <span id="iconRevealNok">🔒</span> <span id="lblRevealNok">Reveal</span>
+                                        </button>
+                                    </div>
+                                </div>
                                     <span class="text-slate-400 font-medium">Special Skill</span>
                                     <p id="profDetSkill" class="font-semibold text-slate-800 text-[11px] leading-relaxed uppercase bg-slate-50 p-2.5 rounded-lg border border-slate-200/60">—</p>
                                 </div>
