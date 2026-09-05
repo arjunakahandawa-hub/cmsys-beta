@@ -1386,44 +1386,24 @@ function computeYesterdayJobs() {
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today; 
   
-  // 1. Get all work orders and job cards belonging to the current zone
-  const currentZoneWOIds = new Set([
-      ...(store.workOrders || []).filter(w => String(w.zone_id) === String(store.currentZone)).map(w => String(w.id || w._fbKey)),
-      ...(store.jobCards || []).filter(j => String(j.zone_id) === String(store.currentZone)).map(j => String(j.id || j._fbKey))
-  ]);
-
-  // 2. Find all past allocations for these current zone work orders
-  const zoneAllocations = (store.dailyAllocations || []).filter(a => 
-      currentZoneWOIds.has(String(a.work_order_id))
-  );
-
-  // 3. Find the most recent date with the SAME Rooting Type
-  let targetRootingType = "Normal Rooting";
-  if (typeof getCurrentRootingType === 'function') {
-      targetRootingType = getCurrentRootingType(new Date(dateVal + "T12:00:00"));
-  }
-
-  const pastDates = [...new Set(zoneAllocations.map((a) => a.date))]
-    .filter((d) => {
-        if (d >= dateVal) return false;
-        let dRootingType = "Normal Rooting";
-        if (typeof getCurrentRootingType === 'function') {
-            dRootingType = getCurrentRootingType(new Date(d + "T12:00:00"));
-        }
-        return dRootingType === targetRootingType;
-    })
+  // Find the most recent date with daily allocations before dateVal
+  const pastDates = [...new Set((store.dailyAllocations || []).map((a) => a.date))]
+    .filter((d) => d < dateVal)
     .sort((a, b) => b.localeCompare(a));
   const lastActiveDate = pastDates[0];
 
-  let assignedCount = 0;
-  // 4. Populate yesterdayJob ONLY for sailors who worked on current zone WOs on that date
   store.sailors.forEach((s) => {
     s.yesterdayJob = null;
     if (lastActiveDate && store.dailyAllocationsMap) {
-      const alloc = store.dailyAllocationsMap[`${lastActiveDate}_${sanitizeFbKey(s.id)}`] || store.dailyAllocationsMap[`${lastActiveDate}_${s.id}`];
-      if (alloc && currentZoneWOIds.has(String(alloc.work_order_id))) {
+      const sId = s.id ? sanitizeFbKey(s.id) : "";
+      const sFb = s._fbKey ? sanitizeFbKey(s._fbKey) : "";
+      const alloc =
+        (sId && store.dailyAllocationsMap[`${lastActiveDate}_${sId}`]) ||
+        (sFb && store.dailyAllocationsMap[`${lastActiveDate}_${sFb}`]) ||
+        (s.id && store.dailyAllocationsMap[`${lastActiveDate}_${s.id}`]) ||
+        (s._fbKey && store.dailyAllocationsMap[`${lastActiveDate}_${s._fbKey}`]);
+      if (alloc && alloc.work_order_id) {
         s.yesterdayJob = alloc.work_order_id;
-        assignedCount++;
       }
     }
   });
@@ -2409,8 +2389,23 @@ function renderAvailableSailors() {
   });
 
   const allActivePool = allSailors.filter(s => isSailorAvailableForWork(s, dateVal));
-  const zoneTeamPool = allSailors.filter(s => s.isZoneTeam && s.zone_assigned === store.currentZone && isSailorAvailableForWork(s, dateVal));
-  const continuePool = allSailors.filter(s => s.yesterdayJob !== null && isSailorAvailableForWork(s, dateVal));
+  const zoneTeamPool = allSailors.filter(s => s.isZoneTeam && isZoneMatch(s.zone_assigned, store.currentZone) && isSailorAvailableForWork(s, dateVal));
+  const currentZoneWoSet = new Set(
+    (store.workOrders || [])
+      .filter((w) => isZoneMatch(w.zone_id, store.currentZone) || (w.assign_type && isZoneMatch(w.description, store.currentZone)))
+      .map((w) => String(w.id || w._fbKey))
+      .concat(
+        (store.jobCards || [])
+          .filter((j) => isZoneMatch(j.zone_id, store.currentZone))
+          .map((j) => String(j.id || j._fbKey))
+      )
+  );
+  const continuePool = allSailors.filter(
+    (s) =>
+      s.yesterdayJob !== null &&
+      currentZoneWoSet.has(String(s.yesterdayJob)) &&
+      isSailorAvailableForWork(s, dateVal)
+  );
 
   // Update Status Pill Badges
   const countAvailEl = document.getElementById("countFilterAvailable");
@@ -2976,6 +2971,25 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
   // If historical date and no explicit daily snapshot found, fall back to wo.assigned
   if (!isToday && assignedKeys.size === 0 && !hasDailyRecordForDate && (wo.status === "Active" || wo.status === "Pending")) {
     extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
+  }
+
+  // Include continuation sailors who worked on this active work order on the last active date and are available today
+  if (isToday && (wo.status === "Active" || wo.status === "Pending")) {
+    (store.sailors || []).forEach((s) => {
+      if (!s) return;
+      if (
+        s.yesterdayJob &&
+        (String(s.yesterdayJob) === woIdStr ||
+          (woFbKeyStr && String(s.yesterdayJob) === woFbKeyStr))
+      ) {
+        const isAvail = typeof isSailorAvailableForWork === "function"
+          ? isSailorAvailableForWork(s, targetDate)
+          : true;
+        if (isAvail) {
+          assignedKeys.add(String(s.id || s._fbKey));
+        }
+      }
+    });
   }
 
   const sailors = (store.sailors || []).filter((s) => {
@@ -3591,24 +3605,28 @@ function updateCounters() {
   // Only include assignments from work orders that have been explicitly committed on dateVal
   const activeWos = activeWo.filter(wo => isWorkOrderActiveOnDate(wo, dateVal) && isWorkOrderCommittedToday(wo, dateVal));
   activeWos.forEach((wo) => {
-      if (wo.assigned && Array.isArray(wo.assigned)) {
+      const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
+      sailors.forEach((s) => {
+          const sid = String(s.id || s._fbKey);
           if (isNA(wo.description) || isNA(wo.reference_no)) {
-              wo.assigned.forEach((id) => naIds.add(String(id)));
+              naIds.add(sid);
           } else {
-              wo.assigned.forEach((id) => assignedIds.add(String(id)));
+              assignedIds.add(sid);
           }
-      }
+      });
   });
 
   const activeJcs = activeJc.filter(jc => isWorkOrderActiveOnDate(jc, dateVal) && isWorkOrderCommittedToday(jc, dateVal));
   activeJcs.forEach((jc) => {
-      if (jc.assigned && Array.isArray(jc.assigned)) {
+      const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
+      sailors.forEach((s) => {
+          const sid = String(s.id || s._fbKey);
           if (isNA(jc.description) || isNA(jc.title)) {
-              jc.assigned.forEach((id) => naIds.add(String(id)));
+              naIds.add(sid);
           } else {
-              jc.assigned.forEach((id) => assignedIds.add(String(id)));
+              assignedIds.add(sid);
           }
-      }
+      });
   });
   const longTerm = getLongTermAllocations();
   const longTermIds = new Set();
@@ -21358,8 +21376,19 @@ function renderDailyDetailsSpecialView() {
   let tableRows = "";
   let hasAllocations = false;
   zones.forEach((z) => {
-    const wos = store.workOrders.filter(
-      (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal)
+    const isZoneMatchLocal = (zoneId) => {
+      if (!zoneId) return false;
+      if (isAdminStaffDuties(z.id)) return isAdminStaffDuties(zoneId);
+      return isZoneMatch(zoneId, z.id) || isZoneMatch(zoneId, z.name);
+    };
+
+    const wos = (store.workOrders || []).filter(
+      (wo) =>
+        wo &&
+        wo.status !== "Cancelled" &&
+        (isZoneMatchLocal(wo.zone_id || wo.zone) ||
+          (wo.assign_type && isZoneMatchLocal(wo.description))) &&
+        isWorkOrderActiveOnDate(wo, dateVal)
     );
     wos.sort((a, b) => {
       const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
@@ -21368,30 +21397,21 @@ function renderDailyDetailsSpecialView() {
       if (!aInCharge && bInCharge) return 1;
       return 0;
     });
+
+    const jcs = (store.jobCards || []).filter(
+      (jc) =>
+        jc &&
+        jc.status !== "Cancelled" &&
+        isZoneMatchLocal(jc.zone_id || jc.zone) &&
+        isWorkOrderActiveOnDate(jc, dateVal)
+    );
+
+    const allZoneTasks = [...wos, ...jcs];
+
     // Find if this zone has any active allocations and collect unique sailors
     const zoneSailorMap = new Map();
-    wos.forEach((wo) => {
-      let sailorsInWo = [];
-      if (dateVal === today) {
-        const assignedIds = (wo.assigned || []).map(String);
-        sailorsInWo = store.sailors.filter(
-          (s) =>
-            assignedIds.includes(String(s.id)) ||
-            assignedIds.includes(String(s._fbKey)),
-        );
-      } else {
-        const assignedIds = (store.dailyAllocations || [])
-          .filter(
-            (a) =>
-              a.date === dateVal && String(a.work_order_id) === String(wo.id),
-          )
-          .map((a) => String(a.sailor_id));
-        sailorsInWo = store.sailors.filter(
-          (s) =>
-            assignedIds.includes(String(s.id)) ||
-            assignedIds.includes(String(s._fbKey)),
-        );
-      }
+    allZoneTasks.forEach((wo) => {
+      const { sailors: sailorsInWo } = getWorkOrderAssignedSailors(wo, dateVal);
       sailorsInWo.forEach((s) => {
         const key = String(s.id || s._fbKey);
         if (!zoneSailorMap.has(key)) zoneSailorMap.set(key, s);
@@ -21450,25 +21470,8 @@ function renderDailyDetailsSpecialView() {
                     </td>
                 </tr>
             `;
-      wos.forEach((wo) => {
-        let assignedSailors = [];
-        let assignedIds = [];
-        if (dateVal === today) {
-          const activeAssignedIds = (wo.assigned || []).map(String);
-          const committedIds = (store.dailyAllocations || [])
-            .filter((a) => a.date === dateVal && String(a.work_order_id) === String(wo.id))
-            .map((a) => String(a.sailor_id));
-          assignedIds = [...new Set([...activeAssignedIds, ...committedIds])];
-        } else {
-          assignedIds = (store.dailyAllocations || [])
-            .filter((a) => a.date === dateVal && String(a.work_order_id) === String(wo.id))
-            .map((a) => String(a.sailor_id));
-        }
-        assignedSailors = store.sailors.filter(
-          (s) =>
-            assignedIds.includes(String(s.id)) ||
-            assignedIds.includes(String(s._fbKey)),
-        );
+      allZoneTasks.forEach((wo) => {
+        const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
         if (assignedSailors.length > 0) {
           // Add Work Order separator row
           tableRows += `
@@ -21795,9 +21798,13 @@ function renderSummaryView() {
     }
 
     // Fallback: create subsection on the fly if it doesn't exist
-    const normKey = (zoneId || "ZONE").trim();
+    const matchedStdZone = (store.zones || []).find(z => isZoneMatch(z.id, zoneId) || isZoneMatch(z.name, zoneId));
+    const normKey = matchedStdZone ? matchedStdZone.id : (zoneId || "ZONE").trim();
+    if (sections.zones.subsections[normKey]) {
+      return sections.zones.subsections[normKey];
+    }
     sections.zones.subsections[normKey] = {
-      title: formatZoneDisplayName(normKey).toUpperCase(),
+      title: formatZoneDisplayName(matchedStdZone ? matchedStdZone.name : normKey).toUpperCase(),
       rows: {},
     };
     return sections.zones.subsections[normKey];
@@ -21809,29 +21816,10 @@ function renderSummaryView() {
   const allTasks = [...allWorkOrders, ...allJobCards].filter((t) => isWorkOrderActiveOnDate(t, dateVal));
 
   allTasks.forEach((wo) => {
-    // 1. Gather all assigned sailor IDs for this task on dateVal
-    const assignedIdsSet = new Set();
-    (wo.assigned || []).forEach((id) => assignedIdsSet.add(String(id)));
-
-    (store.dailyAllocations || []).forEach((a) => {
-      if (
-        a.date === dateVal &&
-        (String(a.work_order_id) === String(wo.id) ||
-          (wo._fbKey && String(a.work_order_id) === String(wo._fbKey)) ||
-          (wo.description && a.description && a.description.trim().toLowerCase() === wo.description.trim().toLowerCase()))
-      ) {
-        assignedIdsSet.add(String(a.sailor_id));
-      }
-    });
-
-    const assignedSailors = (store.sailors || []).filter(
-      (s) =>
-        assignedIdsSet.has(String(s.id)) ||
-        (s._fbKey && assignedIdsSet.has(String(s._fbKey))),
-    );
+    const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
 
     if (assignedSailors.length > 0) {
-      const section = getSectionForZone(wo.zone_id);
+      const section = getSectionForZone(wo.zone_id || wo.zone);
       const rowKey = (wo.description || "UNNAMED DUTY").toUpperCase().trim();
       if (!section.rows[rowKey]) {
         section.rows[rowKey] = createRowMatrix(rowKey);
