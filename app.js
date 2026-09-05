@@ -14291,38 +14291,122 @@ function renderZoneSelectors() {
       };
 
       const assignedSailorKeys = new Set();
+
+      const addSailorKey = (k) => {
+        if (!k) return;
+        const kStr = String(k).trim();
+        if (!kStr) return;
+        const s = (store.sailors || []).find(
+          (sailor) =>
+            String(sailor.id) === kStr ||
+            String(sailor._fbKey) === kStr ||
+            String(sailor.official_number) === kStr ||
+            String(sailor.service_no) === kStr
+        );
+        if (s) {
+          assignedSailorKeys.add(String(s.id || s._fbKey));
+        } else {
+          assignedSailorKeys.add(kStr);
+        }
+      };
+
+      const extractAssignedKeys = (arr) => {
+        if (!arr) return;
+        if (Array.isArray(arr)) {
+          arr.forEach((item) => {
+            if (!item) return;
+            if (typeof item === "object") {
+              addSailorKey(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no);
+            } else {
+              addSailorKey(item);
+            }
+          });
+        } else if (typeof arr === "object") {
+          Object.keys(arr).forEach((k) => addSailorKey(k));
+          Object.values(arr).forEach((v) => {
+            if (!v) return;
+            if (typeof v === "object") {
+              addSailorKey(v.id || v._fbKey || v.sailor_id || v.official_number || v.service_no);
+            } else {
+              addSailorKey(v);
+            }
+          });
+        }
+      };
       
+      // 1. Work Orders in this Zone
       const activeWos = (store.workOrders || []).filter(
-        (wo) => isZoneMatchLocal(wo.zone_id) && isWorkOrderActiveOnDate(wo, dateVal),
+        (wo) =>
+          isZoneMatchLocal(wo.zone_id || wo.zone || wo.zoneId || wo.zone_name) &&
+          (isWorkOrderActiveOnDate(wo, dateVal) || (dateVal === today && wo.assigned && (Array.isArray(wo.assigned) ? wo.assigned.length > 0 : Object.keys(wo.assigned).length > 0)))
       );
       activeWos.forEach((wo) => {
         const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
-        sailors.forEach((s) => {
-          assignedSailorKeys.add(String(s.id || s._fbKey));
-        });
+        sailors.forEach((s) => addSailorKey(s.id || s._fbKey));
+        if (dateVal === today) {
+          extractAssignedKeys(wo.assigned);
+        }
       });
       
+      // 2. Job Cards in this Zone
       const activeJcs = (store.jobCards || []).filter(
-        (jc) => isZoneMatchLocal(jc.zone_id) && isWorkOrderActiveOnDate(jc, dateVal),
+        (jc) =>
+          isZoneMatchLocal(jc.zone_id || jc.zone || jc.zoneId || jc.zone_name) &&
+          (isWorkOrderActiveOnDate(jc, dateVal) || (dateVal === today && jc.assigned && (Array.isArray(jc.assigned) ? jc.assigned.length > 0 : Object.keys(jc.assigned).length > 0)))
       );
       activeJcs.forEach((jc) => {
         const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
-        sailors.forEach((s) => {
-          assignedSailorKeys.add(String(s.id || s._fbKey));
-        });
+        sailors.forEach((s) => addSailorKey(s.id || s._fbKey));
+        if (dateVal === today) {
+          extractAssignedKeys(jc.assigned);
+        }
       }); 
+
+      // 3. Daily Allocations for this date matching this zone
+      (store.dailyAllocations || []).forEach((alloc) => {
+        if (!alloc || alloc.date !== dateVal || alloc.status === "Cancelled") return;
+        const sid = alloc.sailor_id || alloc.sailorId || "";
+        if (!sid) return;
+
+        if (isZoneMatchLocal(alloc.zone_id || alloc.zone || alloc.zone_name)) {
+          addSailorKey(sid);
+        } else if (alloc.work_order_id) {
+          const matchedWo = (store.workOrders || []).find(
+            (w) =>
+              String(w.id) === String(alloc.work_order_id) ||
+              String(w._fbKey) === String(alloc.work_order_id) ||
+              (w.description && alloc.description && w.description.trim().toLowerCase() === alloc.description.trim().toLowerCase())
+          );
+          const matchedJc = (store.jobCards || []).find(
+            (j) =>
+              String(j.id) === String(alloc.work_order_id) ||
+              String(j._fbKey) === String(alloc.work_order_id) ||
+              (j.description && alloc.description && j.description.trim().toLowerCase() === alloc.description.trim().toLowerCase())
+          );
+          if (
+            (matchedWo && isZoneMatchLocal(matchedWo.zone_id || matchedWo.zone || matchedWo.zoneId || matchedWo.zone_name)) ||
+            (matchedJc && isZoneMatchLocal(matchedJc.zone_id || matchedJc.zone || matchedJc.zoneId || matchedJc.zone_name))
+          ) {
+            addSailorKey(sid);
+          }
+        }
+      });
       
       activeCount = assignedSailorKeys.size;
       let evalCount = 0;
       
       assignedSailorKeys.forEach((id) => {
-          const s = (store.sailors || []).find(sailor => String(sailor.id) === String(id) || String(sailor._fbKey) === String(id));
-          if (s && s.evaluated === true) {
-              evalCount++;
-          }
+        const s = (store.sailors || []).find(
+          (sailor) => String(sailor.id) === String(id) || String(sailor._fbKey) === String(id)
+        );
+        const allocKey = `${dateVal}_${sanitizeFbKey(id)}`;
+        const alloc = store.dailyAllocationsMap ? store.dailyAllocationsMap[allocKey] : null;
+        if ((s && s.evaluated === true) || (alloc && alloc.evaluated === true)) {
+          evalCount++;
+        }
       });
       
-      pendingEvalCount = activeCount - evalCount;
+      pendingEvalCount = Math.max(0, activeCount - evalCount);
 
       let displayStr = z.name;
       if (activeCount > 0) {
