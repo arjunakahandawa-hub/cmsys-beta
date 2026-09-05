@@ -1440,6 +1440,7 @@ function refreshCurrentView() {
 function refreshCurrentViewImmediately() {
   computeYesterdayJobs();
   updateCounters();
+  renderZoneSelectors();
   
   const view = store.currentView || "dashboard";
   switch (view) {
