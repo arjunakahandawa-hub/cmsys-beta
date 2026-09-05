@@ -14312,7 +14312,7 @@ function renderZoneSelectors() {
 
       const addSailor = (s) => {
         if (!s) return;
-        const key = String(s.id || s._fbKey);
+        const key = String(s.id || s._fbKey || s.official_number || s.service_no || s.name || "");
         if (key && !zoneSailorMap.has(key)) {
           zoneSailorMap.set(key, s);
         }
@@ -14320,14 +14320,21 @@ function renderZoneSelectors() {
 
       const addSailorById = (id) => {
         if (!id) return;
+        if (typeof id === "object") {
+          addSailor(id);
+          return;
+        }
         const idStr = String(id).trim();
         if (!idStr) return;
+        const idLower = idStr.toLowerCase();
         const s = (store.sailors || []).find(
           (sailor) =>
-            String(sailor.id) === idStr ||
-            String(sailor._fbKey) === idStr ||
-            String(sailor.official_number) === idStr ||
-            String(sailor.service_no) === idStr
+            sailor &&
+            (String(sailor.id).trim().toLowerCase() === idLower ||
+              (sailor._fbKey && String(sailor._fbKey).trim().toLowerCase() === idLower) ||
+              (sailor.official_number && String(sailor.official_number).trim().toLowerCase() === idLower) ||
+              (sailor.service_no && String(sailor.service_no).trim().toLowerCase() === idLower) ||
+              (sailor.name && String(sailor.name).trim().toLowerCase() === idLower))
         );
         if (s) {
           addSailor(s);
@@ -14336,50 +14343,87 @@ function renderZoneSelectors() {
 
       // 1. Work Orders (Projects, Jobs, Tasks, Quick Assignments)
       (store.workOrders || []).forEach((wo) => {
+        if (!wo || wo.status === "Cancelled") return;
         const zoneField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
-        if (isZoneMatchLocal(zoneField)) {
-          const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
-          sailors.forEach(addSailor);
+        const isMatchedZone = isZoneMatchLocal(zoneField) || (wo.assign_type && isZoneMatchLocal(wo.description));
+        if (isMatchedZone) {
+          const isQuickAssign = Boolean(wo.assign_type);
+          const isActive = dateVal === today || isWorkOrderActiveOnDate(wo, dateVal) || isQuickAssign;
+          if (isActive) {
+            const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
+            sailors.forEach(addSailor);
 
-          if (dateVal === today || isWorkOrderActiveOnDate(wo, dateVal)) {
             const assignedList = Array.isArray(wo.assigned)
               ? wo.assigned
               : typeof wo.assigned === "object" && wo.assigned
               ? Object.values(wo.assigned)
+              : typeof wo.assigned === "string"
+              ? wo.assigned.split(",")
               : [];
             assignedList.forEach((item) => {
               if (item && typeof item === "object") {
-                addSailorById(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no);
+                addSailorById(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no || item.name);
               } else if (item) {
                 addSailorById(item);
               }
             });
+
+            if (wo.incharge) addSailorById(wo.incharge);
             if (wo.incharge_id) addSailorById(wo.incharge_id);
+            if (wo.inchargeId) addSailorById(wo.inchargeId);
+            if (wo.incharge_name) addSailorById(wo.incharge_name);
+
+            if (wo.supervisor) addSailorById(wo.supervisor);
             if (wo.supervisor_id) addSailorById(wo.supervisor_id);
+            if (wo.supervisorId) addSailorById(wo.supervisorId);
+            if (wo.supervisor_name) addSailorById(wo.supervisor_name);
+
+            if (wo.project_artificer) addSailorById(wo.project_artificer);
+            if (wo.artificer) addSailorById(wo.artificer);
+            if (wo.artificer_id) addSailorById(wo.artificer_id);
+            if (wo.artificer_name) addSailorById(wo.artificer_name);
+
+            if (wo.driver) addSailorById(wo.driver);
+            if (wo.driver_id) addSailorById(wo.driver_id);
+            if (wo.driverId) addSailorById(wo.driverId);
+            if (wo.driver_name) addSailorById(wo.driver_name);
+            if (wo.driverServiceNo) addSailorById(wo.driverServiceNo);
           }
         }
       });
 
       // 2. Job Cards
       (store.jobCards || []).forEach((jc) => {
+        if (!jc || jc.status === "Cancelled") return;
         const zoneField = jc.zone_id || jc.zone || jc.zoneId || jc.zone_name || jc.location_zone || jc.location;
         if (isZoneMatchLocal(zoneField)) {
-          const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
-          sailors.forEach(addSailor);
-
           if (dateVal === today || isWorkOrderActiveOnDate(jc, dateVal)) {
+            const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
+            sailors.forEach(addSailor);
+
             const assignedList = Array.isArray(jc.assigned)
               ? jc.assigned
               : typeof jc.assigned === "object" && jc.assigned
               ? Object.values(jc.assigned)
+              : typeof jc.assigned === "string"
+              ? jc.assigned.split(",")
               : [];
             assignedList.forEach((item) => {
               if (item && typeof item === "object") {
-                addSailorById(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no);
+                addSailorById(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no || item.name);
               } else if (item) {
                 addSailorById(item);
               }
             });
+
+            if (jc.incharge) addSailorById(jc.incharge);
+            if (jc.incharge_id) addSailorById(jc.incharge_id);
+            if (jc.supervisor) addSailorById(jc.supervisor);
+            if (jc.supervisor_id) addSailorById(jc.supervisor_id);
+            if (jc.project_artificer) addSailorById(jc.project_artificer);
+            if (jc.artificer) addSailorById(jc.artificer);
+            if (jc.driver) addSailorById(jc.driver);
+            if (jc.driver_id) addSailorById(jc.driver_id);
           }
         }
       });
@@ -14387,7 +14431,7 @@ function renderZoneSelectors() {
       // 3. Daily Allocations recorded for dateVal
       (store.dailyAllocations || []).forEach((alloc) => {
         if (!alloc || alloc.date !== dateVal || alloc.status === "Cancelled") return;
-        const sid = alloc.sailor_id || alloc.sailorId || alloc.official_number || "";
+        const sid = alloc.sailor_id || alloc.sailorId || alloc.official_number || alloc.offNo || "";
         if (!sid) return;
 
         if (isZoneMatchLocal(alloc.zone_id || alloc.zone || alloc.zone_name || alloc.location)) {
@@ -14449,20 +14493,41 @@ function renderZoneSelectors() {
           if (inc.subServiceNo) addSailorById(inc.subServiceNo);
           if (inc.subName) addSailorById(inc.subName);
           if (inc.woInchargeId) addSailorById(inc.woInchargeId);
+          if (inc.woInchargeName) addSailorById(inc.woInchargeName);
           if (inc.woArtificerId) addSailorById(inc.woArtificerId);
+          if (inc.woArtificerName) addSailorById(inc.woArtificerName);
           if (inc.woSupervisorId) addSailorById(inc.woSupervisorId);
+          if (inc.woSupervisorName) addSailorById(inc.woSupervisorName);
           if (inc.driverId) addSailorById(inc.driverId);
           if (inc.driverServiceNo) addSailorById(inc.driverServiceNo);
+          if (inc.driverName) addSailorById(inc.driverName);
           
-          if (Array.isArray(inc.supervisors)) {
-            inc.supervisors.forEach((s) => addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name));
-          }
-          if (Array.isArray(inc.officers)) {
-            inc.officers.forEach((s) => addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name));
-          }
-          if (Array.isArray(inc.zoneTeam)) {
-            inc.zoneTeam.forEach((s) => addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name));
-          }
+          const supList = Array.isArray(inc.supervisors)
+            ? inc.supervisors
+            : typeof inc.supervisors === "object" && inc.supervisors
+            ? Object.values(inc.supervisors)
+            : [];
+          supList.forEach((s) => {
+            if (s) addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name || s);
+          });
+
+          const offList = Array.isArray(inc.officers)
+            ? inc.officers
+            : typeof inc.officers === "object" && inc.officers
+            ? Object.values(inc.officers)
+            : [];
+          offList.forEach((s) => {
+            if (s) addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name || s);
+          });
+
+          const teamList = Array.isArray(inc.zoneTeam)
+            ? inc.zoneTeam
+            : typeof inc.zoneTeam === "object" && inc.zoneTeam
+            ? Object.values(inc.zoneTeam)
+            : [];
+          teamList.forEach((s) => {
+            if (s) addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name || s);
+          });
         });
       }
 
@@ -14471,24 +14536,6 @@ function renderZoneSelectors() {
         if (!s) return;
         if (s.isZoneTeam && isZoneMatchLocal(s.zone_assigned || s.zone || s.location)) {
           addSailor(s);
-        }
-      });
-
-      // 7. All sailors assigned to this Zone who are on duty / active today
-      (store.sailors || []).forEach((s) => {
-        if (!s) return;
-        const sailorZone = s.zone_assigned || s.zone || s.location;
-        if (isZoneMatchLocal(sailorZone)) {
-          const isLeave =
-            (typeof isLeaveState === "function" &&
-              isLeaveState(s.status || s.attendance)) ||
-            (s.status &&
-              /^(Leave|Sick|NA|L|DL|WE|HD|SIQ|ADM)$/i.test(
-                String(s.status).trim()
-              ));
-          if (!isLeave) {
-            addSailor(s);
-          }
         }
       });
 
