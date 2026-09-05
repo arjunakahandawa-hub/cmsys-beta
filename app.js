@@ -2973,24 +2973,6 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
     extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
   }
 
-  // Include continuation sailors who worked on this active work order on the last active date and are available today
-  if (isToday && (wo.status === "Active" || wo.status === "Pending")) {
-    (store.sailors || []).forEach((s) => {
-      if (!s) return;
-      if (
-        s.yesterdayJob &&
-        (String(s.yesterdayJob) === woIdStr ||
-          (woFbKeyStr && String(s.yesterdayJob) === woFbKeyStr))
-      ) {
-        const isAvail = typeof isSailorAvailableForWork === "function"
-          ? isSailorAvailableForWork(s, targetDate)
-          : true;
-        if (isAvail) {
-          assignedKeys.add(String(s.id || s._fbKey));
-        }
-      }
-    });
-  }
 
   const sailors = (store.sailors || []).filter((s) => {
     if (!s) return false;
@@ -14363,8 +14345,7 @@ function renderZoneSelectors() {
       (store.workOrders || []).forEach((wo) => {
         if (!wo || wo.status === "Cancelled") return;
         const zoneField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
-        const isMatchedZone = isZoneMatchLocal(zoneField) || (wo.assign_type && isZoneMatchLocal(wo.description));
-        if (isMatchedZone) {
+        if (isZoneMatchLocal(zoneField)) {
           const isQuickAssign = Boolean(wo.assign_type);
           const isActive = dateVal === today || isWorkOrderActiveOnDate(wo, dateVal) || isQuickAssign;
           if (isActive) {
@@ -14385,27 +14366,6 @@ function renderZoneSelectors() {
                 addSailorById(item);
               }
             });
-
-            if (wo.incharge) addSailorById(wo.incharge);
-            if (wo.incharge_id) addSailorById(wo.incharge_id);
-            if (wo.inchargeId) addSailorById(wo.inchargeId);
-            if (wo.incharge_name) addSailorById(wo.incharge_name);
-
-            if (wo.supervisor) addSailorById(wo.supervisor);
-            if (wo.supervisor_id) addSailorById(wo.supervisor_id);
-            if (wo.supervisorId) addSailorById(wo.supervisorId);
-            if (wo.supervisor_name) addSailorById(wo.supervisor_name);
-
-            if (wo.project_artificer) addSailorById(wo.project_artificer);
-            if (wo.artificer) addSailorById(wo.artificer);
-            if (wo.artificer_id) addSailorById(wo.artificer_id);
-            if (wo.artificer_name) addSailorById(wo.artificer_name);
-
-            if (wo.driver) addSailorById(wo.driver);
-            if (wo.driver_id) addSailorById(wo.driver_id);
-            if (wo.driverId) addSailorById(wo.driverId);
-            if (wo.driver_name) addSailorById(wo.driver_name);
-            if (wo.driverServiceNo) addSailorById(wo.driverServiceNo);
           }
         }
       });
@@ -14433,15 +14393,6 @@ function renderZoneSelectors() {
                 addSailorById(item);
               }
             });
-
-            if (jc.incharge) addSailorById(jc.incharge);
-            if (jc.incharge_id) addSailorById(jc.incharge_id);
-            if (jc.supervisor) addSailorById(jc.supervisor);
-            if (jc.supervisor_id) addSailorById(jc.supervisor_id);
-            if (jc.project_artificer) addSailorById(jc.project_artificer);
-            if (jc.artificer) addSailorById(jc.artificer);
-            if (jc.driver) addSailorById(jc.driver);
-            if (jc.driver_id) addSailorById(jc.driver_id);
           }
         }
       });
@@ -14479,81 +14430,6 @@ function renderZoneSelectors() {
             addSailorById(sid);
             return;
           }
-        }
-      });
-
-      // 4. Projects (Approved projects / out projects in this zone)
-      const checkProjects = (projList) => {
-        if (!projList) return;
-        const list = Array.isArray(projList) ? projList : Object.values(projList);
-        list.forEach((proj) => {
-          if (!proj) return;
-          if (isZoneMatchLocal(proj.zone_id || proj.zone || proj.zone_name || proj.location)) {
-            if (proj.assigned_sailors && typeof proj.assigned_sailors === "object") {
-              Object.keys(proj.assigned_sailors).forEach((k) => addSailorById(k));
-            }
-          }
-        });
-      };
-      checkProjects(store.projects);
-      checkProjects(store.outProjects);
-      checkProjects(store.housingProjects);
-      if (store.settings && store.settings.projects) checkProjects(store.settings.projects);
-
-      // 5. Zone In-Charges, Sub In-Charges, Supervisors, Artificers, Drivers & Zone Team from Settings
-      if (store.settings && store.settings.zoneInCharges) {
-        Object.entries(store.settings.zoneInCharges).forEach(([zoneKey, inc]) => {
-          if (!inc || !isZoneMatchLocal(zoneKey)) return;
-          if (inc.sailorId) addSailorById(inc.sailorId);
-          if (inc.serviceNo) addSailorById(inc.serviceNo);
-          if (inc.name) addSailorById(inc.name);
-          if (inc.subSailorId) addSailorById(inc.subSailorId);
-          if (inc.subServiceNo) addSailorById(inc.subServiceNo);
-          if (inc.subName) addSailorById(inc.subName);
-          if (inc.woInchargeId) addSailorById(inc.woInchargeId);
-          if (inc.woInchargeName) addSailorById(inc.woInchargeName);
-          if (inc.woArtificerId) addSailorById(inc.woArtificerId);
-          if (inc.woArtificerName) addSailorById(inc.woArtificerName);
-          if (inc.woSupervisorId) addSailorById(inc.woSupervisorId);
-          if (inc.woSupervisorName) addSailorById(inc.woSupervisorName);
-          if (inc.driverId) addSailorById(inc.driverId);
-          if (inc.driverServiceNo) addSailorById(inc.driverServiceNo);
-          if (inc.driverName) addSailorById(inc.driverName);
-          
-          const supList = Array.isArray(inc.supervisors)
-            ? inc.supervisors
-            : typeof inc.supervisors === "object" && inc.supervisors
-            ? Object.values(inc.supervisors)
-            : [];
-          supList.forEach((s) => {
-            if (s) addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name || s);
-          });
-
-          const offList = Array.isArray(inc.officers)
-            ? inc.officers
-            : typeof inc.officers === "object" && inc.officers
-            ? Object.values(inc.officers)
-            : [];
-          offList.forEach((s) => {
-            if (s) addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name || s);
-          });
-
-          const teamList = Array.isArray(inc.zoneTeam)
-            ? inc.zoneTeam
-            : typeof inc.zoneTeam === "object" && inc.zoneTeam
-            ? Object.values(inc.zoneTeam)
-            : [];
-          teamList.forEach((s) => {
-            if (s) addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name || s);
-          });
-        });
-      }
-
-      // 6. Zone Team sailors assigned to this zone
-      (store.sailors || []).forEach((s) => {
-        if (!s) return;
-        if (s.isZoneTeam && isZoneMatchLocal(s.zone_assigned || s.zone || s.location)) {
-          addSailor(s);
         }
       });
 
