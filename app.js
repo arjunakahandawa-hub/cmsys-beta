@@ -154,7 +154,24 @@ function isZoneMatch(z1, z2) {
 
   if ((s1.startsWith("carpenter") || s1.startsWith("carpentry")) && (s2.startsWith("carpenter") || s2.startsWith("carpentry"))) return true;
 
-  const letterMap = { a: "azone", b: "bzone", c: "czone", d: "dzone", e: "ezone", g: "gzone" };
+  const letterMap = {
+    a: "azone",
+    b: "bzone",
+    c: "czone",
+    d: "dzone",
+    e: "ezone",
+    g: "gzone",
+    zonea: "azone",
+    zoneb: "bzone",
+    zonec: "czone",
+    zoned: "dzone",
+    zonee: "ezone",
+    zoneg: "gzone",
+    fh: "fhzone",
+    zonefh: "fhzone",
+    fhad: "fhzone",
+    fhadzone: "fhzone",
+  };
   const norm1 = letterMap[s1] || s1;
   const norm2 = letterMap[s2] || s2;
   return norm1 === norm2;
@@ -14453,6 +14470,24 @@ function renderZoneSelectors() {
         if (!s) return;
         if (s.isZoneTeam && isZoneMatchLocal(s.zone_assigned || s.zone || s.location)) {
           addSailor(s);
+        }
+      });
+
+      // 7. All sailors assigned to this Zone who are on duty / active today
+      (store.sailors || []).forEach((s) => {
+        if (!s) return;
+        const sailorZone = s.zone_assigned || s.zone || s.location;
+        if (isZoneMatchLocal(sailorZone)) {
+          const isLeave =
+            (typeof isLeaveState === "function" &&
+              isLeaveState(s.status || s.attendance)) ||
+            (s.status &&
+              /^(Leave|Sick|NA|L|DL|WE|HD|SIQ|ADM)$/i.test(
+                String(s.status).trim()
+              ));
+          if (!isLeave) {
+            addSailor(s);
+          }
         }
       });
 
