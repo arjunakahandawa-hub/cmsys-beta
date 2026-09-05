@@ -14420,6 +14420,42 @@ function renderZoneSelectors() {
       checkProjects(store.housingProjects);
       if (store.settings && store.settings.projects) checkProjects(store.settings.projects);
 
+      // 5. Zone In-Charges, Sub In-Charges, Supervisors, Artificers, Drivers & Zone Team from Settings
+      if (store.settings && store.settings.zoneInCharges) {
+        Object.entries(store.settings.zoneInCharges).forEach(([zoneKey, inc]) => {
+          if (!inc || !isZoneMatchLocal(zoneKey)) return;
+          if (inc.sailorId) addSailorById(inc.sailorId);
+          if (inc.serviceNo) addSailorById(inc.serviceNo);
+          if (inc.name) addSailorById(inc.name);
+          if (inc.subSailorId) addSailorById(inc.subSailorId);
+          if (inc.subServiceNo) addSailorById(inc.subServiceNo);
+          if (inc.subName) addSailorById(inc.subName);
+          if (inc.woInchargeId) addSailorById(inc.woInchargeId);
+          if (inc.woArtificerId) addSailorById(inc.woArtificerId);
+          if (inc.woSupervisorId) addSailorById(inc.woSupervisorId);
+          if (inc.driverId) addSailorById(inc.driverId);
+          if (inc.driverServiceNo) addSailorById(inc.driverServiceNo);
+          
+          if (Array.isArray(inc.supervisors)) {
+            inc.supervisors.forEach((s) => addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name));
+          }
+          if (Array.isArray(inc.officers)) {
+            inc.officers.forEach((s) => addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name));
+          }
+          if (Array.isArray(inc.zoneTeam)) {
+            inc.zoneTeam.forEach((s) => addSailorById(s.id || s._fbKey || s.serviceNo || s.official_number || s.name));
+          }
+        });
+      }
+
+      // 6. Zone Team sailors assigned to this zone
+      (store.sailors || []).forEach((s) => {
+        if (!s) return;
+        if (s.isZoneTeam && isZoneMatchLocal(s.zone_assigned || s.zone || s.location)) {
+          addSailor(s);
+        }
+      });
+
       activeCount = zoneSailorMap.size;
       let evalCount = 0;
 
