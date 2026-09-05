@@ -15,35 +15,34 @@ window.onerror = function (msg, url, line, col, error) {
 }; // =============================================
 // PWA SERVICE WORKER REGISTRATION
 // =============================================
-// Force unregister all service workers and clear cache to resolve browser caching bugs
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.getRegistrations().then((registrations) => {
-    for (let registration of registrations) {
-      registration.unregister().then(() => {
-        console.log("⚓ Active Service Worker unregistered!");
+  window.addEventListener("load", () => {
+    navigator.serviceWorker
+      .register("./sw.js")
+      .then((reg) => {
+        console.log("⚓ PWA Service Worker active with scope:", reg.scope);
+      })
+      .catch((err) => {
+        console.warn("⚓ Service Worker registration failed:", err);
       });
-    }
   });
 }
-if ("caches" in window) {
-  caches.keys().then((names) => {
-    for (let name of names) {
-      caches.delete(name);
-    }
-    console.log("⚓ All caches cleared!");
-  });
-} // Custom PWA Installer trigger variables and listeners
+
+// Custom PWA Installer trigger variables and listeners
 let deferredPrompt = null;
 window.addEventListener("beforeinstallprompt", (e) => {
   e.preventDefault();
   deferredPrompt = e;
-  console.log("⚓ PWA Installable prompt intercepted!"); // Show our custom header install button
+  console.log("⚓ PWA Installable prompt intercepted!");
+  // Show our custom header install button
   const installBtn = document.getElementById("installAppBtn");
   if (installBtn) {
     installBtn.classList.remove("hidden");
-  } // Refresh the profile dropdown to show the install button if open
+  }
+  // Refresh the profile dropdown to show the install button if open
   renderProfileDropdown();
 });
+
 window.addEventListener("appinstalled", (evt) => {
   console.log("⚓ CE Management System PWA was installed successfully!");
   deferredPrompt = null;
@@ -53,22 +52,64 @@ window.addEventListener("appinstalled", (evt) => {
   }
   renderProfileDropdown();
 });
+
 function triggerPwaInstall() {
-  if (!deferredPrompt) return;
-  deferredPrompt.prompt();
-  deferredPrompt.userChoice.then((choiceResult) => {
-    if (choiceResult.outcome === "accepted") {
-      console.log("⚓ User accepted PWA installation");
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone;
+  if (isStandalone) {
+    if (typeof showToast === "function") {
+      showToast("CMSys is already installed & running in App Mode! 🚀", "info");
     } else {
-      console.log("⚓ User dismissed PWA installation");
+      alert("CMSys is already installed and running in App Mode!");
     }
-    deferredPrompt = null;
-    const installBtn = document.getElementById("installAppBtn");
-    if (installBtn) {
-      installBtn.classList.add("hidden");
+    return;
+  }
+
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === "accepted") {
+        console.log("⚓ User accepted PWA installation");
+      } else {
+        console.log("⚓ User dismissed PWA installation");
+      }
+      deferredPrompt = null;
+      const installBtn = document.getElementById("installAppBtn");
+      if (installBtn) {
+        installBtn.classList.add("hidden");
+      }
+      renderProfileDropdown();
+    });
+  } else {
+    const isIOS =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    if (isIOS) {
+      if (typeof showToast === "function") {
+        showToast(
+          "📱 Install on iOS: Tap Share (⎋) button and select 'Add to Home Screen'",
+          "info",
+          6000
+        );
+      } else {
+        alert(
+          "To install on iOS:\nTap the Safari Share button (⎋) and select 'Add to Home Screen'."
+        );
+      }
+    } else {
+      if (typeof showToast === "function") {
+        showToast(
+          "📱 Install App: Tap browser menu (⋮) and select 'Install app' or 'Add to Home screen'",
+          "info",
+          6000
+        );
+      } else {
+        alert(
+          "To install on Mobile / PC:\nTap browser menu (⋮) and select 'Install app' or 'Add to Home screen'."
+        );
+      }
     }
-    renderProfileDropdown();
-  });
+  }
 } // Global Runtime Error Alert for Remote Debugging
 window.addEventListener("error", function (e) {
   const errDiv = document.createElement("div");
@@ -5430,11 +5471,7 @@ function openWorkOrderDetail(workOrderId) {
   document.getElementById("woDetailBudget").value = wo.budget_allocation || "";
   document.getElementById("woDetailDuration").value =
     wo.estimated_duration || "";
-  document.getElementById("woDetailProgress").value = wo.progress || 0;
-  document.getElementById("woDetailProgressText").textContent =
-    (wo.progress || 0) + "%";
-  if (typeof toggleCompleteButton === "function")
-    toggleCompleteButton(wo.progress || 0); // Live Job Card cost (req 2)
+  updateWoDetailProgress(wo.progress || 0);
   const jc = getJobCardForWorkOrder(wo.id);
   const cost = computeJobCardCost(jc);
   const jcNoEl = document.getElementById("woJobCardNo");
@@ -7363,6 +7400,49 @@ function deleteWorkOrder() {
       });
   }
 }
+
+function updateWoDetailProgress(value) {
+  const val = Math.min(100, Math.max(0, parseInt(value, 10) || 0));
+  const progressText = document.getElementById("woDetailProgressText");
+  const progressInput = document.getElementById("woDetailProgress");
+  const progressBarFill = document.getElementById("woDetailProgressBarFill");
+  
+  if (progressText) {
+    progressText.textContent = `${val}%`;
+    if (val === 100) {
+      progressText.className = "text-sm font-extrabold text-emerald-600 font-mono bg-emerald-50 border border-emerald-300 px-2.5 py-0.5 rounded-lg shadow-2xs";
+    } else if (val >= 75) {
+      progressText.className = "text-sm font-bold text-teal-700 font-mono bg-teal-50 border border-teal-200 px-2.5 py-0.5 rounded-lg shadow-2xs";
+    } else if (val >= 50) {
+      progressText.className = "text-sm font-bold text-blue-700 font-mono bg-blue-50 border border-blue-200 px-2.5 py-0.5 rounded-lg shadow-2xs";
+    } else {
+      progressText.className = "text-sm font-bold text-slate-700 font-mono bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-lg shadow-2xs";
+    }
+  }
+  
+  if (progressBarFill) {
+    progressBarFill.style.width = `${val}%`;
+    if (val === 100) {
+      progressBarFill.className = "h-full bg-gradient-to-r from-emerald-500 to-green-500 rounded-full transition-all duration-150 relative shadow-sm";
+    } else if (val >= 50) {
+      progressBarFill.className = "h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full transition-all duration-150 relative shadow-sm";
+    } else {
+      progressBarFill.className = "h-full bg-gradient-to-r from-amber-500 to-teal-500 rounded-full transition-all duration-150 relative shadow-sm";
+    }
+  }
+
+  if (progressInput && String(progressInput.value) !== String(val)) {
+    progressInput.value = val;
+  }
+
+  if (typeof toggleCompleteButton === "function") {
+    toggleCompleteButton(val);
+  }
+  if (typeof markWoChangesUnsaved === "function") {
+    markWoChangesUnsaved();
+  }
+}
+
 function toggleCompleteButton(progress) {
   const btn = document.getElementById("btnForwardComplete");
   const btnProceed = document.getElementById("btnProceedWo");
@@ -12047,7 +12127,7 @@ function addWorkScopeBlock(data = null) {
         </div>
         
         <div class="mb-4">
-            <input type="text" class="est-scope-desc w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Describe the scope of work for this section... *" value="${(data === null || data === void 0 ? void 0 : data.description) || ""}" required>
+            <input type="text" class="est-scope-desc w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" placeholder="Describe the scope of work for this section... *" value="${((data === null || data === void 0 ? void 0 : data.description) || "").replace(/"/g, '&quot;')}" required>
         </div>
         
         <!-- Materials sub-section -->
@@ -12251,21 +12331,24 @@ function setupMaterialAutocomplete(inputElement, onSelectCallback) {
 function addScopeMaterialRow(sId, data = null) {
   const tbody = document.getElementById(`estScopeMaterialsBody-${sId}`);
   if (!tbody) return;
+  const descVal = ((data === null || data === void 0 ? void 0 : data.description) || "").replace(/"/g, '&quot;');
+  const unitVal = ((data === null || data === void 0 ? void 0 : data.unit) || "").replace(/"/g, '&quot;');
+  const availVal = ((data === null || data === void 0 ? void 0 : data.availability) || "-").replace(/"/g, '&quot;');
   const tr = document.createElement("tr");
   tr.className = "border-b border-slate-100";
   tr.innerHTML = `
         <td class="px-2 py-1.5 relative">
-            <input type="text" class="est-mat-select w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="Search inventory item..." autocomplete="off" value="${(data === null || data === void 0 ? void 0 : data.description) || ""}">
+            <input type="text" class="est-mat-select w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="Search inventory item..." autocomplete="off" value="${descVal}">
         </td>
-        <td class="px-2 py-1.5 text-center est-mat-avail text-slate-500 font-mono">${(data === null || data === void 0 ? void 0 : data.availability) || "-"}</td>
+        <td class="px-2 py-1.5 text-center est-mat-avail text-slate-500 font-mono">${availVal}</td>
         <td class="px-2 py-1.5">
-            <input type="number" class="est-mat-qty w-full px-2 py-1 border border-slate-300 rounded text-xs text-center font-bold" min="0" step="any" value="${(data === null || data === void 0 ? void 0 : data.qty) || ""}" oninput="updateEstimateTotals()">
-        </td>
-        <td class="px-2 py-1.5">
-            <input type="text" list="estUnitDatalist" class="est-mat-unit w-full px-2 py-1 border border-slate-300 rounded text-xs text-center bg-white font-medium focus:ring-1 focus:ring-amber-500 focus:border-amber-500" placeholder="Unit" value="${(data === null || data === void 0 ? void 0 : data.unit) || ""}">
+            <input type="number" class="est-mat-qty w-full px-2 py-1 border border-slate-300 rounded text-xs text-center font-bold" min="0" step="any" value="${(data === null || data === void 0 ? void 0 : data.qty) !== undefined && (data === null || data === void 0 ? void 0 : data.qty) !== null ? data.qty : ""}" oninput="updateEstimateTotals()">
         </td>
         <td class="px-2 py-1.5">
-            <input type="number" class="est-mat-cost w-full px-2 py-1 border border-slate-300 rounded text-xs text-right" min="0" step="0.01" value="${(data === null || data === void 0 ? void 0 : data.cost) || ""}" oninput="updateEstimateTotals()">
+            <input type="text" list="estUnitDatalist" class="est-mat-unit w-full px-2 py-1 border border-slate-300 rounded text-xs text-center bg-white font-medium focus:ring-1 focus:ring-amber-500 focus:border-amber-500" placeholder="Unit" value="${unitVal}">
+        </td>
+        <td class="px-2 py-1.5">
+            <input type="number" class="est-mat-cost w-full px-2 py-1 border border-slate-300 rounded text-xs text-right" min="0" step="0.01" value="${(data === null || data === void 0 ? void 0 : data.cost) !== undefined && (data === null || data === void 0 ? void 0 : data.cost) !== null ? data.cost : ""}" oninput="updateEstimateTotals()">
         </td>
         <td class="px-2 py-1.5 text-right font-semibold est-mat-total text-green-700">Rs. 0.00</td>
         <td class="px-2 py-1.5 text-center">
@@ -12292,6 +12375,7 @@ function addScopeMaterialRow(sId, data = null) {
 function addScopeLaborRow(sId, data = null) {
   const tbody = document.getElementById(`estScopeLaborBody-${sId}`);
   if (!tbody) return;
+  const taskDescVal = ((data === null || data === void 0 ? void 0 : data.taskDescription) || "").replace(/"/g, '&quot;');
   const trades = [
     "Mason",
     "Carpenter",
@@ -12325,7 +12409,7 @@ function addScopeLaborRow(sId, data = null) {
             <input type="number" class="est-lab-days w-full px-2 py-1 border border-slate-300 rounded text-xs text-center font-bold" min="0" step="any" value="${(data === null || data === void 0 ? void 0 : data.manDays) || ""}" oninput="updateEstimateTotals()">
         </td>
         <td class="px-2 py-1.5">
-            <input type="text" class="est-lab-desc w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="e.g. Concrete breaking, plastering" value="${(data === null || data === void 0 ? void 0 : data.taskDescription) || ""}">
+            <input type="text" class="est-lab-desc w-full px-2 py-1 border border-slate-300 rounded text-xs" placeholder="e.g. Concrete breaking, plastering" value="${taskDescVal}">
         </td>
         <td class="px-2 py-1.5 text-center">
             <button type="button" onclick="this.closest('tr').remove(); updateEstimateTotals();" class="text-red-400 hover:text-red-600 font-bold">&times;</button>
@@ -14200,20 +14284,16 @@ function renderZoneSelectors() {
       let pendingEvalCount = 0;
       let activeCount = 0;
       
-      const isThisZoneAdmin = isAdminStaffDuties(z.id);
-      const cleanZoneStr = (str) => String(str || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      const isZoneMatch = (zoneId) => {
-          if (!zoneId) return false;
-          if (isThisZoneAdmin) {
-              return isAdminStaffDuties(zoneId);
-          }
-          return cleanZoneStr(zoneId) === cleanZoneStr(z.id) || cleanZoneStr(zoneId) === cleanZoneStr(z.name);
+      const isZoneMatchLocal = (zoneId) => {
+        if (!zoneId) return false;
+        if (isAdminStaffDuties(z.id)) return isAdminStaffDuties(zoneId);
+        return isZoneMatch(zoneId, z.id) || isZoneMatch(zoneId, z.name);
       };
 
       const assignedSailorKeys = new Set();
       
       const activeWos = (store.workOrders || []).filter(
-        (wo) => isZoneMatch(wo.zone_id) && isWorkOrderActiveOnDate(wo, dateVal),
+        (wo) => isZoneMatchLocal(wo.zone_id) && isWorkOrderActiveOnDate(wo, dateVal),
       );
       activeWos.forEach((wo) => {
         const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
@@ -14223,7 +14303,7 @@ function renderZoneSelectors() {
       });
       
       const activeJcs = (store.jobCards || []).filter(
-        (jc) => isZoneMatch(jc.zone_id) && isWorkOrderActiveOnDate(jc, dateVal),
+        (jc) => isZoneMatchLocal(jc.zone_id) && isWorkOrderActiveOnDate(jc, dateVal),
       );
       activeJcs.forEach((jc) => {
         const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
@@ -20072,12 +20152,16 @@ function renderProfileDropdown() {
                 `;
       }
     });
-  } // Add PWA Install option if installer is available
-  if (deferredPrompt) {
+  }
+  // Add PWA Install option if not already in standalone app mode
+  const isStandaloneMode =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.navigator.standalone;
+  if (!isStandaloneMode) {
     html += `
             <div class="border-t border-slate-100 mt-1">
-                <div onclick="triggerPwaInstall()" class="px-4 py-2.5 hover:bg-teal-50 text-teal-600 font-semibold cursor-pointer transition-colors text-xs flex items-center gap-3">
-                    <span class="text-base">🖥️</span>
+                <div onclick="toggleProfileDropdown(); triggerPwaInstall();" class="px-4 py-2.5 hover:bg-teal-50 text-teal-600 font-semibold cursor-pointer transition-colors text-xs flex items-center gap-3">
+                    <span class="text-base">📲</span>
                     <span>Install App on PC / Mobile</span>
                 </div>
             </div>
@@ -30164,15 +30248,15 @@ function renderTempIssuesTable() {
 
     let statusBadge = "";
     if (isReturned) {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">✅ Returned</span>`;
+      statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 inline-flex items-center gap-1 whitespace-nowrap shadow-2xs">✅ Returned</span>`;
     } else if (isPending) {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1 w-fit mx-auto"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> ⏳ Pending Receipt</span>`;
+      statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 inline-flex items-center gap-1 whitespace-nowrap shadow-2xs"><span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span> ⏳ Pending Receipt</span>`;
     } else if (isOverdue) {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200 animate-pulse">🚨 Overdue</span>`;
+      statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300 inline-flex items-center gap-1 whitespace-nowrap shadow-2xs animate-pulse">🚨 Overdue</span>`;
     } else if (!isReturnable) {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300">⚪ Non-Returnable</span>`;
+      statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-300 inline-flex items-center gap-1 whitespace-nowrap shadow-2xs">⚪ Non-Returnable</span>`;
     } else {
-      statusBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-200">🛠️ Active / In Use</span>`;
+      statusBadge = `<span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-blue-100 text-blue-900 border border-blue-200 inline-flex items-center gap-1 whitespace-nowrap shadow-2xs">🛠️ Active / In Use</span>`;
     }
 
     const originZoneStr = item.origin_zone || "Main Store";
@@ -30190,20 +30274,20 @@ function renderTempIssuesTable() {
           ${item.issued_by ? `<div class="text-[10px] text-indigo-700 font-medium">👔 Issued by: ${item.issued_by}</div>` : ''}
           ${item.received_by ? `<div class="text-[10px] text-teal-700 font-medium">📥 Received by: ${item.received_by} (${item.received_date || ''})</div>` : ''}
         </td>
-        <td class="px-3 py-3 text-center align-top">
+        <td class="px-3 py-3 text-center align-top whitespace-nowrap">
           <span class="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">${item.category || 'General'}</span>
         </td>
-        <td class="px-3 py-3 text-center align-top">
+        <td class="px-3 py-3 text-center align-top whitespace-nowrap">
           <div class="text-xs font-bold text-slate-800 flex items-center justify-center gap-1">
             <span class="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">${originZoneStr}</span>
             <span class="text-slate-400">→</span>
             <span class="px-1.5 py-0.5 rounded bg-teal-50 text-teal-800 font-bold border border-teal-200/60">${targetZoneStr}</span>
           </div>
         </td>
-        <td class="px-3 py-3 text-center align-top font-bold text-slate-800 font-mono">
+        <td class="px-3 py-3 text-center align-top font-bold text-slate-800 font-mono whitespace-nowrap">
           ${item.qty || 1} <span class="text-[10px] font-normal text-slate-500 font-sans">${item.deno || 'Nos'}</span>
         </td>
-        <td class="px-3.5 py-3 text-right align-top font-mono">
+        <td class="px-3.5 py-3 text-right align-top font-mono whitespace-nowrap">
           <div class="font-bold text-slate-900">Rs. ${val.toLocaleString("en-LK", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
           ${unitCost > 0 ? `<div class="text-[10px] text-slate-400">@ Rs. ${unitCost.toLocaleString("en-LK")}</div>` : ''}
         </td>
@@ -30214,17 +30298,17 @@ function renderTempIssuesTable() {
             ${item.purpose ? `<span>• ${item.purpose}</span>` : ''}
           </div>
         </td>
-        <td class="px-3 py-3 text-center align-top">
+        <td class="px-3 py-3 text-center align-top whitespace-nowrap">
           ${isReturnable ? `
             <div class="font-medium text-slate-700 ${isOverdue ? 'text-rose-700 font-bold' : ''}">${item.expected_return_date || '—'}</div>
             ${isReturned && item.actual_return_date ? `<div class="text-[10px] text-emerald-700 font-semibold">Ret: ${item.actual_return_date}</div>` : ''}
           ` : `<span class="text-[10px] text-slate-400 italic">Not Returnable</span>`}
         </td>
-        <td class="px-3 py-3 text-center align-top">
+        <td class="px-3 py-3 text-center align-top whitespace-nowrap">
           ${statusBadge}
         </td>
-        <td class="px-3.5 py-3 text-center align-top">
-          <div class="flex items-center justify-center gap-1.5 flex-wrap">
+        <td class="px-3.5 py-3 text-center align-top whitespace-nowrap">
+          <div class="flex items-center justify-center gap-1.5 flex-nowrap">
             ${isPending ? `
               <button onclick="openConfirmReceiptModal('${item.id || item._fbKey}')" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-[11px] font-bold shadow-xs transition-all cursor-pointer flex items-center gap-1" title="Confirm Receipt in this Zone/Workshop">
                 <span>📥</span> Confirm Received
