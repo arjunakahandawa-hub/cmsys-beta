@@ -14292,46 +14292,133 @@ function renderZoneSelectors() {
 
       const zoneSailorMap = new Map();
 
-      const allTasks = [
-        ...(store.workOrders || []).filter(
-          (wo) => isZoneMatchLocal(wo.zone_id) && isWorkOrderActiveOnDate(wo, dateVal)
-        ),
-        ...(store.jobCards || []).filter(
-          (jc) => isZoneMatchLocal(jc.zone_id) && isWorkOrderActiveOnDate(jc, dateVal)
-        )
-      ];
-
-      allTasks.forEach((wo) => {
-        let sailorsInWo = [];
-        if (dateVal === today) {
-          const assignedIds = (wo.assigned || []).map(String);
-          sailorsInWo = (store.sailors || []).filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)) ||
-              (s.official_number && assignedIds.includes(String(s.official_number))) ||
-              (s.service_no && assignedIds.includes(String(s.service_no)))
-          );
-        } else {
-          const assignedIds = (store.dailyAllocations || [])
-            .filter(
-              (a) =>
-                a.date === dateVal &&
-                (String(a.work_order_id) === String(wo.id) ||
-                  (wo._fbKey && String(a.work_order_id) === String(wo._fbKey)))
-            )
-            .map((a) => String(a.sailor_id));
-          sailorsInWo = (store.sailors || []).filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey))
-          );
+      const addSailor = (s) => {
+        if (!s) return;
+        const key = String(s.id || s._fbKey);
+        if (key && !zoneSailorMap.has(key)) {
+          zoneSailorMap.set(key, s);
         }
-        sailorsInWo.forEach((s) => {
-          const key = String(s.id || s._fbKey);
-          if (!zoneSailorMap.has(key)) zoneSailorMap.set(key, s);
-        });
+      };
+
+      const addSailorById = (id) => {
+        if (!id) return;
+        const idStr = String(id).trim();
+        if (!idStr) return;
+        const s = (store.sailors || []).find(
+          (sailor) =>
+            String(sailor.id) === idStr ||
+            String(sailor._fbKey) === idStr ||
+            String(sailor.official_number) === idStr ||
+            String(sailor.service_no) === idStr
+        );
+        if (s) {
+          addSailor(s);
+        }
+      };
+
+      // 1. Work Orders (Projects, Jobs, Tasks, Quick Assignments)
+      (store.workOrders || []).forEach((wo) => {
+        const zoneField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
+        if (isZoneMatchLocal(zoneField)) {
+          const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
+          sailors.forEach(addSailor);
+
+          if (dateVal === today || isWorkOrderActiveOnDate(wo, dateVal)) {
+            const assignedList = Array.isArray(wo.assigned)
+              ? wo.assigned
+              : typeof wo.assigned === "object" && wo.assigned
+              ? Object.values(wo.assigned)
+              : [];
+            assignedList.forEach((item) => {
+              if (item && typeof item === "object") {
+                addSailorById(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no);
+              } else if (item) {
+                addSailorById(item);
+              }
+            });
+            if (wo.incharge_id) addSailorById(wo.incharge_id);
+            if (wo.supervisor_id) addSailorById(wo.supervisor_id);
+          }
+        }
       });
+
+      // 2. Job Cards
+      (store.jobCards || []).forEach((jc) => {
+        const zoneField = jc.zone_id || jc.zone || jc.zoneId || jc.zone_name || jc.location_zone || jc.location;
+        if (isZoneMatchLocal(zoneField)) {
+          const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
+          sailors.forEach(addSailor);
+
+          if (dateVal === today || isWorkOrderActiveOnDate(jc, dateVal)) {
+            const assignedList = Array.isArray(jc.assigned)
+              ? jc.assigned
+              : typeof jc.assigned === "object" && jc.assigned
+              ? Object.values(jc.assigned)
+              : [];
+            assignedList.forEach((item) => {
+              if (item && typeof item === "object") {
+                addSailorById(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no);
+              } else if (item) {
+                addSailorById(item);
+              }
+            });
+          }
+        }
+      });
+
+      // 3. Daily Allocations recorded for dateVal
+      (store.dailyAllocations || []).forEach((alloc) => {
+        if (!alloc || alloc.date !== dateVal || alloc.status === "Cancelled") return;
+        const sid = alloc.sailor_id || alloc.sailorId || alloc.official_number || "";
+        if (!sid) return;
+
+        if (isZoneMatchLocal(alloc.zone_id || alloc.zone || alloc.zone_name || alloc.location)) {
+          addSailorById(sid);
+          return;
+        }
+
+        if (alloc.work_order_id) {
+          const matchedWo = (store.workOrders || []).find(
+            (w) =>
+              String(w.id) === String(alloc.work_order_id) ||
+              String(w._fbKey) === String(alloc.work_order_id) ||
+              (w.description && alloc.description && w.description.trim().toLowerCase() === alloc.description.trim().toLowerCase())
+          );
+          if (matchedWo && isZoneMatchLocal(matchedWo.zone_id || matchedWo.zone || matchedWo.zoneId || matchedWo.zone_name)) {
+            addSailorById(sid);
+            return;
+          }
+
+          const matchedJc = (store.jobCards || []).find(
+            (j) =>
+              String(j.id) === String(alloc.work_order_id) ||
+              String(j._fbKey) === String(alloc.work_order_id) ||
+              (j.description && alloc.description && j.description.trim().toLowerCase() === alloc.description.trim().toLowerCase())
+          );
+          if (matchedJc && isZoneMatchLocal(matchedJc.zone_id || matchedJc.zone || matchedJc.zoneId || matchedJc.zone_name)) {
+            addSailorById(sid);
+            return;
+          }
+        }
+      });
+
+      // 4. Projects (Approved projects / out projects in this zone)
+      const checkProjects = (projList) => {
+        if (!projList) return;
+        const list = Array.isArray(projList) ? projList : Object.values(projList);
+        list.forEach((proj) => {
+          if (!proj) return;
+          if (isZoneMatchLocal(proj.zone_id || proj.zone || proj.zone_name || proj.location)) {
+            if (proj.assigned_sailors && typeof proj.assigned_sailors === "object") {
+              Object.keys(proj.assigned_sailors).forEach((k) => addSailorById(k));
+            }
+          }
+        });
+      };
+      checkProjects(store.projects);
+      checkProjects(store.outProjects);
+      checkProjects(store.housingProjects);
+      if (store.settings && store.settings.projects) checkProjects(store.settings.projects);
 
       activeCount = zoneSailorMap.size;
       let evalCount = 0;
