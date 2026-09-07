@@ -390,6 +390,69 @@
             border-radius: 50%; background: var(--navy-700); cursor: pointer;
             border: 3px solid white; box-shadow: 0 2px 8px rgba(0,0,0,0.35); }
 
+        /* ===== Work Order Progress Slider ===== */
+        .wo-progress-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 14px;
+            border-radius: 9999px;
+            border: 1px solid #cbd5e1;
+            box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.12);
+            outline: none;
+            cursor: pointer;
+            background: #e2e8f0;
+            transition: background 0.05s linear;
+        }
+        .wo-progress-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #0d9488;
+            border: 3px solid #ffffff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+            cursor: grab;
+            transition: transform 0.12s ease, background-color 0.15s ease;
+        }
+        .wo-progress-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.18);
+            background: #0f766e;
+        }
+        .wo-progress-slider::-webkit-slider-thumb:active {
+            cursor: grabbing;
+            transform: scale(1.25);
+        }
+        .wo-progress-slider::-moz-range-thumb {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #0d9488;
+            border: 3px solid #ffffff;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
+            cursor: grab;
+            transition: transform 0.12s ease, background-color 0.15s ease;
+        }
+        .wo-progress-slider::-moz-range-thumb:hover {
+            transform: scale(1.18);
+            background: #0f766e;
+        }
+        .wo-progress-slider::-moz-range-thumb:active {
+            cursor: grabbing;
+            transform: scale(1.25);
+        }
+        html.dark .wo-progress-slider {
+            border-color: rgba(255, 255, 255, 0.2);
+            box-shadow: inset 0 1px 4px rgba(0, 0, 0, 0.5);
+        }
+        html.dark .wo-progress-slider::-webkit-slider-thumb {
+            border-color: #0f172a;
+        }
+        html.dark .wo-progress-slider::-moz-range-thumb {
+            border-color: #0f172a;
+        }
+
         /* ===== Badges & Indicators ===== */
         .performance-badge { font-size: 0.65rem; padding: 2px 6px; border-radius: 9999px; font-weight: 600; }
         .zone-team-badge { background: linear-gradient(135deg, #0d9488, #14b8a6); }
@@ -4996,18 +5059,13 @@
                             </div>
                         </div>
                         
-                        <!-- Visual Dynamic Progress Bar with animated fill -->
-                        <div class="w-full h-3.5 bg-slate-200 rounded-full overflow-hidden p-0.5 border border-slate-300 shadow-inner relative flex items-center">
-                            <div id="woDetailProgressBarFill" class="h-full bg-gradient-to-r from-teal-500 to-emerald-500 rounded-full transition-all duration-150 relative shadow-sm" style="width: 0%;"></div>
-                        </div>
-
-                        <!-- Interactive Range Slider -->
-                        <div class="relative pt-1">
+                        <!-- Single Live Dynamic Progress Slider -->
+                        <div class="relative pt-1 px-0.5">
                             <input type="range" id="woDetailProgress" min="0" max="100" value="0" step="1"
-                                class="w-full h-2 bg-slate-200 rounded-lg cursor-pointer accent-teal-600 focus:outline-none"
+                                class="wo-progress-slider"
                                 oninput="updateWoDetailProgress(this.value);"
                                 onchange="updateWoDetailProgress(this.value);">
-                            <div class="flex justify-between text-[10px] text-slate-400 font-semibold px-0.5 mt-1.5 select-none">
+                            <div class="flex justify-between text-[11px] text-slate-500 font-semibold px-1 mt-2 select-none">
                                 <button type="button" class="cursor-pointer hover:text-teal-700 font-bold transition-colors" onclick="updateWoDetailProgress(0)">0%</button>
                                 <button type="button" class="cursor-pointer hover:text-teal-700 font-bold transition-colors" onclick="updateWoDetailProgress(25)">25%</button>
                                 <button type="button" class="cursor-pointer hover:text-teal-700 font-bold transition-colors" onclick="updateWoDetailProgress(50)">50%</button>
@@ -7541,10 +7599,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-teal-400 font-bold z-[9999] bg-slate-900/90 border border-teal-500/30 px-2 py-1 rounded-lg shadow pointer-events-none font-mono">
-        App Version: v5.24.77
+        App Version: v5.24.78
     </div>
 
-    <script src="app.js?v=5.24.77"></script>
+    <script src="app.js?v=5.24.78"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

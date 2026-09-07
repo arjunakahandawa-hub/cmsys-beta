@@ -5444,7 +5444,6 @@ function openWorkOrderDetail(workOrderId) {
     "woDetailAuthority",
     "woDetailBudget",
     "woDetailDuration",
-    "woDetailProgress",
     "woDetailIncharge",
     "woDetailSupervisor",
     "woDetailArtificer",
@@ -5457,6 +5456,13 @@ function openWorkOrderDetail(workOrderId) {
       el.onchange = markWoChangesUnsaved;
     }
   });
+
+  const progressSlider = document.getElementById("woDetailProgress");
+  if (progressSlider) {
+    progressSlider.disabled = !isToday;
+    progressSlider.oninput = (e) => updateWoDetailProgress(e.target.value);
+    progressSlider.onchange = (e) => updateWoDetailProgress(e.target.value);
+  }
 
   const isAssignmentOrAdminStaff =
     Boolean(wo.assign_type) ||
@@ -7449,8 +7455,22 @@ function updateWoDetailProgress(value) {
     }
   }
 
-  if (progressInput && String(progressInput.value) !== String(val)) {
-    progressInput.value = val;
+  if (progressInput) {
+    if (String(progressInput.value) !== String(val)) {
+      progressInput.value = val;
+    }
+    const isDark = Boolean(document.documentElement && document.documentElement.classList.contains("dark"));
+    const emptyTrack = isDark ? "#334155" : "#e2e8f0";
+    let startColor = "#0d9488";
+    let endColor = "#10b981";
+    if (val === 100) {
+      startColor = "#059669";
+      endColor = "#10b981";
+    } else if (val <= 25) {
+      startColor = "#f59e0b";
+      endColor = "#0d9488";
+    }
+    progressInput.style.background = `linear-gradient(to right, ${startColor} 0%, ${endColor} ${val}%, ${emptyTrack} ${val}%, ${emptyTrack} 100%)`;
   }
 
   if (typeof toggleCompleteButton === "function") {
