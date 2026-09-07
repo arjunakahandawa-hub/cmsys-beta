@@ -14343,7 +14343,7 @@ function renderZoneSelectors() {
 
       // 1. Work Orders (Projects, Jobs, Tasks, Quick Assignments)
       (store.workOrders || []).forEach((wo) => {
-        if (!wo || wo.status === "Cancelled") return;
+        if (!wo || wo.status === "Cancelled" || wo.status === "Completed") return;
         const zoneField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
         if (isZoneMatchLocal(zoneField)) {
           const isQuickAssign = Boolean(wo.assign_type);
@@ -14372,7 +14372,7 @@ function renderZoneSelectors() {
 
       // 2. Job Cards
       (store.jobCards || []).forEach((jc) => {
-        if (!jc || jc.status === "Cancelled") return;
+        if (!jc || jc.status === "Cancelled" || jc.status === "Completed") return;
         const zoneField = jc.zone_id || jc.zone || jc.zoneId || jc.zone_name || jc.location_zone || jc.location;
         if (isZoneMatchLocal(zoneField)) {
           if (dateVal === today || isWorkOrderActiveOnDate(jc, dateVal)) {
