@@ -24388,6 +24388,8 @@ function openSailorProfile(sailorId) {
   const modal = document.getElementById("sailorProfileModal");
   if (modal) {
     modal.classList.remove("hidden");
+    const scrollBody = modal.querySelector(".overflow-y-auto");
+    if (scrollBody) scrollBody.scrollTop = 0;
   }
 }
 
