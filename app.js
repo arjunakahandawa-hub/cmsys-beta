@@ -14346,26 +14346,10 @@ function renderZoneSelectors() {
         if (!wo || wo.status === "Cancelled" || wo.status === "Completed") return;
         const zoneField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
         if (isZoneMatchLocal(zoneField)) {
-          const isQuickAssign = Boolean(wo.assign_type);
-          const isActive = dateVal === today || isWorkOrderActiveOnDate(wo, dateVal) || isQuickAssign;
+          const isActive = isWorkOrderActiveOnDate(wo, dateVal);
           if (isActive) {
             const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
             sailors.forEach(addSailor);
-
-            const assignedList = Array.isArray(wo.assigned)
-              ? wo.assigned
-              : typeof wo.assigned === "object" && wo.assigned
-              ? Object.values(wo.assigned)
-              : typeof wo.assigned === "string"
-              ? wo.assigned.split(",")
-              : [];
-            assignedList.forEach((item) => {
-              if (item && typeof item === "object") {
-                addSailorById(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no || item.name);
-              } else if (item) {
-                addSailorById(item);
-              }
-            });
           }
         }
       });
@@ -14375,24 +14359,9 @@ function renderZoneSelectors() {
         if (!jc || jc.status === "Cancelled" || jc.status === "Completed") return;
         const zoneField = jc.zone_id || jc.zone || jc.zoneId || jc.zone_name || jc.location_zone || jc.location;
         if (isZoneMatchLocal(zoneField)) {
-          if (dateVal === today || isWorkOrderActiveOnDate(jc, dateVal)) {
+          if (isWorkOrderActiveOnDate(jc, dateVal)) {
             const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
             sailors.forEach(addSailor);
-
-            const assignedList = Array.isArray(jc.assigned)
-              ? jc.assigned
-              : typeof jc.assigned === "object" && jc.assigned
-              ? Object.values(jc.assigned)
-              : typeof jc.assigned === "string"
-              ? jc.assigned.split(",")
-              : [];
-            assignedList.forEach((item) => {
-              if (item && typeof item === "object") {
-                addSailorById(item.id || item._fbKey || item.sailor_id || item.official_number || item.service_no || item.name);
-              } else if (item) {
-                addSailorById(item);
-              }
-            });
           }
         }
       });
