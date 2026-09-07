@@ -1,12 +1,13 @@
-const CACHE_NAME = 'ncw-ps-cache-v5.22.6';
+const CACHE_NAME = 'ncw-ps-cache-v5.24.80';
 const ASSETS = [
-  './?v=5.22.6',
-  './index.html?v=5.22.6',
-  './app.js?v=5.22.6',
-  './style.css?v=5.22.6',
+  './',
+  './index.html',
+  './app.js?v=5.24.80',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './icon-maskable-192.png',
+  './icon-maskable-512.png',
   './logo.png'
 ];
 
@@ -14,7 +15,15 @@ self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(ASSETS);
+      return Promise.allSettled(
+        ASSETS.map(url =>
+          fetch(url)
+            .then(res => {
+              if (res.ok) return cache.put(url, res);
+            })
+            .catch(err => console.warn('PWA Asset cache skip:', url, err))
+        )
+      );
     })
   );
 });
@@ -44,7 +53,43 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Network First for HTML and JS to ensure latest updates are served immediately
+  const url = new URL(e.request.url);
+
+  // Images & Static Media: Cache First with background update
+  if (url.pathname.match(/\.(jpg|jpeg|png|gif|webp|svg|ico)$/i)) {
+    e.respondWith(
+      caches.match(e.request).then(cached => {
+        if (cached) return cached;
+        return fetch(e.request).then(networkRes => {
+          if (networkRes && networkRes.status === 200) {
+            const clone = networkRes.clone();
+            caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+          }
+          return networkRes;
+        });
+      })
+    );
+    return;
+  }
+
+  // Versioned Assets & Scripts: Stale-While-Revalidate
+  if (url.pathname.endsWith('.js') && url.search.includes('v=')) {
+    e.respondWith(
+      caches.match(e.request).then(cached => {
+        const fetchPromise = fetch(e.request).then(networkRes => {
+          if (networkRes && networkRes.status === 200) {
+            const clone = networkRes.clone();
+            caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
+          }
+          return networkRes;
+        }).catch(() => cached);
+        return cached || fetchPromise;
+      })
+    );
+    return;
+  }
+
+  // HTML: Network First, Fallback to Cache
   e.respondWith(
     fetch(e.request)
       .then(networkResponse => {

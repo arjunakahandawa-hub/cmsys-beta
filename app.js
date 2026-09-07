@@ -2540,6 +2540,7 @@ function renderAvailableSailors() {
                     <div class="relative flex-shrink-0 w-11 h-11 rounded-xl overflow-hidden shadow-xs border border-slate-300 bg-slate-200 flex items-center justify-center">
                         ${cleanNo ? `
                         <img src="images/${cleanNo}.JPG" 
+                             loading="lazy" decoding="async"
                              data-fallback="<div class='w-full h-full flex items-center justify-center text-xs font-bold text-white bg-slate-400'>${sailor.trade}</div>" 
                              class="w-full h-full object-cover" 
                              onerror="handleProfilePicError(this, '${cleanNo}')">
@@ -2601,6 +2602,7 @@ function renderAvailableSailors() {
                 <div class="relative flex-shrink-0 w-11 h-11 rounded-xl overflow-hidden shadow-xs border border-slate-200/90 flex items-center justify-center" style="background:${tradeBg}">
                     ${cleanNo ? `
                     <img src="images/${cleanNo}.JPG" 
+                         loading="lazy" decoding="async"
                          data-fallback="<div class='w-full h-full flex items-center justify-center text-xs font-bold text-white' style='background:${tradeBg}'>${sailor.trade}</div>" 
                          class="w-full h-full object-cover" 
                          onerror="handleProfilePicError(this, '${cleanNo}')">
@@ -8125,7 +8127,7 @@ function renderSundayEvaluationList() {
       <tr class="hover:bg-slate-50/80 transition-colors">
         <td class="px-3.5 py-3 align-middle">
           <div class="flex items-center gap-3">
-            <img src="images/${cleanNo}.JPG" onerror="handleProfilePicError(this, '${s.name.replace(/'/g, "")}')" 
+            <img src="images/${cleanNo}.JPG" loading="lazy" decoding="async" onerror="handleProfilePicError(this, '${s.name.replace(/'/g, "")}')" 
                  class="w-9 h-9 rounded-full object-cover border border-slate-300 shadow-2xs">
             <div>
               <div class="font-bold text-slate-900 cursor-pointer hover:text-teal-600" onclick="openSailorProfile('${sId}')">
@@ -23607,7 +23609,31 @@ function renderSailorsView() {
 
   let filtered = [...(store.sailors || [])];
 
-  // Map each sailor with live computed fields & status
+  // Fast pre-filters before running heavy computations
+  if (trade !== "ALL") {
+    filtered = filtered.filter((s) => s.trade === trade);
+  }
+
+  if (query) {
+    filtered = filtered.filter((s) => {
+      const offNo = String(s.official_number || s.off_no || s.service_no || "").toLowerCase();
+      const name = String(s.name || "").toLowerCase();
+      const rank = String(s.rank || "").toLowerCase();
+      const tr = String(s.trade || "").toLowerCase();
+      const city = String(s.city || s.district || s.hometown || "").toLowerCase();
+      const skill = String(s.special_skill || s.skills || "").toLowerCase();
+      return name.includes(query) || offNo.includes(query) || rank.includes(query) || tr.includes(query) || city.includes(query) || skill.includes(query);
+    });
+  }
+
+  if (cityFilter !== "ALL") {
+    filtered = filtered.filter((s) => {
+      const c = (s.city || s.district || s.hometown || "").toUpperCase();
+      return c.includes(cityFilter);
+    });
+  }
+
+  // Map only the filtered sailors with live computed fields & status
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
 
@@ -23623,32 +23649,6 @@ function renderSailorsView() {
     const assignedZone = liveStatus.currentLoc;
     return { ...s, offNo, points, leaveDays, liveStatus, perf, city, assignedZone };
   });
-
-  // Search filter
-  if (query) {
-    mapped = mapped.filter((s) => {
-      const offNo = String(s.offNo || "").toLowerCase();
-      const name = String(s.name || "").toLowerCase();
-      const rank = String(s.rank || "").toLowerCase();
-      const tr = String(s.trade || "").toLowerCase();
-      const city = String(s.city || s.district || s.hometown || "").toLowerCase();
-      const skill = String(s.special_skill || s.skills || "").toLowerCase();
-      return name.includes(query) || offNo.includes(query) || rank.includes(query) || tr.includes(query) || city.includes(query) || skill.includes(query);
-    });
-  }
-
-  // Trade filter
-  if (trade !== "ALL") {
-    mapped = mapped.filter((s) => s.trade === trade);
-  }
-
-  // City filter
-  if (cityFilter !== "ALL") {
-    mapped = mapped.filter((s) => {
-      const c = (s.city || s.district || s.hometown || "").toUpperCase();
-      return c.includes(cityFilter);
-    });
-  }
 
   // Special skill filter
   if (skillFilter !== "ALL") {
@@ -23720,151 +23720,155 @@ function renderSailorsView() {
     .map((id) => SAILOR_COLUMNS_CONFIG.find((c) => c.id === id))
     .filter((c) => c && !hiddenCols.has(c.id));
 
-  // Render Table View Rows
-  const tableBody = document.getElementById("directorySailorsTableBody");
-  if (tableBody) {
-    if (mapped.length === 0) {
-      tableBody.innerHTML = `<tr><td colspan="${Math.max(1, activeColumns.length)}" class="text-center py-12 text-slate-400 font-medium text-sm">No sailors found matching criteria.</td></tr>`;
-    } else {
-      tableBody.innerHTML = mapped.map((s) => {
-        var _s$idRow;
-        const sId = (_s$idRow = s.id) !== null && _s$idRow !== void 0 ? _s$idRow : s._fbKey;
-        const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 2) : "AB";
-        const statusBadge = s.liveStatus.badgeHtml;
-        const evalStats = getSailorEvaluationStats(s);
-
-        const skillText = s.special_skill && s.special_skill !== "NO" && s.special_skill !== "No" ? s.special_skill.replace(/[\r\n]+/g, " ").trim() : "—";
-        const skillSnippet = skillText.length > 25 ? skillText.substring(0, 25) + "..." : skillText;
-        const cleanCity = s.city && s.city !== "-" ? `📍 ${s.city}` : "—";
-
-        // Map cells according to activeColumns order
-        const rowCells = activeColumns.map((col) => {
-          switch (col.id) {
-            case "off_no":
-              return `<td class="py-3 px-4 font-mono font-bold text-xs text-slate-800 whitespace-nowrap">${s.offNo}</td>`;
-            case "name": {
-              const cleanNo = s.offNo ? s.offNo.replace(/[^a-zA-Z0-9]/g, "") : "";
-              const fallbackText = `<div class="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-[11px] flex-shrink-0 shadow-xs">${shortRank}</div>`;
-              const avatarHtml = cleanNo
-                ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-slate-200/90 shadow-xs" onerror="handleProfilePicError(this, '${cleanNo}')">`
-                : fallbackText;
-              return `
-                <td class="py-3 px-4">
-                    <div class="flex items-center gap-3">
-                        <div class="relative flex-shrink-0">
-                            ${avatarHtml}
-                        </div>
-                        <div class="min-w-0">
-                            <p class="font-bold text-xs text-slate-900 truncate hover:text-teal-600 cursor-pointer" onclick="openSailorProfile('${sId}')">${s.name || "-"}</p>
-                            <p class="text-[10px] text-slate-500 font-semibold">${s.rank || "-"}</p>
-                        </div>
-                    </div>
-                </td>`;
-            }
-            case "trade":
-              return `
-                <td class="py-3 px-4">
-                    <span class="inline-block px-2 py-0.5 rounded text-xs font-extrabold bg-slate-900 text-white">${s.trade || "-"}</span>
-                </td>`;
-            case "city":
-              return `<td class="py-3 px-4 text-xs text-slate-600 font-medium whitespace-nowrap">${cleanCity}</td>`;
-            case "status":
-              return `<td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>`;
-            case "perf":
-              return `
-                <td class="py-3 px-4 whitespace-nowrap">
-                    <div class="flex flex-col items-start gap-1">
-                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300 shadow-xs">
-                            ⭐ ${s.perf.toFixed(2)}
-                        </span>
-                        <div class="flex items-center gap-1 text-[10px] font-bold">
-                            <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d Eval</span>
-                            <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d Non-eval</span>
-                        </div>
-                    </div>
-                </td>`;
-            case "skills":
-              return `
-                <td class="py-3 px-4 text-xs text-slate-500 truncate max-w-[180px]" title="${skillText.replace(/"/g, '&quot;')}">
-                    ${skillSnippet !== "—" ? `<span class="text-slate-700">🛠️ ${skillSnippet}</span>` : '<span class="text-slate-300">—</span>'}
-                </td>`;
-            case "zone":
-              return `<td class="py-3 px-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${s.assignedZone}</td>`;
-            case "actions":
-              return `
-                <td class="py-3 px-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">
-                    <div class="flex items-center justify-center">
-                        <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 border border-slate-200 transition-all shadow-xs cursor-pointer">
-                            <span>👤</span> Profile
-                        </button>
-                    </div>
-                </td>`;
-            default:
-              return `<td class="py-3 px-4 text-xs text-slate-600">—</td>`;
-          }
-        }).join("");
-
-        return `<tr class="hover:bg-slate-50/90 transition-colors group">${rowCells}</tr>`;
-      }).join("");
-    }
-  }
-
-  // Render Cards Grid View
+  const isGrid = store.sailorDirectoryViewMode === "grid";
   const gridContainer = document.getElementById("directorySailorsGrid");
-  if (gridContainer) {
-    if (mapped.length === 0) {
-      gridContainer.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 font-medium text-sm">No sailors found matching criteria.</div>`;
-    } else {
-      gridContainer.innerHTML = mapped.map((s) => {
-        var _s$idGrid;
-        const sId = (_s$idGrid = s.id) !== null && _s$idGrid !== void 0 ? _s$idGrid : s._fbKey;
-        const cleanNo = s.offNo ? s.offNo.replace(/[^a-zA-Z0-9]/g, "") : "";
-        const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 3) : "AB";
-        const fallbackText = `<div class="w-12 h-12 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
-        const avatarHtml = cleanNo ? `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-12 h-12 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` : fallbackText;
-        const evalStats = getSailorEvaluationStats(s);
-        const statusBadge = s.liveStatus.badgeHtml;
+  const tableBody = document.getElementById("directorySailorsTableBody");
 
-        const tradeColors = {
-          MA: "bg-teal-600",
-          CA: "bg-purple-600",
-          PA: "bg-amber-700",
-          PL: "bg-cyan-600",
-          WE: "bg-red-600",
-          RW: "bg-slate-700",
-          SW: "bg-emerald-800",
-          BB: "bg-blue-700",
-          AL: "bg-pink-600",
-        };
-        const tradeClass = tradeColors[s.trade] || "bg-slate-600";
+  if (!isGrid) {
+    if (gridContainer) gridContainer.innerHTML = "";
+    if (tableBody) {
+      if (mapped.length === 0) {
+        tableBody.innerHTML = `<tr><td colspan="${Math.max(1, activeColumns.length)}" class="text-center py-12 text-slate-400 font-medium text-sm">No sailors found matching criteria.</td></tr>`;
+      } else {
+        tableBody.innerHTML = mapped.map((s) => {
+          var _s$idRow;
+          const sId = (_s$idRow = s.id) !== null && _s$idRow !== void 0 ? _s$idRow : s._fbKey;
+          const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 2) : "AB";
+          const statusBadge = s.liveStatus.badgeHtml;
+          const evalStats = getSailorEvaluationStats(s);
 
-        return `
-        <div onclick="openSailorProfile('${sId}')" class="bg-white rounded-2xl shadow-md border border-slate-200/80 p-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between">
-            <div class="flex items-start gap-3">
-                <div class="relative flex-shrink-0">
-                    ${avatarHtml}
-                    <span class="absolute -bottom-1 -right-1 text-[9px] text-white px-1.5 py-0.5 rounded-full font-extrabold ${tradeClass}">
-                        ${s.trade}
-                    </span>
-                </div>
-                <div class="min-w-0 flex-1">
-                    <p class="font-bold text-slate-800 text-sm truncate">${s.name}</p>
-                    <p class="text-xs text-slate-500 font-semibold truncate mt-0.5">${s.rank}</p>
-                    <p class="text-[10px] text-slate-400 mono mt-0.5">${s.offNo}</p>
-                </div>
-            </div>
+          const skillText = s.special_skill && s.special_skill !== "NO" && s.special_skill !== "No" ? s.special_skill.replace(/[\r\n]+/g, " ").trim() : "—";
+          const skillSnippet = skillText.length > 25 ? skillText.substring(0, 25) + "..." : skillText;
+          const cleanCity = s.city && s.city !== "-" ? `📍 ${s.city}` : "—";
 
-            <div class="border-t border-slate-100 pt-3 mt-4 flex items-center justify-between gap-1 flex-wrap">
-                ${statusBadge}
-                <div class="flex items-center gap-1.5 text-[10px] font-bold">
-                    <span class="text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200" title="Performance score">⭐ ${s.perf.toFixed(2)}</span>
-                    <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d</span>
-                    <span class="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d</span>
-                </div>
-            </div>
-        </div>
-        `;
-      }).join("");
+          // Map cells according to activeColumns order
+          const rowCells = activeColumns.map((col) => {
+            switch (col.id) {
+              case "off_no":
+                return `<td class="py-3 px-4 font-mono font-bold text-xs text-slate-800 whitespace-nowrap">${s.offNo}</td>`;
+              case "name": {
+                const cleanNo = s.offNo ? s.offNo.replace(/[^a-zA-Z0-9]/g, "") : "";
+                const fallbackText = `<div class="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center font-black text-[11px] flex-shrink-0 shadow-xs">${shortRank}</div>`;
+                const avatarHtml = cleanNo
+                  ? `<img src="images/${cleanNo}.JPG" loading="lazy" decoding="async" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-slate-200/90 shadow-xs" onerror="handleProfilePicError(this, '${cleanNo}')">`
+                  : fallbackText;
+                return `
+                  <td class="py-3 px-4">
+                      <div class="flex items-center gap-3">
+                          <div class="relative flex-shrink-0">
+                              ${avatarHtml}
+                          </div>
+                          <div class="min-w-0">
+                              <p class="font-bold text-xs text-slate-900 truncate hover:text-teal-600 cursor-pointer" onclick="openSailorProfile('${sId}')">${s.name || "-"}</p>
+                              <p class="text-[10px] text-slate-500 font-semibold">${s.rank || "-"}</p>
+                          </div>
+                      </div>
+                  </td>`;
+              }
+              case "trade":
+                return `
+                  <td class="py-3 px-4">
+                      <span class="inline-block px-2 py-0.5 rounded text-xs font-extrabold bg-slate-900 text-white">${s.trade || "-"}</span>
+                  </td>`;
+              case "city":
+                return `<td class="py-3 px-4 text-xs text-slate-600 font-medium whitespace-nowrap">${cleanCity}</td>`;
+              case "status":
+                return `<td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>`;
+              case "perf":
+                return `
+                  <td class="py-3 px-4 whitespace-nowrap">
+                      <div class="flex flex-col items-start gap-1">
+                          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300 shadow-xs">
+                              ⭐ ${s.perf.toFixed(2)}
+                          </span>
+                          <div class="flex items-center gap-1 text-[10px] font-bold">
+                              <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d Eval</span>
+                              <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d Non-eval</span>
+                          </div>
+                      </div>
+                  </td>`;
+              case "skills":
+                return `
+                  <td class="py-3 px-4 text-xs text-slate-500 truncate max-w-[180px]" title="${skillText.replace(/"/g, '&quot;')}">
+                      ${skillSnippet !== "—" ? `<span class="text-slate-700">🛠️ ${skillSnippet}</span>` : '<span class="text-slate-300">—</span>'}
+                  </td>`;
+              case "zone":
+                return `<td class="py-3 px-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${s.assignedZone}</td>`;
+              case "actions":
+                return `
+                  <td class="py-3 px-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">
+                      <div class="flex items-center justify-center">
+                          <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 border border-slate-200 transition-all shadow-xs cursor-pointer">
+                              <span>👤</span> Profile
+                          </button>
+                      </div>
+                  </td>`;
+              default:
+                return `<td class="py-3 px-4 text-xs text-slate-600">—</td>`;
+            }
+          }).join("");
+
+          return `<tr class="hover:bg-slate-50/90 transition-colors group">${rowCells}</tr>`;
+        }).join("");
+      }
+    }
+  } else {
+    if (tableBody) tableBody.innerHTML = "";
+    if (gridContainer) {
+      if (mapped.length === 0) {
+        gridContainer.innerHTML = `<div class="col-span-full text-center py-12 text-slate-400 font-medium text-sm">No sailors found matching criteria.</div>`;
+      } else {
+        gridContainer.innerHTML = mapped.map((s) => {
+          var _s$idGrid;
+          const sId = (_s$idGrid = s.id) !== null && _s$idGrid !== void 0 ? _s$idGrid : s._fbKey;
+          const cleanNo = s.offNo ? s.offNo.replace(/[^a-zA-Z0-9]/g, "") : "";
+          const shortRank = s.rank ? s.rank.replace(/[a-z\s()]/gi, "").substring(0, 3) : "AB";
+          const fallbackText = `<div class="w-12 h-12 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs flex-shrink-0">${shortRank}</div>`;
+          const avatarHtml = cleanNo ? `<img src="images/${cleanNo}.JPG" loading="lazy" decoding="async" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-12 h-12 rounded-full object-cover flex-shrink-0" onerror="handleProfilePicError(this, '${cleanNo}')">` : fallbackText;
+          const evalStats = getSailorEvaluationStats(s);
+          const statusBadge = s.liveStatus.badgeHtml;
+
+          const tradeColors = {
+            MA: "bg-teal-600",
+            CA: "bg-purple-600",
+            PA: "bg-amber-700",
+            PL: "bg-cyan-600",
+            WE: "bg-red-600",
+            RW: "bg-slate-700",
+            SW: "bg-emerald-800",
+            BB: "bg-blue-700",
+            AL: "bg-pink-600",
+          };
+          const tradeClass = tradeColors[s.trade] || "bg-slate-600";
+
+          return `
+          <div onclick="openSailorProfile('${sId}')" class="bg-white rounded-2xl shadow-md border border-slate-200/80 p-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between">
+              <div class="flex items-start gap-3">
+                  <div class="relative flex-shrink-0">
+                      ${avatarHtml}
+                      <span class="absolute -bottom-1 -right-1 text-[9px] text-white px-1.5 py-0.5 rounded-full font-extrabold ${tradeClass}">
+                          ${s.trade}
+                      </span>
+                  </div>
+                  <div class="min-w-0 flex-1">
+                      <p class="font-bold text-slate-800 text-sm truncate">${s.name}</p>
+                      <p class="text-xs text-slate-500 font-semibold truncate mt-0.5">${s.rank}</p>
+                      <p class="text-[10px] text-slate-400 mono mt-0.5">${s.offNo}</p>
+                  </div>
+              </div>
+
+              <div class="border-t border-slate-100 pt-3 mt-4 flex items-center justify-between gap-1 flex-wrap">
+                  ${statusBadge}
+                  <div class="flex items-center gap-1.5 text-[10px] font-bold">
+                      <span class="text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200" title="Performance score">⭐ ${s.perf.toFixed(2)}</span>
+                      <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d</span>
+                      <span class="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d</span>
+                  </div>
+              </div>
+          </div>
+          `;
+        }).join("");
+      }
     }
   }
 }
@@ -24191,7 +24195,7 @@ function openSailorProfile(sailorId) {
   if (photoBox) {
     const fallbackText = `<div class="w-full h-full bg-slate-700 text-white flex items-center justify-center font-bold text-lg">${shortRank}</div>`;
     if (cleanNo) {
-      photoBox.innerHTML = `<img src="images/${cleanNo}.JPG" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
+      photoBox.innerHTML = `<img src="images/${cleanNo}.JPG" decoding="async" data-fallback="${fallbackText.replace(/"/g, "&quot;")}" class="w-full h-full object-cover" onerror="handleProfilePicError(this, '${cleanNo}')">`;
     } else {
       photoBox.innerHTML = fallbackText;
     }
