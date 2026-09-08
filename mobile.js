@@ -1,0 +1,590 @@
+﻿// =============================================
+// CMSys MOBILE QUICK ENTRY PORTAL (mobile.js)
+// Ultra-lightweight, high-performance module (< 400 lines)
+// =============================================
+
+// Helper for UTC safe timezone processing (Sri Lanka local date)
+function getLocalDateString() {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function sanitizeFbKey(key) {
+  if (!key) return "";
+  return String(key).replace(/[.#$\[\]\/]/g, "_");
+}
+
+// Global In-Memory Store
+const mStore = {
+  currentZone: localStorage.getItem("ncw_saved_zone") || "A-Zone",
+  workOrders: [],
+  sailors: [],
+  dailyAllocations: [],
+  selectedWo: null,
+  assignedTemp: [],
+  currentUser: {
+    name: "Site Officer",
+    rank: "PO1 (CE)",
+    serviceNo: "NRX 12345"
+  }
+};
+
+// =============================================
+// DUAL FIREBASE INITIALIZATION
+// =============================================
+const sailorsFirebaseConfig = {
+  apiKey: "AIzaSyDmHdg1FfgR_-4pKJ5z0inI8-BZ21MUtvg",
+  authDomain: "ce-admin-panel2025.firebaseapp.com",
+  databaseURL: "https://ce-admin-panel2025-default-rtdb.firebaseio.com",
+  projectId: "ce-admin-panel2025",
+  storageBucket: "ce-admin-panel2025.firebasestorage.app",
+  messagingSenderId: "1093761746400",
+  appId: "1:1093761746400:web:1984fad8019641b2ca5785"
+};
+
+const opsFirebaseConfig = {
+  apiKey: "AIzaSyCRgW9qcd42Ks_C56csNL85jXd5OsLD8q0",
+  authDomain: "ncw-ps-operations.firebaseapp.com",
+  databaseURL: "https://ncw-ps-operations-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "ncw-ps-operations",
+  storageBucket: "ncw-ps-operations.firebasestorage.app",
+  messagingSenderId: "992132561625",
+  appId: "1:992132561625:web:5b4f0c753c568cea66dcc8"
+};
+
+let sailorsDB = null;
+let opsDB = null;
+
+try {
+  const sailorsApp = firebase.initializeApp(sailorsFirebaseConfig, "mSailors");
+  sailorsDB = firebase.database(sailorsApp);
+
+  const opsApp = firebase.initializeApp(opsFirebaseConfig, "mOperations");
+  opsDB = firebase.database(opsApp);
+  console.log("⚡ CMSys Mobile: Dual Firebase connected");
+} catch (e) {
+  console.error("Firebase init error:", e);
+}
+
+// =============================================
+// TOAST HELPER
+// =============================================
+let toastTimer = null;
+function showToast(msg, type = "success") {
+  const t = document.getElementById("mToast");
+  const msgEl = document.getElementById("mToastMsg");
+  const iconEl = document.getElementById("mToastIcon");
+  if (!t) return;
+
+  iconEl.textContent = type === "error" ? "⚠️" : type === "info" ? "ℹ️" : "✅";
+  msgEl.innerHTML = msg;
+
+  t.classList.remove("translate-y-24");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    t.classList.add("translate-y-24");
+  }, 3500);
+}
+
+// =============================================
+// DATA FETCHING & REAL-TIME LISTENERS
+// =============================================
+function initListeners() {
+  const zoneSelect = document.getElementById("mZoneSelect");
+  if (zoneSelect) zoneSelect.value = mStore.currentZone;
+
+  // 1. Listen to Sailors DB
+  if (sailorsDB) {
+    sailorsDB.ref("sailors").on("value", (snap) => {
+      const data = snap.val();
+      mStore.sailors = [];
+      if (data) {
+        Object.entries(data).forEach(([key, s]) => {
+          if (s) {
+            s._fbKey = key;
+            if (!s.id) s.id = key;
+            mStore.sailors.push(s);
+          }
+        });
+      }
+      populateLeaderDropdowns();
+      renderWorkOrders();
+    });
+  }
+
+  // 2. Listen to Work Orders
+  if (opsDB) {
+    opsDB.ref("work_orders").on("value", (snap) => {
+      const data = snap.val();
+      mStore.workOrders = [];
+      if (data) {
+        Object.entries(data).forEach(([key, w]) => {
+          if (w) {
+            w._fbKey = key;
+            if (!w.id) w.id = key;
+            mStore.workOrders.push(w);
+          }
+        });
+      }
+      renderWorkOrders();
+    });
+
+    // 3. Listen to Daily Allocations
+    opsDB.ref("daily_allocations").on("value", (snap) => {
+      const data = snap.val();
+      mStore.dailyAllocations = [];
+      if (data) {
+        Object.entries(data).forEach(([key, a]) => {
+          if (a) {
+            a._fbKey = key;
+            mStore.dailyAllocations.push(a);
+          }
+        });
+      }
+      renderWorkOrders();
+    });
+
+    // 4. Connection State Monitor
+    opsDB.ref(".info/connected").on("value", (snap) => {
+      const sync = document.getElementById("mSyncStatus");
+      if (!sync) return;
+      if (snap.val() === true) {
+        sync.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><span>Live</span>`;
+        sync.className = "flex items-center gap-1 text-[10px] text-emerald-400 font-semibold shrink-0";
+      } else {
+        sync.innerHTML = `<span class="w-2 h-2 rounded-full bg-amber-400"></span><span>Offline</span>`;
+        sync.className = "flex items-center gap-1 text-[10px] text-amber-400 font-semibold shrink-0";
+      }
+    });
+  }
+}
+
+// Switch Zone
+function onZoneChange(newZone) {
+  mStore.currentZone = newZone;
+  localStorage.setItem("ncw_saved_zone", newZone);
+  renderWorkOrders();
+  showToast(`Switched to ${newZone}`, "info");
+}
+
+function refreshData(userInitiated = false) {
+  renderWorkOrders();
+  if (userInitiated) showToast("Data refreshed!");
+}
+
+// =============================================
+// RENDER WORK ORDERS LIST
+// =============================================
+function renderWorkOrders() {
+  const container = document.getElementById("mWoList");
+  const countBadge = document.getElementById("mWoCountBadge");
+  const titleEl = document.getElementById("mWoListTitle");
+  if (!container) return;
+
+  const q = (document.getElementById("mSearchWo")?.value || "").toLowerCase().trim();
+  const currentZone = mStore.currentZone;
+  const today = getLocalDateString();
+
+  // Filter by Zone & Query
+  const filtered = mStore.workOrders.filter((w) => {
+    const matchZone = !w.zone || w.zone === currentZone;
+    if (!matchZone) return false;
+    if (!q) return true;
+    const desc = (w.description || "").toLowerCase();
+    const loc = (w.location_id || "").toLowerCase();
+    const status = (w.status || "").toLowerCase();
+    return desc.includes(q) || loc.includes(q) || status.includes(q);
+  });
+
+  if (titleEl) titleEl.textContent = `${currentZone} Tasks`;
+  if (countBadge) countBadge.textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="p-8 text-center text-slate-500 bg-slate-800/40 rounded-2xl border border-slate-800">
+        <div class="text-3xl mb-1">📋</div>
+        <p class="text-xs font-bold text-slate-400">No work orders found in ${currentZone}</p>
+        <p class="text-[10px] text-slate-500 mt-0.5">Change zone or use search to find tasks</p>
+      </div>`;
+    return;
+  }
+
+  // Sort Active first, then Priority
+  filtered.sort((a, b) => {
+    if (a.status === "Active" && b.status !== "Active") return -1;
+    if (b.status === "Active" && a.status !== "Active") return 1;
+    return (b.progress || 0) - (a.progress || 0);
+  });
+
+  container.innerHTML = filtered.map((w) => {
+    const progress = Math.min(100, Math.max(0, parseInt(w.progress) || 0));
+    const crewCount = (w.assigned || []).length;
+    const isCommittedToday = w.last_commit_date === today;
+
+    // Status pill colors
+    let statusClass = "bg-slate-700/60 text-slate-300 border-slate-600";
+    if (w.status === "Active") statusClass = "bg-emerald-500/20 text-emerald-300 border-emerald-500/40";
+    if (w.status === "Pending") statusClass = "bg-amber-500/20 text-amber-300 border-amber-500/40";
+    if (w.status === "Hold") statusClass = "bg-rose-500/20 text-rose-300 border-rose-500/40";
+    if (w.status === "Completed") statusClass = "bg-blue-500/20 text-blue-300 border-blue-500/40";
+
+    return `
+      <div onclick="openWoSheet('${w._fbKey || w.id}')" class="p-3.5 rounded-2xl bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 active-scale shadow-sm transition-all cursor-pointer space-y-2.5">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-1.5 mb-1 flex-wrap">
+              <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${statusClass}">${w.status || "Pending"}</span>
+              ${w.priority === "Urgent" || w.priority === "Emergency" ? `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">${w.priority}</span>` : ""}
+              ${isCommittedToday ? `<span class="text-[9px] font-bold text-teal-300 bg-teal-500/20 px-1.5 py-0.5 rounded border border-teal-500/30">✓ Committed Today</span>` : ""}
+            </div>
+            <h3 class="text-xs font-bold text-white line-clamp-2 leading-snug">${w.description || "Untitled Work Order"}</h3>
+          </div>
+          <span class="text-base text-slate-400 font-bold shrink-0">›</span>
+        </div>
+
+        <!-- Progress Bar & Crew Info -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
+            <span>Progress</span>
+            <span class="font-black text-teal-300">${progress}%</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-teal-500 to-emerald-400 rounded-full transition-all duration-300" style="width: ${progress}%"></div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between pt-1 border-t border-slate-700/50 text-[10px] text-slate-400">
+          <span class="flex items-center gap-1">👥 <strong class="text-slate-200">${crewCount}</strong> sailor(s) assigned</span>
+          <span class="text-teal-400 font-bold">Tap to edit ➔</span>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function filterWorkOrders() {
+  renderWorkOrders();
+}
+
+// =============================================
+// WORK ORDER DETAIL / LABOUR SHEET LOGIC
+// =============================================
+function populateLeaderDropdowns() {
+  const inchargeSel = document.getElementById("mWoIncharge");
+  const supSel = document.getElementById("mWoSupervisor");
+  if (!inchargeSel || !supSel) return;
+
+  const currentInc = inchargeSel.value;
+  const currentSup = supSel.value;
+
+  const options = ['<option value="">-- None --</option>'];
+  mStore.sailors.forEach((s) => {
+    const label = `${s.rank || ""} ${s.name || s.id} (${s.branch || s.rate || ""})`.trim();
+    options.push(`<option value="${s.id}">${label}</option>`);
+  });
+
+  inchargeSel.innerHTML = options.join("");
+  supSel.innerHTML = options.join("");
+
+  if (currentInc) inchargeSel.value = currentInc;
+  if (currentSup) supSel.value = currentSup;
+}
+
+function openWoSheet(woId) {
+  const wo = mStore.workOrders.find((w) => String(w._fbKey) === String(woId) || String(w.id) === String(woId));
+  if (!wo) return;
+
+  mStore.selectedWo = wo;
+  mStore.assignedTemp = Array.isArray(wo.assigned) ? [...wo.assigned] : [];
+
+  document.getElementById("mSheetTitle").textContent = wo.description || "Work Order";
+  document.getElementById("mWoDesc").value = wo.description || "";
+
+  const prog = Math.min(100, Math.max(0, parseInt(wo.progress) || 0));
+  document.getElementById("mProgressInput").value = prog;
+  document.getElementById("mProgressVal").textContent = `${prog}%`;
+
+  document.getElementById("mWoStatus").value = wo.status || "Active";
+  document.getElementById("mWoPriority").value = wo.priority || "Routine";
+
+  populateLeaderDropdowns();
+  if (document.getElementById("mWoIncharge")) document.getElementById("mWoIncharge").value = wo.incharge || "";
+  if (document.getElementById("mWoSupervisor")) document.getElementById("mWoSupervisor").value = wo.supervisor || "";
+
+  renderAssignedTags();
+  renderSailorQuickPicker();
+
+  const sheet = document.getElementById("mWoSheet");
+  if (sheet) sheet.classList.remove("hidden");
+}
+
+function closeWoSheet() {
+  const sheet = document.getElementById("mWoSheet");
+  if (sheet) sheet.classList.add("hidden");
+  mStore.selectedWo = null;
+}
+
+function onProgressChange(val) {
+  const p = parseInt(val) || 0;
+  document.getElementById("mProgressInput").value = p;
+  document.getElementById("mProgressVal").textContent = `${p}%`;
+}
+
+// Assigned Tags Rendering
+function renderAssignedTags() {
+  const container = document.getElementById("mAssignedTags");
+  const countBadge = document.getElementById("mAssignedCountBadge");
+  if (!container) return;
+
+  const count = mStore.assignedTemp.length;
+  if (countBadge) countBadge.textContent = `${count} sailor${count === 1 ? "" : "s"}`;
+
+  if (count === 0) {
+    container.innerHTML = `<span class="text-slate-500 text-[11px] italic py-0.5">No sailors assigned yet</span>`;
+    return;
+  }
+
+  container.innerHTML = mStore.assignedTemp.map((sid) => {
+    const s = mStore.sailors.find((x) => String(x.id) === String(sid) || String(x._fbKey) === String(sid));
+    const name = s ? `${s.rank || ""} ${s.name || sid}`.trim() : sid;
+    return `
+      <span class="inline-flex items-center gap-1 bg-teal-500/20 text-teal-200 border border-teal-500/40 text-xs font-semibold px-2 py-1 rounded-xl">
+        <span>${name}</span>
+        <button onclick="removeSailorFromSheet('${sid}')" class="text-teal-400 hover:text-rose-400 font-bold px-1 active-scale">✕</button>
+      </span>`;
+  }).join("");
+}
+
+function renderSailorQuickPicker() {
+  const container = document.getElementById("mSailorQuickPicker");
+  if (!container) return;
+
+  const q = (document.getElementById("mSailorSearch")?.value || "").toLowerCase().trim();
+
+  // Filter sailors available or matching search
+  const filtered = mStore.sailors.filter((s) => {
+    const isAlreadyAssigned = mStore.assignedTemp.includes(String(s.id)) || mStore.assignedTemp.includes(String(s._fbKey));
+    if (isAlreadyAssigned) return false;
+    if (!q) return true;
+    const name = (s.name || "").toLowerCase();
+    const rank = (s.rank || "").toLowerCase();
+    const rate = (s.rate || s.branch || "").toLowerCase();
+    const official = (s.official_no || s.officialNo || "").toLowerCase();
+    return name.includes(q) || rank.includes(q) || rate.includes(q) || official.includes(q);
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="p-3 text-center text-slate-500 text-[11px]">No matching available sailors</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.slice(0, 30).map((s) => {
+    const sid = s.id || s._fbKey;
+    const label = `${s.rank || ""} ${s.name || s.id}`.trim();
+    const branch = s.rate || s.branch || "Sailor";
+    return `
+      <div onclick="addSailorToSheet('${sid}')" class="p-2.5 flex items-center justify-between hover:bg-slate-800/80 active-scale cursor-pointer">
+        <div>
+          <p class="text-xs font-bold text-white">${label}</p>
+          <p class="text-[10px] text-slate-400">${branch} • ${s.official_no || s.officialNo || s.id}</p>
+        </div>
+        <button class="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 text-xs font-black flex items-center justify-center">
+          +
+        </button>
+      </div>`;
+  }).join("");
+}
+
+function filterSailorsForAssignment() {
+  renderSailorQuickPicker();
+}
+
+function addSailorToSheet(sid) {
+  const idStr = String(sid);
+  if (!mStore.assignedTemp.includes(idStr)) {
+    mStore.assignedTemp.push(idStr);
+    renderAssignedTags();
+    renderSailorQuickPicker();
+  }
+}
+
+function removeSailorFromSheet(sid) {
+  const idStr = String(sid);
+  mStore.assignedTemp = mStore.assignedTemp.filter((x) => x !== idStr);
+  renderAssignedTags();
+  renderSailorQuickPicker();
+}
+
+function restoreCrewInSheet() {
+  const wo = mStore.selectedWo;
+  if (!wo) return;
+  if (wo.last_assigned && Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0) {
+    mStore.assignedTemp = [...wo.last_assigned];
+    renderAssignedTags();
+    renderSailorQuickPicker();
+    showToast(`Restored last crew (${wo.last_assigned.length} sailors)`);
+  } else {
+    showToast("No previous crew recorded for this work order", "info");
+  }
+}
+
+// =============================================
+// COMMIT & PROCEED WORK ORDER
+// =============================================
+function saveWoSheet(shouldClose = true) {
+  const wo = mStore.selectedWo;
+  if (!wo || !opsDB) return;
+
+  const btn = document.getElementById("mBtnSaveOnly");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Saving...";
+  }
+
+  const desc = document.getElementById("mWoDesc").value.trim() || wo.description;
+  const progress = parseInt(document.getElementById("mProgressInput").value) || 0;
+  const status = document.getElementById("mWoStatus").value;
+  const priority = document.getElementById("mWoPriority").value;
+  const incharge = document.getElementById("mWoIncharge").value || null;
+  const supervisor = document.getElementById("mWoSupervisor").value || null;
+
+  wo.description = desc;
+  wo.progress = progress;
+  wo.status = status;
+  wo.priority = priority;
+  wo.incharge = incharge;
+  wo.supervisor = supervisor;
+  wo.assigned = [...mStore.assignedTemp];
+
+  const targetFbKey = wo._fbKey || wo.id;
+  opsDB.ref(`work_orders/${targetFbKey}`).update({
+    description: desc,
+    progress: progress,
+    status: status,
+    priority: priority,
+    incharge: incharge,
+    supervisor: supervisor,
+    assigned: wo.assigned.length > 0 ? wo.assigned : null
+  }).then(() => {
+    showToast("Work order saved successfully!");
+    if (shouldClose) closeWoSheet();
+    renderWorkOrders();
+  }).catch((err) => {
+    showToast("Failed to save: " + err.message, "error");
+  }).finally(() => {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "💾 Save";
+    }
+  });
+}
+
+function proceedWoSheet() {
+  const wo = mStore.selectedWo;
+  if (!wo || !opsDB) return;
+
+  const btn = document.getElementById("mBtnProceed");
+  if (btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="animate-spin">⏳</span> Committing...`;
+  }
+
+  // Auto-restore crew if empty and last_assigned exists
+  if ((!mStore.assignedTemp || mStore.assignedTemp.length === 0) && wo.last_assigned && wo.last_assigned.length > 0) {
+    mStore.assignedTemp = [...wo.last_assigned];
+    renderAssignedTags();
+  }
+
+  if (!mStore.assignedTemp || mStore.assignedTemp.length === 0) {
+    showToast("Please assign at least one sailor before proceeding!", "error");
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span>🚀</span> Commit Daily Labour`;
+    }
+    return;
+  }
+
+  const today = getLocalDateString();
+  const desc = document.getElementById("mWoDesc").value.trim() || wo.description;
+  const progress = parseInt(document.getElementById("mProgressInput").value) || 0;
+  const status = document.getElementById("mWoStatus").value;
+  const priority = document.getElementById("mWoPriority").value;
+  const incharge = document.getElementById("mWoIncharge").value || null;
+  const supervisor = document.getElementById("mWoSupervisor").value || null;
+
+  wo.description = desc;
+  wo.progress = progress;
+  if (status !== "Hold" && status !== "Completed") {
+    wo.status = "Active";
+  } else {
+    wo.status = status;
+  }
+  wo.priority = priority;
+  wo.incharge = incharge;
+  wo.supervisor = supervisor;
+  wo.last_commit_date = today;
+  wo.last_committed_date = today;
+  wo.last_assigned = [...mStore.assignedTemp];
+  wo.last_assigned_date = today;
+  wo.assigned = [...mStore.assignedTemp];
+
+  const targetFbKey = wo._fbKey || wo.id;
+
+  // Single Consolidated Work Order Update
+  opsDB.ref(`work_orders/${targetFbKey}`).update({
+    description: desc,
+    progress: progress,
+    status: wo.status,
+    priority: priority,
+    incharge: incharge,
+    supervisor: supervisor,
+    last_commit_date: today,
+    last_committed_date: today,
+    last_assigned: [...wo.assigned],
+    last_assigned_date: today,
+    assigned: wo.assigned
+  });
+
+  // Write Today's Daily Allocations for each sailor
+  wo.assigned.forEach((sid) => {
+    const sailor = mStore.sailors.find((s) => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
+    const alloc = {
+      id: (mStore.dailyAllocations || []).length + 1,
+      date: today,
+      sailor_id: sid,
+      work_order_id: wo.id,
+      role_today:
+        sailor && sailor.id == wo.supervisor
+          ? "Supervisor"
+          : sailor && sailor.id == wo.incharge
+            ? "In-Charge"
+            : "Worker",
+      assigned_by: mStore.currentUser.name,
+      status: "Active"
+    };
+
+    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
+  });
+
+  // Fast optimistic close & toast
+  setTimeout(() => {
+    closeWoSheet();
+    renderWorkOrders();
+    showToast(`✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 20)}…"`, "success");
+  }, 40);
+
+  if (btn) {
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.innerHTML = `<span>🚀</span> Commit Daily Labour`;
+    }, 400);
+  }
+}
+
+// Start listeners on window load
+window.addEventListener("DOMContentLoaded", () => {
+  initListeners();
+});
