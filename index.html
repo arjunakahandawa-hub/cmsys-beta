@@ -793,6 +793,18 @@
                     <select id="zoneSelector" onchange="changeZone()" class="text-[11px] sm:text-xs rounded-lg px-2 py-1 sm:py-1.5 border border-teal-600/50 font-medium cursor-pointer max-w-[110px] xs:max-w-[140px] sm:max-w-[220px] text-ellipsis"
                         style="background:rgba(13,148,136,0.18);color:#5eead4;">
                     </select>
+                    <script>
+                        (function() {
+                            try {
+                                const qZ = new URLSearchParams(window.location.search).get("zone");
+                                const sZ = qZ || localStorage.getItem("ncw_saved_zone") || "A-Zone";
+                                const sel = document.getElementById("zoneSelector");
+                                if (sel && sZ) {
+                                    sel.innerHTML = '<option value="' + sZ + '" selected>' + sZ + '</option>';
+                                }
+                            } catch(e) {}
+                        })();
+                    </script>
                     <div class="relative">
                         <button onclick="toggleProfileDropdown()" id="profileMenuBtn" class="w-7 h-7 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center text-[9px] sm:text-[10px] font-bold text-white shadow-lg cursor-pointer hover:scale-105 active:scale-95 transition-all shrink-0"
                             style="background:linear-gradient(135deg,#0d9488,#0891b2)" title="Profile Actions">OIC</button>
@@ -7604,10 +7616,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-teal-400 font-bold z-[9999] bg-slate-900/90 border border-teal-500/30 px-2 py-1 rounded-lg shadow pointer-events-none font-mono">
-        App Version: v5.24.82
+        App Version: v5.24.87
     </div>
 
-    <script src="app.js?v=5.24.82"></script>
+    <script src="app.js?v=5.24.87"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

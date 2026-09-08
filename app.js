@@ -215,8 +215,27 @@ function getLocalDateString() {
   return `${year}-${month}-${day}`;
 }
 
+function getInitialAppZone() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const qZone = params.get("zone");
+    if (qZone && qZone.trim()) {
+      const trimmed = qZone.trim();
+      localStorage.setItem("ncw_saved_zone", trimmed);
+      return trimmed;
+    }
+  } catch (e) {}
+  const savedType = localStorage.getItem("ncw_ps_active_profile_type") || sessionStorage.getItem("ncw_ps_active_profile_type");
+  const savedProfileZone = localStorage.getItem("ncw_ps_active_profile_zone") || sessionStorage.getItem("ncw_ps_active_profile_zone");
+  if ((savedType === "ZoneInCharge" || savedType === "ZoneSubInCharge") && savedProfileZone) {
+    localStorage.setItem("ncw_saved_zone", savedProfileZone);
+    return savedProfileZone;
+  }
+  return localStorage.getItem("ncw_saved_zone") || "A-Zone";
+}
+
 const store = {
-  currentZone: localStorage.getItem("ncw_saved_zone") || "A-Zone",
+  currentZone: getInitialAppZone(),
   activeProfileType: null,
   activeProfileZone: null,
   currentFilter: "all",
@@ -14505,26 +14524,44 @@ function renderZoneSelectors() {
       sel.value = "SBS";
       if (selId === "zoneSelector") {
         store.currentZone = "SBS";
-      }
-    } else if (
-      visibleZones.some((z) => z.id === prev) ||
-      (isAdminStaffDuties(prev) && hasAllZoneAccess)
-    ) {
-      sel.value = prev;
-      if (selId === "zoneSelector") {
-        store.currentZone = prev;
+        localStorage.setItem("ncw_saved_zone", "SBS");
       }
     } else {
-      // Select the first visible zone
-      if (visibleZones.length > 0) {
-        sel.value = visibleZones[0].id;
+      const matchedZone = zonesToRender.find(
+        (z) =>
+          z.id === prev ||
+          z.name === prev ||
+          isZoneMatch(z.id, prev) ||
+          isZoneMatch(z.name, prev) ||
+          (isAdminStaffDuties(z.id) && isAdminStaffDuties(prev))
+      );
+
+      if (matchedZone) {
+        sel.value = matchedZone.id;
         if (selId === "zoneSelector") {
-          store.currentZone = visibleZones[0].id;
+          store.currentZone = matchedZone.id;
+          localStorage.setItem("ncw_saved_zone", matchedZone.id);
         }
-      } else if (hasAllZoneAccess) {
+      } else if (isAdminStaffDuties(prev) && hasAllZoneAccess) {
         sel.value = "Admin-&-Staff-Duties";
         if (selId === "zoneSelector") {
           store.currentZone = "Admin-&-Staff-Duties";
+          localStorage.setItem("ncw_saved_zone", "Admin-&-Staff-Duties");
+        }
+      } else {
+        // Select the first visible zone if no matching zone exists
+        if (visibleZones.length > 0) {
+          sel.value = visibleZones[0].id;
+          if (selId === "zoneSelector") {
+            store.currentZone = visibleZones[0].id;
+            localStorage.setItem("ncw_saved_zone", visibleZones[0].id);
+          }
+        } else if (hasAllZoneAccess) {
+          sel.value = "Admin-&-Staff-Duties";
+          if (selId === "zoneSelector") {
+            store.currentZone = "Admin-&-Staff-Duties";
+            localStorage.setItem("ncw_saved_zone", "Admin-&-Staff-Duties");
+          }
         }
       }
     }
@@ -20093,6 +20130,7 @@ document.addEventListener("DOMContentLoaded", () => {
   updateOnlineStatus();
   updateDateTime();
   setInterval(updateDateTime, 1000);
+  applyActiveProfile();
   renderZoneSelectors(); // Initialize dashboardDate to today
   const today = getLocalDateString();
   store.dashboardDate = today;
@@ -20488,6 +20526,10 @@ function performProfileSwitch(type, zoneId = "", oicProfileId = "", rememberMe =
   // Save to target storage
   storage.setItem("ncw_ps_active_profile_type", type);
   storage.setItem("ncw_ps_active_profile_zone", zoneId);
+  if (zoneId) {
+    storage.setItem("ncw_saved_zone", zoneId);
+    store.currentZone = zoneId;
+  }
 
   if (type === "Sailor") {
     storage.setItem("ncw_ps_active_sailor_id", oicProfileId); // third param is sailorId

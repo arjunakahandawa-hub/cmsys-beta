@@ -1,10 +1,10 @@
-const CACHE_NAME = 'ncw-ps-cache-v5.24.86';
+const CACHE_NAME = 'ncw-ps-cache-v5.24.87';
 const ASSETS = [
   './',
   './index.html',
-  './app.js?v=5.24.82',
+  './app.js?v=5.24.87',
   './mobile.html',
-  './mobile.js?v=1.0.5',
+  './mobile.js?v=1.0.6',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',

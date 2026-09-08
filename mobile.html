@@ -71,7 +71,7 @@
                 <span>Live</span>
             </div>
             <!-- Back to Desktop / Full Admin button -->
-            <a href="index.html" class="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-[11px] font-bold text-slate-300 flex items-center gap-1 active-scale">
+            <a href="index.html" onclick="this.href='index.html?zone=' + encodeURIComponent((typeof mStore !== 'undefined' && mStore.currentZone) ? mStore.currentZone : (localStorage.getItem('ncw_saved_zone') || 'A-Zone'))" class="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-[11px] font-bold text-slate-300 flex items-center gap-1 active-scale">
                 <span>🖥️</span> Full App
             </a>
         </div>
@@ -300,6 +300,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.0.5"></script>
+    <script src="mobile.js?v=1.0.6"></script>
 </body>
 </html>
