@@ -5163,7 +5163,7 @@
                 <button id="btnSaveWoChanges" onclick="saveWorkOrderChanges()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-700 px-4 py-2.5 rounded-lg text-sm font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer">
                     <span>💾</span> Save Changes
                 </button>
-                <button id="btnProceedWo" onclick="proceedWorkOrder()" class="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg text-sm font-medium">
+                <button id="btnProceedWo" onclick="proceedWorkOrder()" class="flex-1 bg-green-600 hover:bg-green-700 active:scale-95 transition-all text-white px-4 py-2.5 rounded-lg text-sm font-medium cursor-pointer touch-manipulation shadow-sm">
                     🚀 Proceed - Commit Daily Labour
                 </button>
                 <button id="btnOfficerApproveWoFooter" onclick="officerApproveCurrentWorkOrder()" class="hidden flex-1 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-md transition-all flex items-center justify-center gap-1.5 cursor-pointer">
@@ -7599,10 +7599,10 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-teal-400 font-bold z-[9999] bg-slate-900/90 border border-teal-500/30 px-2 py-1 rounded-lg shadow pointer-events-none font-mono">
-        App Version: v5.24.80
+        App Version: v5.24.81
     </div>
 
-    <script src="app.js?v=5.24.80"></script>
+    <script src="app.js?v=5.24.81"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

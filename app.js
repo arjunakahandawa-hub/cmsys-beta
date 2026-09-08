@@ -7238,8 +7238,9 @@ function markWoChangesSaved() {
   btn.innerHTML = "<span>✓</span> Saved";
 }
 
-function saveWorkOrderChanges(autoClose = true) {
+function saveWorkOrderChanges(autoClose = true, syncWoToFirebase = true) {
   const shouldClose = typeof autoClose === "boolean" ? autoClose : true;
+  const shouldSyncFb = typeof syncWoToFirebase === "boolean" ? syncWoToFirebase : true;
   const btn = document.getElementById("btnSaveWoChanges");
   if (btn) {
     if (btn.disabled) return;
@@ -7338,39 +7339,43 @@ function saveWorkOrderChanges(autoClose = true) {
     if (jc && window.fbSaveJobCard) {
       fbSaveJobCard(jc);
     }
-    if (wo._fbKey) {
-      opsDB.ref(`work_orders/${wo._fbKey}`).update({
-        status: wo.status,
-        priority: wo.priority,
-        description: wo.description,
-        authority_approval: wo.authority_approval,
-        budget_allocation: wo.budget_allocation,
-        estimated_duration: wo.estimated_duration,
-        progress: wo.progress,
-        incharge: wo.incharge,
-        supervisor: wo.supervisor,
-        project_artificer: wo.project_artificer,
-        assigned: wo.assigned && wo.assigned.length > 0 ? wo.assigned : null
-      });
-    } else if (window.fbSaveWorkOrder) {
-      fbSaveWorkOrder(wo);
+    if (shouldSyncFb) {
+      if (wo._fbKey) {
+        opsDB.ref(`work_orders/${wo._fbKey}`).update({
+          status: wo.status,
+          priority: wo.priority,
+          description: wo.description,
+          authority_approval: wo.authority_approval,
+          budget_allocation: wo.budget_allocation,
+          estimated_duration: wo.estimated_duration,
+          progress: wo.progress,
+          incharge: wo.incharge,
+          supervisor: wo.supervisor,
+          project_artificer: wo.project_artificer,
+          assigned: wo.assigned && wo.assigned.length > 0 ? wo.assigned : null
+        });
+      } else if (window.fbSaveWorkOrder) {
+        fbSaveWorkOrder(wo);
+      }
     }
     
     markWoChangesSaved();
 
-    // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
-    setTimeout(() => {
-      refreshCurrentViewImmediately();
-      renderZoneSelectors(); // Update Zone dropdown percentages
-      if (shouldClose) {
-        showToast(
-          `Work order updated successfully! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
-          "success",
-          6000
-        );
-        closeModal("workOrderDetailModal");
-      }
-    }, 350);
+    if (shouldSyncFb) {
+      // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
+      setTimeout(() => {
+        refreshCurrentViewImmediately();
+        renderZoneSelectors(); // Update Zone dropdown percentages
+        if (shouldClose) {
+          showToast(
+            `Work order updated successfully! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+            "success",
+            6000
+          );
+          closeModal("workOrderDetailModal");
+        }
+      }, 350);
+    }
   }
   if (btn) {
     setTimeout(() => {
@@ -7378,7 +7383,7 @@ function saveWorkOrderChanges(autoClose = true) {
       if (!shouldClose) {
         markWoChangesSaved();
       }
-    }, 400);
+    }, shouldSyncFb ? 400 : 50);
   }
 }
 function deleteWorkOrder() {
@@ -7595,7 +7600,8 @@ function proceedWorkOrder() {
     if (btn.disabled) return;
     btn.disabled = true;
     btn.dataset.originalText = btn.innerHTML;
-    btn.innerHTML = "Processing...";
+    btn.innerHTML = `<span class="inline-block animate-spin mr-1.5">⏳</span> Proceeding...`;
+    btn.classList.add("opacity-75", "scale-[0.98]");
   }
 
   const woKey = store.selectedWorkOrder;
@@ -7605,12 +7611,17 @@ function proceedWorkOrder() {
   if (!wo) {
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = btn.dataset.originalText;
+      btn.innerHTML = btn.dataset.originalText || "🚀 Proceed - Commit Daily Labour";
+      btn.classList.remove("opacity-75", "scale-[0.98]");
     }
     return;
-  } // Save any pending field edits first
-  saveWorkOrderChanges(false);
-  const today = getLocalDateString(); // Auto-restore previous crew if current assigned is empty
+  }
+
+  // Save pending edits in-memory/JC without duplicate Work Order network roundtrip
+  saveWorkOrderChanges(false, false);
+
+  const today = getLocalDateString();
+  // Auto-restore previous crew if current assigned is empty
   if (
     (!wo.assigned || wo.assigned.length === 0) &&
     wo.last_assigned &&
@@ -7631,14 +7642,18 @@ function proceedWorkOrder() {
     }
     showToast(`Auto-restored last active crew (${wo.assigned.length} sailors)`);
   }
+
   if (!wo.assigned || wo.assigned.length === 0) {
     showToast("Assign at least one sailor before proceeding", "error");
     if (btn) {
       btn.disabled = false;
-      btn.innerHTML = btn.dataset.originalText;
+      btn.innerHTML = btn.dataset.originalText || "🚀 Proceed - Commit Daily Labour";
+      btn.classList.remove("opacity-75", "scale-[0.98]");
     }
     return;
-  } // Update the work order and write today's allocations
+  }
+
+  // Update the work order state
   if (wo.status !== "Hold" && wo.status !== "Completed") {
     wo.status = "Active";
   }
@@ -7646,21 +7661,36 @@ function proceedWorkOrder() {
   wo.last_committed_date = today;
   wo.last_assigned = [...wo.assigned];
   wo.last_assigned_date = today;
+
+  // Single consolidated Firebase write for Work Order
   if (wo._fbKey) {
     opsDB.ref(`work_orders/${wo._fbKey}`).update({
       status: wo.status,
+      priority: wo.priority,
+      description: wo.description,
+      authority_approval: wo.authority_approval,
+      budget_allocation: wo.budget_allocation,
+      estimated_duration: wo.estimated_duration,
+      progress: wo.progress,
+      incharge: wo.incharge,
+      supervisor: wo.supervisor,
+      project_artificer: wo.project_artificer,
       last_commit_date: today,
       last_committed_date: today,
       last_assigned: [...wo.assigned],
-      last_assigned_date: today
+      last_assigned_date: today,
+      assigned: wo.assigned && wo.assigned.length > 0 ? wo.assigned : null
     });
   } else if (window.fbSaveWorkOrder) {
     fbSaveWorkOrder(wo);
   }
+
+  // Update daily allocations in memory and Firebase
   wo.assigned.forEach((sid) => {
     const sailor = store.sailors.find(
       (s) => String(s.id) === String(sid) || String(s._fbKey) === String(sid),
-    ); // remove existing same-day allocation for this sailor (one job per day)
+    );
+    // remove existing same-day allocation for this sailor (one job per day)
     store.dailyAllocations = (store.dailyAllocations || []).filter(
       (a) => !(a.date === today && a.sailor_id === sid),
     );
@@ -7688,7 +7718,8 @@ function proceedWorkOrder() {
     }
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
   });
-  // Delay closing to prevent mobile double-tap ghost clicks on underlying UI
+
+  // Rapid modal closing (reduced to 50ms) for snappy response
   setTimeout(() => {
     closeModal("workOrderDetailModal");
     refreshCurrentViewImmediately();
@@ -7697,12 +7728,14 @@ function proceedWorkOrder() {
       "success",
       6000
     );
-  }, 300);
+  }, 50);
+
   if (btn) {
     setTimeout(() => {
       btn.disabled = false;
-      btn.innerHTML = btn.dataset.originalText;
-    }, 500);
+      btn.innerHTML = btn.dataset.originalText || "🚀 Proceed - Commit Daily Labour";
+      btn.classList.remove("opacity-75", "scale-[0.98]");
+    }, 400);
   }
 }
 function restorePreviousCrew() {
