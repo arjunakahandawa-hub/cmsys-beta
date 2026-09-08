@@ -179,6 +179,10 @@ function initListeners() {
           if (s) {
             s._fbKey = key;
             if (!s.id) s.id = key;
+            s.off_no = String(s.off_no || s.official_number || s.official_no || s.service_no || s.officialNumber || "").trim();
+            s.official_number = s.off_no;
+            s.trade = String(s.trade || s.branch || s.rate || "Sailor").trim();
+            s.branch = s.trade;
             mStore.sailors.push(s);
           }
         });
@@ -464,7 +468,9 @@ function getSailorStatusToday(sailor, currentWo) {
   const today = getLocalDateString();
   const sId = String(sailor.id || "");
   const sFbKey = String(sailor._fbKey || "");
-  const sOff = String(sailor.official_no || sailor.officialNo || sailor.official_number || "");
+  const sOff = String(sailor.off_no || sailor.official_number || sailor.official_no || sailor.service_no || sailor.officialNumber || "").trim();
+  const sOffClean = sOff.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const sOffDigits = sOff.replace(/\D/g, "");
   const currentWoId = currentWo ? String(currentWo._fbKey || currentWo.id || "") : "";
 
   // 1. Check Leave / Sick in sailorsDB availability
@@ -473,7 +479,7 @@ function getSailorStatusToday(sailor, currentWo) {
   const dayKey = parseInt(day, 10).toString();
   const mAvail = mStore.availability?.[monthKey] || {};
   const dayAvail = mAvail[dayKey] || mAvail[day] || {};
-  const fbStatus = dayAvail[sFbKey] || dayAvail[sId] || (sOff ? dayAvail[sOff] : null);
+  const fbStatus = dayAvail[sFbKey] || dayAvail[sId] || (sOff ? (dayAvail[sOff] || dayAvail[sOffDigits]) : null);
 
   const rawStatus = fbStatus || sailor.attendance || sailor.status || "";
   const statusStr = String(rawStatus).trim();
@@ -504,7 +510,11 @@ function getSailorStatusToday(sailor, currentWo) {
     for (const pid of Object.keys(projectsObj)) {
       const proj = projectsObj[pid];
       if (proj && proj.assigned_sailors) {
-        if (proj.assigned_sailors[sFbKey] || proj.assigned_sailors[sId] || (sOff && proj.assigned_sailors[sOff])) {
+        if (
+          proj.assigned_sailors[sFbKey] ||
+          proj.assigned_sailors[sId] ||
+          (sOff && (proj.assigned_sailors[sOff] || proj.assigned_sailors[sOffDigits]))
+        ) {
           return { name: (proj.name || defaultName).trim(), tag };
         }
       }
@@ -549,7 +559,13 @@ function getSailorStatusToday(sailor, currentWo) {
   if (mStore.dailyAllocations && mStore.dailyAllocations.length > 0) {
     const todayAlloc = mStore.dailyAllocations.find((a) => {
       if (a.date !== today || a.status === "Cancelled") return false;
-      const isThisSailor = String(a.sailor_id) === sId || String(a.sailor_id) === sFbKey || (sOff && String(a.official_number) === sOff);
+      const aOff = String(a.official_number || a.off_no || a.sailor_id || "").trim();
+      const aOffDigits = aOff.replace(/\D/g, "");
+      const isThisSailor =
+        String(a.sailor_id) === sId ||
+        String(a.sailor_id) === sFbKey ||
+        (sOff && aOff.toLowerCase() === sOff.toLowerCase()) ||
+        (sOffDigits && aOffDigits && aOffDigits === sOffDigits);
       if (!isThisSailor) return false;
       if (currentWoId && String(a.work_order_id) === currentWoId) return false;
       return true;
@@ -586,7 +602,13 @@ function getSailorStatusToday(sailor, currentWo) {
       const isCommittedToday = (w.last_commit_date === today || w.last_committed_date === today || w.last_assigned_date === today);
       if (!isCommittedToday) return false;
       const assigned = Array.isArray(w.assigned) ? w.assigned : [];
-      return assigned.some((id) => String(id) === sId || String(id) === sFbKey || (sOff && String(id) === sOff));
+      return assigned.some((id) => {
+        const idStr = String(id).trim();
+        if (idStr === sId || idStr === sFbKey) return true;
+        if (sOff && idStr.toLowerCase() === sOff.toLowerCase()) return true;
+        if (sOffDigits && idStr.replace(/\D/g, "") === sOffDigits) return true;
+        return false;
+      });
     });
 
     if (otherWo) {
@@ -613,7 +635,13 @@ function getSailorStatusToday(sailor, currentWo) {
       const isCommittedToday = (jc.last_committed_date === today || jc.last_commit_date === today || jc.date === today);
       if (!isCommittedToday) return false;
       const assigned = Array.isArray(jc.assigned) ? jc.assigned : [];
-      return assigned.some((id) => String(id) === sId || String(id) === sFbKey || (sOff && String(id) === sOff));
+      return assigned.some((id) => {
+        const idStr = String(id).trim();
+        if (idStr === sId || idStr === sFbKey) return true;
+        if (sOff && idStr.toLowerCase() === sOff.toLowerCase()) return true;
+        if (sOffDigits && idStr.replace(/\D/g, "") === sOffDigits) return true;
+        return false;
+      });
     });
 
     if (otherJc) {
@@ -677,7 +705,11 @@ function populateLeaderDropdowns() {
   mStore.sailors.forEach((s) => {
     const status = getSailorStatusToday(s, mStore.selectedWo);
     const lockTag = status.isLocked ? ` [${status.badgeText.replace(/^[^\s]+\s*/, "")}]` : "";
-    const label = `${s.rank || ""} ${s.name || s.id} (${s.branch || s.rate || ""})${lockTag}`.trim();
+    const off = s.off_no || s.official_number || "";
+    const branch = s.trade || s.branch || "";
+    const sub = [branch, off].filter(Boolean).join(" • ");
+    const subStr = sub ? ` (${sub})` : "";
+    const label = `${s.rank || ""} ${s.name || s.id}${subStr}${lockTag}`.trim();
     options.push(`<option value="${s.id}">${label}</option>`);
   });
 
@@ -761,7 +793,8 @@ function renderAssignedTags() {
 
   container.innerHTML = mStore.assignedTemp.map((sid) => {
     const s = mStore.sailors.find((x) => String(x.id) === String(sid) || String(x._fbKey) === String(sid));
-    const name = s ? `${s.rank || ""} ${s.name || sid}`.trim() : sid;
+    const off = s ? (s.off_no || s.official_number || "") : "";
+    const name = s ? `${s.rank || ""} ${s.name || sid}${off ? ` (${off})` : ""}`.trim() : sid;
     return `
       <span class="inline-flex items-center gap-1 bg-teal-500/20 text-teal-200 border border-teal-500/40 text-xs font-semibold px-2 py-1 rounded-xl">
         <span>${name}</span>
@@ -776,6 +809,8 @@ function renderSailorQuickPicker() {
   if (!container) return;
 
   const q = (document.getElementById("mSailorSearch")?.value || "").toLowerCase().trim();
+  const qClean = q.replace(/[^a-z0-9]/g, "");
+  const qDigits = q.replace(/\D/g, "");
 
   // 1. Filter out sailors already assigned to this current sheet
   const candidates = mStore.sailors.filter((s) => {
@@ -805,13 +840,26 @@ function renderSailorQuickPicker() {
   const filtered = evaluated.filter(({ sailor: s, status }) => {
     if (mStore.sailorFilterMode === "available" && status.isLocked) return false;
     if (!q) return true;
+
     const name = (s.name || "").toLowerCase();
     const rank = (s.rank || "").toLowerCase();
-    const rate = (s.rate || s.branch || "").toLowerCase();
-    const official = (s.official_no || s.officialNo || s.official_number || "").toLowerCase();
+    const trade = (s.trade || s.branch || s.rate || "").toLowerCase();
+    const offRaw = String(s.off_no || s.official_number || s.official_no || s.service_no || "").toLowerCase();
+    const offClean = offRaw.replace(/[^a-z0-9]/g, "");
+    const offDigits = offRaw.replace(/\D/g, "");
     const zone = (status.zone || "").toLowerCase();
     const reason = (status.reasonText || "").toLowerCase();
-    return name.includes(q) || rank.includes(q) || rate.includes(q) || official.includes(q) || zone.includes(q) || reason.includes(q);
+
+    return (
+      name.includes(q) ||
+      rank.includes(q) ||
+      trade.includes(q) ||
+      offRaw.includes(q) ||
+      (qClean && offClean.includes(qClean)) ||
+      (qDigits && offDigits.includes(qDigits)) ||
+      zone.includes(q) ||
+      reason.includes(q)
+    );
   });
 
   if (filtered.length === 0) {
@@ -830,8 +878,9 @@ function renderSailorQuickPicker() {
   container.innerHTML = filtered.slice(0, 50).map(({ sailor: s, status }) => {
     const sid = s.id || s._fbKey;
     const label = `${s.rank || ""} ${s.name || s.id}`.trim();
-    const branch = s.rate || s.branch || "Sailor";
-    const offNo = s.official_no || s.officialNo || s.official_number || s.id;
+    const branch = s.trade || s.branch || s.rate || "Sailor";
+    const offNo = s.off_no || s.official_number || s.official_no || s.service_no || "";
+    const metaDisplay = offNo ? `${branch} • ${offNo}` : branch;
 
     if (status.isLocked) {
       const safeName = (s.name || s.id).replace(/'/g, "\\'");
@@ -846,7 +895,7 @@ function renderSailorQuickPicker() {
                 ${status.badgeText}
               </span>
             </div>
-            <p class="text-[10px] text-slate-500 font-mono">${branch} • ${offNo}</p>
+            <p class="text-[10px] text-slate-500 font-mono">${metaDisplay}</p>
             ${status.reasonText ? `<p class="text-[9px] text-slate-400/90 truncate max-w-[240px] mt-0.5 font-sans">📌 ${status.reasonText}</p>` : ""}
           </div>
           <div class="w-7 h-7 rounded-xl bg-slate-800 text-slate-400 border border-slate-700/80 text-xs font-bold flex items-center justify-center shrink-0 shadow-inner" title="Locked - Already assigned or unavailable">
@@ -864,7 +913,7 @@ function renderSailorQuickPicker() {
               ✓ Available
             </span>
           </div>
-          <p class="text-[10px] text-slate-400 font-mono">${branch} • ${offNo}</p>
+          <p class="text-[10px] text-slate-400 font-mono">${metaDisplay}</p>
         </div>
         <button type="button" class="w-7 h-7 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 hover:bg-teal-500 hover:text-white text-sm font-black flex items-center justify-center shrink-0 transition-all shadow-sm">
           +
