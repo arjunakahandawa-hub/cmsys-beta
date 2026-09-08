@@ -1,6 +1,6 @@
 ﻿// =============================================
 // CMSys MOBILE QUICK ENTRY PORTAL (mobile.js)
-// Ultra-lightweight, high-performance module (< 400 lines)
+// Complete Zone & Workshop support with exact parity to main admin panel
 // =============================================
 
 // Helper for UTC safe timezone processing (Sri Lanka local date)
@@ -17,9 +17,77 @@ function sanitizeFbKey(key) {
   return String(key).replace(/[.#$\[\]\/]/g, "_");
 }
 
+function isAdminStaffDuties(zoneIdOrName) {
+  if (!zoneIdOrName) return false;
+  const normalized = zoneIdOrName.toLowerCase().replace(/[-&\s]+/g, "");
+  return normalized === "adminstaffduties";
+}
+
+function isSbsZone(zoneIdOrName) {
+  if (!zoneIdOrName) return false;
+  const normalized = zoneIdOrName.toLowerCase().replace(/[-_\s]+/g, "");
+  return normalized === "sbs" || normalized.includes("sbsrecord");
+}
+
+function isZoneMatch(z1, z2) {
+  if (!z1 && !z2) return true;
+  if (!z1 || !z2) return false;
+  if (z1 === z2) return true;
+  if (isAdminStaffDuties(z1) && isAdminStaffDuties(z2)) return true;
+  if (isSbsZone(z1) && isSbsZone(z2)) return true;
+
+  const s1 = String(z1).trim().toLowerCase().replace(/[-_\s&]+/g, "");
+  const s2 = String(z2).trim().toLowerCase().replace(/[-_\s&]+/g, "");
+  if (s1 === s2) return true;
+
+  if ((s1.startsWith("carpenter") || s1.startsWith("carpentry")) && (s2.startsWith("carpenter") || s2.startsWith("carpentry"))) return true;
+
+  const letterMap = {
+    a: "azone",
+    b: "bzone",
+    c: "czone",
+    d: "dzone",
+    e: "ezone",
+    g: "gzone",
+    zonea: "azone",
+    zoneb: "bzone",
+    zonec: "czone",
+    zoned: "dzone",
+    zonee: "ezone",
+    zoneg: "gzone",
+    fh: "fhzone",
+    zonefh: "fhzone",
+    fhad: "fhzone",
+    fhadzone: "fhzone",
+  };
+  const norm1 = letterMap[s1] || s1;
+  const norm2 = letterMap[s2] || s2;
+  return norm1 === norm2;
+}
+
+// Standard Zones & Workshops list
+const STANDARD_ZONES = [
+  { id: "A-Zone", name: "A-Zone" },
+  { id: "B-Zone", name: "B-Zone" },
+  { id: "BC-Zone", name: "BC-Zone" },
+  { id: "C-Zone", name: "C-Zone" },
+  { id: "D-Zone", name: "D-Zone" },
+  { id: "E-Zone", name: "E-Zone" },
+  { id: "G-Zone", name: "G-Zone" },
+  { id: "FH-Zone", name: "FH-Zone" },
+  { id: "OTW", name: "OTW" },
+  { id: "Supply-School", name: "Supply School" },
+  { id: "Pump-House", name: "Pump House" },
+  { id: "Main-Store", name: "Main Store" },
+  { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop" },
+  { id: "Welding-Shop", name: "Welding Shop" },
+  { id: "Aluminium-Workshop", name: "Aluminium Workshop" }
+];
+
 // Global In-Memory Store
 const mStore = {
   currentZone: localStorage.getItem("ncw_saved_zone") || "A-Zone",
+  zones: [...STANDARD_ZONES],
   workOrders: [],
   sailors: [],
   dailyAllocations: [],
@@ -93,8 +161,7 @@ function showToast(msg, type = "success") {
 // DATA FETCHING & REAL-TIME LISTENERS
 // =============================================
 function initListeners() {
-  const zoneSelect = document.getElementById("mZoneSelect");
-  if (zoneSelect) zoneSelect.value = mStore.currentZone;
+  populateZoneSelector();
 
   // 1. Listen to Sailors DB
   if (sailorsDB) {
@@ -115,8 +182,20 @@ function initListeners() {
     });
   }
 
-  // 2. Listen to Work Orders
+  // 2. Listen to Settings (Zones / Workshops configured by Admin)
   if (opsDB) {
+    opsDB.ref("settings/zones").on("value", (snap) => {
+      const zonesData = snap.val();
+      if (zonesData && Array.isArray(zonesData) && zonesData.length > 0) {
+        mStore.zones = zonesData.filter((z) => z && (z.id || z.name) && z.active !== false && z.status !== "Inactive");
+      } else {
+        mStore.zones = [...STANDARD_ZONES];
+      }
+      populateZoneSelector();
+      renderWorkOrders();
+    });
+
+    // 3. Listen to Work Orders
     opsDB.ref("work_orders").on("value", (snap) => {
       const data = snap.val();
       mStore.workOrders = [];
@@ -125,6 +204,8 @@ function initListeners() {
           if (w) {
             w._fbKey = key;
             if (!w.id) w.id = key;
+            w.assigned = Array.isArray(w.assigned) ? w.assigned : Object.values(w.assigned || {});
+            w.last_assigned = Array.isArray(w.last_assigned) ? w.last_assigned : Object.values(w.last_assigned || {});
             mStore.workOrders.push(w);
           }
         });
@@ -132,7 +213,7 @@ function initListeners() {
       renderWorkOrders();
     });
 
-    // 3. Listen to Daily Allocations
+    // 4. Listen to Daily Allocations
     opsDB.ref("daily_allocations").on("value", (snap) => {
       const data = snap.val();
       mStore.dailyAllocations = [];
@@ -147,7 +228,7 @@ function initListeners() {
       renderWorkOrders();
     });
 
-    // 4. Connection State Monitor
+    // 5. Connection State Monitor
     opsDB.ref(".info/connected").on("value", (snap) => {
       const sync = document.getElementById("mSyncStatus");
       if (!sync) return;
@@ -159,6 +240,31 @@ function initListeners() {
         sync.className = "flex items-center gap-1 text-[10px] text-amber-400 font-semibold shrink-0";
       }
     });
+  }
+}
+
+// Populate the Zone / Workshop dropdown dynamically
+function populateZoneSelector() {
+  const sel = document.getElementById("mZoneSelect");
+  if (!sel) return;
+
+  const current = mStore.currentZone || localStorage.getItem("ncw_saved_zone") || "A-Zone";
+
+  const options = mStore.zones.map((z) => {
+    const isWorkshop = (z.id || "").includes("Shop") || (z.id || "").includes("Workshop") || (z.id || "") === "Main-Store";
+    const icon = isWorkshop ? "🔨" : "📍";
+    return `<option value="${z.id}">${icon} ${z.name}</option>`;
+  });
+
+  sel.innerHTML = options.join("");
+  
+  if (mStore.zones.some((z) => isZoneMatch(z.id, current))) {
+    const found = mStore.zones.find((z) => isZoneMatch(z.id, current));
+    sel.value = found.id;
+    mStore.currentZone = found.id;
+  } else if (mStore.zones.length > 0) {
+    sel.value = mStore.zones[0].id;
+    mStore.currentZone = mStore.zones[0].id;
   }
 }
 
@@ -175,6 +281,17 @@ function refreshData(userInitiated = false) {
   if (userInitiated) showToast("Data refreshed!");
 }
 
+// Check if work order belongs to active date
+function isWorkOrderActiveToday(wo) {
+  if (!wo) return false;
+  const today = getLocalDateString();
+  if (wo.status === "Completed") {
+    // Only show completed if it was committed or completed today
+    return wo.last_commit_date === today || wo.completed_date === today;
+  }
+  return true;
+}
+
 // =============================================
 // RENDER WORK ORDERS LIST
 // =============================================
@@ -188,31 +305,38 @@ function renderWorkOrders() {
   const currentZone = mStore.currentZone;
   const today = getLocalDateString();
 
-  // Filter by Zone & Query
+  // Filter by Zone Match (handling zone_id, zone, or workshop names)
   const filtered = mStore.workOrders.filter((w) => {
-    const matchZone = !w.zone || w.zone === currentZone;
+    const wZone = w.zone_id || w.zone || w.zoneId || w.location_zone || "";
+    const matchZone = isZoneMatch(wZone, currentZone);
     if (!matchZone) return false;
+    if (!isWorkOrderActiveToday(w)) return false;
+
     if (!q) return true;
     const desc = (w.description || "").toLowerCase();
-    const loc = (w.location_id || "").toLowerCase();
+    const ref = (w.reference_no || "").toLowerCase();
     const status = (w.status || "").toLowerCase();
-    return desc.includes(q) || loc.includes(q) || status.includes(q);
+    const type = (w.type || w.assign_type || "").toLowerCase();
+    return desc.includes(q) || ref.includes(q) || status.includes(q) || type.includes(q);
   });
 
-  if (titleEl) titleEl.textContent = `${currentZone} Tasks`;
+  const zoneObj = mStore.zones.find((z) => isZoneMatch(z.id, currentZone));
+  const zoneName = zoneObj ? zoneObj.name : currentZone;
+
+  if (titleEl) titleEl.textContent = `${zoneName} Tasks`;
   if (countBadge) countBadge.textContent = filtered.length;
 
   if (filtered.length === 0) {
     container.innerHTML = `
       <div class="p-8 text-center text-slate-500 bg-slate-800/40 rounded-2xl border border-slate-800">
         <div class="text-3xl mb-1">📋</div>
-        <p class="text-xs font-bold text-slate-400">No work orders found in ${currentZone}</p>
-        <p class="text-[10px] text-slate-500 mt-0.5">Change zone or use search to find tasks</p>
+        <p class="text-xs font-bold text-slate-400">No active work orders in ${zoneName}</p>
+        <p class="text-[10px] text-slate-500 mt-0.5">Select another zone/workshop from the top menu or search</p>
       </div>`;
     return;
   }
 
-  // Sort Active first, then Priority
+  // Sort Active first, then by priority / progress
   filtered.sort((a, b) => {
     if (a.status === "Active" && b.status !== "Active") return -1;
     if (b.status === "Active" && a.status !== "Active") return 1;
@@ -223,6 +347,7 @@ function renderWorkOrders() {
     const progress = Math.min(100, Math.max(0, parseInt(w.progress) || 0));
     const crewCount = (w.assigned || []).length;
     const isCommittedToday = w.last_commit_date === today;
+    const itemType = w.assign_type ? `💼 ${w.assign_type}` : w.type ? `📋 ${w.type}` : "TASK";
 
     // Status pill colors
     let statusClass = "bg-slate-700/60 text-slate-300 border-slate-600";
@@ -236,11 +361,13 @@ function renderWorkOrders() {
         <div class="flex items-start justify-between gap-2">
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-1.5 mb-1 flex-wrap">
-              <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${statusClass}">${w.status || "Pending"}</span>
-              ${w.priority === "Urgent" || w.priority === "Emergency" ? `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">${w.priority}</span>` : ""}
+              <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${statusClass}">${w.status || "Active"}</span>
+              <span class="text-[9px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">${itemType}</span>
+              ${w.priority === "Urgent" || w.priority === "High" || w.priority === "Emergency" ? `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">${w.priority}</span>` : ""}
               ${isCommittedToday ? `<span class="text-[9px] font-bold text-teal-300 bg-teal-500/20 px-1.5 py-0.5 rounded border border-teal-500/30">✓ Committed Today</span>` : ""}
             </div>
             <h3 class="text-xs font-bold text-white line-clamp-2 leading-snug">${w.description || "Untitled Work Order"}</h3>
+            ${w.reference_no ? `<p class="text-[10px] text-teal-400/80 font-mono mt-0.5">Ref: ${w.reference_no}</p>` : ""}
           </div>
           <span class="text-base text-slate-400 font-bold shrink-0">›</span>
         </div>
@@ -258,7 +385,7 @@ function renderWorkOrders() {
 
         <div class="flex items-center justify-between pt-1 border-t border-slate-700/50 text-[10px] text-slate-400">
           <span class="flex items-center gap-1">👥 <strong class="text-slate-200">${crewCount}</strong> sailor(s) assigned</span>
-          <span class="text-teal-400 font-bold">Tap to edit ➔</span>
+          <span class="text-teal-400 font-bold">Tap to edit details ➔</span>
         </div>
       </div>`;
   }).join("");
@@ -274,10 +401,12 @@ function filterWorkOrders() {
 function populateLeaderDropdowns() {
   const inchargeSel = document.getElementById("mWoIncharge");
   const supSel = document.getElementById("mWoSupervisor");
+  const artificerSel = document.getElementById("mWoArtificer");
   if (!inchargeSel || !supSel) return;
 
   const currentInc = inchargeSel.value;
   const currentSup = supSel.value;
+  const currentArt = artificerSel ? artificerSel.value : "";
 
   const options = ['<option value="">-- None --</option>'];
   mStore.sailors.forEach((s) => {
@@ -287,9 +416,11 @@ function populateLeaderDropdowns() {
 
   inchargeSel.innerHTML = options.join("");
   supSel.innerHTML = options.join("");
+  if (artificerSel) artificerSel.innerHTML = options.join("");
 
   if (currentInc) inchargeSel.value = currentInc;
   if (currentSup) supSel.value = currentSup;
+  if (artificerSel && currentArt) artificerSel.value = currentArt;
 }
 
 function openWoSheet(woId) {
@@ -309,9 +440,24 @@ function openWoSheet(woId) {
   document.getElementById("mWoStatus").value = wo.status || "Active";
   document.getElementById("mWoPriority").value = wo.priority || "Routine";
 
+  // Zone selector inside sheet
+  const sheetZoneSel = document.getElementById("mWoSheetZone");
+  if (sheetZoneSel) {
+    sheetZoneSel.innerHTML = mStore.zones.map((z) => `<option value="${z.id}">${z.name}</option>`).join("");
+    const curZ = wo.zone_id || wo.zone || mStore.currentZone;
+    const matchZ = mStore.zones.find((z) => isZoneMatch(z.id, curZ));
+    sheetZoneSel.value = matchZ ? matchZ.id : curZ;
+  }
+
+  // Budget and Authority
+  if (document.getElementById("mWoAuthority")) document.getElementById("mWoAuthority").value = wo.authority_approval || wo.authority || "";
+  if (document.getElementById("mWoBudget")) document.getElementById("mWoBudget").value = wo.budget_allocation || "";
+  if (document.getElementById("mWoDuration")) document.getElementById("mWoDuration").value = wo.estimated_duration || "";
+
   populateLeaderDropdowns();
   if (document.getElementById("mWoIncharge")) document.getElementById("mWoIncharge").value = wo.incharge || "";
   if (document.getElementById("mWoSupervisor")) document.getElementById("mWoSupervisor").value = wo.supervisor || "";
+  if (document.getElementById("mWoArtificer")) document.getElementById("mWoArtificer").value = wo.project_artificer || "";
 
   renderAssignedTags();
   renderSailorQuickPicker();
@@ -447,15 +593,25 @@ function saveWoSheet(shouldClose = true) {
   const progress = parseInt(document.getElementById("mProgressInput").value) || 0;
   const status = document.getElementById("mWoStatus").value;
   const priority = document.getElementById("mWoPriority").value;
+  const zoneVal = document.getElementById("mWoSheetZone")?.value || wo.zone_id || mStore.currentZone;
   const incharge = document.getElementById("mWoIncharge").value || null;
   const supervisor = document.getElementById("mWoSupervisor").value || null;
+  const artificer = document.getElementById("mWoArtificer")?.value || null;
+  const authority = document.getElementById("mWoAuthority")?.value || null;
+  const budget = parseFloat(document.getElementById("mWoBudget")?.value) || null;
+  const duration = parseInt(document.getElementById("mWoDuration")?.value) || null;
 
   wo.description = desc;
   wo.progress = progress;
   wo.status = status;
   wo.priority = priority;
+  wo.zone_id = zoneVal;
   wo.incharge = incharge;
   wo.supervisor = supervisor;
+  wo.project_artificer = artificer;
+  wo.authority_approval = authority;
+  wo.budget_allocation = budget;
+  wo.estimated_duration = duration;
   wo.assigned = [...mStore.assignedTemp];
 
   const targetFbKey = wo._fbKey || wo.id;
@@ -464,8 +620,13 @@ function saveWoSheet(shouldClose = true) {
     progress: progress,
     status: status,
     priority: priority,
+    zone_id: zoneVal,
     incharge: incharge,
     supervisor: supervisor,
+    project_artificer: artificer,
+    authority_approval: authority,
+    budget_allocation: budget,
+    estimated_duration: duration,
     assigned: wo.assigned.length > 0 ? wo.assigned : null
   }).then(() => {
     showToast("Work order saved successfully!");
@@ -512,8 +673,13 @@ function proceedWoSheet() {
   const progress = parseInt(document.getElementById("mProgressInput").value) || 0;
   const status = document.getElementById("mWoStatus").value;
   const priority = document.getElementById("mWoPriority").value;
+  const zoneVal = document.getElementById("mWoSheetZone")?.value || wo.zone_id || mStore.currentZone;
   const incharge = document.getElementById("mWoIncharge").value || null;
   const supervisor = document.getElementById("mWoSupervisor").value || null;
+  const artificer = document.getElementById("mWoArtificer")?.value || null;
+  const authority = document.getElementById("mWoAuthority")?.value || null;
+  const budget = parseFloat(document.getElementById("mWoBudget")?.value) || null;
+  const duration = parseInt(document.getElementById("mWoDuration")?.value) || null;
 
   wo.description = desc;
   wo.progress = progress;
@@ -523,8 +689,13 @@ function proceedWoSheet() {
     wo.status = status;
   }
   wo.priority = priority;
+  wo.zone_id = zoneVal;
   wo.incharge = incharge;
   wo.supervisor = supervisor;
+  wo.project_artificer = artificer;
+  wo.authority_approval = authority;
+  wo.budget_allocation = budget;
+  wo.estimated_duration = duration;
   wo.last_commit_date = today;
   wo.last_committed_date = today;
   wo.last_assigned = [...mStore.assignedTemp];
@@ -539,8 +710,13 @@ function proceedWoSheet() {
     progress: progress,
     status: wo.status,
     priority: priority,
+    zone_id: zoneVal,
     incharge: incharge,
     supervisor: supervisor,
+    project_artificer: artificer,
+    authority_approval: authority,
+    budget_allocation: budget,
+    estimated_duration: duration,
     last_commit_date: today,
     last_committed_date: today,
     last_assigned: [...wo.assigned],

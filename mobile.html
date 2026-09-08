@@ -73,15 +73,12 @@
         </div>
     </header>
 
-    <!-- ZONE SELECTOR & STATUS BAR -->
+    <!-- ZONE / WORKSHOP SELECTOR & STATUS BAR -->
     <section class="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between gap-3">
         <div class="flex-1 flex items-center gap-2">
-            <label class="text-[11px] font-black uppercase text-teal-400 shrink-0">Zone:</label>
-            <select id="mZoneSelect" onchange="onZoneChange(this.value)" class="w-full bg-slate-800 border border-teal-500/40 text-teal-200 text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-teal-400">
-                <option value="A-Zone">📍 A-Zone</option>
-                <option value="BC-Zone">📍 BC-Zone</option>
-                <option value="Carpentry-Shop">🔨 Carpentry & Painter Shop</option>
-                <option value="Welding-Shop">⚡ Welding Shop</option>
+            <label class="text-[11px] font-black uppercase text-teal-400 shrink-0">Zone / Shop:</label>
+            <select id="mZoneSelect" onchange="onZoneChange(this.value)" class="w-full bg-slate-800 border border-teal-500/40 text-teal-200 text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-teal-400 cursor-pointer">
+                <!-- Populated dynamically from Firebase settings / standard zones -->
             </select>
         </div>
 
@@ -142,6 +139,14 @@
                         <textarea id="mWoDesc" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-teal-400"></textarea>
                     </div>
 
+                    <!-- Zone Assignment Inside Modal -->
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Assigned Zone / Workshop</label>
+                        <select id="mWoSheetZone" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-teal-300 font-bold focus:outline-none focus:border-teal-400">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+
                     <!-- Progress Slider -->
                     <div class="p-3 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
                         <div class="flex items-center justify-between">
@@ -173,9 +178,26 @@
                             <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Priority</label>
                             <select id="mWoPriority" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
                                 <option value="Routine">Routine</option>
+                                <option value="High">High</option>
                                 <option value="Urgent">⚠️ Urgent</option>
                                 <option value="Emergency">🚨 Emergency</option>
                             </select>
+                        </div>
+                    </div>
+
+                    <!-- Authority, Budget & Duration -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Authority</label>
+                            <input type="text" id="mWoAuthority" placeholder="CCED(E)" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Budget (Rs)</label>
+                            <input type="number" id="mWoBudget" placeholder="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Days</label>
+                            <input type="number" id="mWoDuration" placeholder="Days" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
                         </div>
                     </div>
 
@@ -193,6 +215,14 @@
                                 <option value="">-- None --</option>
                             </select>
                         </div>
+                    </div>
+
+                    <!-- Project Artificer -->
+                    <div>
+                        <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Project Artificer</label>
+                        <select id="mWoArtificer" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                            <option value="">-- None --</option>
+                        </select>
                     </div>
 
                     <!-- DAILY CREW / SAILORS ASSIGNMENT SECTION -->
@@ -251,6 +281,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.0.0"></script>
+    <script src="mobile.js?v=1.0.1"></script>
 </body>
 </html>
