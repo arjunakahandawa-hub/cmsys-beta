@@ -84,9 +84,22 @@ const STANDARD_ZONES = [
   { id: "Aluminium-Workshop", name: "Aluminium Workshop" }
 ];
 
+// Helper to lock initial zone from URL query parameter or localStorage
+function getInitialZone() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const qZone = params.get("zone");
+    if (qZone && qZone.trim()) {
+      localStorage.setItem("ncw_saved_zone", qZone.trim());
+      return qZone.trim();
+    }
+  } catch (e) {}
+  return localStorage.getItem("ncw_saved_zone") || "A-Zone";
+}
+
 // Global In-Memory Store
 const mStore = {
-  currentZone: localStorage.getItem("ncw_saved_zone") || "A-Zone",
+  currentZone: getInitialZone(),
   zones: [...STANDARD_ZONES],
   workOrders: [],
   sailors: [],
@@ -167,7 +180,7 @@ function showToast(msg, type = "success") {
 // DATA FETCHING & REAL-TIME LISTENERS
 // =============================================
 function initListeners() {
-  populateZoneSelector();
+  updateZoneSailorStats();
 
   // 1. Listen to Sailors DB
   if (sailorsDB) {
@@ -189,12 +202,14 @@ function initListeners() {
       }
       populateLeaderDropdowns();
       renderWorkOrders();
+      updateZoneSailorStats();
       if (mStore.selectedWo) renderSailorQuickPicker();
     });
 
     // Listen to Attendance / Leave availability
     sailorsDB.ref("availability").on("value", (snap) => {
       mStore.availability = snap.val() || {};
+      updateZoneSailorStats();
       if (mStore.selectedWo) {
         populateLeaderDropdowns();
         renderSailorQuickPicker();
@@ -211,7 +226,7 @@ function initListeners() {
       } else {
         mStore.zones = [...STANDARD_ZONES];
       }
-      populateZoneSelector();
+      updateZoneSailorStats();
       renderWorkOrders();
     });
 
@@ -231,6 +246,7 @@ function initListeners() {
         });
       }
       renderWorkOrders();
+      updateZoneSailorStats();
       if (mStore.selectedWo) renderSailorQuickPicker();
     });
 
@@ -247,6 +263,7 @@ function initListeners() {
         });
       }
       renderWorkOrders();
+      updateZoneSailorStats();
       if (mStore.selectedWo) renderSailorQuickPicker();
     });
 
@@ -296,41 +313,88 @@ function initListeners() {
   }
 }
 
-// Populate the Zone / Workshop dropdown dynamically
-function populateZoneSelector() {
-  const sel = document.getElementById("mZoneSelect");
-  if (!sel) return;
+// =============================================
+// ACTIVE ZONE METRICS & BANNER DISPLAY
+// =============================================
+function updateZoneSailorStats() {
+  const currentZone = mStore.currentZone;
+  const today = getLocalDateString();
 
-  const current = mStore.currentZone || localStorage.getItem("ncw_saved_zone") || "A-Zone";
+  // Update Banner Title & Date
+  const zoneObj = mStore.zones.find((z) => isZoneMatch(z.id, currentZone));
+  const zoneName = zoneObj ? zoneObj.name : currentZone;
+  const isWorkshop = (currentZone || "").includes("Shop") || (currentZone || "").includes("Workshop") || currentZone === "Main-Store";
 
-  const options = mStore.zones.map((z) => {
-    const isWorkshop = (z.id || "").includes("Shop") || (z.id || "").includes("Workshop") || (z.id || "") === "Main-Store";
-    const icon = isWorkshop ? "🔨" : "📍";
-    return `<option value="${z.id}">${icon} ${z.name}</option>`;
+  const bannerNameEl = document.getElementById("mZoneBannerName");
+  const badgeTypeEl = document.getElementById("mZoneBadgeType");
+  const dateBadgeEl = document.getElementById("mTodayDateBadge");
+
+  if (bannerNameEl) bannerNameEl.textContent = zoneName;
+  if (badgeTypeEl) badgeTypeEl.textContent = isWorkshop ? "Workshop" : "Zone";
+  if (dateBadgeEl) dateBadgeEl.textContent = today;
+
+  // 1. Identify sailors belonging to this zone/workshop
+  let zoneSailors = mStore.sailors.filter((s) => {
+    const z = s.zone_assigned || s.zone || s.location_zone;
+    return z && isZoneMatch(z, currentZone);
   });
 
-  sel.innerHTML = options.join("");
-  
-  if (mStore.zones.some((z) => isZoneMatch(z.id, current))) {
-    const found = mStore.zones.find((z) => isZoneMatch(z.id, current));
-    sel.value = found.id;
-    mStore.currentZone = found.id;
-  } else if (mStore.zones.length > 0) {
-    sel.value = mStore.zones[0].id;
-    mStore.currentZone = mStore.zones[0].id;
+  // 2. If zoneSailors is empty, check workshop trades or work order assignments
+  if (zoneSailors.length === 0) {
+    const zoneWoIds = new Set(
+      mStore.workOrders
+        .filter((wo) => isZoneMatch(wo.zone_id || wo.zone, currentZone))
+        .map((wo) => String(wo.id || wo._fbKey))
+    );
+    const assignedIds = new Set();
+    (mStore.dailyAllocations || []).forEach((a) => {
+      if (a.date === today && a.status !== "Cancelled" && zoneWoIds.has(String(a.work_order_id))) {
+        assignedIds.add(String(a.sailor_id));
+      }
+    });
+    mStore.workOrders.forEach((wo) => {
+      if (isZoneMatch(wo.zone_id || wo.zone, currentZone) && wo.assigned) {
+        (Array.isArray(wo.assigned) ? wo.assigned : []).forEach((id) => assignedIds.add(String(id)));
+      }
+    });
+    if (assignedIds.size > 0) {
+      zoneSailors = mStore.sailors.filter((s) => assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey)));
+    }
   }
-}
 
-// Switch Zone
-function onZoneChange(newZone) {
-  mStore.currentZone = newZone;
-  localStorage.setItem("ncw_saved_zone", newZone);
-  renderWorkOrders();
-  showToast(`Switched to ${newZone}`, "info");
+  const targetPool = zoneSailors.length > 0 ? zoneSailors : mStore.sailors;
+
+  let availCount = 0;
+  let deployedCount = 0;
+  let leaveSickCount = 0;
+
+  targetPool.forEach((s) => {
+    const st = getSailorStatusToday(s, null);
+    if (st.isLocked) {
+      if (st.badgeText.includes("Sick") || st.badgeText.includes("Leave")) {
+        leaveSickCount++;
+      } else {
+        deployedCount++;
+      }
+    } else {
+      availCount++;
+    }
+  });
+
+  const strengthEl = document.getElementById("mStatStrength");
+  const availEl = document.getElementById("mStatAvailable");
+  const deployedEl = document.getElementById("mStatDeployed");
+  const leaveEl = document.getElementById("mStatLeaveSick");
+
+  if (strengthEl) strengthEl.textContent = targetPool.length;
+  if (availEl) availEl.textContent = availCount;
+  if (deployedEl) deployedEl.textContent = deployedCount;
+  if (leaveEl) leaveEl.textContent = leaveSickCount;
 }
 
 function refreshData(userInitiated = false) {
   renderWorkOrders();
+  updateZoneSailorStats();
   if (userInitiated) showToast("Data refreshed!");
 }
 
@@ -739,13 +803,15 @@ function openWoSheet(woId) {
   document.getElementById("mWoStatus").value = wo.status || "Active";
   document.getElementById("mWoPriority").value = wo.priority || "Routine";
 
-  // Zone selector inside sheet
+  // Zone selector inside sheet (locked for security)
   const sheetZoneSel = document.getElementById("mWoSheetZone");
   if (sheetZoneSel) {
     sheetZoneSel.innerHTML = mStore.zones.map((z) => `<option value="${z.id}">${z.name}</option>`).join("");
     const curZ = wo.zone_id || wo.zone || mStore.currentZone;
     const matchZ = mStore.zones.find((z) => isZoneMatch(z.id, curZ));
     sheetZoneSel.value = matchZ ? matchZ.id : curZ;
+    sheetZoneSel.disabled = true;
+    sheetZoneSel.classList.add("opacity-75", "cursor-not-allowed");
   }
 
   // Budget and Authority

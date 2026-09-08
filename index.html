@@ -777,7 +777,7 @@
                 <!-- Right Controls -->
                 <div class="flex items-center gap-1.5 sm:gap-2.5">
                     <!-- Quick Mobile Portal Button -->
-                    <a href="mobile.html" class="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg flex items-center gap-1 text-[10px] sm:text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md border border-emerald-400/40 transition-all active:scale-95" title="Open Ultra-Fast Mobile Portal for Work Orders">
+                    <a href="mobile.html" onclick="this.href='mobile.html?zone=' + encodeURIComponent((typeof store !== 'undefined' && store.currentZone) ? store.currentZone : (localStorage.getItem('ncw_saved_zone') || 'A-Zone'))" class="px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg flex items-center gap-1 text-[10px] sm:text-xs font-bold bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-md border border-emerald-400/40 transition-all active:scale-95" title="Open Ultra-Fast Mobile Portal for Work Orders">
                         <span>📱</span> <span class="hidden xs:inline">Fast Mobile</span>
                     </a>
 

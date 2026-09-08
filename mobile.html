@@ -51,21 +51,25 @@
 <body class="min-h-screen flex flex-col antialiased select-none pb-safe">
 
     <!-- TOP APP BAR -->
-    <header class="sticky top-0 z-40 bg-[#0a1628]/95 backdrop-blur border-b border-teal-500/20 px-4 py-3 flex items-center justify-between shadow-lg">
+    <header class="sticky top-0 z-40 bg-[#0a1628]/95 backdrop-blur border-b border-teal-500/20 px-4 py-2.5 flex items-center justify-between shadow-lg">
         <div class="flex items-center gap-2.5">
-            <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-teal-600 to-cyan-500 flex items-center justify-center font-black text-white text-lg shadow-md shadow-teal-900/40">
-                ⚡
+            <div class="w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center bg-slate-900/90 border border-teal-500/30 p-0.5 shadow-md shadow-teal-950/50 shrink-0">
+                <img src="logo.png" alt="Sri Lanka Navy Crest" class="w-full h-full object-contain filter drop-shadow">
             </div>
             <div>
                 <h1 class="text-sm font-black tracking-tight text-white flex items-center gap-1.5">
                     CMSys Mobile
-                    <span class="text-[9px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30 px-1.5 py-0.2 rounded-full uppercase tracking-wider">Fast</span>
+                    <span class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded-full uppercase tracking-wider">BETA</span>
                 </h1>
                 <p class="text-[10px] text-slate-400 font-medium">Civil Engineering Quick Portal</p>
             </div>
         </div>
 
         <div class="flex items-center gap-2">
+            <div id="mSyncStatus" class="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold shrink-0">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Live</span>
+            </div>
             <!-- Back to Desktop / Full Admin button -->
             <a href="index.html" class="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-[11px] font-bold text-slate-300 flex items-center gap-1 active-scale">
                 <span>🖥️</span> Full App
@@ -73,18 +77,31 @@
         </div>
     </header>
 
-    <!-- ZONE / WORKSHOP SELECTOR & STATUS BAR -->
-    <section class="bg-slate-900/90 border-b border-slate-800 px-4 py-2.5 flex items-center justify-between gap-3">
-        <div class="flex-1 flex items-center gap-2">
-            <label class="text-[11px] font-black uppercase text-teal-400 shrink-0">Zone / Shop:</label>
-            <select id="mZoneSelect" onchange="onZoneChange(this.value)" class="w-full bg-slate-800 border border-teal-500/40 text-teal-200 text-xs font-bold rounded-lg px-2.5 py-1.5 outline-none focus:ring-1 focus:ring-teal-400 cursor-pointer">
-                <!-- Populated dynamically from Firebase settings / standard zones -->
-            </select>
+    <!-- ACTIVE ZONE BANNER & SAILOR STRENGTH METRICS (Replaces Dropdown for Security & Clarity) -->
+    <section class="bg-slate-900/95 border-b border-slate-800 px-4 py-2 space-y-1.5 shadow-sm">
+        <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-sm">📍</span>
+                <h2 id="mZoneBannerName" class="text-xs font-black uppercase tracking-wider text-teal-300 truncate">Loading Zone...</h2>
+                <span id="mZoneBadgeType" class="text-[9px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded border border-slate-700">Zone</span>
+            </div>
+            <span class="text-[9px] font-bold text-slate-400 font-mono" id="mTodayDateBadge">Today</span>
         </div>
 
-        <div id="mSyncStatus" class="flex items-center gap-1 text-[10px] text-emerald-400 font-semibold shrink-0">
-            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span>Live</span>
+        <!-- Zone Sailors Strength Metrics Pills -->
+        <div class="flex items-center gap-1.5 overflow-x-auto touch-scroll text-[10px] font-bold pb-0.5 scrollbar-none">
+            <span class="bg-teal-950/80 text-teal-300 px-2 py-0.5 rounded-lg border border-teal-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm">
+                👥 Strength: <strong id="mStatStrength" class="text-white font-mono">0</strong>
+            </span>
+            <span class="bg-emerald-950/80 text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm">
+                🟢 Available: <strong id="mStatAvailable" class="text-white font-mono">0</strong>
+            </span>
+            <span class="bg-blue-950/80 text-blue-300 px-2 py-0.5 rounded-lg border border-blue-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm">
+                🛠️ Deployed: <strong id="mStatDeployed" class="text-white font-mono">0</strong>
+            </span>
+            <span class="bg-rose-950/80 text-rose-300 px-2 py-0.5 rounded-lg border border-rose-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm">
+                🏖️ Leave/Sick: <strong id="mStatLeaveSick" class="text-white font-mono">0</strong>
+            </span>
         </div>
     </section>
 
@@ -290,6 +307,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.0.3"></script>
+    <script src="mobile.js?v=1.0.4"></script>
 </body>
 </html>
