@@ -803,16 +803,6 @@ function openWoSheet(woId) {
   document.getElementById("mWoStatus").value = wo.status || "Active";
   document.getElementById("mWoPriority").value = wo.priority || "Routine";
 
-  // Zone selector inside sheet (locked for security)
-  const sheetZoneSel = document.getElementById("mWoSheetZone");
-  if (sheetZoneSel) {
-    sheetZoneSel.innerHTML = mStore.zones.map((z) => `<option value="${z.id}">${z.name}</option>`).join("");
-    const curZ = wo.zone_id || wo.zone || mStore.currentZone;
-    const matchZ = mStore.zones.find((z) => isZoneMatch(z.id, curZ));
-    sheetZoneSel.value = matchZ ? matchZ.id : curZ;
-    sheetZoneSel.disabled = true;
-    sheetZoneSel.classList.add("opacity-75", "cursor-not-allowed");
-  }
 
   // Budget and Authority
   if (document.getElementById("mWoAuthority")) document.getElementById("mWoAuthority").value = wo.authority_approval || wo.authority || "";
