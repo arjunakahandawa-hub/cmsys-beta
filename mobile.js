@@ -1,4 +1,4 @@
-﻿// =============================================
+// =============================================
 // CMSys MOBILE QUICK ENTRY PORTAL (mobile.js)
 // Complete Zone & Workshop support with exact parity to main admin panel
 // =============================================
@@ -91,8 +91,14 @@ const mStore = {
   workOrders: [],
   sailors: [],
   dailyAllocations: [],
+  jobCards: [],
+  availability: {},
+  outProjects: {},
+  housingProjects: {},
+  otherBases: {},
   selectedWo: null,
   assignedTemp: [],
+  sailorFilterMode: "all", // "all" | "available"
   currentUser: {
     name: "Site Officer",
     rank: "PO1 (CE)",
@@ -179,6 +185,16 @@ function initListeners() {
       }
       populateLeaderDropdowns();
       renderWorkOrders();
+      if (mStore.selectedWo) renderSailorQuickPicker();
+    });
+
+    // Listen to Attendance / Leave availability
+    sailorsDB.ref("availability").on("value", (snap) => {
+      mStore.availability = snap.val() || {};
+      if (mStore.selectedWo) {
+        populateLeaderDropdowns();
+        renderSailorQuickPicker();
+      }
     });
   }
 
@@ -211,6 +227,7 @@ function initListeners() {
         });
       }
       renderWorkOrders();
+      if (mStore.selectedWo) renderSailorQuickPicker();
     });
 
     // 4. Listen to Daily Allocations
@@ -226,9 +243,41 @@ function initListeners() {
         });
       }
       renderWorkOrders();
+      if (mStore.selectedWo) renderSailorQuickPicker();
     });
 
-    // 5. Connection State Monitor
+    // 5. Listen to Job Cards
+    opsDB.ref("job_cards").on("value", (snap) => {
+      const data = snap.val();
+      mStore.jobCards = [];
+      if (data) {
+        Object.entries(data).forEach(([key, jc]) => {
+          if (jc) {
+            jc._fbKey = key;
+            if (!jc.id) jc.id = key;
+            jc.assigned = Array.isArray(jc.assigned) ? jc.assigned : Object.values(jc.assigned || {});
+            mStore.jobCards.push(jc);
+          }
+        });
+      }
+      if (mStore.selectedWo) renderSailorQuickPicker();
+    });
+
+    // 6. Listen to Long-Term Deployments
+    opsDB.ref("out_projects").on("value", (snap) => {
+      mStore.outProjects = snap.val() || {};
+      if (mStore.selectedWo) renderSailorQuickPicker();
+    });
+    opsDB.ref("housing_projects").on("value", (snap) => {
+      mStore.housingProjects = snap.val() || {};
+      if (mStore.selectedWo) renderSailorQuickPicker();
+    });
+    opsDB.ref("other_bases").on("value", (snap) => {
+      mStore.otherBases = snap.val() || {};
+      if (mStore.selectedWo) renderSailorQuickPicker();
+    });
+
+    // 7. Connection State Monitor
     opsDB.ref(".info/connected").on("value", (snap) => {
       const sync = document.getElementById("mSyncStatus");
       if (!sync) return;
@@ -398,6 +447,222 @@ function filterWorkOrders() {
 // =============================================
 // WORK ORDER DETAIL / LABOUR SHEET LOGIC
 // =============================================
+// =============================================
+// SAILOR STATUS & LOCK EVALUATION FOR TODAY
+// =============================================
+function getSailorStatusToday(sailor, currentWo) {
+  if (!sailor) {
+    return {
+      isLocked: false,
+      badgeClass: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+      badgeText: "✓ Available",
+      reasonText: "Ready for assignment",
+      icon: "✓"
+    };
+  }
+
+  const today = getLocalDateString();
+  const sId = String(sailor.id || "");
+  const sFbKey = String(sailor._fbKey || "");
+  const sOff = String(sailor.official_no || sailor.officialNo || sailor.official_number || "");
+  const currentWoId = currentWo ? String(currentWo._fbKey || currentWo.id || "") : "";
+
+  // 1. Check Leave / Sick in sailorsDB availability
+  const [year, month, day] = today.split("-");
+  const monthKey = `${year}-${month}`;
+  const dayKey = parseInt(day, 10).toString();
+  const mAvail = mStore.availability?.[monthKey] || {};
+  const dayAvail = mAvail[dayKey] || mAvail[day] || {};
+  const fbStatus = dayAvail[sFbKey] || dayAvail[sId] || (sOff ? dayAvail[sOff] : null);
+
+  const rawStatus = fbStatus || sailor.attendance || sailor.status || "";
+  const statusStr = String(rawStatus).trim();
+
+  if (/^(Sick|SIQ|S\/R|Hospital|ADM|Admit)$/i.test(statusStr)) {
+    return {
+      isLocked: true,
+      badgeClass: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+      badgeText: "🏥 Sick",
+      reasonText: statusStr || "Medical Attention",
+      icon: "🏥"
+    };
+  }
+
+  if (/^(Leave|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SL|R|Off|Holiday|Absent|AWOL|නිවාඩු|ගිලන්)$/i.test(statusStr)) {
+    return {
+      isLocked: true,
+      badgeClass: "bg-amber-500/20 text-amber-300 border-amber-500/30",
+      badgeText: "🏖️ On Leave",
+      reasonText: statusStr || "On Leave",
+      icon: "🏖️"
+    };
+  }
+
+  // 2. Check Long Term Projects (Out Project, Housing, Other Base)
+  const checkLongTerm = (projectsObj, tag, defaultName) => {
+    if (!projectsObj) return null;
+    for (const pid of Object.keys(projectsObj)) {
+      const proj = projectsObj[pid];
+      if (proj && proj.assigned_sailors) {
+        if (proj.assigned_sailors[sFbKey] || proj.assigned_sailors[sId] || (sOff && proj.assigned_sailors[sOff])) {
+          return { name: (proj.name || defaultName).trim(), tag };
+        }
+      }
+    }
+    return null;
+  };
+
+  const ltOut = checkLongTerm(mStore.outProjects, "Out Project", "Out Project");
+  if (ltOut) {
+    return {
+      isLocked: true,
+      badgeClass: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+      badgeText: `🏕️ ${ltOut.tag}`,
+      reasonText: ltOut.name,
+      icon: "🏕️"
+    };
+  }
+
+  const ltHousing = checkLongTerm(mStore.housingProjects, "Housing", "Housing Project");
+  if (ltHousing) {
+    return {
+      isLocked: true,
+      badgeClass: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+      badgeText: `🏠 ${ltHousing.tag}`,
+      reasonText: ltHousing.name,
+      icon: "🏠"
+    };
+  }
+
+  const ltBase = checkLongTerm(mStore.otherBases, "Other Base", "Other Base");
+  if (ltBase) {
+    return {
+      isLocked: true,
+      badgeClass: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
+      badgeText: `⚓ ${ltBase.tag}`,
+      reasonText: ltBase.name,
+      icon: "⚓"
+    };
+  }
+
+  // 3. Check Daily Allocations for today
+  if (mStore.dailyAllocations && mStore.dailyAllocations.length > 0) {
+    const todayAlloc = mStore.dailyAllocations.find((a) => {
+      if (a.date !== today || a.status === "Cancelled") return false;
+      const isThisSailor = String(a.sailor_id) === sId || String(a.sailor_id) === sFbKey || (sOff && String(a.official_number) === sOff);
+      if (!isThisSailor) return false;
+      if (currentWoId && String(a.work_order_id) === currentWoId) return false;
+      return true;
+    });
+
+    if (todayAlloc) {
+      let taskName = todayAlloc.work_order_title || todayAlloc.title || todayAlloc.location || todayAlloc.work_order_no || "";
+      let taskZone = todayAlloc.zone || todayAlloc.zone_id || "";
+      if (todayAlloc.work_order_id) {
+        const otherWo = (mStore.workOrders || []).find((w) => String(w.id || w._fbKey) === String(todayAlloc.work_order_id));
+        if (otherWo) {
+          taskName = otherWo.description || otherWo.reference_no || taskName;
+          taskZone = otherWo.zone_id || otherWo.zone || taskZone;
+        }
+      }
+      const zoneDisplay = taskZone ? String(taskZone).replace(/-/g, " ") : "Another Task";
+      return {
+        isLocked: true,
+        badgeClass: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+        badgeText: `🔒 Assigned: ${zoneDisplay}`,
+        reasonText: taskName || "Allocated for today",
+        icon: "🔒",
+        zone: zoneDisplay
+      };
+    }
+  }
+
+  // 4. Check Work Orders committed / active today
+  if (mStore.workOrders && mStore.workOrders.length > 0) {
+    const otherWo = mStore.workOrders.find((w) => {
+      const wKey = String(w._fbKey || w.id || "");
+      if (currentWoId && wKey === currentWoId) return false;
+      if (w.status === "Completed" || w.status === "Cancelled" || w.status === "Hold") return false;
+      const isCommittedToday = (w.last_commit_date === today || w.last_committed_date === today || w.last_assigned_date === today);
+      if (!isCommittedToday) return false;
+      const assigned = Array.isArray(w.assigned) ? w.assigned : [];
+      return assigned.some((id) => String(id) === sId || String(id) === sFbKey || (sOff && String(id) === sOff));
+    });
+
+    if (otherWo) {
+      const zName = otherWo.zone_id || otherWo.zone || "Another Zone";
+      const zoneDisplay = String(zName).replace(/-/g, " ");
+      const taskName = otherWo.description || otherWo.reference_no || "Active Work Order";
+      return {
+        isLocked: true,
+        badgeClass: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+        badgeText: `🔒 Assigned: ${zoneDisplay}`,
+        reasonText: taskName,
+        icon: "🔒",
+        zone: zoneDisplay
+      };
+    }
+  }
+
+  // 5. Check Job Cards committed today
+  if (mStore.jobCards && mStore.jobCards.length > 0) {
+    const otherJc = mStore.jobCards.find((jc) => {
+      const jKey = String(jc._fbKey || jc.id || "");
+      if (currentWoId && jKey === currentWoId) return false;
+      if (jc.status === "Completed" || jc.status === "Cancelled" || jc.status === "Hold") return false;
+      const isCommittedToday = (jc.last_committed_date === today || jc.last_commit_date === today || jc.date === today);
+      if (!isCommittedToday) return false;
+      const assigned = Array.isArray(jc.assigned) ? jc.assigned : [];
+      return assigned.some((id) => String(id) === sId || String(id) === sFbKey || (sOff && String(id) === sOff));
+    });
+
+    if (otherJc) {
+      const zName = otherJc.zone_id || otherJc.zone || "Job Card";
+      const zoneDisplay = String(zName).replace(/-/g, " ");
+      const taskName = otherJc.description || otherJc.title || otherJc.job_card_no || "Active Job Card";
+      return {
+        isLocked: true,
+        badgeClass: "bg-rose-500/20 text-rose-300 border-rose-500/30",
+        badgeText: `🔒 Assigned: ${zoneDisplay}`,
+        reasonText: taskName,
+        icon: "🔒",
+        zone: zoneDisplay
+      };
+    }
+  }
+
+  return {
+    isLocked: false,
+    badgeClass: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
+    badgeText: "✓ Available",
+    reasonText: "Ready for assignment",
+    icon: "✓"
+  };
+}
+
+function showLockedSailorAlert(name, badgeText, reasonText) {
+  const reason = reasonText ? ` (${reasonText})` : "";
+  showToast(`⚠️ ${name} cannot be selected: ${badgeText}${reason}`, "error");
+}
+
+function toggleSailorFilterMode() {
+  mStore.sailorFilterMode = mStore.sailorFilterMode === "available" ? "all" : "available";
+  const btn = document.getElementById("mToggleAvailFilter");
+  if (btn) {
+    if (mStore.sailorFilterMode === "available") {
+      btn.textContent = "Available Only";
+      btn.className = "px-2.5 py-1.5 rounded-xl border text-[10px] font-bold whitespace-nowrap transition-all bg-teal-500/20 text-teal-200 border-teal-500/40 active-scale";
+    } else {
+      btn.textContent = "All";
+      btn.className = "px-2.5 py-1.5 rounded-xl border text-[10px] font-bold whitespace-nowrap transition-all bg-slate-800 text-teal-300 border-slate-700 hover:bg-slate-700 active-scale";
+    }
+  }
+  renderSailorQuickPicker();
+}
+
+// =============================================
+// WORK ORDER DETAIL / LABOUR SHEET LOGIC
+// =============================================
 function populateLeaderDropdowns() {
   const inchargeSel = document.getElementById("mWoIncharge");
   const supSel = document.getElementById("mWoSupervisor");
@@ -410,7 +675,9 @@ function populateLeaderDropdowns() {
 
   const options = ['<option value="">-- None --</option>'];
   mStore.sailors.forEach((s) => {
-    const label = `${s.rank || ""} ${s.name || s.id} (${s.branch || s.rate || ""})`.trim();
+    const status = getSailorStatusToday(s, mStore.selectedWo);
+    const lockTag = status.isLocked ? ` [${status.badgeText.replace(/^[^\s]+\s*/, "")}]` : "";
+    const label = `${s.rank || ""} ${s.name || s.id} (${s.branch || s.rate || ""})${lockTag}`.trim();
     options.push(`<option value="${s.id}">${label}</option>`);
   });
 
@@ -505,38 +772,101 @@ function renderAssignedTags() {
 
 function renderSailorQuickPicker() {
   const container = document.getElementById("mSailorQuickPicker");
+  const poolCountEl = document.getElementById("mSailorPoolCount");
   if (!container) return;
 
   const q = (document.getElementById("mSailorSearch")?.value || "").toLowerCase().trim();
 
-  // Filter sailors available or matching search
-  const filtered = mStore.sailors.filter((s) => {
+  // 1. Filter out sailors already assigned to this current sheet
+  const candidates = mStore.sailors.filter((s) => {
     const isAlreadyAssigned = mStore.assignedTemp.includes(String(s.id)) || mStore.assignedTemp.includes(String(s._fbKey));
-    if (isAlreadyAssigned) return false;
+    return !isAlreadyAssigned;
+  });
+
+  // 2. Attach live status for today
+  let availableCount = 0;
+  let lockedCount = 0;
+
+  const evaluated = candidates.map((s) => {
+    const status = getSailorStatusToday(s, mStore.selectedWo);
+    if (status.isLocked) {
+      lockedCount++;
+    } else {
+      availableCount++;
+    }
+    return { sailor: s, status };
+  });
+
+  if (poolCountEl) {
+    poolCountEl.innerHTML = `<span class="text-emerald-400 font-bold">🟢 ${availableCount}</span> • <span class="text-rose-400 font-bold">🔒 ${lockedCount}</span>`;
+  }
+
+  // 3. Filter by search and filter mode
+  const filtered = evaluated.filter(({ sailor: s, status }) => {
+    if (mStore.sailorFilterMode === "available" && status.isLocked) return false;
     if (!q) return true;
     const name = (s.name || "").toLowerCase();
     const rank = (s.rank || "").toLowerCase();
     const rate = (s.rate || s.branch || "").toLowerCase();
-    const official = (s.official_no || s.officialNo || "").toLowerCase();
-    return name.includes(q) || rank.includes(q) || rate.includes(q) || official.includes(q);
+    const official = (s.official_no || s.officialNo || s.official_number || "").toLowerCase();
+    const zone = (status.zone || "").toLowerCase();
+    const reason = (status.reasonText || "").toLowerCase();
+    return name.includes(q) || rank.includes(q) || rate.includes(q) || official.includes(q) || zone.includes(q) || reason.includes(q);
   });
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="p-3 text-center text-slate-500 text-[11px]">No matching available sailors</div>`;
+    container.innerHTML = `<div class="p-4 text-center text-slate-500 text-[11px] font-semibold">No matching sailors found</div>`;
     return;
   }
 
-  container.innerHTML = filtered.slice(0, 30).map((s) => {
+  // 4. Sort: Available first, locked at bottom, then alphabetical
+  filtered.sort((a, b) => {
+    if (!a.status.isLocked && b.status.isLocked) return -1;
+    if (a.status.isLocked && !b.status.isLocked) return 1;
+    return (a.sailor.name || "").localeCompare(b.sailor.name || "");
+  });
+
+  // 5. Render list items
+  container.innerHTML = filtered.slice(0, 50).map(({ sailor: s, status }) => {
     const sid = s.id || s._fbKey;
     const label = `${s.rank || ""} ${s.name || s.id}`.trim();
     const branch = s.rate || s.branch || "Sailor";
+    const offNo = s.official_no || s.officialNo || s.official_number || s.id;
+
+    if (status.isLocked) {
+      const safeName = (s.name || s.id).replace(/'/g, "\\'");
+      const safeBadge = (status.badgeText || "Locked").replace(/'/g, "\\'");
+      const safeReason = (status.reasonText || "").replace(/'/g, "\\'");
+      return `
+        <div onclick="showLockedSailorAlert('${safeName}', '${safeBadge}', '${safeReason}')" class="p-2.5 flex items-center justify-between bg-slate-950/50 opacity-65 border-l-2 border-l-rose-500/80 cursor-not-allowed select-none transition-all">
+          <div class="flex-1 min-w-0 pr-2">
+            <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
+              <p class="text-xs font-semibold text-slate-300 leading-tight">${label}</p>
+              <span class="text-[9px] font-bold ${status.badgeClass} px-1.5 py-0.5 rounded border flex items-center gap-0.5">
+                ${status.badgeText}
+              </span>
+            </div>
+            <p class="text-[10px] text-slate-500 font-mono">${branch} • ${offNo}</p>
+            ${status.reasonText ? `<p class="text-[9px] text-slate-400/90 truncate max-w-[240px] mt-0.5 font-sans">📌 ${status.reasonText}</p>` : ""}
+          </div>
+          <div class="w-7 h-7 rounded-xl bg-slate-800 text-slate-400 border border-slate-700/80 text-xs font-bold flex items-center justify-center shrink-0 shadow-inner" title="Locked - Already assigned or unavailable">
+            🔒
+          </div>
+        </div>`;
+    }
+
     return `
-      <div onclick="addSailorToSheet('${sid}')" class="p-2.5 flex items-center justify-between hover:bg-slate-800/80 active-scale cursor-pointer">
-        <div>
-          <p class="text-xs font-bold text-white">${label}</p>
-          <p class="text-[10px] text-slate-400">${branch} • ${s.official_no || s.officialNo || s.id}</p>
+      <div onclick="addSailorToSheet('${sid}')" class="p-2.5 flex items-center justify-between hover:bg-slate-800/80 active-scale cursor-pointer bg-slate-900/30 transition-colors">
+        <div class="flex-1 min-w-0 pr-2">
+          <div class="flex items-center gap-1.5 mb-0.5 flex-wrap">
+            <p class="text-xs font-bold text-white leading-tight">${label}</p>
+            <span class="text-[9px] font-bold text-emerald-400 bg-emerald-500/15 border border-emerald-500/30 px-1.5 py-0.5 rounded">
+              ✓ Available
+            </span>
+          </div>
+          <p class="text-[10px] text-slate-400 font-mono">${branch} • ${offNo}</p>
         </div>
-        <button class="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 text-xs font-black flex items-center justify-center">
+        <button type="button" class="w-7 h-7 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/40 hover:bg-teal-500 hover:text-white text-sm font-black flex items-center justify-center shrink-0 transition-all shadow-sm">
           +
         </button>
       </div>`;
@@ -548,6 +878,15 @@ function filterSailorsForAssignment() {
 }
 
 function addSailorToSheet(sid) {
+  const sailor = mStore.sailors.find((s) => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
+  if (sailor) {
+    const status = getSailorStatusToday(sailor, mStore.selectedWo);
+    if (status.isLocked) {
+      showLockedSailorAlert(sailor.name || sid, status.badgeText, status.reasonText);
+      return;
+    }
+  }
+
   const idStr = String(sid);
   if (!mStore.assignedTemp.includes(idStr)) {
     mStore.assignedTemp.push(idStr);

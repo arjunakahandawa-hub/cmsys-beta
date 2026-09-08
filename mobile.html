@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -250,9 +250,18 @@
 
                         <!-- Sailor quick-search & add list -->
                         <div class="pt-2 border-t border-slate-700/60 space-y-2">
-                            <input type="text" id="mSailorSearch" oninput="filterSailorsForAssignment()" placeholder="Search sailors to add (Rate, Name)..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-400">
+                            <div class="flex items-center justify-between text-[10px]">
+                                <span class="font-bold uppercase tracking-wider text-slate-400">Add Sailors to Crew</span>
+                                <span id="mSailorPoolCount" class="font-semibold text-slate-400"></span>
+                            </div>
+                            <div class="flex items-center gap-1.5">
+                                <input type="text" id="mSailorSearch" oninput="filterSailorsForAssignment()" placeholder="Search sailors to add (Rate, Name)..." class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-400">
+                                <button type="button" id="mToggleAvailFilter" onclick="toggleSailorFilterMode()" class="px-2.5 py-1.5 rounded-xl border text-[10px] font-bold whitespace-nowrap transition-all bg-slate-800 text-teal-300 border-slate-700 hover:bg-slate-700 active-scale">
+                                    All
+                                </button>
+                            </div>
                             
-                            <div id="mSailorQuickPicker" class="max-h-40 overflow-y-auto touch-scroll divide-y divide-slate-700/40 bg-slate-900/60 rounded-xl border border-slate-700/60">
+                            <div id="mSailorQuickPicker" class="max-h-52 overflow-y-auto touch-scroll divide-y divide-slate-700/40 bg-slate-900/60 rounded-xl border border-slate-700/60">
                                 <!-- Dynamic sailors -->
                             </div>
                         </div>
@@ -281,6 +290,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.0.1"></script>
+    <script src="mobile.js?v=1.0.2"></script>
 </body>
 </html>
