@@ -125,17 +125,17 @@
         </div>
 
         <!-- Zone Sailors Strength Metrics Pills -->
-        <div class="flex items-center gap-1.5 overflow-x-auto touch-scroll text-[10px] font-bold pb-0.5 scrollbar-none">
-            <span class="bg-teal-950/80 text-teal-300 px-2 py-0.5 rounded-lg border border-teal-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm">
+        <div id="mMetricsRibbon" class="flex items-center gap-1.5 overflow-x-auto touch-scroll text-[10px] font-bold pb-0.5 scrollbar-none cursor-grab active:cursor-grabbing select-none">
+            <span class="bg-teal-950/80 text-teal-300 px-2 py-0.5 rounded-lg border border-teal-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
                 👥 Strength: <strong id="mStatStrength" class="text-white font-mono">0</strong>
             </span>
-            <span class="bg-emerald-950/80 text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm">
+            <span class="bg-emerald-950/80 text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
                 🟢 Available: <strong id="mStatAvailable" class="text-white font-mono">0</strong>
             </span>
-            <span class="bg-blue-950/80 text-blue-300 px-2 py-0.5 rounded-lg border border-blue-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm">
+            <span class="bg-blue-950/80 text-blue-300 px-2 py-0.5 rounded-lg border border-blue-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
                 🛠️ Deployed: <strong id="mStatDeployed" class="text-white font-mono">0</strong>
             </span>
-            <span class="bg-rose-950/80 text-rose-300 px-2 py-0.5 rounded-lg border border-rose-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm">
+            <span class="bg-rose-950/80 text-rose-300 px-2 py-0.5 rounded-lg border border-rose-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
                 🏖️ Leave/Sick: <strong id="mStatLeaveSick" class="text-white font-mono">0</strong>
             </span>
         </div>
@@ -145,20 +145,24 @@
     <main class="flex-1 overflow-y-auto touch-scroll p-4 space-y-4">
 
         <!-- SEARCH BAR & NEW ACTIONS (ASSIGN & WORK ORDER) -->
-        <div class="flex items-center gap-1.5">
-            <div class="relative flex-1 min-w-0">
-                <input type="text" id="mSearchWo" oninput="filterWorkOrders()" placeholder="Search work orders / tasks..." class="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2 pl-8 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500">
-                <span class="absolute left-2.5 top-2.5 text-xs text-slate-400">🔍</span>
+        <div class="space-y-2">
+            <div class="flex items-center gap-2">
+                <div class="relative flex-1 min-w-0">
+                    <input type="text" id="mSearchWo" oninput="filterWorkOrders()" placeholder="Search work orders / tasks..." class="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2.5 pl-8 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500 shadow-sm">
+                    <span class="absolute left-2.5 top-2.5 text-xs text-slate-400">🔍</span>
+                </div>
+                <button type="button" onclick="refreshData(true)" class="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-bold text-xs p-2.5 rounded-xl flex items-center justify-center active-scale shrink-0 shadow-sm" title="Refresh">
+                    🔄
+                </button>
             </div>
-            <button type="button" onclick="openNewAssignSheet()" class="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 text-white font-black text-[11px] px-2.5 py-2 rounded-xl flex items-center gap-1 active-scale shrink-0 shadow-md shadow-indigo-950/40" title="New Assignment">
-                <span>➕</span> Assign
-            </button>
-            <button type="button" onclick="openNewWoSheet()" class="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 text-white font-black text-[11px] px-2.5 py-2 rounded-xl flex items-center gap-1 active-scale shrink-0 shadow-md shadow-teal-950/40" title="New Work Order">
-                <span>➕</span> Work Order
-            </button>
-            <button type="button" onclick="refreshData(true)" class="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-bold text-xs p-2 rounded-xl flex items-center justify-center active-scale shrink-0" title="Refresh">
-                🔄
-            </button>
+            <div class="grid grid-cols-2 gap-2">
+                <button type="button" onclick="openNewAssignSheet()" class="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 text-white font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 active-scale shadow-md shadow-indigo-950/40" title="New Assignment">
+                    <span>➕</span> Assign
+                </button>
+                <button type="button" onclick="openNewWoSheet()" class="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 text-white font-black text-xs py-2.5 px-3 rounded-xl flex items-center justify-center gap-1.5 active-scale shadow-md shadow-teal-950/40" title="New Work Order">
+                    <span>➕</span> Work Order
+                </button>
+            </div>
         </div>
 
         <!-- WORK ORDERS LIST VIEW -->
@@ -373,22 +377,92 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.0.8"></script>
+    <script src="mobile.js?v=1.0.9"></script>
+    <!-- UNIVERSAL MOUSE WHEEL & CLICK-AND-DRAG (PAN) CONTROLLER -->
     <script>
-    window.addEventListener('wheel', function(e) {
-        if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.deltaY === 0) return;
-        let cur = e.target;
-        while (cur && cur !== document.body && cur !== document.documentElement) {
-            if (cur.classList.contains('overflow-x-auto') || cur.scrollWidth > cur.clientWidth) {
-                if (cur.scrollWidth > cur.clientWidth && cur.clientHeight < 80) {
-                    e.preventDefault();
-                    cur.scrollLeft += (e.deltaY * 1.2);
-                    return;
+    (function initMobileScrollController() {
+        function getHScrollContainer(target) {
+            if (!target) return null;
+            let el = target.closest('#mMetricsRibbon, .overflow-x-auto, [data-scroll="horizontal"]');
+            if (el && el.scrollWidth > el.clientWidth) return el;
+
+            let cur = target;
+            while (cur && cur !== document.body && cur !== document.documentElement) {
+                if (cur.scrollWidth > (cur.clientWidth + 1)) {
+                    const style = window.getComputedStyle(cur);
+                    if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
+                        return cur;
+                    }
                 }
+                cur = cur.parentElement;
             }
-            cur = cur.parentElement;
+            return null;
         }
-    }, { passive: false });
+
+        // 1. Mouse Wheel Horizontal Scroll
+        window.addEventListener('wheel', function(e) {
+            if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.deltaY === 0) return;
+            const container = getHScrollContainer(e.target);
+            if (!container) return;
+
+            e.preventDefault();
+            container.scrollLeft += (e.deltaY * 1.2);
+        }, { passive: false });
+
+        // 2. Click and Drag to Pan with Mouse
+        let isDragging = false;
+        let dragContainer = null;
+        let startX = 0;
+        let scrollStart = 0;
+        let hasMoved = false;
+
+        document.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return; // Left click only
+            if (e.target.closest('input, textarea, select')) return;
+
+            const container = getHScrollContainer(e.target);
+            if (!container) return;
+
+            isDragging = true;
+            dragContainer = container;
+            hasMoved = false;
+            startX = e.pageX;
+            scrollStart = container.scrollLeft;
+            container.style.cursor = 'grabbing';
+            container.style.userSelect = 'none';
+        });
+
+        window.addEventListener('mousemove', function(e) {
+            if (!isDragging || !dragContainer) return;
+            const delta = e.pageX - startX;
+            if (Math.abs(delta) > 3) {
+                hasMoved = true;
+                dragContainer.scrollLeft = scrollStart - delta;
+            }
+        });
+
+        function endDrag() {
+            if (dragContainer) {
+                dragContainer.style.cursor = '';
+                dragContainer.style.userSelect = '';
+            }
+            isDragging = false;
+            dragContainer = null;
+            setTimeout(() => { hasMoved = false; }, 50);
+        }
+
+        window.addEventListener('mouseup', endDrag);
+        window.addEventListener('mouseleave', endDrag);
+
+        // Prevent child clicks if dragging occurred
+        document.addEventListener('click', function(e) {
+            if (hasMoved) {
+                e.preventDefault();
+                e.stopPropagation();
+                hasMoved = false;
+            }
+        }, true);
+    })();
     </script>
 </body>
 </html>

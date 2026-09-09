@@ -7659,85 +7659,92 @@
     <!-- Universal Mouse Wheel & Drag Horizontal Scroll Handler for Menus, Ribbons, and Tabs -->
     <script>
     (function initHorizontalScrollSystem() {
-        function isHorizontallyScrollable(el) {
-            if (!el || el === document.body || el === document.documentElement) return false;
-            try {
-                const style = window.getComputedStyle(el);
-                const overflowX = style.overflowX;
-                return (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth;
-            } catch (err) {
-                return false;
-            }
-        }
+        function getHScrollContainer(target) {
+            if (!target) return null;
+            let el = target.closest('#desktopMainNav, nav, .overflow-x-auto, [data-scroll="horizontal"]');
+            if (el && el.scrollWidth > el.clientWidth) return el;
 
-        // Global wheel listener for all horizontal bars, ribbons, and menus
-        window.addEventListener('wheel', function(e) {
-            if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
-            if (e.deltaY === 0) return;
-
-            let cur = e.target;
+            let cur = target;
             while (cur && cur !== document.body && cur !== document.documentElement) {
-                const isNavOrRibbon = cur.tagName === 'NAV' || cur.id === 'desktopMainNav' || cur.classList.contains('scrollbar-none') || cur.clientHeight < 80;
-                const hasVerticalScroll = cur.scrollHeight > (cur.clientHeight + 10);
-
-                if (cur.tagName === 'NAV' || cur.id === 'desktopMainNav' || cur.classList.contains('overflow-x-auto') || isHorizontallyScrollable(cur)) {
-                    if (cur.scrollWidth > cur.clientWidth && (!hasVerticalScroll || isNavOrRibbon)) {
-                        e.preventDefault();
-                        cur.scrollLeft += (e.deltaY * 1.2);
-                        return;
+                if (cur.scrollWidth > (cur.clientWidth + 1)) {
+                    const style = window.getComputedStyle(cur);
+                    if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
+                        return cur;
                     }
                 }
                 cur = cur.parentElement;
             }
+            return null;
+        }
+
+        // 1. Global wheel listener for all horizontal bars, ribbons, and menus
+        window.addEventListener('wheel', function(e) {
+            if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.deltaY === 0) return;
+
+            const container = getHScrollContainer(e.target);
+            if (!container) return;
+
+            const hasVerticalScroll = container.scrollHeight > (container.clientHeight + 10);
+            const isMenuOrRibbon = container.tagName === 'NAV' || container.id === 'desktopMainNav' || container.clientHeight < 80 || container.classList.contains('scrollbar-none');
+
+            if (!hasVerticalScroll || isMenuOrRibbon) {
+                e.preventDefault();
+                container.scrollLeft += (e.deltaY * 1.2);
+            }
         }, { passive: false });
 
-        // Enable click-and-drag panning on desktop main nav
-        function attachDragScroll() {
-            const nav = document.getElementById('desktopMainNav');
-            if (!nav || nav.dataset.dragAttached) return;
-            nav.dataset.dragAttached = 'true';
+        // 2. Global Mouse Click-and-Drag (Pan)
+        let isDragging = false;
+        let dragContainer = null;
+        let startX = 0;
+        let scrollStart = 0;
+        let hasMoved = false;
 
-            let isDown = false;
-            let startX = 0;
-            let scrollLeft = 0;
-            let dragged = false;
+        document.addEventListener('mousedown', function(e) {
+            if (e.button !== 0) return; // Left mouse button only
+            if (e.target.closest('input, textarea, select')) return;
 
-            nav.addEventListener('mousedown', (e) => {
-                if (e.button !== 0) return;
-                isDown = true;
-                dragged = false;
-                startX = e.pageX - nav.offsetLeft;
-                scrollLeft = nav.scrollLeft;
-            });
+            const container = getHScrollContainer(e.target);
+            if (!container) return;
 
-            window.addEventListener('mouseup', () => {
-                isDown = false;
-            });
+            isDragging = true;
+            dragContainer = container;
+            hasMoved = false;
+            startX = e.pageX;
+            scrollStart = container.scrollLeft;
+            container.style.cursor = 'grabbing';
+            container.style.userSelect = 'none';
+        });
 
-            nav.addEventListener('mousemove', (e) => {
-                if (!isDown) return;
-                const x = e.pageX - nav.offsetLeft;
-                const walk = (x - startX);
-                if (Math.abs(walk) > 4) {
-                    dragged = true;
-                    nav.scrollLeft = scrollLeft - walk;
-                }
-            });
+        window.addEventListener('mousemove', function(e) {
+            if (!isDragging || !dragContainer) return;
+            const delta = e.pageX - startX;
+            if (Math.abs(delta) > 3) {
+                hasMoved = true;
+                dragContainer.scrollLeft = scrollStart - delta;
+            }
+        });
 
-            nav.addEventListener('click', (e) => {
-                if (dragged) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    dragged = false;
-                }
-            }, true);
+        function endDrag() {
+            if (dragContainer) {
+                dragContainer.style.cursor = '';
+                dragContainer.style.userSelect = '';
+            }
+            isDragging = false;
+            dragContainer = null;
+            setTimeout(() => { hasMoved = false; }, 50);
         }
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', attachDragScroll);
-        } else {
-            attachDragScroll();
-        }
+        window.addEventListener('mouseup', endDrag);
+        window.addEventListener('mouseleave', endDrag);
+
+        document.addEventListener('click', function(e) {
+            if (hasMoved) {
+                e.preventDefault();
+                e.stopPropagation();
+                hasMoved = false;
+            }
+        }, true);
     })();
     </script>
 
