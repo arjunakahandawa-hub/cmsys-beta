@@ -114,7 +114,7 @@
     </header>
 
     <!-- ACTIVE ZONE BANNER & SAILOR STRENGTH METRICS (Replaces Dropdown for Security & Clarity) -->
-    <section id="mZoneSection" class="bg-slate-900/95 border-b border-slate-800 px-3 py-2 space-y-1.5 shadow-sm">
+    <section id="mZoneSection" onwheel="handleRibbonWheel(event)" class="bg-slate-900/95 border-b border-slate-800 px-3 py-2 space-y-1.5 shadow-sm">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-1.5 min-w-0">
                 <span class="text-sm">📍</span>
@@ -151,7 +151,7 @@
             <button type="button" onclick="scrollMetricsRibbon(-130)" class="w-6 h-6 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:scale-90 text-slate-300 flex items-center justify-center text-[10px] border border-slate-700 cursor-pointer shrink-0 shadow-xs" title="Scroll metrics left">
                 ◀
             </button>
-            <div id="mMetricsRibbon" class="flex-1 flex items-center gap-1.5 overflow-x-auto text-[10px] font-bold pb-0.5 scrollbar-none cursor-grab active:cursor-grabbing select-none" style="scroll-behavior: auto !important; -webkit-overflow-scrolling: touch;">
+            <div id="mMetricsRibbon" onwheel="handleRibbonWheel(event)" onmousedown="startRibbonDrag(event)" class="flex-1 flex items-center gap-1.5 overflow-x-auto text-[10px] font-bold pb-0.5 scrollbar-none cursor-grab active:cursor-grabbing select-none" style="scroll-behavior: auto !important; -webkit-overflow-scrolling: touch;">
                 <span class="bg-teal-950/80 text-teal-300 px-2 py-0.5 rounded-lg border border-teal-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
                     👥 Strength: <strong id="mStatStrength" class="text-white font-mono">0</strong>
                 </span>
@@ -416,6 +416,62 @@
         if (el) {
             el.scrollBy({ left: amount, behavior: 'smooth' });
         }
+    }
+
+    function handleRibbonWheel(e) {
+        const ribbon = document.getElementById('mMetricsRibbon');
+        if (!ribbon) return;
+        let delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (delta === 0) return;
+        if (e.deltaMode === 1) delta *= 35;
+        else if (e.deltaMode === 2) delta *= 120;
+        else if (Math.abs(delta) < 15) delta *= 30;
+        e.preventDefault();
+        e.stopPropagation();
+        ribbon.scrollLeft += delta;
+    }
+
+    function startRibbonDrag(e) {
+        if (e.button !== 0) return;
+        if (e.target.closest('button, input, a')) return;
+        const ribbon = document.getElementById('mMetricsRibbon');
+        if (!ribbon) return;
+        let isDown = true;
+        let startX = e.clientX;
+        let startScroll = ribbon.scrollLeft;
+        let hasDragged = false;
+        ribbon.style.cursor = 'grabbing';
+        ribbon.style.userSelect = 'none';
+        e.preventDefault();
+
+        function onMove(ev) {
+            if (!isDown) return;
+            const walk = ev.clientX - startX;
+            if (Math.abs(walk) > 2) {
+                hasDragged = true;
+                ev.preventDefault();
+                ribbon.scrollLeft = startScroll - walk;
+            }
+        }
+
+        function onUp() {
+            isDown = false;
+            ribbon.style.cursor = '';
+            ribbon.style.userSelect = '';
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            if (hasDragged) {
+                const blockClick = (cEv) => {
+                    cEv.preventDefault();
+                    cEv.stopPropagation();
+                    window.removeEventListener('click', blockClick, true);
+                };
+                window.addEventListener('click', blockClick, true);
+            }
+        }
+
+        window.addEventListener('mousemove', onMove, { passive: false });
+        window.addEventListener('mouseup', onUp);
     }
 
     (function initMobileScrollController() {
