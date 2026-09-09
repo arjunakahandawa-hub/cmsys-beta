@@ -332,14 +332,31 @@
             color: var(--gold-light);
         }
 
-        /* ===== Navigation Pills ===== */
-        .nav-pill { transition: all 0.2s cubic-bezier(.4,0,.2,1); border-radius: 8px; }
+        /* ===== Navigation Pills & Horizontal Scrolling ===== */
+        .nav-pill {
+            transition: all 0.2s cubic-bezier(.4,0,.2,1);
+            border-radius: 8px;
+            flex-shrink: 0 !important;
+            white-space: nowrap !important;
+            user-select: none;
+        }
         .nav-pill:hover { background: rgba(13,148,136,0.25); color: #5eead4; }
         .tab-active {
             background: linear-gradient(135deg, rgba(13,148,136,0.35), rgba(20,184,166,0.2));
             color: #2dd4bf !important;
             box-shadow: 0 0 12px rgba(13,148,136,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
             border-bottom: 2px solid var(--teal-light);
+        }
+        .scrollbar-none::-webkit-scrollbar {
+            display: none !important;
+        }
+        .scrollbar-none {
+            -ms-overflow-style: none !important;
+            scrollbar-width: none !important;
+        }
+        .touch-scroll {
+            -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
         }
 
         /* ===== Cards ===== */
@@ -732,7 +749,7 @@
                 </div>
 
                 <!-- Navigation (Desktop) -->
-                <nav class="hidden md:flex flex-wrap gap-0.5 bg-white/5 backdrop-blur rounded-xl p-1 border border-white/10">
+                <nav id="desktopMainNav" class="hidden md:flex items-center flex-nowrap overflow-x-auto gap-0.5 bg-white/5 backdrop-blur rounded-xl p-1 border border-white/10 scrollbar-none min-w-0 max-w-[62vw] 2xl:max-w-none touch-scroll select-none">
                     <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300 tab-active">
                         <span>📊 </span>Dashboard
                     </button>
@@ -2471,17 +2488,17 @@
                 </div>
 
                 <!-- Settings Tabs -->
-                <div class="flex gap-2 mb-6 flex-wrap">
-                    <button onclick="switchSettingsTab('identity')" id="stab-identity" class="settings-tab-btn active-stab px-4 py-2 rounded-lg text-sm font-medium">⚙️ System Identity</button>
-                    <button onclick="switchSettingsTab('projects')" id="stab-projects" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-indigo-700 bg-indigo-50/70 border border-indigo-200">🏗️ Approved Projects</button>
-                    <button onclick="switchSettingsTab('user')" id="stab-user" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">👤 User Profile</button>
-                    <button onclick="switchSettingsTab('zones')" id="stab-zones" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🗺️ Zones</button>
-                    <button onclick="switchSettingsTab('inventory')" id="stab-inventory" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-emerald-800 bg-emerald-50/70 border border-emerald-200">📦 Inventory & Stores</button>
-                    <button onclick="switchSettingsTab('workorder')" id="stab-workorder" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📋 Work Orders</button>
-                    <button onclick="switchSettingsTab('display')" id="stab-display" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">🎨 Display</button>
-                    <button onclick="switchSettingsTab('dateschedule')" id="stab-dateschedule" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium">📅 Date Schedule</button>
-                    <button onclick="switchSettingsTab('minutesheet')" id="stab-minutesheet" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-teal-800 bg-teal-50/70 border border-teal-200">📜 Minute Sheet Config</button>
-                    <button onclick="switchSettingsTab('data')" id="stab-data" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-rose-600 bg-rose-50">🧹 Data Management</button>
+                <div class="flex gap-2 mb-6 overflow-x-auto scrollbar-none pb-1 flex-nowrap" id="settingsTabsContainer">
+                    <button onclick="switchSettingsTab('identity')" id="stab-identity" class="settings-tab-btn active-stab px-4 py-2 rounded-lg text-sm font-medium shrink-0 whitespace-nowrap">⚙️ System Identity</button>
+                    <button onclick="switchSettingsTab('projects')" id="stab-projects" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-indigo-700 bg-indigo-50/70 border border-indigo-200 shrink-0 whitespace-nowrap">🏗️ Approved Projects</button>
+                    <button onclick="switchSettingsTab('user')" id="stab-user" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium shrink-0 whitespace-nowrap">👤 User Profile</button>
+                    <button onclick="switchSettingsTab('zones')" id="stab-zones" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium shrink-0 whitespace-nowrap">🗺️ Zones</button>
+                    <button onclick="switchSettingsTab('inventory')" id="stab-inventory" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-emerald-800 bg-emerald-50/70 border border-emerald-200 shrink-0 whitespace-nowrap">📦 Inventory & Stores</button>
+                    <button onclick="switchSettingsTab('workorder')" id="stab-workorder" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium shrink-0 whitespace-nowrap">📋 Work Orders</button>
+                    <button onclick="switchSettingsTab('display')" id="stab-display" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium shrink-0 whitespace-nowrap">🎨 Display</button>
+                    <button onclick="switchSettingsTab('dateschedule')" id="stab-dateschedule" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium shrink-0 whitespace-nowrap">📅 Date Schedule</button>
+                    <button onclick="switchSettingsTab('minutesheet')" id="stab-minutesheet" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-teal-800 bg-teal-50/70 border border-teal-200 shrink-0 whitespace-nowrap">📜 Minute Sheet Config</button>
+                    <button onclick="switchSettingsTab('data')" id="stab-data" class="settings-tab-btn px-4 py-2 rounded-lg text-sm font-medium text-rose-600 bg-rose-50 shrink-0 whitespace-nowrap">🧹 Data Management</button>
                 </div>
 
                 <!-- ── Tab: System Identity ── -->
@@ -7637,6 +7654,91 @@
             console.warn('⚠️ CMSys DB#1 (Sailors): DISCONNECTED');
         }
     });
+    </script>
+
+    <!-- Universal Mouse Wheel & Drag Horizontal Scroll Handler for Menus, Ribbons, and Tabs -->
+    <script>
+    (function initHorizontalScrollSystem() {
+        function isHorizontallyScrollable(el) {
+            if (!el || el === document.body || el === document.documentElement) return false;
+            try {
+                const style = window.getComputedStyle(el);
+                const overflowX = style.overflowX;
+                return (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth;
+            } catch (err) {
+                return false;
+            }
+        }
+
+        // Global wheel listener for all horizontal bars, ribbons, and menus
+        window.addEventListener('wheel', function(e) {
+            if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+            if (e.deltaY === 0) return;
+
+            let cur = e.target;
+            while (cur && cur !== document.body && cur !== document.documentElement) {
+                const isNavOrRibbon = cur.tagName === 'NAV' || cur.id === 'desktopMainNav' || cur.classList.contains('scrollbar-none') || cur.clientHeight < 80;
+                const hasVerticalScroll = cur.scrollHeight > (cur.clientHeight + 10);
+
+                if (cur.tagName === 'NAV' || cur.id === 'desktopMainNav' || cur.classList.contains('overflow-x-auto') || isHorizontallyScrollable(cur)) {
+                    if (cur.scrollWidth > cur.clientWidth && (!hasVerticalScroll || isNavOrRibbon)) {
+                        e.preventDefault();
+                        cur.scrollLeft += (e.deltaY * 1.2);
+                        return;
+                    }
+                }
+                cur = cur.parentElement;
+            }
+        }, { passive: false });
+
+        // Enable click-and-drag panning on desktop main nav
+        function attachDragScroll() {
+            const nav = document.getElementById('desktopMainNav');
+            if (!nav || nav.dataset.dragAttached) return;
+            nav.dataset.dragAttached = 'true';
+
+            let isDown = false;
+            let startX = 0;
+            let scrollLeft = 0;
+            let dragged = false;
+
+            nav.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                isDown = true;
+                dragged = false;
+                startX = e.pageX - nav.offsetLeft;
+                scrollLeft = nav.scrollLeft;
+            });
+
+            window.addEventListener('mouseup', () => {
+                isDown = false;
+            });
+
+            nav.addEventListener('mousemove', (e) => {
+                if (!isDown) return;
+                const x = e.pageX - nav.offsetLeft;
+                const walk = (x - startX);
+                if (Math.abs(walk) > 4) {
+                    dragged = true;
+                    nav.scrollLeft = scrollLeft - walk;
+                }
+            });
+
+            nav.addEventListener('click', (e) => {
+                if (dragged) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    dragged = false;
+                }
+            }, true);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', attachDragScroll);
+        } else {
+            attachDragScroll();
+        }
+    })();
     </script>
 
 

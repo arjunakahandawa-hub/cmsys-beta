@@ -1674,6 +1674,12 @@ function switchView(view, preventPushState = false) {
     t.classList.remove("tab-active");
   });
   const activeTab = document.getElementById(`tab-${view}`);
+  if (activeTab) {
+    activeTab.classList.add("tab-active");
+    if (typeof activeTab.scrollIntoView === "function") {
+      activeTab.scrollIntoView({ behavior: "smooth", inline: "nearest", block: "nearest" });
+    }
+  }
   // Update bottom nav tabs active styles
   document.querySelectorAll('[id^="mobile-tab-"]').forEach((btn) => {
     btn.classList.remove("text-teal-400");

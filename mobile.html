@@ -374,5 +374,21 @@
 
     <!-- SCRIPT INCLUSION -->
     <script src="mobile.js?v=1.0.8"></script>
+    <script>
+    window.addEventListener('wheel', function(e) {
+        if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.deltaY === 0) return;
+        let cur = e.target;
+        while (cur && cur !== document.body && cur !== document.documentElement) {
+            if (cur.classList.contains('overflow-x-auto') || cur.scrollWidth > cur.clientWidth) {
+                if (cur.scrollWidth > cur.clientWidth && cur.clientHeight < 80) {
+                    e.preventDefault();
+                    cur.scrollLeft += (e.deltaY * 1.2);
+                    return;
+                }
+            }
+            cur = cur.parentElement;
+        }
+    }, { passive: false });
+    </script>
 </body>
 </html>
