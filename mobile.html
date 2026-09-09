@@ -308,28 +308,51 @@
                         </div>
                     </div>
 
-                    <!-- In-Charge & Supervisor -->
-                    <div class="grid grid-cols-2 gap-2.5">
-                        <div>
-                            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">In-Charge</label>
-                            <select id="mWoIncharge" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
-                                <option value="">-- None --</option>
-                            </select>
+                    <!-- SEARCH & FIND LEADERS (In-Charge & Supervisor) -->
+                    <div class="p-3 bg-slate-800/90 rounded-2xl border border-slate-700 space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label class="text-[10px] font-black uppercase tracking-wider text-teal-300 flex items-center gap-1.5">
+                                <span>🔍</span> Search & Find Leaders
+                            </label>
+                            <span id="mLeaderSearchBadge" class="text-[9px] text-slate-400 font-mono"></span>
                         </div>
-                        <div>
-                            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Supervisor</label>
-                            <select id="mWoSupervisor" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
-                                <option value="">-- None --</option>
-                            </select>
+                        <div class="relative">
+                            <input type="text" id="mLeaderSearch" oninput="filterLeaderDropdowns(this.value)" placeholder="Type Name or Service No to find sailor..." class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-2.5 py-1.5 pl-8 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-400">
+                            <span class="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+                            <button type="button" id="mLeaderSearchClear" onclick="clearLeaderSearch()" class="hidden absolute right-2.5 top-1.5 text-xs text-slate-400 hover:text-white px-1">✕</button>
                         </div>
-                    </div>
+                        
+                        <div class="grid grid-cols-2 gap-2 pt-1">
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="block text-[10px] font-bold uppercase text-slate-300">In-Charge</label>
+                                    <button type="button" onclick="clearIncharge()" class="text-[9px] text-rose-400 hover:underline" title="Clear In-Charge">Clear</button>
+                                </div>
+                                <select id="mWoIncharge" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                                    <option value="">-- None --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <div class="flex items-center justify-between mb-1">
+                                    <label class="block text-[10px] font-bold uppercase text-slate-300">Supervisor</label>
+                                    <button type="button" onclick="clearSupervisor()" class="text-[9px] text-rose-400 hover:underline" title="Clear Supervisor">Clear</button>
+                                </div>
+                                <select id="mWoSupervisor" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                                    <option value="">-- None --</option>
+                                </select>
+                            </div>
+                        </div>
 
-                    <!-- Project Artificer -->
-                    <div>
-                        <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Project Artificer</label>
-                        <select id="mWoArtificer" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
-                            <option value="">-- None --</option>
-                        </select>
+                        <!-- Project Artificer -->
+                        <div class="pt-1">
+                            <div class="flex items-center justify-between mb-1">
+                                <label class="block text-[10px] font-bold uppercase text-slate-400">Project Artificer</label>
+                                <button type="button" onclick="clearArtificer()" class="text-[9px] text-rose-400 hover:underline" title="Clear Artificer">Clear</button>
+                            </div>
+                            <select id="mWoArtificer" class="w-full bg-slate-900 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                                <option value="">-- None --</option>
+                            </select>
+                        </div>
                     </div>
 
                     <!-- DAILY CREW / SAILORS ASSIGNMENT SECTION -->
@@ -407,7 +430,7 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.1.0"></script>
+    <script src="mobile.js?v=1.1.1"></script>
 
     <!-- ROBUST MOUSE WHEEL & CLICK-AND-DRAG (PAN) CONTROLLER -->
     <script>

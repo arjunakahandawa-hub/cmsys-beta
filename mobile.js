@@ -39,6 +39,40 @@ function parseOfficialNumber(offNo) {
   return { type: "•", num: clean };
 }
 
+function getSailorDisplayName(sailorId) {
+  if (!sailorId) return "";
+  const s = (typeof mStore !== "undefined" && mStore.sailors)
+    ? mStore.sailors.find(
+        (sailor) =>
+          String(sailor.id) === String(sailorId) ||
+          String(sailor._fbKey) === String(sailorId) ||
+          String(sailor.off_no || sailor.official_number) === String(sailorId)
+      )
+    : null;
+  if (!s) return String(sailorId);
+  const off = s.off_no || s.official_number || "";
+  const rank = s.rank || "";
+  const name = s.name || "";
+  const offPart = off ? ` (${off})` : "";
+  return `${rank} ${name}${offPart}`.trim();
+}
+
+function getWorkOrderCreatedDate(wo) {
+  if (!wo) return "";
+  if (wo.date) return String(wo.date).split("T")[0];
+  if (wo.created_date) return String(wo.created_date).split("T")[0];
+  if (wo.created_at) {
+    try {
+      const cd = new Date(wo.created_at);
+      if (!isNaN(cd.getTime())) return cd.toISOString().split("T")[0];
+    } catch (e) {}
+    if (typeof wo.created_at === "string" && /^\d{4}-\d{2}-\d{2}/.test(wo.created_at)) {
+      return wo.created_at.substring(0, 10);
+    }
+  }
+  return "";
+}
+
 function getSelectedDate() {
   return (typeof mStore !== "undefined" && mStore.selectedDate) ? mStore.selectedDate : getLocalDateString();
 }
@@ -519,29 +553,80 @@ function isWorkOrderActiveOnDate(wo, targetDate) {
   const today = getLocalDateString();
   const tDate = targetDate || today;
 
-  if (tDate === today) {
-    if (wo.status === "Completed") {
-      // Only show completed if it was committed or completed today
-      return wo.last_commit_date === today || wo.completed_date === today;
-    }
-    return true;
-  }
-
-  // Back-date check
   const wid = String(wo.id || wo._fbKey || "");
-  const hasAlloc = (mStore.dailyAllocations || []).some(
-    (a) => a.date === tDate && String(a.work_order_id) === wid && a.status !== "Cancelled"
-  );
+  const wRef = String(wo.reference_no || "");
+  const wJobNo = String(wo.job_no || "");
+  const wDesc = String(wo.description || "").trim().toLowerCase();
+
+  // 1. Check if dailyAllocations has an active allocation on target date (highest fidelity)
+  const hasAlloc = (mStore.dailyAllocations || []).some((a) => {
+    if (!a || a.date !== tDate || a.status === "Cancelled") return false;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    return (
+      (wid && aWoId === wid) ||
+      (wRef && aWoId === wRef) ||
+      (wJobNo && aWoId === wJobNo) ||
+      (wDesc && aDesc && (aDesc === wDesc || aDesc.includes(wDesc) || wDesc.includes(aDesc)))
+    );
+  });
   if (hasAlloc) return true;
 
-  if (wo.last_commit_date === tDate || wo.last_committed_date === tDate || wo.last_assigned_date === tDate) {
-    return true;
+  // 2. Check if committed / assigned on target date
+  const isCommittedOnDate = (
+    wo.last_commit_date === tDate ||
+    wo.last_committed_date === tDate ||
+    wo.last_assigned_date === tDate
+  );
+  if (isCommittedOnDate) return true;
+
+  // 3. Completed items should only be shown if completed or committed on this exact target date
+  if (wo.status === "Completed") {
+    return wo.completed_date === tDate || wo.last_commit_date === tDate || wo.last_committed_date === tDate;
   }
 
-  if (wo.created_date && wo.created_date <= tDate) {
-    if (!wo.completed_date || wo.completed_date >= tDate) {
+  // 4. Hold items should not be shown unless explicitly allocated or committed on this date
+  if (wo.status === "Hold") {
+    return false;
+  }
+
+  // 5. Extract creation date
+  const createdDate = getWorkOrderCreatedDate(wo);
+
+  // 6. Single-Day Lifecycle for Tasks and Daily Assignments:
+  // Tasks/Assignments created on previous days do not persist without active allocations on target date
+  const isSingleDay = (
+    wo.type === "TASK" ||
+    Boolean(wo.assign_type) ||
+    isAssignmentItem(wo) ||
+    wo.type === "ASSIGNMENT"
+  );
+
+  if (isSingleDay) {
+    if (createdDate) {
+      // If created on a different date and no allocations on tDate, do not show
+      if (createdDate !== tDate) {
+        return false;
+      }
       return true;
     }
+    // If no createdDate known:
+    if (wo.last_commit_date && wo.last_commit_date !== tDate) {
+      return false;
+    }
+    return tDate === today;
+  }
+
+  // 7. Multi-day items (PROJECT, JOB, WORK_ORDER):
+  if (createdDate && createdDate > tDate) {
+    return false;
+  }
+  if (wo.completed_date && wo.completed_date < tDate) {
+    return false;
+  }
+
+  if (wo.status === "Active" || wo.status === "Pending") {
+    return true;
   }
 
   return false;
@@ -554,26 +639,48 @@ function isWorkOrderActiveToday(wo) {
 function getWorkOrderCrewForDate(wo, targetDate) {
   if (!wo) return [];
   const wid = String(wo.id || wo._fbKey || "");
+  const wRef = String(wo.reference_no || "");
+  const wJobNo = String(wo.job_no || "");
+  const wDesc = String(wo.description || "").trim().toLowerCase();
   const today = getLocalDateString();
   const tDate = targetDate || today;
 
-  if (tDate === today) {
-    if (Array.isArray(wo.assigned) && wo.assigned.length > 0) return [...wo.assigned];
-    if (Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0) return [...wo.last_assigned];
-    return [];
-  }
+  // 1. Check dailyAllocations for this specific targetDate (ground truth)
+  const dateAllocs = (mStore.dailyAllocations || []).filter((a) => {
+    if (!a || a.date !== tDate || a.status === "Cancelled") return false;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    return (
+      (wid && aWoId === wid) ||
+      (wRef && aWoId === wRef) ||
+      (wJobNo && aWoId === wJobNo) ||
+      (wDesc && aDesc && (aDesc === wDesc || aDesc.includes(wDesc) || wDesc.includes(aDesc)))
+    );
+  });
 
-  // Historical date: check dailyAllocations first
-  const dateAllocs = (mStore.dailyAllocations || []).filter(
-    (a) => a.date === tDate && String(a.work_order_id) === wid && a.status !== "Cancelled"
-  );
   if (dateAllocs.length > 0) {
     return dateAllocs.map((a) => a.sailor_id || a.official_number || a.off_no).filter(Boolean);
   }
 
+  // 2. If committed or assigned on this specific target date
   if (wo.last_commit_date === tDate || wo.last_committed_date === tDate || wo.last_assigned_date === tDate) {
     if (Array.isArray(wo.assigned) && wo.assigned.length > 0) return [...wo.assigned];
     if (Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0) return [...wo.last_assigned];
+  }
+
+  // 3. For today:
+  if (tDate === today) {
+    const createdDate = getWorkOrderCreatedDate(wo);
+    // If created today and has planned crew:
+    if (createdDate === today) {
+      if (Array.isArray(wo.assigned) && wo.assigned.length > 0) return [...wo.assigned];
+      if (Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0) return [...wo.last_assigned];
+    }
+    // Ongoing multi-day project / job:
+    const isSingleDay = (wo.type === "TASK" || Boolean(wo.assign_type) || isAssignmentItem(wo) || wo.type === "ASSIGNMENT");
+    if (!isSingleDay && (wo.status === "Active" || wo.status === "Pending")) {
+      if (Array.isArray(wo.assigned) && wo.assigned.length > 0) return [...wo.assigned];
+    }
   }
 
   return [];
@@ -606,7 +713,35 @@ function renderWorkOrders() {
     const ref = (w.reference_no || "").toLowerCase();
     const status = (w.status || "").toLowerCase();
     const type = (w.type || w.assign_type || "").toLowerCase();
-    return desc.includes(q) || ref.includes(q) || status.includes(q) || type.includes(q);
+
+    // Search by leaders (display name, rank, official number, or id)
+    const incStr = getSailorDisplayName(w.incharge).toLowerCase();
+    const supStr = getSailorDisplayName(w.supervisor).toLowerCase();
+    const artStr = getSailorDisplayName(w.project_artificer).toLowerCase();
+    const incRaw = String(w.incharge || "").toLowerCase();
+    const supRaw = String(w.supervisor || "").toLowerCase();
+    const artRaw = String(w.project_artificer || "").toLowerCase();
+
+    // Search by crew members assigned
+    const crewMatches = getWorkOrderCrewForDate(w, targetDate).some((sid) => {
+      const sDisplay = getSailorDisplayName(sid).toLowerCase();
+      const sRaw = String(sid).toLowerCase();
+      return sDisplay.includes(q) || sRaw.includes(q);
+    });
+
+    return (
+      desc.includes(q) ||
+      ref.includes(q) ||
+      status.includes(q) ||
+      type.includes(q) ||
+      incStr.includes(q) ||
+      supStr.includes(q) ||
+      artStr.includes(q) ||
+      incRaw.includes(q) ||
+      supRaw.includes(q) ||
+      artRaw.includes(q) ||
+      crewMatches
+    );
   });
 
   const zoneObj = mStore.zones.find((z) => isZoneMatch(z.id, currentZone));
@@ -642,6 +777,18 @@ function renderWorkOrders() {
     
     const isCommittedToday = (w.last_commit_date === targetDate || w.last_committed_date === targetDate);
     const itemType = w.assign_type ? `💼 ${w.assign_type}` : (isAssign ? "💼 ASSIGNMENT" : (w.type ? `📋 ${w.type}` : "TASK"));
+
+    // Leader badges (In-Charge & Supervisor)
+    const incDisplay = getSailorDisplayName(w.incharge);
+    const supDisplay = getSailorDisplayName(w.supervisor);
+    let leaderBadgesHtml = "";
+    if (incDisplay || supDisplay) {
+      leaderBadgesHtml = `
+        <div class="flex items-center gap-1.5 flex-wrap pt-1 text-[10px]">
+          ${incDisplay ? `<span class="inline-flex items-center gap-1 bg-slate-900/90 text-teal-300 px-2 py-0.5 rounded-lg border border-teal-500/30 font-medium"><span>👤</span><strong class="text-[9px] text-slate-400">IC:</strong> <span class="truncate max-w-[130px]">${escapeHtml(incDisplay)}</span></span>` : ""}
+          ${supDisplay ? `<span class="inline-flex items-center gap-1 bg-slate-900/90 text-sky-300 px-2 py-0.5 rounded-lg border border-sky-500/30 font-medium"><span>👮</span><strong class="text-[9px] text-slate-400">SUP:</strong> <span class="truncate max-w-[130px]">${escapeHtml(supDisplay)}</span></span>` : ""}
+        </div>`;
+    }
 
     // Status pill colors
     let statusClass = "bg-slate-700/60 text-slate-300 border-slate-600";
@@ -710,6 +857,7 @@ function renderWorkOrders() {
             </div>
             <h3 class="text-xs font-bold text-white line-clamp-2 leading-snug">${w.description || "Untitled Work Order"}</h3>
             ${w.reference_no ? `<p class="text-[10px] text-teal-400/80 font-mono mt-0.5">Ref: ${w.reference_no}</p>` : ""}
+            ${leaderBadgesHtml}
           </div>
           <span class="text-base text-slate-400 font-bold shrink-0">›</span>
         </div>
@@ -973,35 +1121,106 @@ function toggleSailorFilterMode() {
 // =============================================
 // WORK ORDER DETAIL / LABOUR SHEET LOGIC
 // =============================================
-function populateLeaderDropdowns() {
+function populateLeaderDropdowns(filterQuery = "") {
   const inchargeSel = document.getElementById("mWoIncharge");
   const supSel = document.getElementById("mWoSupervisor");
   const artificerSel = document.getElementById("mWoArtificer");
+  const badgeEl = document.getElementById("mLeaderSearchBadge");
   if (!inchargeSel || !supSel) return;
 
   const currentInc = inchargeSel.value;
   const currentSup = supSel.value;
   const currentArt = artificerSel ? artificerSel.value : "";
 
-  const options = ['<option value="">-- None --</option>'];
-  mStore.sailors.forEach((s) => {
-    const status = getSailorStatusToday(s, mStore.selectedWo);
-    const lockTag = status.isLocked ? ` [${status.badgeText.replace(/^[^\s]+\s*/, "")}]` : "";
-    const off = s.off_no || s.official_number || "";
-    const branch = s.trade || s.branch || "";
-    const sub = [branch, off].filter(Boolean).join(" • ");
-    const subStr = sub ? ` (${sub})` : "";
-    const label = `${s.rank || ""} ${s.name || s.id}${subStr}${lockTag}`.trim();
-    options.push(`<option value="${s.id}">${label}</option>`);
+  const q = (filterQuery || "").trim().toLowerCase();
+
+  // Filter sailors if search query is entered
+  const matchedSailors = (mStore.sailors || []).filter((s) => {
+    if (!q) return true;
+    const name = (s.name || "").toLowerCase();
+    const off = (s.off_no || s.official_number || "").toLowerCase();
+    const rank = (s.rank || "").toLowerCase();
+    const branch = (s.trade || s.branch || "").toLowerCase();
+    return name.includes(q) || off.includes(q) || rank.includes(q) || branch.includes(q);
   });
 
-  inchargeSel.innerHTML = options.join("");
-  supSel.innerHTML = options.join("");
-  if (artificerSel) artificerSel.innerHTML = options.join("");
+  if (badgeEl) {
+    badgeEl.textContent = q ? `${matchedSailors.length} found` : "";
+  }
+
+  const buildOptions = (currentVal) => {
+    const opts = ['<option value="">-- None --</option>'];
+
+    // If currently selected sailor is not in filtered list, preserve them at the top
+    if (currentVal && !matchedSailors.some((s) => String(s.id) === String(currentVal) || String(s._fbKey) === String(currentVal))) {
+      const curSailor = (mStore.sailors || []).find((s) => String(s.id) === String(currentVal) || String(s._fbKey) === String(currentVal));
+      if (curSailor) {
+        const off = curSailor.off_no || curSailor.official_number || "";
+        const label = `★ [Selected] ${curSailor.rank || ""} ${curSailor.name || curSailor.id} (${off})`.trim();
+        opts.push(`<option value="${curSailor.id || curSailor._fbKey}" selected>${escapeHtml(label)}</option>`);
+      } else {
+        opts.push(`<option value="${currentVal}" selected>★ [Selected] ${escapeHtml(currentVal)}</option>`);
+      }
+    }
+
+    matchedSailors.forEach((s) => {
+      const sId = s.id || s._fbKey;
+      const status = getSailorStatusToday(s, mStore.selectedWo);
+      const lockTag = status.isLocked ? ` [${status.badgeText.replace(/^[^\s]+\s*/, "")}]` : "";
+      const off = s.off_no || s.official_number || "";
+      const branch = s.trade || s.branch || "";
+      const sub = [branch, off].filter(Boolean).join(" • ");
+      const subStr = sub ? ` (${sub})` : "";
+      const label = `${s.rank || ""} ${s.name || s.id}${subStr}${lockTag}`.trim();
+      const isSel = String(sId) === String(currentVal) ? " selected" : "";
+      opts.push(`<option value="${sId}"${isSel}>${escapeHtml(label)}</option>`);
+    });
+
+    return opts.join("");
+  };
+
+  inchargeSel.innerHTML = buildOptions(currentInc);
+  supSel.innerHTML = buildOptions(currentSup);
+  if (artificerSel) artificerSel.innerHTML = buildOptions(currentArt);
 
   if (currentInc) inchargeSel.value = currentInc;
   if (currentSup) supSel.value = currentSup;
   if (artificerSel && currentArt) artificerSel.value = currentArt;
+}
+
+function filterLeaderDropdowns(val) {
+  populateLeaderDropdowns(val);
+  const clearBtn = document.getElementById("mLeaderSearchClear");
+  if (clearBtn) {
+    if (val && val.trim()) {
+      clearBtn.classList.remove("hidden");
+    } else {
+      clearBtn.classList.add("hidden");
+    }
+  }
+}
+
+function clearLeaderSearch() {
+  const input = document.getElementById("mLeaderSearch");
+  if (input) input.value = "";
+  const clearBtn = document.getElementById("mLeaderSearchClear");
+  if (clearBtn) clearBtn.classList.add("hidden");
+  populateLeaderDropdowns("");
+}
+
+function clearIncharge() {
+  const el = document.getElementById("mWoIncharge");
+  if (el) el.value = "";
+}
+
+function clearSupervisor() {
+  const el = document.getElementById("mWoSupervisor");
+  if (el) el.value = "";
+}
+
+function clearArtificer() {
+  const el = document.getElementById("mWoArtificer");
+  if (el) el.value = "";
 }
 
 // =============================================
@@ -1030,7 +1249,11 @@ function openWoSheet(woId) {
   // Load crew allocated or planned for this date
   mStore.assignedTemp = getWorkOrderCrewForDate(wo, targetDate);
   if (mStore.assignedTemp.length === 0 && !isBackDate) {
-    mStore.assignedTemp = Array.isArray(wo.assigned) ? [...wo.assigned] : [];
+    const createdDate = getWorkOrderCreatedDate(wo);
+    const isSingleDay = (wo.type === "TASK" || Boolean(wo.assign_type) || isAssignmentItem(wo) || wo.type === "ASSIGNMENT");
+    if (!isSingleDay || createdDate === today) {
+      mStore.assignedTemp = Array.isArray(wo.assigned) ? [...wo.assigned] : [];
+    }
   }
 
   const titleEl = document.getElementById("mSheetTitle");
@@ -1075,6 +1298,14 @@ function openWoSheet(woId) {
   if (document.getElementById("mWoAuthority")) document.getElementById("mWoAuthority").value = wo.authority_approval || wo.authority || "";
   if (document.getElementById("mWoBudget")) document.getElementById("mWoBudget").value = wo.budget_allocation || "";
   if (document.getElementById("mWoDuration")) document.getElementById("mWoDuration").value = wo.estimated_duration || "";
+
+  // Reset leader search
+  const leaderSearchInput = document.getElementById("mLeaderSearch");
+  if (leaderSearchInput) leaderSearchInput.value = "";
+  const leaderSearchClear = document.getElementById("mLeaderSearchClear");
+  if (leaderSearchClear) leaderSearchClear.classList.add("hidden");
+  const leaderSearchBadge = document.getElementById("mLeaderSearchBadge");
+  if (leaderSearchBadge) leaderSearchBadge.textContent = "";
 
   populateLeaderDropdowns();
   if (document.getElementById("mWoIncharge")) document.getElementById("mWoIncharge").value = wo.incharge || "";
@@ -1168,6 +1399,14 @@ function openNewWoSheet() {
   if (document.getElementById("mWoBudget")) document.getElementById("mWoBudget").value = "";
   if (document.getElementById("mWoDuration")) document.getElementById("mWoDuration").value = "1";
 
+  // Reset leader search
+  const leaderSearchInput = document.getElementById("mLeaderSearch");
+  if (leaderSearchInput) leaderSearchInput.value = "";
+  const leaderSearchClear = document.getElementById("mLeaderSearchClear");
+  if (leaderSearchClear) leaderSearchClear.classList.add("hidden");
+  const leaderSearchBadge = document.getElementById("mLeaderSearchBadge");
+  if (leaderSearchBadge) leaderSearchBadge.textContent = "";
+
   populateLeaderDropdowns();
   if (document.getElementById("mWoIncharge")) document.getElementById("mWoIncharge").value = "";
   if (document.getElementById("mWoSupervisor")) document.getElementById("mWoSupervisor").value = "";
@@ -1247,6 +1486,14 @@ function openNewAssignSheet() {
   if (document.getElementById("mWoAuthority")) document.getElementById("mWoAuthority").value = "";
   if (document.getElementById("mWoBudget")) document.getElementById("mWoBudget").value = "";
   if (document.getElementById("mWoDuration")) document.getElementById("mWoDuration").value = "1";
+
+  // Reset leader search
+  const leaderSearchInput = document.getElementById("mLeaderSearch");
+  if (leaderSearchInput) leaderSearchInput.value = "";
+  const leaderSearchClear = document.getElementById("mLeaderSearchClear");
+  if (leaderSearchClear) leaderSearchClear.classList.add("hidden");
+  const leaderSearchBadge = document.getElementById("mLeaderSearchBadge");
+  if (leaderSearchBadge) leaderSearchBadge.textContent = "";
 
   populateLeaderDropdowns();
   if (document.getElementById("mWoIncharge")) document.getElementById("mWoIncharge").value = "";
