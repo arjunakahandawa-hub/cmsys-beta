@@ -103,6 +103,7 @@ const mStore = {
   zones: [...STANDARD_ZONES],
   workOrders: [],
   sailors: [],
+  sailorStatusCache: new Map(),
   dailyAllocations: [],
   jobCards: [],
   availability: {},
@@ -786,6 +787,20 @@ function populateLeaderDropdowns() {
   if (artificerSel && currentArt) artificerSel.value = currentArt;
 }
 
+// =============================================
+// SAILOR STATUS CACHE & SMOOTH SHEET MANAGEMENT
+// =============================================
+function refreshSailorStatusCache() {
+  mStore.sailorStatusCache = new Map();
+  const currentWo = mStore.selectedWo;
+  (mStore.sailors || []).forEach((s) => {
+    const key = String(s.id || s._fbKey || "");
+    if (key) {
+      mStore.sailorStatusCache.set(key, getSailorStatusToday(s, currentWo));
+    }
+  });
+}
+
 function openWoSheet(woId) {
   const wo = mStore.workOrders.find((w) => String(w._fbKey) === String(woId) || String(w.id) === String(woId));
   if (!wo) return;
@@ -793,16 +808,32 @@ function openWoSheet(woId) {
   mStore.selectedWo = wo;
   mStore.assignedTemp = Array.isArray(wo.assigned) ? [...wo.assigned] : [];
 
-  document.getElementById("mSheetTitle").textContent = wo.description || "Work Order";
-  document.getElementById("mWoDesc").value = wo.description || "";
+  const titleEl = document.getElementById("mSheetTitle");
+  const descEl = document.getElementById("mWoDesc");
+  if (titleEl) titleEl.textContent = wo.description || "Work Order";
+  if (descEl) descEl.value = wo.description || "";
 
   const prog = Math.min(100, Math.max(0, parseInt(wo.progress) || 0));
-  document.getElementById("mProgressInput").value = prog;
-  document.getElementById("mProgressVal").textContent = `${prog}%`;
+  const progInput = document.getElementById("mProgressInput");
+  const progVal = document.getElementById("mProgressVal");
+  if (progInput) progInput.value = prog;
+  if (progVal) progVal.textContent = `${prog}%`;
 
-  document.getElementById("mWoStatus").value = wo.status || "Active";
-  document.getElementById("mWoPriority").value = wo.priority || "Routine";
+  if (document.getElementById("mWoStatus")) document.getElementById("mWoStatus").value = wo.status || "Active";
+  if (document.getElementById("mWoPriority")) document.getElementById("mWoPriority").value = wo.priority || "Routine";
 
+  const zoneBadge = document.getElementById("mSheetZoneBadge");
+  if (zoneBadge) zoneBadge.textContent = String(wo.zone_id || wo.zone || mStore.currentZone).replace(/-/g, " ");
+
+  const statusBadge = document.getElementById("mSheetStatusBadge");
+  if (statusBadge) {
+    statusBadge.textContent = wo.status || "Active";
+    statusBadge.className = wo.status === "Completed"
+      ? "inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30"
+      : wo.status === "Hold"
+        ? "inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30"
+        : "inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+  }
 
   // Budget and Authority
   if (document.getElementById("mWoAuthority")) document.getElementById("mWoAuthority").value = wo.authority_approval || wo.authority || "";
@@ -814,23 +845,138 @@ function openWoSheet(woId) {
   if (document.getElementById("mWoSupervisor")) document.getElementById("mWoSupervisor").value = wo.supervisor || "";
   if (document.getElementById("mWoArtificer")) document.getElementById("mWoArtificer").value = wo.project_artificer || "";
 
+  // Reset search box
+  const searchInput = document.getElementById("mSailorSearch");
+  if (searchInput) searchInput.value = "";
+  const searchClear = document.getElementById("mSailorSearchClear");
+  if (searchClear) searchClear.classList.add("hidden");
+
+  // Pre-calculate status cache once for this sheet session (0ms search latency)
+  refreshSailorStatusCache();
+
   renderAssignedTags();
   renderSailorQuickPicker();
 
   const sheet = document.getElementById("mWoSheet");
-  if (sheet) sheet.classList.remove("hidden");
+  if (sheet) {
+    sheet.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      sheet.classList.remove("sheet-hidden");
+    });
+    document.body.style.overflow = "hidden";
+  }
+}
+
+function openNewWoSheet() {
+  const blankWo = {
+    id: null,
+    _fbKey: null,
+    isNew: true,
+    description: "",
+    progress: 0,
+    status: "Active",
+    priority: "Routine",
+    zone_id: mStore.currentZone,
+    assigned: [],
+    last_assigned: []
+  };
+
+  mStore.selectedWo = blankWo;
+  mStore.assignedTemp = [];
+
+  const titleEl = document.getElementById("mSheetTitle");
+  const descEl = document.getElementById("mWoDesc");
+  if (titleEl) titleEl.textContent = "➕ Create New Task";
+  if (descEl) descEl.value = "";
+
+  const progInput = document.getElementById("mProgressInput");
+  const progVal = document.getElementById("mProgressVal");
+  if (progInput) progInput.value = 0;
+  if (progVal) progVal.textContent = "0%";
+
+  if (document.getElementById("mWoStatus")) document.getElementById("mWoStatus").value = "Active";
+  if (document.getElementById("mWoPriority")) document.getElementById("mWoPriority").value = "Routine";
+
+  const zoneBadge = document.getElementById("mSheetZoneBadge");
+  if (zoneBadge) zoneBadge.textContent = String(mStore.currentZone).replace(/-/g, " ");
+
+  const statusBadge = document.getElementById("mSheetStatusBadge");
+  if (statusBadge) {
+    statusBadge.textContent = "NEW";
+    statusBadge.className = "inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30";
+  }
+
+  if (document.getElementById("mWoAuthority")) document.getElementById("mWoAuthority").value = "";
+  if (document.getElementById("mWoBudget")) document.getElementById("mWoBudget").value = "";
+  if (document.getElementById("mWoDuration")) document.getElementById("mWoDuration").value = "1";
+
+  populateLeaderDropdowns();
+  if (document.getElementById("mWoIncharge")) document.getElementById("mWoIncharge").value = "";
+  if (document.getElementById("mWoSupervisor")) document.getElementById("mWoSupervisor").value = "";
+  if (document.getElementById("mWoArtificer")) document.getElementById("mWoArtificer").value = "";
+
+  const searchInput = document.getElementById("mSailorSearch");
+  if (searchInput) searchInput.value = "";
+  const searchClear = document.getElementById("mSailorSearchClear");
+  if (searchClear) searchClear.classList.add("hidden");
+
+  refreshSailorStatusCache();
+  renderAssignedTags();
+  renderSailorQuickPicker();
+
+  const sheet = document.getElementById("mWoSheet");
+  if (sheet) {
+    sheet.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      sheet.classList.remove("sheet-hidden");
+    });
+    document.body.style.overflow = "hidden";
+  }
 }
 
 function closeWoSheet() {
   const sheet = document.getElementById("mWoSheet");
-  if (sheet) sheet.classList.add("hidden");
+  if (sheet) {
+    sheet.classList.add("sheet-hidden");
+    setTimeout(() => {
+      sheet.classList.add("hidden");
+    }, 280);
+    document.body.style.overflow = "";
+  }
   mStore.selectedWo = null;
+}
+
+function handleBackdropClick(event) {
+  if (event.target && event.target.id === "mWoSheet") {
+    closeWoSheet();
+  }
+}
+
+function appendQuickNote(note) {
+  const descEl = document.getElementById("mWoDesc");
+  if (!descEl) return;
+  const current = descEl.value.trim();
+  if (!current) {
+    descEl.value = note;
+  } else {
+    descEl.value = current + " - " + note;
+  }
+  navigator.vibrate?.(10);
+}
+
+function adjustProgress(delta) {
+  const current = parseInt(document.getElementById("mProgressInput")?.value) || 0;
+  const nextVal = Math.min(100, Math.max(0, current + delta));
+  onProgressChange(nextVal);
+  navigator.vibrate?.(10);
 }
 
 function onProgressChange(val) {
   const p = parseInt(val) || 0;
-  document.getElementById("mProgressInput").value = p;
-  document.getElementById("mProgressVal").textContent = `${p}%`;
+  const progInput = document.getElementById("mProgressInput");
+  const progVal = document.getElementById("mProgressVal");
+  if (progInput) progInput.value = p;
+  if (progVal) progVal.textContent = `${p}%`;
 }
 
 // Assigned Tags Rendering
@@ -852,11 +998,81 @@ function renderAssignedTags() {
     const off = s ? (s.off_no || s.official_number || "") : "";
     const name = s ? `${s.rank || ""} ${s.name || sid}${off ? ` (${off})` : ""}`.trim() : sid;
     return `
-      <span class="inline-flex items-center gap-1 bg-teal-500/20 text-teal-200 border border-teal-500/40 text-xs font-semibold px-2 py-1 rounded-xl">
+      <span class="inline-flex items-center gap-1 bg-teal-500/20 text-teal-200 border border-teal-500/40 text-xs font-semibold px-2 py-1 rounded-xl shadow-sm">
         <span>${name}</span>
-        <button onclick="removeSailorFromSheet('${sid}')" class="text-teal-400 hover:text-rose-400 font-bold px-1 active-scale">✕</button>
+        <button type="button" onclick="removeSailorFromSheet('${sid}')" class="text-teal-400 hover:text-rose-400 font-bold px-1 active-scale" title="Remove">✕</button>
       </span>`;
   }).join("");
+}
+
+function clearCrewInSheet() {
+  if (!mStore.assignedTemp || mStore.assignedTemp.length === 0) return;
+  mStore.assignedTemp = [];
+  navigator.vibrate?.(10);
+  renderAssignedTags();
+  renderSailorQuickPicker();
+  showToast("Cleared assigned crew", "info");
+}
+
+function addAllAvailableInZone() {
+  const currentZone = mStore.currentZone;
+  let candidates = mStore.sailors.filter((s) => {
+    const z = s.zone_assigned || s.zone || s.location_zone;
+    return z && isZoneMatch(z, currentZone);
+  });
+
+  if (candidates.length === 0) {
+    candidates = mStore.sailors;
+  }
+
+  let addedCount = 0;
+  candidates.forEach((s) => {
+    const sid = String(s.id || s._fbKey || "");
+    if (!sid || mStore.assignedTemp.includes(sid)) return;
+
+    const status = (mStore.sailorStatusCache && mStore.sailorStatusCache.has(sid))
+      ? mStore.sailorStatusCache.get(sid)
+      : getSailorStatusToday(s, mStore.selectedWo);
+
+    if (!status.isLocked) {
+      mStore.assignedTemp.push(sid);
+      addedCount++;
+    }
+  });
+
+  if (addedCount > 0) {
+    navigator.vibrate?.(15);
+    renderAssignedTags();
+    renderSailorQuickPicker();
+    showToast(`⚡ Added ${addedCount} available sailor(s) to crew`);
+  } else {
+    showToast("No additional available sailors found for this zone", "info");
+  }
+}
+
+function clearSailorSearch() {
+  const input = document.getElementById("mSailorSearch");
+  if (input) {
+    input.value = "";
+    input.focus();
+  }
+  const clearBtn = document.getElementById("mSailorSearchClear");
+  if (clearBtn) clearBtn.classList.add("hidden");
+  renderSailorQuickPicker();
+}
+
+let _sailorSearchDebounce = null;
+function filterSailorsForAssignment() {
+  const input = document.getElementById("mSailorSearch");
+  const clearBtn = document.getElementById("mSailorSearchClear");
+  if (clearBtn && input) {
+    clearBtn.classList.toggle("hidden", !input.value.trim());
+  }
+
+  clearTimeout(_sailorSearchDebounce);
+  _sailorSearchDebounce = setTimeout(() => {
+    renderSailorQuickPicker();
+  }, 70);
 }
 
 function renderSailorQuickPicker() {
@@ -874,12 +1090,16 @@ function renderSailorQuickPicker() {
     return !isAlreadyAssigned;
   });
 
-  // 2. Attach live status for today
+  // 2. Attach live status for today from O(1) Cache
   let availableCount = 0;
   let lockedCount = 0;
 
   const evaluated = candidates.map((s) => {
-    const status = getSailorStatusToday(s, mStore.selectedWo);
+    const sKey = String(s.id || s._fbKey || "");
+    const status = (mStore.sailorStatusCache && mStore.sailorStatusCache.has(sKey))
+      ? mStore.sailorStatusCache.get(sKey)
+      : getSailorStatusToday(s, mStore.selectedWo);
+
     if (status.isLocked) {
       lockedCount++;
     } else {
@@ -930,8 +1150,8 @@ function renderSailorQuickPicker() {
     return (a.sailor.name || "").localeCompare(b.sailor.name || "");
   });
 
-  // 5. Render list items
-  container.innerHTML = filtered.slice(0, 50).map(({ sailor: s, status }) => {
+  // 5. Render list items (capped to 60 for ultra smooth rendering)
+  container.innerHTML = filtered.slice(0, 60).map(({ sailor: s, status }) => {
     const sid = s.id || s._fbKey;
     const label = `${s.rank || ""} ${s.name || s.id}`.trim();
     const branch = s.trade || s.branch || s.rate || "Sailor";
@@ -978,14 +1198,14 @@ function renderSailorQuickPicker() {
   }).join("");
 }
 
-function filterSailorsForAssignment() {
-  renderSailorQuickPicker();
-}
-
 function addSailorToSheet(sid) {
   const sailor = mStore.sailors.find((s) => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
   if (sailor) {
-    const status = getSailorStatusToday(sailor, mStore.selectedWo);
+    const sKey = String(sailor.id || sailor._fbKey || "");
+    const status = (mStore.sailorStatusCache && mStore.sailorStatusCache.has(sKey))
+      ? mStore.sailorStatusCache.get(sKey)
+      : getSailorStatusToday(sailor, mStore.selectedWo);
+
     if (status.isLocked) {
       showLockedSailorAlert(sailor.name || sid, status.badgeText, status.reasonText);
       return;
@@ -995,6 +1215,7 @@ function addSailorToSheet(sid) {
   const idStr = String(sid);
   if (!mStore.assignedTemp.includes(idStr)) {
     mStore.assignedTemp.push(idStr);
+    navigator.vibrate?.(10);
     renderAssignedTags();
     renderSailorQuickPicker();
   }
@@ -1003,6 +1224,7 @@ function addSailorToSheet(sid) {
 function removeSailorFromSheet(sid) {
   const idStr = String(sid);
   mStore.assignedTemp = mStore.assignedTemp.filter((x) => x !== idStr);
+  navigator.vibrate?.(10);
   renderAssignedTags();
   renderSailorQuickPicker();
 }
@@ -1012,6 +1234,7 @@ function restoreCrewInSheet() {
   if (!wo) return;
   if (wo.last_assigned && Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0) {
     mStore.assignedTemp = [...wo.last_assigned];
+    navigator.vibrate?.(12);
     renderAssignedTags();
     renderSailorQuickPicker();
     showToast(`Restored last crew (${wo.last_assigned.length} sailors)`);
@@ -1033,7 +1256,8 @@ function saveWoSheet(shouldClose = true) {
     btn.textContent = "Saving...";
   }
 
-  const desc = document.getElementById("mWoDesc").value.trim() || wo.description;
+  const today = getLocalDateString();
+  const desc = document.getElementById("mWoDesc").value.trim() || wo.description || "New Task";
   const progress = parseInt(document.getElementById("mProgressInput").value) || 0;
   const status = document.getElementById("mWoStatus").value;
   const priority = document.getElementById("mWoPriority").value;
@@ -1058,21 +1282,52 @@ function saveWoSheet(shouldClose = true) {
   wo.estimated_duration = duration;
   wo.assigned = [...mStore.assignedTemp];
 
-  const targetFbKey = wo._fbKey || wo.id;
-  opsDB.ref(`work_orders/${targetFbKey}`).update({
-    description: desc,
-    progress: progress,
-    status: status,
-    priority: priority,
-    zone_id: zoneVal,
-    incharge: incharge,
-    supervisor: supervisor,
-    project_artificer: artificer,
-    authority_approval: authority,
-    budget_allocation: budget,
-    estimated_duration: duration,
-    assigned: wo.assigned.length > 0 ? wo.assigned : null
-  }).then(() => {
+  let savePromise;
+  if (wo.isNew) {
+    const newRef = opsDB.ref("work_orders").push();
+    wo.id = newRef.key;
+    wo._fbKey = newRef.key;
+    wo.isNew = false;
+    wo.type = "TASK";
+    wo.created_date = today;
+    wo.created_by = mStore.currentUser.name;
+    savePromise = newRef.set({
+      description: desc,
+      progress: progress,
+      status: status,
+      priority: priority,
+      zone_id: zoneVal,
+      type: "TASK",
+      incharge: incharge,
+      supervisor: supervisor,
+      project_artificer: artificer,
+      authority_approval: authority,
+      budget_allocation: budget,
+      estimated_duration: duration,
+      created_date: today,
+      created_by: mStore.currentUser.name,
+      assigned: wo.assigned.length > 0 ? wo.assigned : null
+    });
+  } else {
+    const targetFbKey = wo._fbKey || wo.id;
+    savePromise = opsDB.ref(`work_orders/${targetFbKey}`).update({
+      description: desc,
+      progress: progress,
+      status: status,
+      priority: priority,
+      zone_id: zoneVal,
+      incharge: incharge,
+      supervisor: supervisor,
+      project_artificer: artificer,
+      authority_approval: authority,
+      budget_allocation: budget,
+      estimated_duration: duration,
+      assigned: wo.assigned.length > 0 ? wo.assigned : null
+    });
+  }
+
+  savePromise.then(() => {
+    navigator.vibrate?.(15);
     showToast("Work order saved successfully!");
     if (shouldClose) closeWoSheet();
     renderWorkOrders();
@@ -1113,7 +1368,7 @@ function proceedWoSheet() {
   }
 
   const today = getLocalDateString();
-  const desc = document.getElementById("mWoDesc").value.trim() || wo.description;
+  const desc = document.getElementById("mWoDesc").value.trim() || wo.description || "New Task";
   const progress = parseInt(document.getElementById("mProgressInput").value) || 0;
   const status = document.getElementById("mWoStatus").value;
   const priority = document.getElementById("mWoPriority").value;
@@ -1146,62 +1401,92 @@ function proceedWoSheet() {
   wo.last_assigned_date = today;
   wo.assigned = [...mStore.assignedTemp];
 
-  const targetFbKey = wo._fbKey || wo.id;
+  let savePromise;
+  if (wo.isNew) {
+    const newRef = opsDB.ref("work_orders").push();
+    wo.id = newRef.key;
+    wo._fbKey = newRef.key;
+    wo.isNew = false;
+    wo.type = "TASK";
+    wo.created_date = today;
+    wo.created_by = mStore.currentUser.name;
+    savePromise = newRef.set({
+      description: desc,
+      progress: progress,
+      status: wo.status,
+      priority: priority,
+      zone_id: zoneVal,
+      type: "TASK",
+      incharge: incharge,
+      supervisor: supervisor,
+      project_artificer: artificer,
+      authority_approval: authority,
+      budget_allocation: budget,
+      estimated_duration: duration,
+      created_date: today,
+      created_by: mStore.currentUser.name,
+      last_commit_date: today,
+      last_committed_date: today,
+      last_assigned: [...wo.assigned],
+      last_assigned_date: today,
+      assigned: wo.assigned
+    });
+  } else {
+    const targetFbKey = wo._fbKey || wo.id;
+    savePromise = opsDB.ref(`work_orders/${targetFbKey}`).update({
+      description: desc,
+      progress: progress,
+      status: wo.status,
+      priority: priority,
+      zone_id: zoneVal,
+      incharge: incharge,
+      supervisor: supervisor,
+      project_artificer: artificer,
+      authority_approval: authority,
+      budget_allocation: budget,
+      estimated_duration: duration,
+      last_commit_date: today,
+      last_committed_date: today,
+      last_assigned: [...wo.assigned],
+      last_assigned_date: today,
+      assigned: wo.assigned
+    });
+  }
 
-  // Single Consolidated Work Order Update
-  opsDB.ref(`work_orders/${targetFbKey}`).update({
-    description: desc,
-    progress: progress,
-    status: wo.status,
-    priority: priority,
-    zone_id: zoneVal,
-    incharge: incharge,
-    supervisor: supervisor,
-    project_artificer: artificer,
-    authority_approval: authority,
-    budget_allocation: budget,
-    estimated_duration: duration,
-    last_commit_date: today,
-    last_committed_date: today,
-    last_assigned: [...wo.assigned],
-    last_assigned_date: today,
-    assigned: wo.assigned
-  });
+  savePromise.then(() => {
+    // Write Today's Daily Allocations for each sailor
+    wo.assigned.forEach((sid) => {
+      const sailor = mStore.sailors.find((s) => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
+      const alloc = {
+        id: (mStore.dailyAllocations || []).length + 1,
+        date: today,
+        sailor_id: sid,
+        work_order_id: wo.id,
+        role_today:
+          sailor && sailor.id == wo.supervisor
+            ? "Supervisor"
+            : sailor && sailor.id == wo.incharge
+              ? "In-Charge"
+              : "Worker",
+        assigned_by: mStore.currentUser.name,
+        status: "Active"
+      };
 
-  // Write Today's Daily Allocations for each sailor
-  wo.assigned.forEach((sid) => {
-    const sailor = mStore.sailors.find((s) => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
-    const alloc = {
-      id: (mStore.dailyAllocations || []).length + 1,
-      date: today,
-      sailor_id: sid,
-      work_order_id: wo.id,
-      role_today:
-        sailor && sailor.id == wo.supervisor
-          ? "Supervisor"
-          : sailor && sailor.id == wo.incharge
-            ? "In-Charge"
-            : "Worker",
-      assigned_by: mStore.currentUser.name,
-      status: "Active"
-    };
+      opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
+    });
 
-    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
-  });
-
-  // Fast optimistic close & toast
-  setTimeout(() => {
+    navigator.vibrate?.([20, 50, 20]);
     closeWoSheet();
     renderWorkOrders();
     showToast(`✅ ${wo.assigned.length} sailor(s) committed to "${wo.description.substring(0, 20)}…"`, "success");
-  }, 40);
-
-  if (btn) {
-    setTimeout(() => {
+  }).catch((err) => {
+    showToast("Failed to commit: " + err.message, "error");
+  }).finally(() => {
+    if (btn) {
       btn.disabled = false;
       btn.innerHTML = `<span>🚀</span> Commit Daily Labour`;
-    }, 400);
-  }
+    }
+  });
 }
 
 // Start listeners on window load

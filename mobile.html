@@ -23,16 +23,31 @@
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
 
     <style>
+        html {
+            height: 100%;
+            -webkit-text-size-adjust: 100%;
+        }
         body {
             font-family: 'Inter', 'Noto Sans Sinhala', sans-serif;
             background-color: #0b1329;
             color: #f1f5f9;
             -webkit-tap-highlight-color: transparent;
             overscroll-behavior-y: contain;
+            touch-action: manipulation;
         }
         /* Native touch momentum scrolling */
         .touch-scroll {
             -webkit-overflow-scrolling: touch;
+            scroll-behavior: smooth;
+            overscroll-behavior: contain;
+        }
+        /* Hide scrollbars for chips while keeping scroll functionality */
+        .scrollbar-none::-webkit-scrollbar {
+            display: none;
+        }
+        .scrollbar-none {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
         /* Custom scrollbars */
         ::-webkit-scrollbar {
@@ -43,8 +58,29 @@
             background: #334155;
             border-radius: 4px;
         }
+        .active-scale {
+            transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.4, 1);
+            touch-action: manipulation;
+            user-select: none;
+        }
         .active-scale:active {
             transform: scale(0.96);
+        }
+        /* Smooth Bottom Sheet Animation */
+        #mWoSheet {
+            transition: opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s ease;
+        }
+        #mWoSheet.sheet-hidden {
+            opacity: 0;
+            pointer-events: none;
+            visibility: hidden;
+        }
+        #mWoSheet.sheet-hidden > div {
+            transform: translateY(100%);
+        }
+        #mWoSheet > div {
+            transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+            transform: translateY(0);
         }
     </style>
 </head>
@@ -108,12 +144,15 @@
     <!-- MAIN CONTENT: LIST OR DETAIL SHEET -->
     <main class="flex-1 overflow-y-auto touch-scroll p-4 space-y-4">
 
-        <!-- SEARCH BAR -->
+        <!-- SEARCH BAR & NEW TASK ACTION -->
         <div class="flex items-center gap-2">
-            <div class="relative flex-1">
+            <div class="relative flex-1 min-w-0">
                 <input type="text" id="mSearchWo" oninput="filterWorkOrders()" placeholder="Search work orders..." class="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2 pl-8 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500">
                 <span class="absolute left-2.5 top-2.5 text-xs text-slate-400">🔍</span>
             </div>
+            <button onclick="openNewWoSheet()" class="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-black text-xs px-3 py-2 rounded-xl flex items-center gap-1 active-scale shrink-0 shadow-md shadow-teal-950/40" title="Create New Task">
+                <span>➕</span> New Task
+            </button>
             <button onclick="refreshData(true)" class="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-bold text-xs p-2 rounded-xl flex items-center justify-center active-scale shrink-0" title="Refresh">
                 🔄
             </button>
@@ -134,42 +173,63 @@
             </div>
         </div>
 
-        <!-- WORK ORDER DETAIL / LABOUR COMMIT SHEET (POPUP MODAL) -->
-        <div id="mWoSheet" class="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm hidden flex flex-col justify-end">
-            <div class="bg-slate-900 border-t border-slate-700 rounded-t-3xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-200">
+        <!-- WORK ORDER DETAIL / LABOUR COMMIT SHEET (SMOOTH POPUP MODAL) -->
+        <div id="mWoSheet" onclick="handleBackdropClick(event)" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col justify-end sheet-hidden transition-all duration-300">
+            <div onclick="event.stopPropagation()" class="bg-slate-900 border-t border-slate-700/80 rounded-t-3xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden transition-transform duration-300 ease-out">
                 
+                <!-- Pull / Drag Handle Indicator -->
+                <div class="w-12 h-1.5 bg-slate-600/80 rounded-full mx-auto my-2 shrink-0 cursor-grab active:cursor-grabbing"></div>
+
                 <!-- Sheet Header -->
-                <div class="px-5 py-3.5 bg-gradient-to-r from-slate-800 to-slate-900 border-b border-slate-700/80 flex items-center justify-between shrink-0">
+                <div class="px-5 py-3 bg-gradient-to-r from-slate-800/90 to-slate-900/90 border-b border-slate-700/80 flex items-center justify-between shrink-0">
                     <div class="min-w-0 flex-1 pr-2">
-                        <span id="mSheetStatusBadge" class="inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 mb-0.5">Active</span>
+                        <div class="flex items-center gap-1.5 mb-0.5">
+                            <span id="mSheetStatusBadge" class="inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Active</span>
+                            <span id="mSheetZoneBadge" class="inline-block text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">Zone</span>
+                        </div>
                         <h3 id="mSheetTitle" class="text-sm font-bold text-white truncate leading-tight">Work Order Title</h3>
                     </div>
-                    <button onclick="closeWoSheet()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 flex items-center justify-center font-bold text-sm active-scale">✕</button>
+                    <button onclick="closeWoSheet()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 hover:text-white hover:bg-slate-700 flex items-center justify-center font-bold text-sm active-scale border border-slate-700">✕</button>
                 </div>
 
                 <!-- Sheet Scrollable Form Content -->
-                <div class="overflow-y-auto touch-scroll p-4 space-y-4 flex-1 text-xs">
+                <div class="overflow-y-auto touch-scroll p-4 space-y-4 flex-1 text-xs overscroll-contain">
 
-                    <!-- Description edit -->
+                    <!-- Description Edit + Quick Preset Chips -->
                     <div>
-                        <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Work Order Description</label>
-                        <textarea id="mWoDesc" rows="2" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-teal-400"></textarea>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="text-[10px] font-bold uppercase text-slate-400">Work Order Description</label>
+                            <span class="text-[9px] text-teal-400 font-semibold">Tap below to add quick text</span>
+                        </div>
+                        <textarea id="mWoDesc" rows="2" placeholder="Enter job description or work scope..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-teal-400 leading-relaxed"></textarea>
+                        
+                        <!-- Quick Notes Chips for 1-Tap Entry -->
+                        <div class="flex items-center gap-1.5 overflow-x-auto touch-scroll pt-1 pb-0.5 scrollbar-none">
+                            <button type="button" onclick="appendQuickNote('Ongoing Maintenance')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] font-semibold whitespace-nowrap active-scale">+ Maint.</button>
+                            <button type="button" onclick="appendQuickNote('Plumbing Repair')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] font-semibold whitespace-nowrap active-scale">+ Plumbing</button>
+                            <button type="button" onclick="appendQuickNote('Carpentry Work')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] font-semibold whitespace-nowrap active-scale">+ Carpentry</button>
+                            <button type="button" onclick="appendQuickNote('Painting Work')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] font-semibold whitespace-nowrap active-scale">+ Painting</button>
+                            <button type="button" onclick="appendQuickNote('Masonry Work')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] font-semibold whitespace-nowrap active-scale">+ Masonry</button>
+                            <button type="button" onclick="appendQuickNote('Welding Work')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] font-semibold whitespace-nowrap active-scale">+ Welding</button>
+                            <button type="button" onclick="appendQuickNote('Material Arranged')" class="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] font-semibold whitespace-nowrap active-scale">+ Material OK</button>
+                            <button type="button" onclick="appendQuickNote('Completed Today')" class="px-2 py-1 rounded-lg bg-teal-800/60 hover:bg-teal-700 text-teal-200 border border-teal-600/50 text-[10px] font-bold whitespace-nowrap active-scale">✓ Done</button>
+                        </div>
                     </div>
 
-
-                    <!-- Progress Slider -->
+                    <!-- Progress Slider & Steppers -->
                     <div class="p-3 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
                         <div class="flex items-center justify-between">
                             <label class="text-[10px] font-bold uppercase text-teal-400">Work Progress</label>
                             <span id="mProgressVal" class="text-sm font-black text-teal-300">0%</span>
                         </div>
-                        <input type="range" id="mProgressInput" min="0" max="100" step="5" value="0" oninput="onProgressChange(this.value)" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-400">
-                        <div class="grid grid-cols-5 gap-1.5 pt-1">
-                            <button onclick="onProgressChange(0)" class="py-1 rounded bg-slate-700/80 hover:bg-slate-700 text-[10px] font-bold text-slate-300">0%</button>
-                            <button onclick="onProgressChange(25)" class="py-1 rounded bg-slate-700/80 hover:bg-slate-700 text-[10px] font-bold text-slate-300">25%</button>
-                            <button onclick="onProgressChange(50)" class="py-1 rounded bg-slate-700/80 hover:bg-slate-700 text-[10px] font-bold text-slate-300">50%</button>
-                            <button onclick="onProgressChange(75)" class="py-1 rounded bg-slate-700/80 hover:bg-slate-700 text-[10px] font-bold text-slate-300">75%</button>
-                            <button onclick="onProgressChange(100)" class="py-1 rounded bg-teal-600/80 hover:bg-teal-600 text-[10px] font-bold text-white">100%</button>
+                        <input type="range" id="mProgressInput" min="0" max="100" step="5" value="0" oninput="onProgressChange(this.value)" class="w-full h-2.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-teal-400">
+                        <div class="grid grid-cols-6 gap-1 pt-1">
+                            <button type="button" onclick="adjustProgress(-10)" class="py-1 rounded bg-slate-700/60 hover:bg-slate-700 text-[10px] font-bold text-slate-300 active-scale">-10%</button>
+                            <button type="button" onclick="onProgressChange(0)" class="py-1 rounded bg-slate-700/80 hover:bg-slate-700 text-[10px] font-bold text-slate-300 active-scale">0%</button>
+                            <button type="button" onclick="onProgressChange(25)" class="py-1 rounded bg-slate-700/80 hover:bg-slate-700 text-[10px] font-bold text-slate-300 active-scale">25%</button>
+                            <button type="button" onclick="onProgressChange(50)" class="py-1 rounded bg-slate-700/80 hover:bg-slate-700 text-[10px] font-bold text-slate-300 active-scale">50%</button>
+                            <button type="button" onclick="onProgressChange(75)" class="py-1 rounded bg-slate-700/80 hover:bg-slate-700 text-[10px] font-bold text-slate-300 active-scale">75%</button>
+                            <button type="button" onclick="onProgressChange(100)" class="py-1 rounded bg-teal-600 hover:bg-teal-500 text-[10px] font-black text-white active-scale">100%</button>
                         </div>
                     </div>
 
@@ -242,9 +302,17 @@
                                 <span class="text-sm">👥</span>
                                 <span class="text-xs font-bold text-white uppercase tracking-wider">Today's Labour Crew</span>
                             </div>
-                            <button onclick="restoreCrewInSheet()" class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-1 rounded-lg font-bold hover:bg-amber-500/30 active-scale">
-                                ↩️ Auto-Crew
-                            </button>
+                            <div class="flex items-center gap-1">
+                                <button type="button" onclick="addAllAvailableInZone()" class="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-1 rounded-lg font-bold hover:bg-emerald-500/30 active-scale flex items-center gap-0.5">
+                                    <span>⚡</span> Add Available
+                                </button>
+                                <button type="button" onclick="restoreCrewInSheet()" class="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-1 rounded-lg font-bold hover:bg-amber-500/30 active-scale">
+                                    ↩️ Auto-Crew
+                                </button>
+                                <button type="button" onclick="clearCrewInSheet()" class="text-[10px] bg-slate-700 text-slate-400 hover:text-rose-300 px-1.5 py-1 rounded-lg font-bold active-scale" title="Clear all">
+                                    ✕
+                                </button>
+                            </div>
                         </div>
 
                         <!-- Current assigned tags -->
@@ -253,7 +321,7 @@
                                 <span>Assigned Sailors:</span>
                                 <span id="mAssignedCountBadge" class="font-bold text-teal-300">0 sailors</span>
                             </div>
-                            <div id="mAssignedTags" class="flex flex-wrap gap-1.5 min-h-[36px] p-2 bg-slate-900/80 rounded-xl border border-slate-700/60">
+                            <div id="mAssignedTags" class="flex flex-wrap gap-1.5 min-h-[36px] p-2 bg-slate-900/80 rounded-xl border border-slate-700/60 max-h-28 overflow-y-auto touch-scroll">
                                 <span class="text-slate-500 text-[11px] italic py-0.5">No sailors assigned yet</span>
                             </div>
                         </div>
@@ -265,13 +333,16 @@
                                 <span id="mSailorPoolCount" class="font-semibold text-slate-400"></span>
                             </div>
                             <div class="flex items-center gap-1.5">
-                                <input type="text" id="mSailorSearch" oninput="filterSailorsForAssignment()" placeholder="Search sailors to add (Rate, Name)..." class="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-400">
+                                <div class="relative flex-1 min-w-0">
+                                    <input type="text" id="mSailorSearch" oninput="filterSailorsForAssignment()" placeholder="Search sailors (Off No, Rate, Name)..." class="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 pr-7 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-400">
+                                    <button type="button" id="mSailorSearchClear" onclick="clearSailorSearch()" class="hidden absolute right-2 top-1.5 text-xs text-slate-400 hover:text-white font-bold">✕</button>
+                                </div>
                                 <button type="button" id="mToggleAvailFilter" onclick="toggleSailorFilterMode()" class="px-2.5 py-1.5 rounded-xl border text-[10px] font-bold whitespace-nowrap transition-all bg-slate-800 text-teal-300 border-slate-700 hover:bg-slate-700 active-scale">
                                     All
                                 </button>
                             </div>
                             
-                            <div id="mSailorQuickPicker" class="max-h-52 overflow-y-auto touch-scroll divide-y divide-slate-700/40 bg-slate-900/60 rounded-xl border border-slate-700/60">
+                            <div id="mSailorQuickPicker" class="max-h-56 overflow-y-auto touch-scroll divide-y divide-slate-700/40 bg-slate-900/60 rounded-xl border border-slate-700/60">
                                 <!-- Dynamic sailors -->
                             </div>
                         </div>
@@ -280,14 +351,13 @@
 
                 <!-- Sticky Bottom Action Bar -->
                 <div class="p-3.5 bg-slate-900 border-t border-slate-800 flex gap-2 shrink-0">
-                    <button id="mBtnSaveOnly" onclick="saveWoSheet(false)" class="px-3.5 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs border border-slate-700 active-scale">
+                    <button id="mBtnSaveOnly" onclick="saveWoSheet(false)" class="px-4 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs border border-slate-700 active-scale flex items-center gap-1">
                         💾 Save
                     </button>
-                    <button id="mBtnProceed" onclick="proceedWoSheet()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-black text-xs shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-1.5 active-scale">
+                    <button id="mBtnProceed" onclick="proceedWoSheet()" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-lg shadow-emerald-950/40 flex items-center justify-center gap-1.5 active-scale transition-all">
                         <span>🚀</span> Commit Daily Labour
                     </button>
                 </div>
-
             </div>
         </div>
 
@@ -300,6 +370,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.0.6"></script>
+    <script src="mobile.js?v=1.0.7"></script>
 </body>
 </html>
