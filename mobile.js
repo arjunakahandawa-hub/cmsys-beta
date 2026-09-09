@@ -29,6 +29,14 @@ function isSbsZone(zoneIdOrName) {
   return normalized === "sbs" || normalized.includes("sbsrecord");
 }
 
+function isAssignmentItem(w) {
+  if (!w) return false;
+  const assignType = w.assign_type;
+  const type = String(w.type || "").toUpperCase();
+  const zone = w.zone_id || w.zone || (typeof mStore !== "undefined" ? mStore.currentZone : "");
+  return Boolean(assignType) || type === "ASSIGNMENT" || (type === "TASK" && Boolean(assignType)) || isAdminStaffDuties(zone);
+}
+
 function isZoneMatch(z1, z2) {
   if (!z1 && !z2) return true;
   if (!z1 || !z2) return false;
@@ -462,10 +470,17 @@ function renderWorkOrders() {
   });
 
   container.innerHTML = filtered.map((w) => {
+    const isAssign = isAssignmentItem(w);
     const progress = Math.min(100, Math.max(0, parseInt(w.progress) || 0));
-    const crewCount = (w.assigned || []).length;
-    const isCommittedToday = w.last_commit_date === today;
-    const itemType = w.assign_type ? `💼 ${w.assign_type}` : w.type ? `📋 ${w.type}` : "TASK";
+    
+    // Effective planned sailors (either currently assigned or last_assigned)
+    const effectiveCrew = (Array.isArray(w.assigned) && w.assigned.length > 0)
+      ? w.assigned
+      : (Array.isArray(w.last_assigned) ? w.last_assigned : []);
+    const crewCount = effectiveCrew.length;
+    
+    const isCommittedToday = (w.last_commit_date === today || w.last_committed_date === today);
+    const itemType = w.assign_type ? `💼 ${w.assign_type}` : (isAssign ? "💼 ASSIGNMENT" : (w.type ? `📋 ${w.type}` : "TASK"));
 
     // Status pill colors
     let statusClass = "bg-slate-700/60 text-slate-300 border-slate-600";
@@ -473,6 +488,48 @@ function renderWorkOrders() {
     if (w.status === "Pending") statusClass = "bg-amber-500/20 text-amber-300 border-amber-500/40";
     if (w.status === "Hold") statusClass = "bg-rose-500/20 text-rose-300 border-rose-500/40";
     if (w.status === "Completed") statusClass = "bg-blue-500/20 text-blue-300 border-blue-500/40";
+
+    // Progress section: Only for genuine Work Orders, NEVER for Assignments!
+    const progressHtml = isAssign
+      ? ""
+      : `
+        <!-- Progress Bar & Percentage -->
+        <div class="space-y-1">
+          <div class="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
+            <span>Progress</span>
+            <span class="font-black text-teal-300">${progress}%</span>
+          </div>
+          <div class="w-full h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-teal-500 to-emerald-400 rounded-full transition-all duration-300" style="width: ${progress}%"></div>
+          </div>
+        </div>`;
+
+    // 1-Tap Quick Commit Button directly on card if planned crew exists and not yet committed today
+    let quickCommitHtml = "";
+    if (!isCommittedToday && w.status !== "Completed" && w.status !== "Hold" && crewCount > 0) {
+      // Calculate available sailors excluding Leave/Sick
+      let activeCrewCount = 0;
+      effectiveCrew.forEach((sid) => {
+        const s = mStore.sailors.find((sailor) => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+        if (s) {
+          const st = (mStore.sailorStatusCache && mStore.sailorStatusCache.has(String(s.id || s._fbKey)))
+            ? mStore.sailorStatusCache.get(String(s.id || s._fbKey))
+            : getSailorStatusToday(s, null);
+          const isSickOrLeave = st.isLocked && (st.badgeText.includes("Sick") || st.badgeText.includes("Leave"));
+          if (!isSickOrLeave) activeCrewCount++;
+        } else {
+          activeCrewCount++;
+        }
+      });
+
+      const commitTargetCount = activeCrewCount > 0 ? activeCrewCount : crewCount;
+      quickCommitHtml = `
+        <div class="pt-2 border-t border-slate-700/60" onclick="event.stopPropagation()">
+          <button type="button" onclick="commitQuickFromCard(event, '${w._fbKey || w.id}')" class="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-500 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-950/40 flex items-center justify-center gap-1.5 active-scale transition-all cursor-pointer">
+            <span>⚡</span> Proceed - Commit Daily Labour (${commitTargetCount})
+          </button>
+        </div>`;
+    }
 
     return `
       <div onclick="openWoSheet('${w._fbKey || w.id}')" class="p-3.5 rounded-2xl bg-slate-800/90 hover:bg-slate-800 border border-slate-700/80 active-scale shadow-sm transition-all cursor-pointer space-y-2.5">
@@ -490,21 +547,14 @@ function renderWorkOrders() {
           <span class="text-base text-slate-400 font-bold shrink-0">›</span>
         </div>
 
-        <!-- Progress Bar & Crew Info -->
-        <div class="space-y-1">
-          <div class="flex items-center justify-between text-[10px] text-slate-400 font-semibold">
-            <span>Progress</span>
-            <span class="font-black text-teal-300">${progress}%</span>
-          </div>
-          <div class="w-full h-1.5 bg-slate-700/80 rounded-full overflow-hidden">
-            <div class="h-full bg-gradient-to-r from-teal-500 to-emerald-400 rounded-full transition-all duration-300" style="width: ${progress}%"></div>
-          </div>
-        </div>
+        ${progressHtml}
 
         <div class="flex items-center justify-between pt-1 border-t border-slate-700/50 text-[10px] text-slate-400">
           <span class="flex items-center gap-1">👥 <strong class="text-slate-200">${crewCount}</strong> sailor(s) assigned</span>
           <span class="text-teal-400 font-bold">Tap to edit details ➔</span>
         </div>
+
+        ${quickCommitHtml}
       </div>`;
   }).join("");
 }
@@ -835,6 +885,17 @@ function openWoSheet(woId) {
         : "inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
   }
 
+  // Toggle Progress Section: Only show for Work Orders, hide for Assignments!
+  const isAssign = isAssignmentItem(wo);
+  const progSection = document.getElementById("mProgressSection");
+  if (progSection) {
+    if (isAssign) {
+      progSection.classList.add("hidden");
+    } else {
+      progSection.classList.remove("hidden");
+    }
+  }
+
   // Budget and Authority
   if (document.getElementById("mWoAuthority")) document.getElementById("mWoAuthority").value = wo.authority_approval || wo.authority || "";
   if (document.getElementById("mWoBudget")) document.getElementById("mWoBudget").value = wo.budget_allocation || "";
@@ -877,6 +938,7 @@ function openNewWoSheet() {
     status: "Active",
     priority: "Routine",
     zone_id: mStore.currentZone,
+    type: "WORK_ORDER",
     assigned: [],
     last_assigned: []
   };
@@ -886,8 +948,15 @@ function openNewWoSheet() {
 
   const titleEl = document.getElementById("mSheetTitle");
   const descEl = document.getElementById("mWoDesc");
-  if (titleEl) titleEl.textContent = "➕ Create New Task";
-  if (descEl) descEl.value = "";
+  if (titleEl) titleEl.textContent = "➕ New Work Order";
+  if (descEl) {
+    descEl.value = "";
+    descEl.placeholder = "Enter work order title / description...";
+  }
+
+  // Show progress section for Work Orders
+  const progSection = document.getElementById("mProgressSection");
+  if (progSection) progSection.classList.remove("hidden");
 
   const progInput = document.getElementById("mProgressInput");
   const progVal = document.getElementById("mProgressVal");
@@ -902,7 +971,7 @@ function openNewWoSheet() {
 
   const statusBadge = document.getElementById("mSheetStatusBadge");
   if (statusBadge) {
-    statusBadge.textContent = "NEW";
+    statusBadge.textContent = "NEW WO";
     statusBadge.className = "inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30";
   }
 
@@ -932,6 +1001,165 @@ function openNewWoSheet() {
     });
     document.body.style.overflow = "hidden";
   }
+}
+
+function openNewAssignSheet() {
+  const isAdminStaff = isAdminStaffDuties(mStore.currentZone);
+  const defaultAssignType = isAdminStaff ? "Admin Staff" : "In Charge";
+  const defaultDesc = isAdminStaff ? "" : "In Charge";
+
+  const blankAssign = {
+    id: null,
+    _fbKey: null,
+    isNew: true,
+    description: defaultDesc,
+    progress: 0,
+    status: "Active",
+    priority: "Routine",
+    zone_id: mStore.currentZone,
+    type: "TASK",
+    assign_type: defaultAssignType,
+    assigned: [],
+    last_assigned: []
+  };
+
+  mStore.selectedWo = blankAssign;
+  mStore.assignedTemp = [];
+
+  const titleEl = document.getElementById("mSheetTitle");
+  const descEl = document.getElementById("mWoDesc");
+  if (titleEl) titleEl.textContent = `➕ New Assignment (${defaultAssignType})`;
+  if (descEl) {
+    descEl.value = defaultDesc;
+    descEl.placeholder = isAdminStaff ? "Describe Admin Staff work..." : "Assignment Description (e.g. In Charge, Standby, Base Duty)...";
+  }
+
+  // Hide progress section for Assignments (No progress bar!)
+  const progSection = document.getElementById("mProgressSection");
+  if (progSection) progSection.classList.add("hidden");
+
+  const progInput = document.getElementById("mProgressInput");
+  const progVal = document.getElementById("mProgressVal");
+  if (progInput) progInput.value = 0;
+  if (progVal) progVal.textContent = "0%";
+
+  if (document.getElementById("mWoStatus")) document.getElementById("mWoStatus").value = "Active";
+  if (document.getElementById("mWoPriority")) document.getElementById("mWoPriority").value = "Routine";
+
+  const zoneBadge = document.getElementById("mSheetZoneBadge");
+  if (zoneBadge) zoneBadge.textContent = String(mStore.currentZone).replace(/-/g, " ");
+
+  const statusBadge = document.getElementById("mSheetStatusBadge");
+  if (statusBadge) {
+    statusBadge.textContent = "ASSIGN";
+    statusBadge.className = "inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30";
+  }
+
+  if (document.getElementById("mWoAuthority")) document.getElementById("mWoAuthority").value = "";
+  if (document.getElementById("mWoBudget")) document.getElementById("mWoBudget").value = "";
+  if (document.getElementById("mWoDuration")) document.getElementById("mWoDuration").value = "1";
+
+  populateLeaderDropdowns();
+  if (document.getElementById("mWoIncharge")) document.getElementById("mWoIncharge").value = "";
+  if (document.getElementById("mWoSupervisor")) document.getElementById("mWoSupervisor").value = "";
+  if (document.getElementById("mWoArtificer")) document.getElementById("mWoArtificer").value = "";
+
+  const searchInput = document.getElementById("mSailorSearch");
+  if (searchInput) searchInput.value = "";
+  const searchClear = document.getElementById("mSailorSearchClear");
+  if (searchClear) searchClear.classList.add("hidden");
+
+  refreshSailorStatusCache();
+  renderAssignedTags();
+  renderSailorQuickPicker();
+
+  const sheet = document.getElementById("mWoSheet");
+  if (sheet) {
+    sheet.classList.remove("hidden");
+    requestAnimationFrame(() => {
+      sheet.classList.remove("sheet-hidden");
+    });
+    document.body.style.overflow = "hidden";
+  }
+}
+
+// Quick 1-Tap Commit Directly From Outside Card
+function commitQuickFromCard(event, woId) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if (!opsDB) {
+    showToast("Database not connected", "error");
+    return;
+  }
+
+  const wo = mStore.workOrders.find((w) => String(w._fbKey) === String(woId) || String(w.id) === String(woId));
+  if (!wo) return;
+
+  const today = getLocalDateString();
+
+  // Effective sailors
+  let crew = Array.isArray(wo.assigned) && wo.assigned.length > 0
+    ? [...wo.assigned]
+    : (Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0 ? [...wo.last_assigned] : []);
+
+  if (crew.length === 0) {
+    showToast("No planned sailors found for this task!", "warning");
+    return;
+  }
+
+  // Filter out sailors who are on Leave or Sick today
+  const activeSailorsToCommit = crew.filter((sid) => {
+    const s = mStore.sailors.find((sailor) => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+    if (!s) return true;
+    const st = (mStore.sailorStatusCache && mStore.sailorStatusCache.has(String(s.id || s._fbKey)))
+      ? mStore.sailorStatusCache.get(String(s.id || s._fbKey))
+      : getSailorStatusToday(s, wo);
+    return !(st.isLocked && (st.badgeText.includes("Sick") || st.badgeText.includes("Leave")));
+  });
+
+  if (activeSailorsToCommit.length === 0) {
+    showToast("All assigned sailors are on leave/sick today!", "error");
+    return;
+  }
+
+  wo.last_commit_date = today;
+  wo.last_committed_date = today;
+  wo.last_assigned = [...crew];
+  wo.last_assigned_date = today;
+  wo.assigned = [...crew];
+
+  const targetFbKey = wo._fbKey || wo.id;
+  opsDB.ref(`work_orders/${targetFbKey}`).update({
+    last_commit_date: today,
+    last_committed_date: today,
+    last_assigned: [...crew],
+    last_assigned_date: today,
+    assigned: crew
+  }).then(() => {
+    // Write daily allocations for each sailor
+    activeSailorsToCommit.forEach((sid) => {
+      const sailor = mStore.sailors.find((s) => String(s.id) === String(sid) || String(s._fbKey) === String(sid));
+      const alloc = {
+        id: (mStore.dailyAllocations || []).length + 1,
+        date: today,
+        sailor_id: sid,
+        work_order_id: wo.id,
+        role_today: (sailor && sailor.id == wo.supervisor) ? "Supervisor" : ((sailor && sailor.id == wo.incharge) ? "In-Charge" : "Worker"),
+        assigned_by: mStore.currentUser.name,
+        status: "Active"
+      };
+      opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
+    });
+
+    navigator.vibrate?.([20, 50, 20]);
+    showToast(`⚡ Committed daily labour (${activeSailorsToCommit.length} sailors) for "${(wo.description || 'Task').substring(0, 22)}…"`, "success");
+    renderWorkOrders();
+    updateZoneSailorStats();
+  }).catch((err) => {
+    showToast("Failed to commit: " + err.message, "error");
+  });
 }
 
 function closeWoSheet() {

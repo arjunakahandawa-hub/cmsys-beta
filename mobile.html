@@ -144,16 +144,19 @@
     <!-- MAIN CONTENT: LIST OR DETAIL SHEET -->
     <main class="flex-1 overflow-y-auto touch-scroll p-4 space-y-4">
 
-        <!-- SEARCH BAR & NEW TASK ACTION -->
-        <div class="flex items-center gap-2">
+        <!-- SEARCH BAR & NEW ACTIONS (ASSIGN & WORK ORDER) -->
+        <div class="flex items-center gap-1.5">
             <div class="relative flex-1 min-w-0">
-                <input type="text" id="mSearchWo" oninput="filterWorkOrders()" placeholder="Search work orders..." class="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2 pl-8 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500">
+                <input type="text" id="mSearchWo" oninput="filterWorkOrders()" placeholder="Search work orders / tasks..." class="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2 pl-8 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500">
                 <span class="absolute left-2.5 top-2.5 text-xs text-slate-400">🔍</span>
             </div>
-            <button onclick="openNewWoSheet()" class="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white font-black text-xs px-3 py-2 rounded-xl flex items-center gap-1 active-scale shrink-0 shadow-md shadow-teal-950/40" title="Create New Task">
-                <span>➕</span> New Task
+            <button type="button" onclick="openNewAssignSheet()" class="bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 text-white font-black text-[11px] px-2.5 py-2 rounded-xl flex items-center gap-1 active-scale shrink-0 shadow-md shadow-indigo-950/40" title="New Assignment">
+                <span>➕</span> Assign
             </button>
-            <button onclick="refreshData(true)" class="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-bold text-xs p-2 rounded-xl flex items-center justify-center active-scale shrink-0" title="Refresh">
+            <button type="button" onclick="openNewWoSheet()" class="bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 text-white font-black text-[11px] px-2.5 py-2 rounded-xl flex items-center gap-1 active-scale shrink-0 shadow-md shadow-teal-950/40" title="New Work Order">
+                <span>➕</span> Work Order
+            </button>
+            <button type="button" onclick="refreshData(true)" class="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-bold text-xs p-2 rounded-xl flex items-center justify-center active-scale shrink-0" title="Refresh">
                 🔄
             </button>
         </div>
@@ -216,8 +219,8 @@
                         </div>
                     </div>
 
-                    <!-- Progress Slider & Steppers -->
-                    <div class="p-3 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
+                    <!-- Progress Slider & Steppers (Only for Work Orders, hidden for Assignments) -->
+                    <div id="mProgressSection" class="p-3 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
                         <div class="flex items-center justify-between">
                             <label class="text-[10px] font-bold uppercase text-teal-400">Work Progress</label>
                             <span id="mProgressVal" class="text-sm font-black text-teal-300">0%</span>
@@ -370,6 +373,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.0.7"></script>
+    <script src="mobile.js?v=1.0.8"></script>
 </body>
 </html>
