@@ -347,6 +347,33 @@
             box-shadow: 0 0 12px rgba(13,148,136,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
             border-bottom: 2px solid var(--teal-light);
         }
+        /* Enforce strict single-line horizontal layout for Desktop Navigation */
+        #desktopMainNav {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            overflow-x: auto !important;
+            overflow-y: hidden !important;
+            white-space: nowrap !important;
+            max-height: 42px !important;
+            min-height: 42px !important;
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+        }
+        #desktopMainNav::-webkit-scrollbar {
+            display: none !important;
+            width: 0 !important;
+            height: 0 !important;
+        }
+        #desktopMainNav .nav-pill,
+        #desktopMainNav button {
+            display: inline-flex !important;
+            align-items: center !important;
+            flex-shrink: 0 !important;
+            white-space: nowrap !important;
+            height: 34px !important;
+        }
         .scrollbar-none::-webkit-scrollbar {
             display: none !important;
         }
@@ -748,48 +775,52 @@
                     </div>
                 </div>
 
-                <!-- Navigation (Desktop) -->
-                <nav id="desktopMainNav" class="hidden md:flex items-center flex-nowrap overflow-x-auto gap-0.5 bg-white/5 backdrop-blur rounded-xl p-1 border border-white/10 scrollbar-none min-w-0 max-w-[62vw] 2xl:max-w-none touch-scroll select-none">
-                    <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300 tab-active">
-                        <span>📊 </span>Dashboard
-                    </button>
-                    <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>📋 </span>Daily Details
-                    </button>
-                    <button onclick="switchView('summary')" id="tab-summary" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>📊 </span>Summary
-                    </button>
-                    <button onclick="switchView('jobcards')" id="tab-jobcards" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>📋 </span>Job Cards
-                    </button>
-                    <button onclick="switchView('inventory')" id="tab-inventory" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>📦 </span>Inventory
-                    </button>
-                    <button onclick="switchView('estimates')" id="tab-estimates" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>📐 </span>Estimates
-                    </button>
-                    <button onclick="switchView('documents')" id="tab-documents" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>📄 </span>Documents
-                    </button>
-                    <button onclick="openSbsBookView()" id="tab-sbs-book" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-teal-300 hover:text-white">
-                        <span>📖 </span>SBS Book
-                    </button>
-                    <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>⚓ </span>Sailors
-                    </button>
-                    <button onclick="switchView('maintenance')" id="tab-maintenance" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>📍 </span>Locations & LMD
-                    </button>
-                    <button onclick="switchView('reports')" id="tab-reports" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>📈 </span>Reports
-                    </button>
-                    <button onclick="switchView('projects')" id="tab-projects" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>🏗️ </span>Projects
-                    </button>
-                    <button onclick="openSettingsView()" id="tab-settings" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
-                        <span>⚙️ </span>Settings
-                    </button>
-                </nav>
+                <!-- Navigation (Desktop) with Left/Right Quick Scroll Buttons -->
+                <div class="hidden md:flex items-center gap-1 min-w-0 max-w-[62vw] 2xl:max-w-none">
+                    <button type="button" onclick="scrollDesktopNav(-220)" class="w-6 h-8 rounded-lg bg-white/5 hover:bg-white/15 active:scale-90 text-slate-400 hover:text-white flex items-center justify-center text-xs border border-white/10 shrink-0 cursor-pointer transition-all" title="Scroll tabs left">◀</button>
+                    <nav id="desktopMainNav" class="flex items-center flex-nowrap overflow-x-auto gap-0.5 bg-white/5 backdrop-blur rounded-xl p-1 border border-white/10 scrollbar-none min-w-0 flex-1 touch-scroll select-none" style="display: flex !important; flex-wrap: nowrap !important; overflow-x: auto !important; max-height: 42px !important;">
+                        <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300 tab-active">
+                            <span>📊 </span>Dashboard
+                        </button>
+                        <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>📋 </span>Daily Details
+                        </button>
+                        <button onclick="switchView('summary')" id="tab-summary" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>📊 </span>Summary
+                        </button>
+                        <button onclick="switchView('jobcards')" id="tab-jobcards" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>📋 </span>Job Cards
+                        </button>
+                        <button onclick="switchView('inventory')" id="tab-inventory" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>📦 </span>Inventory
+                        </button>
+                        <button onclick="switchView('estimates')" id="tab-estimates" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>📐 </span>Estimates
+                        </button>
+                        <button onclick="switchView('documents')" id="tab-documents" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>📄 </span>Documents
+                        </button>
+                        <button onclick="openSbsBookView()" id="tab-sbs-book" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-teal-300 hover:text-white">
+                            <span>📖 </span>SBS Book
+                        </button>
+                        <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>⚓ </span>Sailors
+                        </button>
+                        <button onclick="switchView('maintenance')" id="tab-maintenance" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>📍 </span>Locations & LMD
+                        </button>
+                        <button onclick="switchView('reports')" id="tab-reports" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>📈 </span>Reports
+                        </button>
+                        <button onclick="switchView('projects')" id="tab-projects" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>🏗️ </span>Projects
+                        </button>
+                        <button onclick="openSettingsView()" id="tab-settings" class="nav-pill px-3 py-1.5 text-[12.5px] font-medium text-slate-300">
+                            <span>⚙️ </span>Settings
+                        </button>
+                    </nav>
+                    <button type="button" onclick="scrollDesktopNav(220)" class="w-6 h-8 rounded-lg bg-white/5 hover:bg-white/15 active:scale-90 text-slate-400 hover:text-white flex items-center justify-center text-xs border border-white/10 shrink-0 cursor-pointer transition-all" title="Scroll tabs right">▶</button>
+                </div>
 
                 <!-- Right Controls -->
                 <div class="flex items-center gap-1.5 sm:gap-2.5">
@@ -7658,6 +7689,13 @@
 
     <!-- Universal Mouse Wheel & Drag Horizontal Scroll Handler for Menus, Ribbons, and Tabs -->
     <script>
+    function scrollDesktopNav(amount) {
+        const nav = document.getElementById('desktopMainNav');
+        if (nav) {
+            nav.scrollBy({ left: amount, behavior: 'smooth' });
+        }
+    }
+
     (function initHorizontalScrollSystem() {
         function getHScrollContainer(target) {
             if (!target) return null;

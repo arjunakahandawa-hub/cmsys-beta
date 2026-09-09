@@ -396,24 +396,11 @@
         const ribbon = document.getElementById('mMetricsRibbon');
 
         function getTargetContainer(target) {
-            if (!target) return ribbon;
-            let el = target.closest('#mMetricsRibbon, .overflow-x-auto, [data-scroll="horizontal"]');
+            if (!target) return null;
+            // Only capture horizontal scroll if mouse is directly over the metrics ribbon or horizontal container
+            let el = target.closest('#mMetricsRibbon, [data-scroll="horizontal"]');
             if (el && el.scrollWidth > el.clientWidth) return el;
-
-            const zoneSection = target.closest('section');
-            if (zoneSection && ribbon && ribbon.scrollWidth > ribbon.clientWidth) {
-                return ribbon;
-            }
-
-            let cur = target;
-            while (cur && cur !== document.body && cur !== document.documentElement) {
-                if (cur.scrollWidth > (cur.clientWidth + 2)) {
-                    const ox = window.getComputedStyle(cur).overflowX;
-                    if (ox === 'auto' || ox === 'scroll') return cur;
-                }
-                cur = cur.parentElement;
-            }
-            return (ribbon && ribbon.scrollWidth > ribbon.clientWidth) ? ribbon : null;
+            return null;
         }
 
         // 1. ROBUST MOUSE WHEEL SCROLL
