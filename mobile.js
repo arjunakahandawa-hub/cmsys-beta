@@ -12,6 +12,106 @@ function getLocalDateString() {
   return `${year}-${month}-${day}`;
 }
 
+function escapeHtml(str) {
+  if (str == null) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function parseOfficialNumber(offNo) {
+  if (!offNo) return { type: "•", num: "-" };
+  const clean = offNo.trim().replace(/^[^a-zA-Z0-9]+/, "");
+  const match = clean.match(/^([A-Za-z\/&]+)[\s\.\-]*(\d+[A-Za-z]*)$/);
+  if (match) {
+    return { type: match[1], num: match[2] };
+  }
+  const parts = clean.split(/[\s]+/);
+  if (parts.length > 1) {
+    return { type: parts[0], num: parts.slice(1).join(" ") };
+  }
+  if (/^\d+$/.test(clean)) {
+    return { type: "•", num: clean };
+  }
+  return { type: "•", num: clean };
+}
+
+function getSelectedDate() {
+  return (typeof mStore !== "undefined" && mStore.selectedDate) ? mStore.selectedDate : getLocalDateString();
+}
+
+function updateDateUI() {
+  const curDate = getSelectedDate();
+  const today = getLocalDateString();
+  const picker = document.getElementById("mDatePicker");
+  const dateBadgeEl = document.getElementById("mTodayDateBadge");
+  const backBanner = document.getElementById("mBackDateBanner");
+  const backLabel = document.getElementById("mBackDateLabel");
+  const btnToday = document.getElementById("mBtnToday");
+
+  if (picker && picker.value !== curDate) {
+    picker.value = curDate;
+  }
+  if (dateBadgeEl) {
+    dateBadgeEl.textContent = curDate === today ? "Today" : curDate;
+  }
+
+  const isBackDate = curDate !== today;
+  if (backBanner) {
+    if (isBackDate) {
+      backBanner.classList.remove("hidden");
+      if (backLabel) {
+        backLabel.textContent = `Viewing Record: ${curDate}`;
+      }
+    } else {
+      backBanner.classList.add("hidden");
+    }
+  }
+
+  if (btnToday) {
+    if (isBackDate) {
+      btnToday.className = "px-2 py-0.5 rounded-lg text-[10px] font-bold bg-amber-500 text-slate-900 hover:bg-amber-400 active:scale-95 shadow-sm transition-all cursor-pointer animate-pulse";
+      btnToday.textContent = "Back to Today";
+    } else {
+      btnToday.className = "px-2 py-0.5 rounded-lg text-[10px] font-bold bg-teal-600 text-white hover:bg-teal-500 active:scale-95 shadow-sm transition-all cursor-pointer";
+      btnToday.textContent = "Today";
+    }
+  }
+}
+
+function changeMobileDate(val) {
+  if (!val) return;
+  mStore.selectedDate = val;
+  updateDateUI();
+  updateZoneSailorStats();
+  renderWorkOrders();
+}
+
+function navigateMobileDate(delta) {
+  const cur = getSelectedDate();
+  const parts = cur.split("-");
+  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  if (isNaN(d.getTime())) return;
+  d.setDate(d.getDate() + delta);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  mStore.selectedDate = `${y}-${m}-${day}`;
+  updateDateUI();
+  updateZoneSailorStats();
+  renderWorkOrders();
+}
+
+function jumpMobileToday() {
+  mStore.selectedDate = getLocalDateString();
+  updateDateUI();
+  updateZoneSailorStats();
+  renderWorkOrders();
+}
+
 function sanitizeFbKey(key) {
   if (!key) return "";
   return String(key).replace(/[.#$\[\]\/]/g, "_");
@@ -108,6 +208,7 @@ function getInitialZone() {
 // Global In-Memory Store
 const mStore = {
   currentZone: getInitialZone(),
+  selectedDate: getLocalDateString(),
   zones: [...STANDARD_ZONES],
   workOrders: [],
   sailors: [],
@@ -327,7 +428,9 @@ function initListeners() {
 // =============================================
 function updateZoneSailorStats() {
   const currentZone = mStore.currentZone;
+  const targetDate = getSelectedDate();
   const today = getLocalDateString();
+  const isBackDate = targetDate !== today;
 
   // Update Banner Title & Date
   const zoneObj = mStore.zones.find((z) => isZoneMatch(z.id, currentZone));
@@ -340,7 +443,10 @@ function updateZoneSailorStats() {
 
   if (bannerNameEl) bannerNameEl.textContent = zoneName;
   if (badgeTypeEl) badgeTypeEl.textContent = isWorkshop ? "Workshop" : "Zone";
-  if (dateBadgeEl) dateBadgeEl.textContent = today;
+  if (dateBadgeEl) dateBadgeEl.textContent = isBackDate ? targetDate : "Today";
+
+  // Sync date picker UI state
+  updateDateUI();
 
   // 1. Identify sailors belonging to this zone/workshop
   let zoneSailors = mStore.sailors.filter((s) => {
@@ -357,7 +463,7 @@ function updateZoneSailorStats() {
     );
     const assignedIds = new Set();
     (mStore.dailyAllocations || []).forEach((a) => {
-      if (a.date === today && a.status !== "Cancelled" && zoneWoIds.has(String(a.work_order_id))) {
+      if (a.date === targetDate && a.status !== "Cancelled" && zoneWoIds.has(String(a.work_order_id))) {
         assignedIds.add(String(a.sailor_id));
       }
     });
@@ -378,7 +484,7 @@ function updateZoneSailorStats() {
   let leaveSickCount = 0;
 
   targetPool.forEach((s) => {
-    const st = getSailorStatusToday(s, null);
+    const st = getSailorStatusToday(s, null, targetDate);
     if (st.isLocked) {
       if (st.badgeText.includes("Sick") || st.badgeText.includes("Leave")) {
         leaveSickCount++;
@@ -408,14 +514,69 @@ function refreshData(userInitiated = false) {
 }
 
 // Check if work order belongs to active date
-function isWorkOrderActiveToday(wo) {
+function isWorkOrderActiveOnDate(wo, targetDate) {
   if (!wo) return false;
   const today = getLocalDateString();
-  if (wo.status === "Completed") {
-    // Only show completed if it was committed or completed today
-    return wo.last_commit_date === today || wo.completed_date === today;
+  const tDate = targetDate || today;
+
+  if (tDate === today) {
+    if (wo.status === "Completed") {
+      // Only show completed if it was committed or completed today
+      return wo.last_commit_date === today || wo.completed_date === today;
+    }
+    return true;
   }
-  return true;
+
+  // Back-date check
+  const wid = String(wo.id || wo._fbKey || "");
+  const hasAlloc = (mStore.dailyAllocations || []).some(
+    (a) => a.date === tDate && String(a.work_order_id) === wid && a.status !== "Cancelled"
+  );
+  if (hasAlloc) return true;
+
+  if (wo.last_commit_date === tDate || wo.last_committed_date === tDate || wo.last_assigned_date === tDate) {
+    return true;
+  }
+
+  if (wo.created_date && wo.created_date <= tDate) {
+    if (!wo.completed_date || wo.completed_date >= tDate) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isWorkOrderActiveToday(wo) {
+  return isWorkOrderActiveOnDate(wo, getSelectedDate());
+}
+
+function getWorkOrderCrewForDate(wo, targetDate) {
+  if (!wo) return [];
+  const wid = String(wo.id || wo._fbKey || "");
+  const today = getLocalDateString();
+  const tDate = targetDate || today;
+
+  if (tDate === today) {
+    if (Array.isArray(wo.assigned) && wo.assigned.length > 0) return [...wo.assigned];
+    if (Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0) return [...wo.last_assigned];
+    return [];
+  }
+
+  // Historical date: check dailyAllocations first
+  const dateAllocs = (mStore.dailyAllocations || []).filter(
+    (a) => a.date === tDate && String(a.work_order_id) === wid && a.status !== "Cancelled"
+  );
+  if (dateAllocs.length > 0) {
+    return dateAllocs.map((a) => a.sailor_id || a.official_number || a.off_no).filter(Boolean);
+  }
+
+  if (wo.last_commit_date === tDate || wo.last_committed_date === tDate || wo.last_assigned_date === tDate) {
+    if (Array.isArray(wo.assigned) && wo.assigned.length > 0) return [...wo.assigned];
+    if (Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0) return [...wo.last_assigned];
+  }
+
+  return [];
 }
 
 // =============================================
@@ -429,14 +590,16 @@ function renderWorkOrders() {
 
   const q = (document.getElementById("mSearchWo")?.value || "").toLowerCase().trim();
   const currentZone = mStore.currentZone;
+  const targetDate = getSelectedDate();
   const today = getLocalDateString();
+  const isBackDate = targetDate !== today;
 
-  // Filter by Zone Match (handling zone_id, zone, or workshop names)
+  // Filter by Zone Match & Active on selected date
   const filtered = mStore.workOrders.filter((w) => {
     const wZone = w.zone_id || w.zone || w.zoneId || w.location_zone || "";
     const matchZone = isZoneMatch(wZone, currentZone);
     if (!matchZone) return false;
-    if (!isWorkOrderActiveToday(w)) return false;
+    if (!isWorkOrderActiveOnDate(w, targetDate)) return false;
 
     if (!q) return true;
     const desc = (w.description || "").toLowerCase();
@@ -449,15 +612,15 @@ function renderWorkOrders() {
   const zoneObj = mStore.zones.find((z) => isZoneMatch(z.id, currentZone));
   const zoneName = zoneObj ? zoneObj.name : currentZone;
 
-  if (titleEl) titleEl.textContent = `${zoneName} Tasks`;
+  if (titleEl) titleEl.textContent = isBackDate ? `${zoneName} (${targetDate})` : `${zoneName} Tasks`;
   if (countBadge) countBadge.textContent = filtered.length;
 
   if (filtered.length === 0) {
     container.innerHTML = `
       <div class="p-8 text-center text-slate-500 bg-slate-800/40 rounded-2xl border border-slate-800">
         <div class="text-3xl mb-1">📋</div>
-        <p class="text-xs font-bold text-slate-400">No active work orders in ${zoneName}</p>
-        <p class="text-[10px] text-slate-500 mt-0.5">Select another zone/workshop from the top menu or search</p>
+        <p class="text-xs font-bold text-slate-400">No active work orders in ${zoneName}${isBackDate ? ` on ${targetDate}` : ""}</p>
+        <p class="text-[10px] text-slate-500 mt-0.5">${isBackDate ? "Try selecting another date or return to Today" : "Select another zone/workshop from the top menu or search"}</p>
       </div>`;
     return;
   }
@@ -473,13 +636,11 @@ function renderWorkOrders() {
     const isAssign = isAssignmentItem(w);
     const progress = Math.min(100, Math.max(0, parseInt(w.progress) || 0));
     
-    // Effective planned sailors (either currently assigned or last_assigned)
-    const effectiveCrew = (Array.isArray(w.assigned) && w.assigned.length > 0)
-      ? w.assigned
-      : (Array.isArray(w.last_assigned) ? w.last_assigned : []);
+    // Effective planned / deployed sailors for targetDate
+    const effectiveCrew = getWorkOrderCrewForDate(w, targetDate);
     const crewCount = effectiveCrew.length;
     
-    const isCommittedToday = (w.last_commit_date === today || w.last_committed_date === today);
+    const isCommittedToday = (w.last_commit_date === targetDate || w.last_committed_date === targetDate);
     const itemType = w.assign_type ? `💼 ${w.assign_type}` : (isAssign ? "💼 ASSIGNMENT" : (w.type ? `📋 ${w.type}` : "TASK"));
 
     // Status pill colors
@@ -506,7 +667,13 @@ function renderWorkOrders() {
 
     // 1-Tap Quick Commit Button directly on card if planned crew exists and not yet committed today
     let quickCommitHtml = "";
-    if (!isCommittedToday && w.status !== "Completed" && w.status !== "Hold" && crewCount > 0) {
+    if (isBackDate) {
+      quickCommitHtml = `
+        <div class="pt-2 border-t border-slate-700/60 flex items-center justify-between text-[10px] text-amber-300 font-bold px-1">
+          <span class="flex items-center gap-1">📜 <span>Record (${targetDate})</span></span>
+          <span class="text-slate-400 font-normal">${crewCount} sailor(s) deployed</span>
+        </div>`;
+    } else if (!isCommittedToday && w.status !== "Completed" && w.status !== "Hold" && crewCount > 0) {
       // Calculate available sailors excluding Leave/Sick
       let activeCrewCount = 0;
       effectiveCrew.forEach((sid) => {
@@ -514,7 +681,7 @@ function renderWorkOrders() {
         if (s) {
           const st = (mStore.sailorStatusCache && mStore.sailorStatusCache.has(String(s.id || s._fbKey)))
             ? mStore.sailorStatusCache.get(String(s.id || s._fbKey))
-            : getSailorStatusToday(s, null);
+            : getSailorStatusToday(s, null, targetDate);
           const isSickOrLeave = st.isLocked && (st.badgeText.includes("Sick") || st.badgeText.includes("Leave"));
           if (!isSickOrLeave) activeCrewCount++;
         } else {
@@ -539,7 +706,7 @@ function renderWorkOrders() {
               <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${statusClass}">${w.status || "Active"}</span>
               <span class="text-[9px] font-bold text-slate-400 bg-slate-900 px-1.5 py-0.5 rounded border border-slate-700">${itemType}</span>
               ${w.priority === "Urgent" || w.priority === "High" || w.priority === "Emergency" ? `<span class="text-[9px] font-black uppercase px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/40">${w.priority}</span>` : ""}
-              ${isCommittedToday ? `<span class="text-[9px] font-bold text-teal-300 bg-teal-500/20 px-1.5 py-0.5 rounded border border-teal-500/30">✓ Committed Today</span>` : ""}
+              ${isCommittedToday ? `<span class="text-[9px] font-bold text-teal-300 bg-teal-500/20 px-1.5 py-0.5 rounded border border-teal-500/30">✓ Committed</span>` : ""}
             </div>
             <h3 class="text-xs font-bold text-white line-clamp-2 leading-snug">${w.description || "Untitled Work Order"}</h3>
             ${w.reference_no ? `<p class="text-[10px] text-teal-400/80 font-mono mt-0.5">Ref: ${w.reference_no}</p>` : ""}
@@ -550,8 +717,8 @@ function renderWorkOrders() {
         ${progressHtml}
 
         <div class="flex items-center justify-between pt-1 border-t border-slate-700/50 text-[10px] text-slate-400">
-          <span class="flex items-center gap-1">👥 <strong class="text-slate-200">${crewCount}</strong> sailor(s) assigned</span>
-          <span class="text-teal-400 font-bold">Tap to edit details ➔</span>
+          <span class="flex items-center gap-1">👥 <strong class="text-slate-200">${crewCount}</strong> sailor(s) ${isBackDate ? "deployed" : "assigned"}</span>
+          <span class="text-teal-400 font-bold">Tap to view details ➔</span>
         </div>
 
         ${quickCommitHtml}
@@ -569,7 +736,7 @@ function filterWorkOrders() {
 // =============================================
 // SAILOR STATUS & LOCK EVALUATION FOR TODAY
 // =============================================
-function getSailorStatusToday(sailor, currentWo) {
+function getSailorStatusToday(sailor, currentWo, customDate = null) {
   if (!sailor) {
     return {
       isLocked: false,
@@ -580,7 +747,7 @@ function getSailorStatusToday(sailor, currentWo) {
     };
   }
 
-  const today = getLocalDateString();
+  const today = customDate || getSelectedDate();
   const sId = String(sailor.id || "");
   const sFbKey = String(sailor._fbKey || "");
   const sOff = String(sailor.off_no || sailor.official_number || sailor.official_no || sailor.service_no || sailor.officialNumber || "").trim();
@@ -856,11 +1023,19 @@ function openWoSheet(woId) {
   if (!wo) return;
 
   mStore.selectedWo = wo;
-  mStore.assignedTemp = Array.isArray(wo.assigned) ? [...wo.assigned] : [];
+  const targetDate = getSelectedDate();
+  const today = getLocalDateString();
+  const isBackDate = targetDate !== today;
+
+  // Load crew allocated or planned for this date
+  mStore.assignedTemp = getWorkOrderCrewForDate(wo, targetDate);
+  if (mStore.assignedTemp.length === 0 && !isBackDate) {
+    mStore.assignedTemp = Array.isArray(wo.assigned) ? [...wo.assigned] : [];
+  }
 
   const titleEl = document.getElementById("mSheetTitle");
   const descEl = document.getElementById("mWoDesc");
-  if (titleEl) titleEl.textContent = wo.description || "Work Order";
+  if (titleEl) titleEl.textContent = isBackDate ? `${wo.description || "Work Order"} (${targetDate})` : (wo.description || "Work Order");
   if (descEl) descEl.value = wo.description || "";
 
   const prog = Math.min(100, Math.max(0, parseInt(wo.progress) || 0));
@@ -912,11 +1087,25 @@ function openWoSheet(woId) {
   const searchClear = document.getElementById("mSailorSearchClear");
   if (searchClear) searchClear.classList.add("hidden");
 
-  // Pre-calculate status cache once for this sheet session (0ms search latency)
+  // Pre-calculate status cache once for this sheet session
   refreshSailorStatusCache();
 
   renderAssignedTags();
   renderSailorQuickPicker();
+
+  // Safeguard Commit button when viewing historical back-dates
+  const btnProceed = document.getElementById("mBtnProceed");
+  if (btnProceed) {
+    if (isBackDate) {
+      btnProceed.disabled = true;
+      btnProceed.innerHTML = `<span>📜</span> Historical Record (${targetDate})`;
+      btnProceed.classList.add("opacity-60", "cursor-not-allowed");
+    } else {
+      btnProceed.disabled = false;
+      btnProceed.innerHTML = `<span>🚀</span> Commit Daily Labour`;
+      btnProceed.classList.remove("opacity-60", "cursor-not-allowed");
+    }
+  }
 
   const sheet = document.getElementById("mWoSheet");
   if (sheet) {
@@ -1717,7 +1906,205 @@ function proceedWoSheet() {
   });
 }
 
+// =============================================
+// DAILY LABOUR DEPLOYMENT REPORT (PRINT / PDF)
+// Parity with main admin panel Naval CE Daily LMD
+// =============================================
+function printMobileLmdReport() {
+  const targetZone = mStore.currentZone || "A-Zone";
+  const targetDate = getSelectedDate();
+  const zoneObj = mStore.zones.find((z) => isZoneMatch(z.id, targetZone));
+  const zoneDisplayName = zoneObj ? zoneObj.name : targetZone;
+
+  // Filter tasks in this zone active on targetDate
+  const allWorks = (mStore.workOrders || []).filter(
+    (w) => isZoneMatch(w.zone_id || w.zone, targetZone) && isWorkOrderActiveOnDate(w, targetDate)
+  );
+
+  let rowsHtml = "";
+  let totalSailorsCount = 0;
+
+  allWorks.forEach((wo) => {
+    const crewIds = getWorkOrderCrewForDate(wo, targetDate);
+    if (!crewIds || crewIds.length === 0) return;
+
+    const workTitle = (wo.description || wo.title || wo.reference_no || "Active Task").trim();
+    rowsHtml += `
+      <tr style="background-color: #f1f5f9; font-weight: bold;">
+        <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
+          📋 ${escapeHtml(workTitle.toUpperCase())}
+        </td>
+      </tr>
+    `;
+
+    crewIds.forEach((sid, idx) => {
+      totalSailorsCount++;
+      const s = mStore.sailors.find(
+        (sailor) => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid) || String(sailor.off_no || sailor.official_number || "").toLowerCase() === String(sid).toLowerCase()
+      ) || { rank: "AB", name: `Sailor (${sid})`, trade: "—", official_number: sid };
+
+      const parsed = parseOfficialNumber(s.off_no || s.official_number || s.service_no || "");
+      rowsHtml += `
+        <tr>
+          <td style="text-align:center;">${String(idx + 1).padStart(2, "0")}</td>
+          <td>${escapeHtml(s.rank || "AB")}</td>
+          <td>${escapeHtml(s.name || "")}</td>
+          <td style="text-align:center;">${escapeHtml(parsed.type)}</td>
+          <td>${escapeHtml(parsed.num)}</td>
+          <td style="text-align:center;">${escapeHtml(s.trade || s.branch || "—")}</td>
+        </tr>
+      `;
+    });
+  });
+
+  if (!rowsHtml) {
+    rowsHtml = `<tr><td colspan="6" style="text-align:center; padding: 25px; color: #64748b; font-size: 12px;">No sailor allocations recorded for ${escapeHtml(zoneDisplayName)} on ${targetDate}.</td></tr>`;
+  }
+
+  const crestUrl = window.location.href.split("?")[0].split("#")[0].replace("mobile.html", "").replace("index.html", "") + "logo.png";
+
+  const printHtml = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Daily Details - ${zoneDisplayName} (${targetDate})</title>
+      <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; color: #000; margin: 0; padding: 20px; }
+        .header-container { display: flex; align-items: center; justify-content: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px; }
+        .logo-img { height: 65px; margin-right: 18px; }
+        .header-text { text-align: left; }
+        .header-text h1 { font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        .header-text h2 { font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .meta-section { display: flex; justify-content: space-between; font-size: 10px; color: #334155; margin-bottom: 15px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 6px; }
+        .meta-left { font-weight: bold; line-height: 1.5; }
+        .meta-right { text-align: right; line-height: 1.5; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-top: 10px; }
+        th, td { border: 1px solid #94a3b8; padding: 7px 9px; text-align: left; vertical-align: middle; }
+        th { background: #f1f5f9; color: #1e293b; font-weight: bold; text-transform: uppercase; font-size: 10px; }
+        
+        .signature-section { margin-top: 50px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
+        .sig-block { text-align: center; width: 220px; }
+        .sig-block p { margin: 2px 0; }
+        
+        .footer { margin-top: 30px; font-size: 9px; color: #64748b; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+        @media print { 
+          @page { size: A4; margin: 12mm; } 
+          body { padding: 0; }
+          .meta-section { background: none; border-color: #94a3b8; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header-container">
+        <img class="logo-img" src="${crestUrl}" alt="SLN Crest" onerror="this.style.display='none'">
+        <div class="header-text">
+          <h1>Sri Lanka Navy</h1>
+          <h2>Captain Civil Engineering Department (E)</h2>
+        </div>
+      </div>
+      
+      <div class="meta-section">
+        <div class="meta-left">
+          <div>REPORT: DAILY LABOUR DEPLOYMENT SHEET (LMD)</div>
+          <div>ZONE / WORKSHOP: ${escapeHtml(zoneDisplayName.toUpperCase())}</div>
+          <div>TOTAL SAILORS ALLOCATED: ${totalSailorsCount}</div>
+        </div>
+        <div class="meta-right">
+          <div>DEPLOYMENT DATE: ${targetDate}</div>
+          <div>GENERATED BY: CMSys Mobile Quick Portal</div>
+          <div>PRINT TIME: ${new Date().toLocaleTimeString()}</div>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 8%; text-align:center;">Ser No</th>
+            <th style="width: 14%;">Rank</th>
+            <th style="width: 36%;">Name</th>
+            <th style="width: 14%; text-align:center;">Service Type</th>
+            <th style="width: 14%;">Service No</th>
+            <th style="width: 14%; text-align:center;">Trade</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+      
+      <div class="signature-section">
+        <div class="sig-block">
+          <p>..................................................</p>
+          <p style="font-weight: bold;">PREPARED BY - LME</p>
+        </div>
+        <div class="sig-block">
+          <p>..................................................</p>
+          <p style="font-weight: bold;">CHECKED BY (S/S INCHARGE)</p>
+        </div>
+        <div class="sig-block">
+          <p>..................................................</p>
+          <p style="font-weight: bold;">OFFICER IN CHARGE</p>
+        </div>
+      </div>
+
+      <div class="footer">Generated by Sri Lanka Navy Civil Engineering CMSys • ${new Date().toLocaleString()}</div>
+    </body>
+    </html>
+  `;
+
+  // Attempt window.open first
+  let printWin = null;
+  try {
+    printWin = window.open("", "_blank");
+  } catch (e) {
+    printWin = null;
+  }
+
+  if (printWin) {
+    printWin.document.open();
+    printWin.document.write(printHtml);
+    printWin.document.close();
+    printWin.focus();
+    setTimeout(() => {
+      try {
+        printWin.print();
+      } catch (err) {
+        console.warn("Print window error:", err);
+      }
+    }, 400);
+  } else {
+    // Hidden iframe fallback (works reliably on mobile if popups are blocked)
+    let iframe = document.getElementById("mPrintIframe");
+    if (!iframe) {
+      iframe = document.createElement("iframe");
+      iframe.id = "mPrintIframe";
+      iframe.style.position = "fixed";
+      iframe.style.right = "0";
+      iframe.style.bottom = "0";
+      iframe.style.width = "0";
+      iframe.style.height = "0";
+      iframe.style.border = "0";
+      document.body.appendChild(iframe);
+    }
+    iframe.srcdoc = printHtml;
+    iframe.onload = () => {
+      setTimeout(() => {
+        try {
+          iframe.contentWindow.focus();
+          iframe.contentWindow.print();
+        } catch (e) {
+          console.warn("Iframe print error:", e);
+        }
+      }, 400);
+    };
+  }
+}
+
 // Start listeners on window load
 window.addEventListener("DOMContentLoaded", () => {
+  updateDateUI();
   initListeners();
 });
