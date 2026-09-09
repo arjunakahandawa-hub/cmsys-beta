@@ -7688,8 +7688,20 @@
             const isMenuOrRibbon = container.tagName === 'NAV' || container.id === 'desktopMainNav' || container.clientHeight < 80 || container.classList.contains('scrollbar-none');
 
             if (!hasVerticalScroll || isMenuOrRibbon) {
+                let delta = e.deltaY;
+                if (e.deltaMode === 1) {
+                    delta *= 40;
+                } else if (e.deltaMode === 2) {
+                    delta *= 200;
+                } else if (Math.abs(delta) < 15) {
+                    delta *= 30;
+                }
+
                 e.preventDefault();
-                container.scrollLeft += (e.deltaY * 1.2);
+                const prev = container.style.scrollBehavior;
+                container.style.scrollBehavior = 'auto';
+                container.scrollLeft += delta;
+                container.style.scrollBehavior = prev;
             }
         }, { passive: false });
 

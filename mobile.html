@@ -121,7 +121,11 @@
                 <h2 id="mZoneBannerName" class="text-xs font-black uppercase tracking-wider text-teal-300 truncate">Loading Zone...</h2>
                 <span id="mZoneBadgeType" class="text-[9px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded border border-slate-700">Zone</span>
             </div>
-            <span class="text-[9px] font-bold text-slate-400 font-mono" id="mTodayDateBadge">Today</span>
+            <div class="flex items-center gap-1 shrink-0">
+                <button type="button" onclick="scrollMetricsRibbon(-130)" class="w-5 h-5 rounded-md bg-slate-800 hover:bg-slate-700 active:scale-90 text-slate-300 flex items-center justify-center text-[9px] border border-slate-700 cursor-pointer" title="Scroll metrics left">◀</button>
+                <button type="button" onclick="scrollMetricsRibbon(130)" class="w-5 h-5 rounded-md bg-slate-800 hover:bg-slate-700 active:scale-90 text-slate-300 flex items-center justify-center text-[9px] border border-slate-700 cursor-pointer" title="Scroll metrics right">▶</button>
+                <span class="text-[9px] font-bold text-slate-400 font-mono pl-1" id="mTodayDateBadge">Today</span>
+            </div>
         </div>
 
         <!-- Zone Sailors Strength Metrics Pills -->
@@ -378,88 +382,118 @@
 
     <!-- SCRIPT INCLUSION -->
     <script src="mobile.js?v=1.0.9"></script>
-    <!-- UNIVERSAL MOUSE WHEEL & CLICK-AND-DRAG (PAN) CONTROLLER -->
+
+    <!-- ROBUST MOUSE WHEEL & CLICK-AND-DRAG (PAN) CONTROLLER -->
     <script>
+    function scrollMetricsRibbon(amount) {
+        const el = document.getElementById('mMetricsRibbon');
+        if (el) {
+            el.scrollBy({ left: amount, behavior: 'smooth' });
+        }
+    }
+
     (function initMobileScrollController() {
-        function getHScrollContainer(target) {
-            if (!target) return null;
+        const ribbon = document.getElementById('mMetricsRibbon');
+
+        function getTargetContainer(target) {
+            if (!target) return ribbon;
             let el = target.closest('#mMetricsRibbon, .overflow-x-auto, [data-scroll="horizontal"]');
             if (el && el.scrollWidth > el.clientWidth) return el;
 
+            const zoneSection = target.closest('section');
+            if (zoneSection && ribbon && ribbon.scrollWidth > ribbon.clientWidth) {
+                return ribbon;
+            }
+
             let cur = target;
             while (cur && cur !== document.body && cur !== document.documentElement) {
-                if (cur.scrollWidth > (cur.clientWidth + 1)) {
-                    const style = window.getComputedStyle(cur);
-                    if (style.overflowX === 'auto' || style.overflowX === 'scroll') {
-                        return cur;
-                    }
+                if (cur.scrollWidth > (cur.clientWidth + 2)) {
+                    const ox = window.getComputedStyle(cur).overflowX;
+                    if (ox === 'auto' || ox === 'scroll') return cur;
                 }
                 cur = cur.parentElement;
             }
-            return null;
+            return (ribbon && ribbon.scrollWidth > ribbon.clientWidth) ? ribbon : null;
         }
 
-        // 1. Mouse Wheel Horizontal Scroll
+        // 1. ROBUST MOUSE WHEEL SCROLL
         window.addEventListener('wheel', function(e) {
             if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.deltaY === 0) return;
-            const container = getHScrollContainer(e.target);
+
+            const container = getTargetContainer(e.target);
             if (!container) return;
+
+            // Windows Delta Normalization (handles deltaMode 1: lines, deltaMode 2: pages)
+            let delta = e.deltaY;
+            if (e.deltaMode === 1) {
+                delta *= 40;
+            } else if (e.deltaMode === 2) {
+                delta *= 200;
+            } else if (Math.abs(delta) < 15) {
+                delta *= 30; // Boost low-delta mice
+            }
 
             e.preventDefault();
-            container.scrollLeft += (e.deltaY * 1.2);
+            // Bypass CSS smooth-scroll cancellation during active wheeling
+            const prev = container.style.scrollBehavior;
+            container.style.scrollBehavior = 'auto';
+            container.scrollLeft += delta;
+            container.style.scrollBehavior = prev;
         }, { passive: false });
 
-        // 2. Click and Drag to Pan with Mouse
-        let isDragging = false;
-        let dragContainer = null;
+        // 2. ROBUST MOUSE CLICK-AND-DRAG (PAN)
+        let isDown = false;
         let startX = 0;
-        let scrollStart = 0;
-        let hasMoved = false;
+        let startScroll = 0;
+        let activeEl = null;
+        let dragged = false;
 
         document.addEventListener('mousedown', function(e) {
-            if (e.button !== 0) return; // Left click only
-            if (e.target.closest('input, textarea, select')) return;
+            if (e.button !== 0) return; // Left mouse button only
+            if (e.target.closest('input, textarea, select, button, a')) return;
 
-            const container = getHScrollContainer(e.target);
+            const container = getTargetContainer(e.target);
             if (!container) return;
 
-            isDragging = true;
-            dragContainer = container;
-            hasMoved = false;
-            startX = e.pageX;
-            scrollStart = container.scrollLeft;
-            container.style.cursor = 'grabbing';
-            container.style.userSelect = 'none';
+            isDown = true;
+            dragged = false;
+            activeEl = container;
+            startX = e.clientX;
+            startScroll = container.scrollLeft;
+
+            activeEl.style.scrollBehavior = 'auto';
+            activeEl.style.cursor = 'grabbing';
+            activeEl.style.userSelect = 'none';
         });
 
         window.addEventListener('mousemove', function(e) {
-            if (!isDragging || !dragContainer) return;
-            const delta = e.pageX - startX;
-            if (Math.abs(delta) > 3) {
-                hasMoved = true;
-                dragContainer.scrollLeft = scrollStart - delta;
+            if (!isDown || !activeEl) return;
+            const walk = e.clientX - startX;
+            if (Math.abs(walk) > 3) {
+                dragged = true;
+                activeEl.scrollLeft = startScroll - walk;
             }
         });
 
-        function endDrag() {
-            if (dragContainer) {
-                dragContainer.style.cursor = '';
-                dragContainer.style.userSelect = '';
+        function finishDrag() {
+            if (activeEl) {
+                activeEl.style.cursor = '';
+                activeEl.style.userSelect = '';
+                activeEl.style.scrollBehavior = '';
             }
-            isDragging = false;
-            dragContainer = null;
-            setTimeout(() => { hasMoved = false; }, 50);
+            isDown = false;
+            activeEl = null;
+            setTimeout(() => { dragged = false; }, 60);
         }
 
-        window.addEventListener('mouseup', endDrag);
-        window.addEventListener('mouseleave', endDrag);
+        window.addEventListener('mouseup', finishDrag);
+        window.addEventListener('mouseleave', finishDrag);
 
-        // Prevent child clicks if dragging occurred
         document.addEventListener('click', function(e) {
-            if (hasMoved) {
+            if (dragged) {
                 e.preventDefault();
                 e.stopPropagation();
-                hasMoved = false;
+                dragged = false;
             }
         }, true);
     })();
