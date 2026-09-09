@@ -358,6 +358,7 @@
             white-space: nowrap !important;
             max-height: 42px !important;
             min-height: 42px !important;
+            scroll-behavior: auto !important;
             scrollbar-width: none !important;
             -ms-overflow-style: none !important;
         }
@@ -7717,8 +7718,6 @@
 
         // 1. Global wheel listener for all horizontal bars, ribbons, and menus
         window.addEventListener('wheel', function(e) {
-            if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.deltaY === 0) return;
-
             const container = getHScrollContainer(e.target);
             if (!container) return;
 
@@ -7726,20 +7725,20 @@
             const isMenuOrRibbon = container.tagName === 'NAV' || container.id === 'desktopMainNav' || container.clientHeight < 80 || container.classList.contains('scrollbar-none');
 
             if (!hasVerticalScroll || isMenuOrRibbon) {
-                let delta = e.deltaY;
+                let delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+                if (delta === 0) return;
+
                 if (e.deltaMode === 1) {
-                    delta *= 40;
+                    delta *= 35;
                 } else if (e.deltaMode === 2) {
-                    delta *= 200;
+                    delta *= 120;
                 } else if (Math.abs(delta) < 15) {
                     delta *= 30;
                 }
 
                 e.preventDefault();
-                const prev = container.style.scrollBehavior;
-                container.style.scrollBehavior = 'auto';
+                e.stopPropagation();
                 container.scrollLeft += delta;
-                container.style.scrollBehavior = prev;
             }
         }, { passive: false });
 
@@ -7764,16 +7763,20 @@
             scrollStart = container.scrollLeft;
             container.style.cursor = 'grabbing';
             container.style.userSelect = 'none';
+            if (container.tagName === 'NAV' || container.id === 'desktopMainNav' || container.clientHeight < 60) {
+                e.preventDefault();
+            }
         });
 
         window.addEventListener('mousemove', function(e) {
             if (!isDragging || !dragContainer) return;
             const delta = e.pageX - startX;
-            if (Math.abs(delta) > 3) {
+            if (Math.abs(delta) > 2) {
                 hasMoved = true;
+                e.preventDefault();
                 dragContainer.scrollLeft = scrollStart - delta;
             }
-        });
+        }, { passive: false });
 
         function endDrag() {
             if (dragContainer) {
