@@ -29,8 +29,7 @@
         }
         body {
             font-family: 'Inter', 'Noto Sans Sinhala', sans-serif;
-            background-color: #0b1329;
-            color: #f1f5f9;
+            background: linear-gradient(160deg, #e8f4f8 0%, #dbeafe 25%, #e0f2fe 50%, #f0fdf4 75%, #f8fafc 100%) fixed !important; color: #0f172a !important;
             -webkit-tap-highlight-color: transparent;
             overscroll-behavior-y: contain;
             touch-action: manipulation;
@@ -109,22 +108,22 @@
     </header>
 
     <!-- ACTIVE ZONE BANNER & SAILOR STRENGTH METRICS (Replaces Dropdown for Security & Clarity) -->
-    <section id="mZoneSection" onwheel="handleRibbonWheel(event)" class="bg-slate-900/95 border-b border-slate-800 px-3 py-2 space-y-1.5 shadow-sm">
+    <section id="mZoneSection" onwheel="handleRibbonWheel(event)" class="bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-2 space-y-1.5 shadow-xs">
         <div class="flex flex-wrap items-center justify-between gap-2">
             <div class="flex items-center gap-1.5 min-w-0">
                 <span class="text-sm">📍</span>
-                <h2 id="mZoneBannerName" class="text-xs font-black uppercase tracking-wider text-teal-300 truncate">Loading Zone...</h2>
-                <span id="mZoneBadgeType" class="text-[9px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.2 rounded border border-slate-700">Zone</span>
+                <h2 id="mZoneBannerName" class="text-xs font-black uppercase tracking-wider text-teal-800 truncate">Loading Zone...</h2>
+                <span id="mZoneBadgeType" class="text-[9px] font-bold text-slate-600 bg-slate-100 px-1.5 py-0.2 rounded border border-slate-200">Zone</span>
             </div>
 
             <!-- Quick Day Switcher & Date Controller (Back Date Details Support) -->
-            <div class="flex items-center gap-1 bg-slate-800/95 border border-slate-700 p-0.5 rounded-xl shadow-xs">
-                <button type="button" onclick="navigateMobileDate(-1)" id="mPrevDayBtn" class="w-6 h-6 rounded-lg text-xs font-bold text-slate-300 hover:bg-slate-700 flex items-center justify-center active:scale-90 transition-all cursor-pointer" title="Previous Day (Back Date / ඊයේ)">
+            <div class="flex items-center gap-1 bg-slate-100 border border-slate-200 p-0.5 rounded-xl shadow-xs">
+                <button type="button" onclick="navigateMobileDate(-1)" id="mPrevDayBtn" class="w-6 h-6 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-200 flex items-center justify-center active:scale-90 transition-all cursor-pointer" title="Previous Day (Back Date / ඊයේ)">
                     ◀
                 </button>
-                <div class="flex items-center gap-1 px-1.5 text-[11px] font-bold text-slate-200">
+                <div class="flex items-center gap-1 px-1.5 text-[11px] font-bold text-slate-700">
                     <span class="text-xs">📅</span>
-                    <input type="date" id="mDatePicker" onchange="changeMobileDate(this.value)" class="border-0 p-0 text-[11px] font-bold text-teal-400 focus:ring-0 cursor-pointer bg-transparent" style="outline:none;">
+                    <input type="date" id="mDatePicker" onchange="changeMobileDate(this.value)" class="border-0 p-0 text-[11px] font-bold text-teal-700 focus:ring-0 cursor-pointer bg-transparent" style="outline:none;">
                 </div>
                 <button type="button" onclick="navigateMobileDate(1)" id="mNextDayBtn" class="w-6 h-6 rounded-lg text-xs font-bold text-slate-300 hover:bg-slate-700 flex items-center justify-center active:scale-90 transition-all cursor-pointer" title="Next Day (හෙට)">
                     ▶
@@ -147,17 +146,17 @@
                 ◀
             </button>
             <div id="mMetricsRibbon" onwheel="handleRibbonWheel(event)" onmousedown="startRibbonDrag(event)" class="flex-1 flex items-center gap-1.5 overflow-x-auto text-[10px] font-bold pb-0.5 scrollbar-none cursor-grab active:cursor-grabbing select-none" style="scroll-behavior: auto !important; -webkit-overflow-scrolling: touch;">
-                <span class="bg-teal-950/80 text-teal-300 px-2 py-0.5 rounded-lg border border-teal-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
-                    👥 Strength: <strong id="mStatStrength" class="text-white font-mono">0</strong>
+                <span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg border border-slate-200 whitespace-nowrap flex items-center gap-1 shadow-xs shrink-0">
+                    👥 Strength: <strong id="mStatStrength" class="text-slate-900 font-mono">0</strong>
                 </span>
-                <span class="bg-emerald-950/80 text-emerald-300 px-2 py-0.5 rounded-lg border border-emerald-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
-                    🟢 Available: <strong id="mStatAvailable" class="text-white font-mono">0</strong>
+                <span class="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg border border-emerald-200 whitespace-nowrap flex items-center gap-1 shadow-xs shrink-0">
+                    🟢 Available: <strong id="mStatAvailable" class="text-emerald-800 font-mono">0</strong>
                 </span>
-                <span class="bg-blue-950/80 text-blue-300 px-2 py-0.5 rounded-lg border border-blue-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
-                    🛠️ Deployed: <strong id="mStatDeployed" class="text-white font-mono">0</strong>
+                <span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded-lg border border-blue-200 whitespace-nowrap flex items-center gap-1 shadow-xs shrink-0">
+                    🛠️ Deployed: <strong id="mStatDeployed" class="text-blue-800 font-mono">0</strong>
                 </span>
-                <span class="bg-rose-950/80 text-rose-300 px-2 py-0.5 rounded-lg border border-rose-700/50 whitespace-nowrap flex items-center gap-1 shadow-sm shrink-0">
-                    🏖️ Leave/Sick: <strong id="mStatLeaveSick" class="text-white font-mono">0</strong>
+                <span class="bg-rose-50 text-rose-700 px-2 py-0.5 rounded-lg border border-rose-200 whitespace-nowrap flex items-center gap-1 shadow-xs shrink-0">
+                    🏖️ Leave/Sick: <strong id="mStatLeaveSick" class="text-rose-800 font-mono">0</strong>
                 </span>
             </div>
             <button type="button" onclick="scrollMetricsRibbon(130)" class="w-6 h-6 rounded-lg bg-slate-800/90 hover:bg-slate-700 active:scale-90 text-slate-300 flex items-center justify-center text-[10px] border border-slate-700 cursor-pointer shrink-0 shadow-xs" title="Scroll metrics right">
@@ -176,7 +175,7 @@
         <div class="space-y-2">
             <div class="flex items-center gap-2">
                 <div class="relative flex-1 min-w-0">
-                    <input type="text" id="mSearchWo" oninput="filterWorkOrders()" placeholder="Search work orders / tasks..." class="w-full bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-2.5 pl-8 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-teal-500 shadow-sm">
+                    <input type="text" id="mSearchWo" oninput="filterWorkOrders()" placeholder="Search work orders / tasks..." class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2.5 pl-8 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-600 shadow-xs">
                     <span class="absolute left-2.5 top-2.5 text-xs text-slate-400">🔍</span>
                 </div>
                 <button type="button" onclick="refreshData(true)" class="bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-300 font-bold text-xs p-2.5 rounded-xl flex items-center justify-center active-scale shrink-0 shadow-sm" title="Refresh">
@@ -243,21 +242,21 @@
                 <div class="grid grid-cols-3 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Length (ft)</label>
-                        <input type="number" id="mEstConcL" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstConcL" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Width (ft)</label>
-                        <input type="number" id="mEstConcW" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstConcW" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Thick (in)</label>
-                        <input type="number" id="mEstConcT" value="6" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstConcT" value="6" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                 </div>
 
                 <div>
                     <label class="block text-[10px] font-bold text-slate-400 mb-1">Concrete Mix Grade</label>
-                    <select id="mEstConcMix" onchange="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                    <select id="mEstConcMix" onchange="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400 font-semibold">
                         <option value="1:2:4">1:2:4 (Grade 20 - Standard Slabs & Beams)</option>
                         <option value="1:1.5:3">1:1.5:3 (Grade 25 - Heavy Structural / Columns)</option>
                         <option value="1:3:6">1:3:6 (Grade 15 - Lean Concrete / Sub-base)</option>
@@ -271,16 +270,16 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Wall Length (ft)</label>
-                        <input type="number" id="mEstBrickL" value="20" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstBrickL" value="20" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Wall Height (ft)</label>
-                        <input type="number" id="mEstBrickH" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstBrickH" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-slate-400 mb-1">Wall Material & Thickness</label>
-                    <select id="mEstBrickType" onchange="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                    <select id="mEstBrickType" onchange="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400 font-semibold">
                         <option value="brick_half">Red Clay Brick - 4.5" (Single Half-Brick Wall)</option>
                         <option value="brick_full">Red Clay Brick - 9" (Double Full-Brick Wall)</option>
                         <option value="block_4">Cement Block 4" (Standard Partition)</option>
@@ -293,12 +292,12 @@
             <div id="mEstSectionPlaster" class="hidden space-y-3 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
                 <div>
                     <label class="block text-[10px] font-bold text-slate-400 mb-1">Surface Area (Sq.Ft)</label>
-                    <input type="number" id="mEstPlasterArea" value="200" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    <input type="number" id="mEstPlasterArea" value="200" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Plaster Thickness</label>
-                        <select id="mEstPlasterThick" onchange="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                        <select id="mEstPlasterThick" onchange="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400 font-semibold">
                             <option value="12">12 mm (Internal Wall)</option>
                             <option value="16">16 mm (External Wall)</option>
                             <option value="20">20 mm (Rough Cast / 2-Coat)</option>
@@ -306,7 +305,7 @@
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Paint Specification</label>
-                        <select id="mEstPaintType" onchange="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                        <select id="mEstPaintType" onchange="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400 font-semibold">
                             <option value="emulsion">Emulsion (2 Coats + Filler)</option>
                             <option value="weather">Weather Shield (External 2 Coats)</option>
                             <option value="enamel">Enamel / Oil (Wood/Metal 2 Coats)</option>
@@ -320,21 +319,21 @@
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Masons / Carpenters</label>
-                        <input type="number" id="mEstSkilled" value="2" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstSkilled" value="2" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Labourers / Helpers</label>
-                        <input type="number" id="mEstUnskilled" value="2" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstUnskilled" value="2" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Estimated Days</label>
-                        <input type="number" id="mEstDays" value="3" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstDays" value="3" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-400 mb-1">Skilled Daily Rate (Rs)</label>
-                        <input type="number" id="mEstRateSkilled" value="4500" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                        <input type="number" id="mEstRateSkilled" value="4500" oninput="runEstimateCalc()" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                     </div>
                 </div>
             </div>
@@ -434,13 +433,13 @@
         </div>
 <!-- WORK ORDER DETAIL / LABOUR COMMIT SHEET (SMOOTH POPUP MODAL) -->
         <div id="mWoSheet" onclick="handleBackdropClick(event)" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col justify-end sheet-hidden transition-all duration-300">
-            <div onclick="event.stopPropagation()" class="bg-slate-900 border-t border-slate-700/80 rounded-t-3xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden transition-transform duration-300 ease-out">
+            <div onclick="event.stopPropagation()" class="bg-white border-t border-slate-200 rounded-t-3xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden transition-transform duration-300 ease-out text-slate-900">
                 
                 <!-- Pull / Drag Handle Indicator -->
                 <div class="w-12 h-1.5 bg-slate-600/80 rounded-full mx-auto my-2 shrink-0 cursor-grab active:cursor-grabbing"></div>
 
                 <!-- Sheet Header -->
-                <div class="px-5 py-3 bg-gradient-to-r from-slate-800/90 to-slate-900/90 border-b border-slate-700/80 flex items-center justify-between shrink-0">
+                <div class="px-5 py-3 bg-gradient-to-r from-slate-900 to-[#0a1628] border-b border-slate-800 flex items-center justify-between shrink-0 text-white">
                     <div class="min-w-0 flex-1 pr-2">
                         <div class="flex items-center gap-1.5 mb-0.5">
                             <span id="mSheetStatusBadge" class="inline-block text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Active</span>
@@ -460,7 +459,7 @@
                             <label class="text-[10px] font-bold uppercase text-slate-400">Work Order Description</label>
                             <span class="text-[9px] text-teal-400 font-semibold">Tap below to add quick text</span>
                         </div>
-                        <textarea id="mWoDesc" rows="2" placeholder="Enter job description or work scope..." class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-teal-400 leading-relaxed"></textarea>
+                        <textarea id="mWoDesc" rows="2" placeholder="Enter job description or work scope..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400 leading-relaxed"></textarea>
                         
                         <!-- Quick Notes Chips for 1-Tap Entry -->
                         <div class="flex items-center gap-1.5 overflow-x-auto touch-scroll pt-1 pb-0.5 scrollbar-none">
@@ -476,7 +475,7 @@
                     </div>
 
                     <!-- Progress Slider & Steppers (Only for Work Orders, hidden for Assignments) -->
-                    <div id="mProgressSection" class="p-3 bg-slate-800/80 rounded-xl border border-slate-700/80 space-y-2">
+                    <div id="mProgressSection" class="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
                         <div class="flex items-center justify-between">
                             <label class="text-[10px] font-bold uppercase text-teal-400">Work Progress</label>
                             <span id="mProgressVal" class="text-sm font-black text-teal-300">0%</span>
@@ -496,7 +495,7 @@
                     <div class="grid grid-cols-2 gap-2.5">
                         <div>
                             <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Status</label>
-                            <select id="mWoStatus" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                            <select id="mWoStatus" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400 font-semibold">
                                 <option value="Active">🟢 Active</option>
                                 <option value="Pending">🟡 Pending</option>
                                 <option value="Hold">⏸️ On Hold</option>
@@ -505,7 +504,7 @@
                         </div>
                         <div>
                             <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Priority</label>
-                            <select id="mWoPriority" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                            <select id="mWoPriority" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400 font-semibold">
                                 <option value="Routine">Routine</option>
                                 <option value="High">High</option>
                                 <option value="Urgent">⚠️ Urgent</option>
@@ -518,15 +517,15 @@
                     <div class="grid grid-cols-3 gap-2">
                         <div>
                             <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Authority</label>
-                            <input type="text" id="mWoAuthority" placeholder="CCED(E)" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                            <input type="text" id="mWoAuthority" placeholder="CCED(E)" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                         </div>
                         <div>
                             <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Budget (Rs)</label>
-                            <input type="number" id="mWoBudget" placeholder="0.00" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                            <input type="number" id="mWoBudget" placeholder="0.00" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                         </div>
                         <div>
                             <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Days</label>
-                            <input type="number" id="mWoDuration" placeholder="Days" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                            <input type="number" id="mWoDuration" placeholder="Days" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                         </div>
                     </div>
 
@@ -578,7 +577,7 @@
                     </div>
 
                     <!-- DAILY CREW / SAILORS ASSIGNMENT SECTION -->
-                    <div class="p-3.5 bg-slate-800/90 rounded-2xl border border-slate-700 space-y-3">
+                    <div class="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
                         <div class="flex items-center justify-between">
                             <div class="flex items-center gap-1.5">
                                 <span class="text-sm">👥</span>
@@ -632,7 +631,7 @@
                 </div>
 
                 <!-- Sticky Bottom Action Bar -->
-                <div class="p-3.5 bg-slate-900 border-t border-slate-800 flex gap-2 shrink-0">
+                <div class="p-3.5 bg-white border-t border-slate-200 flex gap-2 shrink-0">
                     <button id="mBtnSaveOnly" onclick="saveWoSheet(false)" class="px-4 py-3 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs border border-slate-700 active-scale flex items-center gap-1">
                         💾 Save
                     </button>
@@ -647,10 +646,10 @@
 
     
     <!-- FIXED BOTTOM APP NAVIGATION BAR -->
-    <nav id="mBottomNav" class="fixed bottom-0 left-0 right-0 z-40 bg-[#0a1628]/95 backdrop-blur border-t border-slate-800 flex items-center justify-around px-2 py-1.5 shadow-2xl">
+    <nav id="mBottomNav" class="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-slate-200 flex items-center justify-around px-2 py-1.5 shadow-xl text-slate-500">
         <button type="button" onclick="switchMobileTab('tasks')" id="mTabBtnTasks" class="flex flex-col items-center gap-0.5 text-teal-400 font-bold px-3 py-1 rounded-xl active-scale">
             <span class="text-base">📋</span>
-            <span class="text-[9px]">Tasks</span>
+            <span class="text-[9px]">Home</span>
         </button>
         <button type="button" onclick="switchMobileTab('estimate')" id="mTabBtnEstimate" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-white font-medium px-3 py-1 rounded-xl active-scale">
             <span class="text-base">🧮</span>
@@ -845,20 +844,20 @@
             </div>
             <div>
                 <label class="block text-[10px] font-bold text-slate-400 mb-1">Asset / Facility Name</label>
-                <input type="text" id="mNewLmdName" placeholder="e.g. Wardroom Water Pump #2" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                <input type="text" id="mNewLmdName" placeholder="e.g. Wardroom Water Pump #2" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
             </div>
             <div>
                 <label class="block text-[10px] font-bold text-slate-400 mb-1">Location / Quarters</label>
-                <input type="text" id="mNewLmdLocation" placeholder="e.g. Block C, Upper Floor" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                <input type="text" id="mNewLmdLocation" placeholder="e.g. Block C, Upper Floor" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
             </div>
             <div class="grid grid-cols-2 gap-2">
                 <div>
                     <label class="block text-[10px] font-bold text-slate-400 mb-1">Last Maintained</label>
-                    <input type="date" id="mNewLmdDate" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    <input type="date" id="mNewLmdDate" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
                 </div>
                 <div>
                     <label class="block text-[10px] font-bold text-slate-400 mb-1">Cycle (Days)</label>
-                    <select id="mNewLmdCycle" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                    <select id="mNewLmdCycle" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400 font-semibold">
                         <option value="30">30 Days (Monthly)</option>
                         <option value="90" selected>90 Days (Quarterly)</option>
                         <option value="180">180 Days (Bi-Annual)</option>
@@ -868,7 +867,7 @@
             </div>
             <div>
                 <label class="block text-[10px] font-bold text-slate-400 mb-1">Notes / Condition</label>
-                <input type="text" id="mNewLmdNotes" placeholder="e.g. Serviced impeller, grease bearing" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                <input type="text" id="mNewLmdNotes" placeholder="e.g. Serviced impeller, grease bearing" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-400">
             </div>
             <div class="flex gap-2 pt-2">
                 <button type="button" onclick="closeNewLmdModal()" class="flex-1 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs border border-slate-700">Cancel</button>

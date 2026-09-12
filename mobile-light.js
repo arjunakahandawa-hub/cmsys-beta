@@ -1,7 +1,8 @@
 // =============================================
-// CMSys MOBILE LIGHT CONTROLLER (mobile-light.js)
-// Designed specifically for older / low-end smartphones.
-// Zero bloat, pure fast data entry & field progress.
+// CMSys MOBILE LIGHT CONTROLLER (mobile-light.js v2.0.0)
+// Designed for older & budget smartphones.
+// Fast, clean Light Naval Theme matching pic - 02.
+// Tabs: Home, Estimate, LMD, Sailors
 // =============================================
 
 function getLocalDateString() {
@@ -48,22 +49,20 @@ function isZoneMatch(z1, z2) {
   return false;
 }
 
-// In-Memory Store
+// Store
 const mlStore = {
   currentZone: localStorage.getItem("ncw_saved_zone") || "A-Zone",
   selectedDate: getLocalDateString(),
   workOrders: [],
   sailors: [],
   dailyAllocations: [],
-  inventory: [],
-  selectedAssignWoKey: "",
-  assignedTemp: new Set(),
-  activeTab: "tasks"
+  lmdRecords: [],
+  activeTab: "home",
+  estCategory: "concrete",
+  selectedAssignKey: ""
 };
 
-// =============================================
-// DUAL FIREBASE INITIALIZATION
-// =============================================
+// Dual Firebase Config
 const sailorsFirebaseConfig = {
   apiKey: "AIzaSyDmHdg1FfgR_-4pKJ5z0inI8-BZ21MUtvg",
   authDomain: "ce-admin-panel2025.firebaseapp.com",
@@ -92,116 +91,142 @@ try {
   sailorsDB = firebase.database(sApp);
   const oApp = firebase.initializeApp(opsFirebaseConfig, "mlOperations");
   opsDB = firebase.database(oApp);
-  console.log("⚡ Mobile Light: Firebase connected");
 } catch (e) {
-  console.error("Firebase Light init error:", e);
+  console.warn("Mobile Light Firebase Init:", e);
 }
 
-// Toast
-let toastTimer = null;
-function showLightToast(msg, icon = "✅") {
-  const t = document.getElementById("mlToast");
-  const m = document.getElementById("mlToastMsg");
-  const i = document.getElementById("mlToastIcon");
-  if (!t) return;
-  i.textContent = icon;
-  m.textContent = msg;
-  t.classList.remove("translate-y-24");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    t.classList.add("translate-y-24");
-  }, 3000);
-}
-
-// Tab Switching
-function switchLightTab(tabName) {
-  mlStore.activeTab = tabName;
-  const tabs = ["tasks", "new", "assign", "inventory"];
+// ---------------------------------------------
+// TAB SWITCHER
+// ---------------------------------------------
+function switchLightTab(tabId) {
+  mlStore.activeTab = tabId;
+  const tabs = ["home", "estimate", "lmd", "sailors"];
+  
   tabs.forEach(t => {
-    const view = document.getElementById("view" + t.charAt(0).toUpperCase() + t.slice(1));
-    const btn = document.getElementById("tabBtn" + t.charAt(0).toUpperCase() + t.slice(1));
+    const view = document.getElementById(t === "home" ? "viewHome" : t === "estimate" ? "viewEstimate" : t === "lmd" ? "viewLmd" : "viewSailors");
+    const btn = document.getElementById(t === "home" ? "tabBtnHome" : t === "estimate" ? "tabBtnEstimate" : t === "lmd" ? "tabBtnLmd" : "tabBtnSailors");
+    
     if (view) {
-      if (t === tabName) view.classList.remove("hidden");
+      if (t === tabId) view.classList.remove("hidden");
       else view.classList.add("hidden");
     }
     if (btn) {
-      if (t === tabName) btn.classList.add("active-tab");
-      else btn.classList.remove("active-tab");
+      if (t === tabId) {
+        btn.className = "flex flex-col items-center gap-0.5 active-tab active-scale px-3 py-1 text-teal-600 font-extrabold";
+      } else {
+        btn.className = "flex flex-col items-center gap-0.5 text-slate-500 hover:text-slate-800 active-scale px-3 py-1 font-semibold";
+      }
     }
   });
 
-  if (tabName === "assign") {
-    renderAssignDropdown();
-    renderSailorChecklist();
+  if (tabId === "estimate") calcLightEstimate();
+  else if (tabId === "lmd") loadLightLmdRecords();
+  else if (tabId === "sailors") renderLightSailorList();
+}
+
+// ---------------------------------------------
+// INITIALIZATION
+// ---------------------------------------------
+function initLightApp() {
+  const zoneSelect = document.getElementById("mlZoneSelect");
+  if (zoneSelect) {
+    zoneSelect.innerHTML = STANDARD_ZONES.map(z => 
+      `<option value="${z.id}" ${z.id === mlStore.currentZone ? "selected" : ""}>${z.name}</option>`
+    ).join("");
   }
+
+  const datePicker = document.getElementById("mlDatePicker");
+  if (datePicker) {
+    datePicker.value = mlStore.selectedDate;
+  }
+
+  loadLightData();
 }
 
-// Zone Selector Setup
-function initZoneSelectors() {
-  const sel1 = document.getElementById("mlZoneSelect");
-  const sel2 = document.getElementById("mlNewZone");
-  let opts = "";
-  STANDARD_ZONES.forEach(z => {
-    const isSel = isZoneMatch(z.id, mlStore.currentZone) ? "selected" : "";
-    opts += `<option value="${z.id}" ${isSel}>${z.name}</option>`;
-  });
-  if (sel1) sel1.innerHTML = opts;
-  if (sel2) sel2.innerHTML = opts;
-
-  const dp = document.getElementById("mlDatePicker");
-  if (dp) dp.value = mlStore.selectedDate;
-}
-
-function changeLightZone(newZone) {
-  mlStore.currentZone = newZone;
-  localStorage.setItem("ncw_saved_zone", newZone);
+function changeLightZone(z) {
+  mlStore.currentZone = z;
+  localStorage.setItem("ncw_saved_zone", z);
   renderLightTasks();
-  if (mlStore.activeTab === "assign") {
-    renderAssignDropdown();
-    renderSailorChecklist();
-  }
+  if (mlStore.activeTab === "lmd") loadLightLmdRecords();
 }
 
-function changeLightDate(newDate) {
-  if (!newDate) return;
-  mlStore.selectedDate = newDate;
+function changeLightDate(d) {
+  mlStore.selectedDate = d;
   renderLightTasks();
-  if (mlStore.activeTab === "assign") {
-    renderAssignDropdown();
-    renderSailorChecklist();
-  }
 }
 
 function refreshLightData() {
-  showLightToast("Syncing with live server...", "🔄");
-  renderLightTasks();
-  renderSailorChecklist();
+  showLightToast("Refreshing data...", "🔄");
+  loadLightData();
 }
 
-// =============================================
-// TAB 1: RENDER TASKS & PROGRESS
-// =============================================
+function loadLightData() {
+  if (sailorsDB) {
+    sailorsDB.ref("sailors").once("value", snap => {
+      const d = snap.val();
+      mlStore.sailors = [];
+      if (d) {
+        Object.keys(d).forEach(k => {
+          if (d[k]) mlStore.sailors.push({ id: k, _fbKey: k, ...d[k] });
+        });
+      }
+      renderLightTasks();
+      if (mlStore.activeTab === "sailors") renderLightSailorList();
+    });
+  }
+
+  if (opsDB) {
+    opsDB.ref("work_orders").once("value", snap => {
+      const d = snap.val();
+      mlStore.workOrders = [];
+      if (d) {
+        Object.keys(d).forEach(k => {
+          if (d[k]) mlStore.workOrders.push({ id: k, _fbKey: k, ...d[k] });
+        });
+      }
+      renderLightTasks();
+    });
+
+    opsDB.ref("daily_allocations").once("value", snap => {
+      const d = snap.val();
+      mlStore.dailyAllocations = [];
+      if (d) {
+        Object.keys(d).forEach(k => {
+          if (d[k]) mlStore.dailyAllocations.push({ id: k, _fbKey: k, ...d[k] });
+        });
+      }
+      renderLightTasks();
+    });
+  }
+}
+
+// ---------------------------------------------
+// TAB 1: HOME (TASKS & DETAILS) - PIC - 02 LIGHT CARD
+// ---------------------------------------------
 function renderLightTasks() {
   const container = document.getElementById("mlTaskList");
-  const countBadge = document.getElementById("mlTaskCount");
+  const countEl = document.getElementById("mlTaskCount");
   if (!container) return;
 
+  const targetDate = mlStore.selectedDate;
+  const currentZone = mlStore.currentZone;
+
   const currentZoneTasks = mlStore.workOrders.filter(wo => {
-    const zid = wo.zone_id || wo.zone || "";
-    return isZoneMatch(zid, mlStore.currentZone);
+    const z = wo.zone_id || wo.zone || "";
+    return isZoneMatch(z, currentZone);
   });
 
-  if (countBadge) countBadge.textContent = currentZoneTasks.length;
+  if (countEl) countEl.textContent = currentZoneTasks.length;
 
   if (currentZoneTasks.length === 0) {
     container.innerHTML = `
-      <div class="p-6 text-center text-slate-400 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
-        <p class="text-sm font-bold">No tasks found in ${mlStore.currentZone}</p>
-        <button type="button" onclick="switchLightTab('new')" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold active-scale">
+      <div class="p-6 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
+        <div class="text-3xl">📋</div>
+        <p class="text-xs font-bold text-slate-700">No active tasks in ${currentZone}</p>
+        <button type="button" onclick="openNewTaskModal()" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold active-scale">
           ➕ Create First Job
         </button>
-      </div>
-    `;
+      </div>`;
     return;
   }
 
@@ -210,56 +235,96 @@ function renderLightTasks() {
     const key = wo._fbKey || wo.id;
     const desc = escapeHtml(wo.description || wo.title || "Untitled Job");
     const status = wo.status || "Active";
-    const progress = parseInt(wo.progress, 10) || 0;
-    const priority = wo.priority || "Medium";
+    const progress = Math.min(100, Math.max(0, parseInt(wo.progress, 10) || 0));
+    const prio = wo.priority || "Medium";
+    const isCommittedToday = (wo.last_commit_date === targetDate || wo.last_committed_date === targetDate);
 
-    let statusCls = "bg-emerald-500/20 text-emerald-300 border-emerald-500/30";
-    if (status === "Pending") statusCls = "bg-amber-500/20 text-amber-300 border-amber-500/30";
-    else if (status === "Hold") statusCls = "bg-rose-500/20 text-rose-300 border-rose-500/30";
-    else if (status === "Completed") statusCls = "bg-blue-500/20 text-blue-300 border-blue-500/30";
+    // Assigned Crew
+    const assignedIds = Array.isArray(wo.assigned) ? wo.assigned : (wo.assigned ? Object.values(wo.assigned) : []);
+    const crewCount = assignedIds.length;
 
-    const assignedCount = (Array.isArray(wo.assigned) ? wo.assigned.length : (wo.assigned ? Object.keys(wo.assigned).length : 0));
+    // Badges (pic - 02)
+    let prioBadge = prio === "Low" 
+      ? '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🟢 Low</span>'
+      : (prio === "High" || prio === "Urgent" 
+          ? '<span class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🔴 ' + prio + '</span>'
+          : '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🟡 Medium</span>');
+
+    const statusBadge = '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">' + escapeHtml(status) + '</span>';
+    const activeTodayBadge = isCommittedToday 
+      ? '<span class="bg-emerald-50 text-emerald-700 border border-emerald-300 px-2 py-0.5 rounded-full text-[10px] font-bold">🟢 Active Today</span>'
+      : (crewCount > 0 ? '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⏳ Standby</span>' : '');
+
+    const typeBadge = '<span class="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-bold">' + (wo.type ? '📋 ' + wo.type : 'TASK') + '</span>';
+
+    // Sailor Pills (pic - 02)
+    let sailorPillsHtml = '';
+    if (crewCount > 0) {
+      sailorPillsHtml = assignedIds.slice(0, 3).map(sid => {
+        const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+        const rawName = s ? (s.name || s.off_no || 'Sailor') : ('Sailor ' + sid);
+        const nameParts = rawName.split(' ');
+        const displayShort = nameParts.length > 1 ? nameParts[nameParts.length - 1].toUpperCase() : rawName.toUpperCase();
+        return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">' + 
+               escapeHtml(displayShort) + ' <span class="bg-orange-500 text-white px-1.5 py-0.1 rounded-full text-[8px] font-black">7.0</span></span>';
+      }).join(' ');
+      if (crewCount > 3) sailorPillsHtml += ' <span class="text-[9px] text-slate-400 font-bold">+' + (crewCount - 3) + '</span>';
+    } else {
+      sailorPillsHtml = '<span class="text-slate-400 text-xs italic">No sailors assigned yet</span>';
+    }
+
+    // Quick Commit Button
+    let commitBtnHtml = '';
+    if (!isCommittedToday && status !== 'Completed' && crewCount > 0) {
+      commitBtnHtml = `
+        <div class="pt-2 border-t border-slate-100">
+          <button type="button" onclick="commitLightLabour('${key}')" class="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 active-scale">
+            <span>⚡</span> Proceed - Commit Daily Labour (${crewCount})
+          </button>
+        </div>`;
+    }
 
     html += `
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-2.5 shadow-sm">
-        <div class="flex items-start justify-between gap-2">
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-1.5 mb-1">
-              <span class="text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${statusCls}">${status}</span>
-              <span class="text-[9px] font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">${priority}</span>
-              <span class="text-[9px] font-bold text-teal-400 bg-slate-800 px-1.5 py-0.5 rounded">👷 ${assignedCount} Crew</span>
-            </div>
-            <h3 class="text-xs font-bold text-white leading-tight">${desc}</h3>
-          </div>
+      <!-- WORK ORDER CARD (PIC - 02) -->
+      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md p-3.5 space-y-2.5 transition-all">
+        <!-- Badges Row -->
+        <div class="flex items-center gap-1.5 flex-wrap">
+          ${prioBadge}
+          ${statusBadge}
+          ${activeTodayBadge}
+          ${typeBadge}
+        </div>
+
+        <!-- Title & Location -->
+        <div>
+          <h3 class="text-sm font-bold text-slate-900 leading-snug">${desc}</h3>
+          <p class="text-xs text-slate-500 font-medium mt-0.5">📍 ${escapeHtml(wo.location || (currentZone + ' Area'))}</p>
         </div>
 
         <!-- Progress Slider -->
-        <div class="space-y-1 bg-slate-950/60 p-2 rounded-lg border border-slate-800">
-          <div class="flex items-center justify-between text-[10px] font-bold">
-            <span class="text-slate-400">Progress</span>
-            <span id="progLabel_${key}" class="text-teal-400 font-mono">${progress}%</span>
+        <div class="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+          <div class="flex items-center justify-between text-xs font-bold text-slate-600">
+            <span>Progress</span>
+            <span id="progLabel_${key}" class="text-teal-700 font-mono font-black">${progress}%</span>
           </div>
           <input type="range" min="0" max="100" step="5" value="${progress}" 
                  oninput="document.getElementById('progLabel_${key}').textContent = this.value + '%'"
                  onchange="updateTaskProgress('${key}', this.value)"
-                 class="w-full accent-teal-500 cursor-pointer h-1.5 bg-slate-700 rounded-lg">
+                 class="w-full accent-teal-600 cursor-pointer h-2 bg-slate-200 rounded-lg">
         </div>
 
-        <!-- Action Row -->
-        <div class="flex items-center gap-1.5 pt-1">
-          <button type="button" onclick="quickAssignToTask('${key}')" class="flex-1 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-[11px] rounded-lg border border-slate-700 active-scale flex items-center justify-center gap-1">
-            <span>👥</span> Assign Crew
+        <!-- Assigned Crew Section -->
+        <div class="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1 flex-wrap">
+          <div class="flex items-center gap-1 flex-wrap flex-1">
+            <span class="text-xs font-bold text-slate-700">🧑 ${crewCount} active:</span>
+            ${sailorPillsHtml}
+          </div>
+          <button type="button" onclick="openAssignModal('${key}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-teal-800 font-bold text-[10px] rounded-lg border border-slate-200 active-scale">
+            👥 Assign
           </button>
-          ${status !== "Active" ? `
-            <button type="button" onclick="activateTask('${key}')" class="py-1.5 px-3 bg-emerald-700 hover:bg-emerald-600 text-white font-bold text-[11px] rounded-lg active-scale">
-              Proceed ➔
-            </button>
-          ` : `
-            <button type="button" onclick="toggleTaskStatus('${key}', 'Hold')" class="py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-amber-300 font-bold text-[10px] rounded-lg border border-slate-700 active-scale">
-              Hold
-            </button>
-          `}
         </div>
+
+        ${commitBtnHtml}
       </div>
     `;
   });
@@ -274,326 +339,388 @@ function updateTaskProgress(key, val) {
     progress: num,
     last_updated: Date.now()
   }).then(() => {
-    showLightToast(`Progress updated to ${num}%`, "📈");
+    showLightToast(`Progress set to ${num}%`, "📈");
   });
 }
 
-function activateTask(key) {
-  if (!opsDB || !key) return;
-  opsDB.ref(`work_orders/${key}`).update({
-    status: "Active",
-    last_updated: Date.now()
-  }).then(() => {
-    showLightToast("Work Order Activated / Proceeded!", "🚀");
-  });
-}
+function commitLightLabour(key) {
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(key) || String(w._fbKey) === String(key));
+  if (!wo) return;
+  const today = mlStore.selectedDate;
+  const assigned = Array.isArray(wo.assigned) ? wo.assigned : (wo.assigned ? Object.values(wo.assigned) : []);
 
-function toggleTaskStatus(key, newStatus) {
-  if (!opsDB || !key) return;
-  opsDB.ref(`work_orders/${key}`).update({
-    status: newStatus,
-    last_updated: Date.now()
-  }).then(() => {
-    showLightToast(`Status changed to ${newStatus}`, "ℹ️");
-  });
-}
-
-// =============================================
-// TAB 2: CREATE NEW WORK ORDER
-// =============================================
-function submitNewLightTask() {
-  const descEl = document.getElementById("mlNewDesc");
-  const zoneEl = document.getElementById("mlNewZone");
-  const prioEl = document.getElementById("mlNewPriority");
-
-  const desc = descEl ? descEl.value.trim() : "";
-  const zone = zoneEl ? zoneEl.value : mlStore.currentZone;
-  const prio = prioEl ? prioEl.value : "Medium";
-
-  if (!desc) {
-    showLightToast("Please enter work description!", "⚠️");
-    if (descEl) descEl.focus();
+  if (assigned.length === 0) {
+    showLightToast("No sailors assigned to commit", "⚠️");
     return;
   }
 
-  const payload = {
+  assigned.forEach(sid => {
+    opsDB.ref(`daily_allocations/${today}_${sid}`).set({
+      date: today,
+      sailor_id: sid,
+      work_order_id: wo.id || key,
+      status: "Active"
+    });
+  });
+
+  opsDB.ref(`work_orders/${key}`).update({
+    last_commit_date: today,
+    last_committed_date: today
+  }).then(() => {
+    wo.last_commit_date = today;
+    wo.last_committed_date = today;
+    showLightToast(`Committed ${assigned.length} sailor(s)!`, "⚡");
+    renderLightTasks();
+  });
+}
+
+// ---------------------------------------------
+// TAB 2: CIVIL ESTIMATOR (LIGHTWEIGHT)
+// ---------------------------------------------
+let mLightEstSummary = "";
+
+function selectLightEstCat(cat) {
+  mlStore.estCategory = cat;
+  ["concrete", "brick", "plaster"].forEach(c => {
+    const inputDiv = document.getElementById(c === "concrete" ? "mlEstConcInputs" : c === "brick" ? "mlEstBrickInputs" : "mlEstPlastInputs");
+    const btn = document.getElementById(c === "concrete" ? "mlCatBtnConc" : c === "brick" ? "mlCatBtnBrick" : "mlCatBtnPlast");
+    if (inputDiv) {
+      if (c === cat) inputDiv.classList.remove("hidden");
+      else inputDiv.classList.add("hidden");
+    }
+    if (btn) {
+      if (c === cat) btn.className = "flex-1 py-1.5 rounded-lg bg-teal-600 text-white active-scale";
+      else btn.className = "flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 active-scale";
+    }
+  });
+  calcLightEstimate();
+}
+
+function calcLightEstimate() {
+  const grid = document.getElementById("mlEstResultGrid");
+  const costEl = document.getElementById("mlEstCost");
+  const sumEl = document.getElementById("mlEstSummary");
+  if (!grid || !costEl) return;
+
+  const cat = mlStore.estCategory;
+  let cards = [];
+  let summary = "";
+  let totalCost = 0;
+
+  if (cat === "concrete") {
+    const l = parseFloat(document.getElementById("mlConcL")?.value) || 0;
+    const w = parseFloat(document.getElementById("mlConcW")?.value) || 0;
+    const t = parseFloat(document.getElementById("mlConcT")?.value) || 0;
+    const wetVol = l * w * (t / 12);
+    const dryVol = wetVol * 1.54;
+
+    // 1:2:4 Mix
+    const cementBags = Math.ceil((1 / 7) * dryVol / 1.25);
+    const sandCubes = ((2 / 7) * dryVol / 100).toFixed(2);
+    const metalCubes = ((4 / 7) * dryVol / 100).toFixed(2);
+    totalCost = (cementBags * 2400) + (parseFloat(sandCubes) * 28000) + (parseFloat(metalCubes) * 26000);
+
+    cards = [
+      { label: "Cement Bags", val: cementBags + " Bags" },
+      { label: "River Sand", val: sandCubes + " Cubes" },
+      { label: "Metal (3/4)", val: metalCubes + " Cubes" },
+      { label: "Volume", val: wetVol.toFixed(1) + " cu.ft" }
+    ];
+    summary = `Concrete 1:2:4 (${l}ft × ${w}ft × ${t}"): ${cementBags} Cement Bags, ${sandCubes} Sand Cubes, ${metalCubes} Metal Cubes. Total: Rs ${totalCost.toLocaleString()}`;
+  } else if (cat === "brick") {
+    const l = parseFloat(document.getElementById("mlBrickL")?.value) || 0;
+    const h = parseFloat(document.getElementById("mlBrickH")?.value) || 0;
+    const area = l * h;
+    const count = Math.ceil(area * 5.5);
+    const cementBags = Math.ceil(area * 0.07);
+    const sandCubes = (area * 0.0035).toFixed(2);
+    totalCost = (count * 35) + (cementBags * 2400) + (parseFloat(sandCubes) * 28000);
+
+    cards = [
+      { label: "Clay Bricks", val: count + " Bricks" },
+      { label: "Mortar Cement", val: cementBags + " Bags" },
+      { label: "Mortar Sand", val: sandCubes + " Cubes" },
+      { label: "Wall Area", val: area.toFixed(0) + " Sq.Ft" }
+    ];
+    summary = `Brickwork (${l}ft × ${h}ft): ${count} Bricks, ${cementBags} Cement Bags, ${sandCubes} Sand Cubes. Total: Rs ${totalCost.toLocaleString()}`;
+  } else {
+    const area = parseFloat(document.getElementById("mlPlastArea")?.value) || 0;
+    const cementBags = Math.ceil(area * 0.012);
+    const sandCubes = (area * 0.012 * 0.06).toFixed(2);
+    const paintLitres = Math.ceil((area / 180) * 4);
+    totalCost = (cementBags * 2400) + (parseFloat(sandCubes) * 28000) + (paintLitres * 1800);
+
+    cards = [
+      { label: "Plaster Cement", val: cementBags + " Bags" },
+      { label: "Plaster Sand", val: sandCubes + " Cubes" },
+      { label: "Paint Litres", val: paintLitres + " L" },
+      { label: "Area", val: area.toFixed(0) + " Sq.Ft" }
+    ];
+    summary = `Plaster & Paint (${area} Sq.Ft): ${cementBags} Cement Bags, ${sandCubes} Sand, ${paintLitres}L Paint. Total: Rs ${totalCost.toLocaleString()}`;
+  }
+
+  mLightEstSummary = summary;
+  costEl.textContent = `Rs ${totalCost.toLocaleString()}`;
+  grid.innerHTML = cards.map(c => `
+    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+      <div class="text-[9px] font-bold text-slate-500 uppercase">${c.label}</div>
+      <div class="text-xs font-black text-slate-900 font-mono mt-0.5">${c.val}</div>
+    </div>
+  `).join("");
+  if (sumEl) sumEl.textContent = summary;
+}
+
+function copyLightEstimate() {
+  if (!mLightEstSummary) calcLightEstimate();
+  navigator.clipboard?.writeText(mLightEstSummary).then(() => {
+    showLightToast("Estimate copied to clipboard!", "📋");
+  });
+}
+
+// ---------------------------------------------
+// TAB 3: LMD TRACKER (LAST MAINTAINED DATE)
+// ---------------------------------------------
+function loadLightLmdRecords() {
+  const container = document.getElementById("mlLmdList");
+  if (!container) return;
+
+  const zone = mlStore.currentZone;
+  const cleanZone = zone.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  const defaultTemplates = [
+    { id: "pmp_01", name: "Water Pump #1", location: "Pump House", last_date: "2026-08-15", cycle_days: 30 },
+    { id: "pmp_02", name: "Standby Pump #2", location: "Pump House", last_date: "2026-08-10", cycle_days: 30 },
+    { id: "gen_01", name: "Backup Generator", location: "Gen Room", last_date: "2026-08-25", cycle_days: 30 },
+    { id: "elec_01", name: "Electrical DB Panel", location: "Main Block", last_date: "2026-06-20", cycle_days: 90 }
+  ];
+
+  if (opsDB) {
+    opsDB.ref(`lmd_records/${cleanZone}`).once("value", snap => {
+      const data = snap.val();
+      if (data) {
+        mlStore.lmdRecords = Object.keys(data).map(k => ({ id: k, ...data[k] }));
+      } else {
+        mlStore.lmdRecords = defaultTemplates;
+      }
+      renderLightLmdList();
+    });
+  } else {
+    mlStore.lmdRecords = defaultTemplates;
+    renderLightLmdList();
+  }
+}
+
+function renderLightLmdList() {
+  const container = document.getElementById("mlLmdList");
+  if (!container) return;
+
+  const q = (document.getElementById("mlLmdSearch")?.value || "").toLowerCase().trim();
+  const filtered = mlStore.lmdRecords.filter(r => !q || (r.name && r.name.toLowerCase().includes(q)) || (r.location && r.location.toLowerCase().includes(q)));
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="p-4 text-center text-slate-400 text-xs">No records found.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(r => {
+    return `
+      <div class="bg-white rounded-2xl border border-slate-200 p-3 space-y-2 shadow-sm">
+        <div class="flex items-start justify-between">
+          <div>
+            <h4 class="text-xs font-bold text-slate-900">${escapeHtml(r.name)}</h4>
+            <p class="text-[10px] text-slate-500">📍 ${escapeHtml(r.location || 'Zone')}</p>
+          </div>
+          <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[9px] font-bold">🟢 Active</span>
+        </div>
+        <div class="text-[10px] text-slate-600 bg-slate-50 p-2 rounded-xl border border-slate-200 flex justify-between">
+          <span>Last Serviced: <strong>${r.last_date || 'N/A'}</strong></span>
+          <span>Cycle: <strong>${r.cycle_days || 30}d</strong></span>
+        </div>
+        <button type="button" onclick="markLightLmdToday('${r.id}')" class="w-full py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-[11px] font-bold active-scale shadow-xs">
+          ⚡ Mark Serviced Today
+        </button>
+      </div>
+    `;
+  }).join("");
+}
+
+function filterLightLmd() {
+  renderLightLmdList();
+}
+
+function markLightLmdToday(assetId) {
+  const today = getLocalDateString();
+  const zone = mlStore.currentZone;
+  const cleanZone = zone.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  const item = mlStore.lmdRecords.find(r => String(r.id) === String(assetId));
+  if (item) item.last_date = today;
+
+  if (opsDB) {
+    opsDB.ref(`lmd_records/${cleanZone}/${assetId}`).update({ last_date: today });
+  }
+  showLightToast("Serviced date updated to today!", "⚡");
+  renderLightLmdList();
+}
+
+// ---------------------------------------------
+// TAB 4: SAILORS DIRECTORY
+// ---------------------------------------------
+function renderLightSailorList() {
+  const container = document.getElementById("mlSailorList");
+  const countEl = document.getElementById("mlSailorCount");
+  if (!container) return;
+
+  const q = (document.getElementById("mlSailorSearch")?.value || "").toLowerCase().trim();
+  const sailors = mlStore.sailors || [];
+
+  const filtered = sailors.filter(s => {
+    if (!q) return true;
+    const off = (s.off_no || s.official_number || "").toLowerCase();
+    const name = (s.name || "").toLowerCase();
+    const trade = (s.trade || s.branch || "").toLowerCase();
+    return off.includes(q) || name.includes(q) || trade.includes(q);
+  });
+
+  if (countEl) countEl.textContent = filtered.length;
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="p-4 text-center text-slate-400 text-xs">No sailors found.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.slice(0, 80).map(s => {
+    const off = s.off_no || s.official_number || "—";
+    const rank = s.rank || "AB";
+    const name = s.name || "Sailor";
+    const trade = s.trade || s.branch || "General";
+
+    return `
+      <div class="bg-white rounded-xl border border-slate-200 p-2.5 flex items-center justify-between shadow-xs">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center text-xs font-black">
+            ${rank}
+          </div>
+          <div>
+            <h4 class="text-xs font-bold text-slate-900 leading-tight">${escapeHtml(name)}</h4>
+            <span class="text-[10px] text-slate-500 font-mono">${escapeHtml(off)} • ${escapeHtml(trade)}</span>
+          </div>
+        </div>
+        <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[9px] font-bold">Available</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function filterLightSailors() {
+  renderLightSailorList();
+}
+
+// ---------------------------------------------
+// MODALS: QUICK ASSIGN & NEW TASK
+// ---------------------------------------------
+function openAssignModal(woKey) {
+  mlStore.selectedAssignKey = woKey;
+  const modal = document.getElementById("mlAssignModal");
+  const picker = document.getElementById("mlAssignSailorPicker");
+  if (!modal || !picker) return;
+
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(woKey) || String(w._fbKey) === String(woKey));
+  const assigned = new Set((wo && Array.isArray(wo.assigned)) ? wo.assigned.map(String) : []);
+
+  picker.innerHTML = mlStore.sailors.slice(0, 60).map(s => {
+    const sid = String(s.id || s._fbKey);
+    const checked = assigned.has(sid) ? "checked" : "";
+    return `
+      <label class="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium cursor-pointer">
+        <span class="text-slate-800"><strong>${s.rank || 'AB'}</strong> ${escapeHtml(s.name || s.off_no)} (${s.trade || 'MA'})</span>
+        <input type="checkbox" value="${sid}" ${checked} class="ml-assign-check w-4 h-4 accent-teal-600">
+      </label>
+    `;
+  }).join("");
+
+  modal.classList.remove("hidden");
+}
+
+function closeAssignModal() {
+  const modal = document.getElementById("mlAssignModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function saveAssignedCrew() {
+  const key = mlStore.selectedAssignKey;
+  if (!key || !opsDB) return;
+
+  const checks = document.querySelectorAll(".ml-assign-check:checked");
+  const crew = Array.from(checks).map(c => c.value);
+
+  opsDB.ref(`work_orders/${key}/assigned`).set(crew).then(() => {
+    const wo = mlStore.workOrders.find(w => String(w.id) === String(key) || String(w._fbKey) === String(key));
+    if (wo) wo.assigned = crew;
+    closeAssignModal();
+    showLightToast(`Assigned ${crew.length} sailor(s)!`, "👥");
+    renderLightTasks();
+  });
+}
+
+function openNewTaskModal() {
+  const modal = document.getElementById("mlNewTaskModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeNewTaskModal() {
+  const modal = document.getElementById("mlNewTaskModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function submitNewTask() {
+  const desc = (document.getElementById("mlNewDesc")?.value || "").trim();
+  const prio = document.getElementById("mlNewPriority")?.value || "Medium";
+  const dur = parseInt(document.getElementById("mlNewDuration")?.value, 10) || 1;
+
+  if (!desc) {
+    showLightToast("Please enter task description", "⚠️");
+    return;
+  }
+
+  const zone = mlStore.currentZone;
+  const newRef = opsDB.ref("work_orders").push();
+  const newWo = {
+    id: newRef.key,
     description: desc,
     zone_id: zone,
-    priority: prio,
     status: "Active",
+    priority: prio,
     progress: 0,
-    start_date: mlStore.selectedDate,
+    duration: dur,
     created_at: Date.now()
   };
 
-  opsDB.ref("work_orders").push(payload).then(() => {
-    if (descEl) descEl.value = "";
-    showLightToast("Work Order Created Successfully! 🚀", "✅");
-    mlStore.currentZone = zone;
-    const sel = document.getElementById("mlZoneSelect");
-    if (sel) sel.value = zone;
-    switchLightTab("tasks");
-  }).catch(err => {
-    showLightToast("Error: " + err.message, "⚠️");
+  newRef.set(newWo).then(() => {
+    mlStore.workOrders.unshift(newWo);
+    closeNewTaskModal();
+    document.getElementById("mlNewDesc").value = "";
+    showLightToast("Work Order created!", "✅");
+    renderLightTasks();
   });
 }
 
-// =============================================
-// TAB 3: DAILY LABOUR ASSIGN & EVALUATION
-// =============================================
-function renderAssignDropdown() {
-  const sel = document.getElementById("mlAssignWoSelect");
-  if (!sel) return;
+function showLightToast(msg, icon) {
+  const toast = document.getElementById("mlToast");
+  const msgEl = document.getElementById("mlToastMsg");
+  const iconEl = document.getElementById("mlToastIcon");
+  if (!toast || !msgEl) return;
 
-  const currentZoneTasks = mlStore.workOrders.filter(wo => {
-    const zid = wo.zone_id || wo.zone || "";
-    return isZoneMatch(zid, mlStore.currentZone);
-  });
+  msgEl.textContent = msg;
+  if (iconEl) iconEl.textContent = icon || "✅";
 
-  let opts = '<option value="">-- Choose Active Work Order --</option>';
-  currentZoneTasks.forEach(wo => {
-    const key = wo._fbKey || wo.id;
-    const isSel = key === mlStore.selectedAssignWoKey ? "selected" : "";
-    const desc = escapeHtml(wo.description || "Untitled Job");
-    opts += `<option value="${key}" ${isSel}>${desc}</option>`;
-  });
-  sel.innerHTML = opts;
+  toast.classList.remove("translate-y-24");
+  toast.classList.add("translate-y-0");
+
+  setTimeout(() => {
+    toast.classList.remove("translate-y-0");
+    toast.classList.add("translate-y-24");
+  }, 2200);
 }
 
-function quickAssignToTask(woKey) {
-  mlStore.selectedAssignWoKey = woKey;
-  switchLightTab("assign");
-}
-
-function onAssignWoChanged() {
-  const sel = document.getElementById("mlAssignWoSelect");
-  mlStore.selectedAssignWoKey = sel ? sel.value : "";
-  renderSailorChecklist();
-}
-
-function renderSailorChecklist() {
-  const container = document.getElementById("mlSailorList");
-  const countEl = document.getElementById("mlAssignSelectedCount");
-  if (!container) return;
-
-  const wo = mlStore.workOrders.find(w => (w._fbKey || w.id) === mlStore.selectedAssignWoKey);
-  const assignedSet = new Set();
-  if (wo && wo.assigned) {
-    const arr = Array.isArray(wo.assigned) ? wo.assigned : Object.values(wo.assigned);
-    arr.forEach(id => assignedSet.add(String(id)));
-  }
-
-  // Also include today's committed allocations for this task
-  (mlStore.dailyAllocations || []).forEach(da => {
-    if (da.date === mlStore.selectedDate && da.work_order_id === mlStore.selectedAssignWoKey) {
-      if (da.sailor_id) assignedSet.add(String(da.sailor_id));
-    }
-  });
-
-  mlStore.assignedTemp = assignedSet;
-  if (countEl) countEl.textContent = `${assignedSet.size} Selected`;
-
-  // Filter sailors belonging to current zone or all if unassigned
-  const zoneSailors = mlStore.sailors.filter(s => {
-    const sz = s.zone_assigned || s.zone || "";
-    return isZoneMatch(sz, mlStore.currentZone) || assignedSet.has(String(s.id)) || assignedSet.has(String(s._fbKey));
-  });
-
-  if (zoneSailors.length === 0) {
-    container.innerHTML = `<div class="p-3 text-center text-slate-500 text-xs">No sailors assigned to ${mlStore.currentZone}</div>`;
-    return;
-  }
-
-  let html = "";
-  zoneSailors.forEach(s => {
-    const sid = String(s.id || s._fbKey);
-    const sfb = String(s._fbKey || s.id);
-    const isChecked = assignedSet.has(sid) || assignedSet.has(sfb);
-    const name = escapeHtml(s.name || "Unknown");
-    const offNo = escapeHtml(s.official_number || s.off_no || "");
-    const rank = escapeHtml(s.rank || "");
-    const trade = escapeHtml(s.trade || "");
-
-    html += `
-      <label class="flex items-center justify-between p-2 hover:bg-slate-900 rounded-lg cursor-pointer transition-colors ${isChecked ? 'bg-teal-950/30' : ''}">
-        <div class="flex items-center gap-2 min-w-0">
-          <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleSailorSelection('${sid}', this.checked)" class="w-4 h-4 rounded accent-teal-500 cursor-pointer">
-          <div class="truncate">
-            <p class="text-xs font-bold text-white truncate">${rank} ${name}</p>
-            <p class="text-[10px] text-slate-400 font-mono">${offNo} • <strong class="text-teal-400">${trade}</strong></p>
-          </div>
-        </div>
-        <!-- Quick 1-Tap Evaluation (Stars/Rating) -->
-        <button type="button" onclick="event.preventDefault(); event.stopPropagation(); quickEvaluateSailor('${sid}')" class="px-2 py-0.5 rounded bg-slate-800 text-[10px] font-bold text-amber-300 border border-slate-700 active-scale" title="Evaluate Sailor">
-          ⭐ Rate
-        </button>
-      </label>
-    `;
-  });
-
-  container.innerHTML = html;
-}
-
-function toggleSailorSelection(sid, isChecked) {
-  if (isChecked) mlStore.assignedTemp.add(sid);
-  else mlStore.assignedTemp.delete(sid);
-
-  const countEl = document.getElementById("mlAssignSelectedCount");
-  if (countEl) countEl.textContent = `${mlStore.assignedTemp.size} Selected`;
-}
-
-function quickEvaluateSailor(sid) {
-  const rating = prompt("Enter Sailor Evaluation (1-5 Stars or Notes):", "5");
-  if (!rating) return;
-  opsDB.ref(`evaluations/${mlStore.selectedDate}_${sid}`).set({
-    date: mlStore.selectedDate,
-    sailor_id: sid,
-    rating: rating,
-    timestamp: Date.now()
-  }).then(() => {
-    showLightToast("Sailor Evaluated: " + rating + " ⭐", "⭐");
-  });
-}
-
-function commitLightLabour() {
-  const woKey = mlStore.selectedAssignWoKey;
-  if (!woKey) {
-    showLightToast("Please select a Work Order first!", "⚠️");
-    return;
-  }
-
-  const assignedArr = Array.from(mlStore.assignedTemp);
-  if (assignedArr.length === 0) {
-    showLightToast("No sailors selected to commit!", "⚠️");
-    return;
-  }
-
-  // 1. Update work order assigned array
-  opsDB.ref(`work_orders/${woKey}`).update({
-    assigned: assignedArr,
-    last_assigned_date: mlStore.selectedDate,
-    last_updated: Date.now()
-  });
-
-  // 2. Commit to daily_allocations
-  const batch = {};
-  assignedArr.forEach(sid => {
-    const key = `${mlStore.selectedDate}_${sid}`;
-    batch[`daily_allocations/${key}`] = {
-      date: mlStore.selectedDate,
-      sailor_id: sid,
-      work_order_id: woKey,
-      zone_id: mlStore.currentZone,
-      status: "Active",
-      role_today: "Worker",
-      timestamp: Date.now()
-    };
-  });
-
-  opsDB.ref().update(batch).then(() => {
-    showLightToast(`Committed ${assignedArr.length} Sailors for Today! 🚀`, "✅");
-    switchLightTab("tasks");
-  }).catch(err => {
-    showLightToast("Error: " + err.message, "⚠️");
-  });
-}
-
-// =============================================
-// TAB 4: INVENTORY
-// =============================================
-function renderLightInventory(filter = "") {
-  const container = document.getElementById("mlInvList");
-  if (!container) return;
-
-  const f = filter.toLowerCase().trim();
-  const list = (mlStore.inventory || []).filter(item => {
-    if (!f) return true;
-    const name = (item.name || item.item_name || "").toLowerCase();
-    const cat = (item.category || "").toLowerCase();
-    return name.includes(f) || cat.includes(f);
-  });
-
-  if (list.length === 0) {
-    container.innerHTML = `<div class="p-4 text-center text-slate-500 text-xs">No inventory items found.</div>`;
-    return;
-  }
-
-  let html = "";
-  list.forEach(it => {
-    const name = escapeHtml(it.name || it.item_name || "Item");
-    const qty = it.qty !== undefined ? it.qty : (it.quantity || 0);
-    const unit = escapeHtml(it.unit || "units");
-    const cat = escapeHtml(it.category || "General");
-
-    html += `
-      <div class="bg-slate-900 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between">
-        <div class="min-w-0 flex-1">
-          <p class="text-xs font-bold text-white truncate">${name}</p>
-          <p class="text-[10px] text-slate-400">${cat}</p>
-        </div>
-        <div class="text-right shrink-0">
-          <span class="text-xs font-black text-teal-400 font-mono">${qty}</span>
-          <span class="text-[9px] text-slate-400 block">${unit}</span>
-        </div>
-      </div>
-    `;
-  });
-  container.innerHTML = html;
-}
-
-function filterLightInventory() {
-  const q = document.getElementById("mlInvSearch");
-  renderLightInventory(q ? q.value : "");
-}
-
-// =============================================
-// REALTIME DATA LISTENERS
-// =============================================
-function initLightListeners() {
-  initZoneSelectors();
-
-  // 1. Work Orders Listener
-  if (opsDB) {
-    opsDB.ref("work_orders").on("value", snapshot => {
-      const val = snapshot.val() || {};
-      mlStore.workOrders = Object.entries(val).map(([k, v]) => ({
-        ...v,
-        _fbKey: k,
-        id: v.id || k
-      }));
-      renderLightTasks();
-      if (mlStore.activeTab === "assign") renderAssignDropdown();
-    });
-
-    // 2. Daily Allocations Listener
-    opsDB.ref("daily_allocations").on("value", snapshot => {
-      const val = snapshot.val() || {};
-      mlStore.dailyAllocations = Object.values(val);
-      if (mlStore.activeTab === "assign") renderSailorChecklist();
-    });
-
-    // 3. Inventory Listener
-    opsDB.ref("inventory").on("value", snapshot => {
-      const val = snapshot.val() || {};
-      mlStore.inventory = Object.values(val);
-      if (mlStore.activeTab === "inventory") renderLightInventory();
-    });
-  }
-
-  // 4. Sailors Database Listener
-  if (sailorsDB) {
-    sailorsDB.ref("sailors").on("value", snapshot => {
-      const val = snapshot.val() || {};
-      mlStore.sailors = Object.entries(val).map(([k, v]) => ({
-        ...v,
-        _fbKey: k,
-        id: v.id || k
-      }));
-      if (mlStore.activeTab === "assign") renderSailorChecklist();
-    });
-  }
-}
-
-window.addEventListener("DOMContentLoaded", () => {
-  initLightListeners();
-});
+window.addEventListener("DOMContentLoaded", initLightApp);
