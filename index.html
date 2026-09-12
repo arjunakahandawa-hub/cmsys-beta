@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="preconnect" href="https://ncw-ps-operations-default-rtdb.asia-southeast1.firebasedatabase.app">
@@ -11,7 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="manifest" href="manifest.json">
     <title>CMSys v2.2 | CE Management System — SLN Trincomalee</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link rel="stylesheet" href="tailwind-static.css">
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
@@ -555,24 +555,125 @@
 
         /* ===== Print ===== */
         @media print {
-            .no-print { display: none !important; }
-            body { background: white; color: black; font-family: sans-serif; }
-            .print-header { display: block !important; }
-            .print-signatures { display: grid !important; margin-top: 40px !important; }
-            .print-table-container { 
+            @page {
+                size: A4 portrait;
+                margin: 8mm 6mm 10mm 6mm;
+            }
+            *, *::before, *::after {
+                box-sizing: border-box !important;
+            }
+            .no-print { 
+                display: none !important; 
+            }
+            html, body { 
+                background: #ffffff !important; 
+                color: #000000 !important; 
+                font-family: sans-serif !important;
+                height: auto !important;
+                min-height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            /* Hide general UI layout structure in print */
+            header, 
+            #navalHeader,
+            .header-container, 
+            #tacticalStatusBar,
+            #leftSidebarContainer, 
+            #sidebarToggleBtn, 
+            #sidebarBackdrop,
+            #mobileTabBar, 
+            #mobileMoreMenuSheet,
+            .modal-overlay,
+            [id$="Modal"],
+            [id$="modal"] { 
+                display: none !important; 
+            }
+            /* Reset main wrapper restrictions so content flows across multiple pages */
+            main, .container, .view-content, #view-summary { 
+                padding: 0 !important; 
+                margin: 0 !important; 
+                width: 100% !important; 
+                max-width: none !important;
+                min-width: 0 !important;
+                height: auto !important;
+                min-height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+                display: block !important;
+                position: static !important;
+                transform: none !important;
+            }
+            .view-content.hidden {
+                display: none !important;
+            }
+            .print-header { 
+                display: block !important; 
+                margin-bottom: 8px !important;
+            }
+            .print-signatures { 
+                display: grid !important; 
+                margin-top: 25px !important; 
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            .glass-card { 
+                background: #ffffff !important; 
+                box-shadow: none !important; 
+                border: none !important; 
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            /* Table & scroll wrapper fixes for complete multi-page printing */
+            .print-table-container,
+            #summaryTableScrollContainer { 
                 border: none !important; 
                 padding: 0 !important; 
+                margin: 0 !important;
                 box-shadow: none !important; 
-                background: white !important;
+                background: #ffffff !important; 
                 overflow: visible !important;
+                max-height: none !important;
+                height: auto !important;
+                display: block !important;
+                position: static !important;
             }
-            table { border-color: #000 !important; width: 100% !important; }
-            th, td { border-color: #000 !important; padding: 4px 6px !important; color: #000 !important; }
-            th { background-color: #f8fafc !important; color: #000 !important; }
-            /* Hide general layout structure in print */
-            #leftSidebarContainer, #sidebarToggleBtn, header, .header-container, #mobileTabBar { display: none !important; }
-            main, .view-content { padding: 0 !important; margin: 0 !important; width: 100% !important; }
-            .glass-card { background: white !important; box-shadow: none !important; border: none !important; }
+            table, #summaryMatrixTable { 
+                border-color: #000000 !important; 
+                width: 100% !important; 
+                border-collapse: collapse !important;
+                page-break-inside: auto !important;
+                break-inside: auto !important;
+                font-size: 10px !important;
+            }
+            thead {
+                display: table-header-group !important;
+                position: static !important;
+            }
+            tbody {
+                display: table-row-group !important;
+            }
+            tr {
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }
+            th, td { 
+                border: 1px solid #000000 !important; 
+                padding: 2.5px 4px !important; 
+                color: #000000 !important; 
+                position: static !important;
+                top: auto !important;
+                box-shadow: none !important;
+            }
+            th { 
+                background-color: #f1f5f9 !important; 
+                color: #000000 !important; 
+                font-weight: bold !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
         }
 
         /* ===== Button Hover & Active Effects ===== */
@@ -770,7 +871,7 @@
                     </div>
                     <div>
                         <div class="flex items-center gap-1.5 sm:gap-2">
-                            <h1 class="text-xs sm:text-[15px] font-bold text-white tracking-wide">CMSys <span class="text-teal-400 font-extrabold text-[9px] sm:text-[12px] bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-500/30 font-mono">v5.24.77</span></h1>
+                            <h1 class="text-xs sm:text-[15px] font-bold text-white tracking-wide">CMSys <span class="text-teal-400 font-extrabold text-[9px] sm:text-[12px] bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-500/30 font-mono">v5.25.18</span></h1>
                         </div>
                         <p class="brand-tag leading-none hidden md:block">CE Management · Trincomalee</p>
                     </div>
@@ -7665,10 +7766,42 @@
 
     <!-- Version Tag for Debugging -->
     <div class="hidden md:block fixed bottom-2 right-2 text-[10px] text-teal-400 font-bold z-[9999] bg-slate-900/90 border border-teal-500/30 px-2 py-1 rounded-lg shadow pointer-events-none font-mono">
-        App Version: v5.24.87
+        App Version: v5.25.18
     </div>
 
-    <script src="app.js?v=5.24.87"></script>
+    <!-- Auto-thumbnail: Redirect small sailor photos to thumb.php for mobile performance -->
+    <script>
+    (function(){
+        const THUMB_MAX_SIZE = 100; // images displayed under 100px get thumbnailed
+        function processImg(img) {
+            if (!img || img.dataset.thumbProcessed) return;
+            const src = img.getAttribute('src') || '';
+            if (!src || src.startsWith('data:') || src.includes('thumb.php')) return;
+            // Only process local images/ directory images
+            if (!src.match(/^images\/[^\/]+$/i)) return;
+            img.dataset.thumbProcessed = '1';
+            // Use 160px thumb: good sharpness on retina displays up to 80x80 CSS px
+            img.src = 'thumb.php?src=' + encodeURIComponent(src) + '&w=160';
+        }
+        // Process existing images
+        document.querySelectorAll('img[src^="images/"]').forEach(processImg);
+        // Watch for dynamically added images (renderSailorCard etc.)
+        const observer = new MutationObserver(mutations => {
+            for (const m of mutations) {
+                for (const node of m.addedNodes) {
+                    if (node.nodeType !== 1) continue;
+                    if (node.tagName === 'IMG') processImg(node);
+                    else if (node.querySelectorAll) {
+                        node.querySelectorAll('img[src^="images/"]').forEach(processImg);
+                    }
+                }
+            }
+        });
+        observer.observe(document.body || document.documentElement, {childList: true, subtree: true});
+    })();
+    </script>
+
+    <script src="app.js?v=5.25.18"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load

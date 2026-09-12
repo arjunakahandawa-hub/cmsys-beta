@@ -152,7 +152,14 @@ function isZoneMatch(z1, z2) {
   const s2 = String(z2).trim().toLowerCase().replace(/[-_\s&]+/g, "");
   if (s1 === s2) return true;
 
-  if ((s1.startsWith("carpenter") || s1.startsWith("carpentry")) && (s2.startsWith("carpenter") || s2.startsWith("carpentry"))) return true;
+  const isCarpentryOrPaint = (s) =>
+    s.includes("carpenter") ||
+    s.includes("carpentry") ||
+    s.includes("paintworkshop") ||
+    s.includes("paintershop") ||
+    s.includes("paintshop") ||
+    s.includes("carpenterpaint");
+  if (isCarpentryOrPaint(s1) && isCarpentryOrPaint(s2)) return true;
 
   const letterMap = {
     a: "azone",
@@ -234,8 +241,24 @@ function getInitialAppZone() {
   return localStorage.getItem("ncw_saved_zone") || "A-Zone";
 }
 
+function getInitialAppView() {
+  try {
+    const hash = window.location.hash ? window.location.hash.replace(/^#/, "").trim().toLowerCase() : "";
+    const saved = localStorage.getItem("ncw_saved_view");
+    const validViews = [
+      "dashboard", "projects", "jobcards", "inventory", "estimates",
+      "maintenance", "reports", "settings", "dailydetails", "summary",
+      "sailors", "sailordashboard", "documents", "nastatus"
+    ];
+    if (hash && validViews.includes(hash)) return hash;
+    if (saved && validViews.includes(saved)) return saved;
+  } catch (e) {}
+  return "dashboard";
+}
+
 const store = {
   currentZone: getInitialAppZone(),
+  currentView: getInitialAppView(),
   activeProfileType: null,
   activeProfileZone: null,
   currentFilter: "all",
@@ -279,10 +302,21 @@ const store = {
   dailyAllocationsMap: {}, // Static config (not stored in Firebase)
   approvalAuthorities: ["CCED(E)", "CENA", "DAC(E)", "DGCE", "CCEO(E)"],
   zones: [
-    { id: "A-Zone", name: "A-Zone" },
-    { id: "BC-Zone", name: "BC-Zone" },
-    { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop" },
-    { id: "Welding-Shop", name: "Welding Shop" },
+    { id: "A-Zone", name: "A-Zone", status: "Active", active: true },
+    { id: "B-Zone", name: "B-Zone", status: "Active", active: true },
+    { id: "BC-Zone", name: "BC-Zone", status: "Active", active: true },
+    { id: "C-Zone", name: "C-Zone", status: "Active", active: true },
+    { id: "D-Zone", name: "D-Zone", status: "Active", active: true },
+    { id: "E-Zone", name: "E-Zone", status: "Active", active: true },
+    { id: "G-Zone", name: "G-Zone", status: "Active", active: true },
+    { id: "FH-Zone", name: "FH-Zone", status: "Active", active: true },
+    { id: "OTW", name: "OTW", status: "Active", active: true },
+    { id: "Supply-School", name: "Supply School", status: "Active", active: true },
+    { id: "Pump-House", name: "Pump House", status: "Active", active: true },
+    { id: "Main-Store", name: "Main Store", status: "Active", active: true },
+    { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop", status: "Active", active: true },
+    { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
+    { id: "Aluminium-Workshop", name: "Aluminium Workshop", status: "Active", active: true }
   ],
   offChargeDestinations: [
     "SLNS Tissa",
@@ -1655,6 +1689,11 @@ function switchView(view, preventPushState = false) {
   }
 
   store.currentView = view;
+  if (view && view !== "tempissues") {
+    try {
+      localStorage.setItem("ncw_saved_view", view);
+    } catch (e) {}
+  }
   if (!preventPushState) {
     window.history.pushState({ view: view }, "", `#${view}`);
   }
@@ -2959,8 +2998,8 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
 
   const assignedKeys = new Set();
 
-  // If today, include live wo.assigned
-  if (isToday) {
+  // If today OR active/pending work order, include planned wo.assigned crew
+  if (isToday || wo.status === "Active" || wo.status === "Pending") {
     extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
   }
 
@@ -2995,8 +3034,8 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
     }
   });
 
-  // If historical date and no explicit daily snapshot found, fall back to wo.assigned
-  if (!isToday && assignedKeys.size === 0 && !hasDailyRecordForDate && (wo.status === "Active" || wo.status === "Pending")) {
+  // Fallback if assignedKeys is still empty for active/pending work order
+  if (assignedKeys.size === 0 && (wo.status === "Active" || wo.status === "Pending")) {
     extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
   }
 
@@ -3088,6 +3127,9 @@ function commitDailyLabourForWorkOrder(event, woKey) {
   showToast(`⚡ Daily Labour committed for ${activeSailorsToCommit.length} sailor(s)!`, "success");
   refreshDailyCommitmentCache(dateVal);
   renderDashboard();
+  if (typeof renderSummaryView === "function") {
+    renderSummaryView();
+  }
 }
 
 function commitAllZoneWorkOrders() {
@@ -3150,8 +3192,37 @@ function renderWorkOrderCard(wo) {
     ? `<span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">💼 ${wo.assign_type}</span>`
     : "";
   const woKey = wo._fbKey || wo.id;
-  const tradeCounts = {};
+  // Check if any planned sailor is on Leave/Sick today
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+  const isLeaveCode = (val) => {
+    if (!val) return false;
+    const str = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
+  };
+  const getSailorLeave = (s) => {
+    if (!s) return null;
+    const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][s._fbKey] : null;
+    if (isLeaveCode(fbStatus)) return fbStatus;
+    if (isLeaveCode(s.attendance)) return s.attendance;
+    if (isLeaveCode(s.status)) return s.status;
+    return null;
+  };
+
+  let leaveAbsentCount = 0;
+  const activeWorkingSailors = [];
   assignedSailors.forEach((s) => {
+    const leave = getSailorLeave(s);
+    if (leave) {
+      leaveAbsentCount++;
+    } else {
+      activeWorkingSailors.push(s);
+    }
+  });
+
+  const tradeCounts = {};
+  (isCommitted ? activeWorkingSailors : assignedSailors).forEach((s) => {
     const t = s.trade || "MA";
     tradeCounts[t] = (tradeCounts[t] || 0) + 1;
   });
@@ -3176,23 +3247,6 @@ function renderWorkOrderCard(wo) {
       ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-300 flex items-center gap-1">🟢 Active Today</span>`
       : `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-300 flex items-center gap-1">⏳ Standby (${assignedSailors.length} Planned)</span>`
     : "";
-
-  // Check if any planned sailor is on Leave/Sick today
-  const [yyyy, mm, dd] = dateVal.split("-");
-  const monthKey = `${yyyy}-${mm}`;
-  const dayKey = parseInt(dd, 10).toString();
-  const isLeaveCode = (val) => {
-    if (!val) return false;
-    const str = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
-  };
-  let leaveAbsentCount = 0;
-  assignedSailors.forEach((s) => {
-    const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][s._fbKey] : null;
-    if (isLeaveCode(s.status) || isLeaveCode(s.attendance) || isLeaveCode(fbStatus)) {
-      leaveAbsentCount++;
-    }
-  });
 
   const leaveAlertHtml = (isToday && !isCommitted && leaveAbsentCount > 0)
     ? `<div class="mt-2 px-2.5 py-1 bg-red-50 border border-red-200 rounded-lg text-[10px] text-red-700 font-semibold flex items-center gap-1.5 animate-pulse">
@@ -3267,7 +3321,15 @@ function renderWorkOrderCard(wo) {
             <!-- Assigned sailors -->
             <div class="px-3 pb-3 border-t border-slate-100 pt-2">
                 <div class="flex items-center justify-between mb-1.5">
-                    <span class="text-[11px] text-slate-500 flex items-center flex-wrap gap-1">👷 ${assignedSailors.length} ${isCommitted ? 'active' : 'planned'} ${tradeBadge}</span>
+                    <span class="text-[11px] text-slate-500 flex items-center flex-wrap gap-1">👷 ${
+                      isCommitted
+                        ? (leaveAbsentCount > 0 
+                            ? `<span class="font-bold text-slate-700">${activeWorkingSailors.length} active</span> <span class="text-amber-600 text-[10px] font-semibold">(${leaveAbsentCount} on leave/WE)</span>` 
+                            : `<span class="font-bold text-slate-700">${assignedSailors.length} active</span>`)
+                        : (leaveAbsentCount > 0
+                            ? `<span class="font-medium text-slate-600">${assignedSailors.length} planned</span> <span class="text-amber-600 text-[10px]">(${activeWorkingSailors.length} available)</span>`
+                            : `<span class="font-medium text-slate-600">${assignedSailors.length} planned</span>`)
+                    } ${tradeBadge}</span>
                     ${store.isEveningMode && pendingEvals > 0 ? `<span class="text-[10px] bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-bold animate-pulse">📝 ${pendingEvals} eval due</span>` : ""}
                 </div>
                 <div class="flex flex-wrap gap-1" id="assigned-${wo.id}">
@@ -3277,16 +3339,18 @@ function renderWorkOrderCard(wo) {
                             .slice(0, 4)
                             .map(
                               (s) => {
-                                const isLeave = isLeaveCode(s.status) || isLeaveCode(s.attendance);
+                                const leaveCode = getSailorLeave(s);
+                                const isLeave = Boolean(leaveCode);
                                 const colorClasses = isLeave 
-                                  ? "bg-red-100 text-red-700 opacity-75" 
+                                  ? "bg-rose-100 text-rose-800 border border-rose-300 opacity-80" 
                                   : (isCommitted ? (s.evaluated ? "bg-teal-100 text-teal-700" : "bg-blue-100 text-blue-700") : "bg-slate-100 text-slate-700 border border-dashed border-slate-300");
                                 const leaveIcon = isLeave ? "🛌 " : "";
+                                const leaveTag = isLeave ? ` [${leaveCode}]` : "";
                                 const shortName = s.name ? (s.name.split(" ").length > 1 ? s.name.split(" ").slice(-1)[0] : s.name) : (s.official_number || "Sailor");
                                 const scoreNum = typeof s.avgScore === "number" ? s.avgScore : (typeof s.score === "number" ? s.score : 7.0);
                                 return `
-                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${colorClasses}" title="${isLeave ? 'On Leave/Sick' : (isCommitted ? 'Active Today' : 'Planned / Standby')}">
-                                ${leaveIcon}${shortName}
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${colorClasses}" title="${isLeave ? `On Leave/Sick/Weekend: ${leaveCode}` : (isCommitted ? 'Active Today' : 'Planned / Standby')}">
+                                ${leaveIcon}${shortName}${leaveTag}
                                 <span class="${getPerformanceColor(scoreNum)} px-1 rounded-full text-[9px]">${scoreNum.toFixed(1)}</span>
                             </span>`;
                               }
@@ -3582,7 +3646,7 @@ function updateCounters() {
   const isNA = (text) => {
     if (!text) return false;
     const s = typeof text === "string" ? text : String(text);
-    return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b|\bweekend\b|\boff\b|\bholiday\b|\babsent\b|\bawol\b|\bL\b|\bDL\b|\bWE\b|\bHD\b|T\/D|M\/D)/i.test(
+    return /(නිවාඩු|ගිලන්|\bsiq\b|\bngh\b|\badmit\b|\bleave\b|\bsick\b|\bweekend\b|\boff\b|\bholiday\b|\babsent\b|\bawol\b|\bDL\b|T\/D|M\/D|^\s*L\s*$|^\s*HD\s*$)/i.test(
       s,
     );
   };
@@ -14366,6 +14430,14 @@ function renderZoneSelectors() {
   );
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+  const isLeaveCode = (val) => {
+    if (!val) return false;
+    const str = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
+  };
   let zonesToRender = [...visibleZones];
   if (hasAllZoneAccess) {
     const hasAdminZone = visibleZones.some((z) => isAdminStaffDuties(z.id));
@@ -14392,6 +14464,18 @@ function renderZoneSelectors() {
 
       const addSailor = (s) => {
         if (!s) return;
+        const fbStatus =
+          store.availability &&
+          store.availability[monthKey] &&
+          store.availability[monthKey][dayKey]
+            ? store.availability[monthKey][dayKey][s._fbKey]
+            : null;
+        if (
+          isLeaveCode(fbStatus) ||
+          (!fbStatus && isLeaveCode(s.attendance))
+        ) {
+          return;
+        }
         const key = String(s.id || s._fbKey || s.official_number || s.service_no || s.name || "");
         if (key && !zoneSailorMap.has(key)) {
           zoneSailorMap.set(key, s);
@@ -14555,12 +14639,18 @@ function renderZoneSelectors() {
           localStorage.setItem("ncw_saved_zone", "Admin-&-Staff-Duties");
         }
       } else {
-        // Select the first visible zone if no matching zone exists
-        if (visibleZones.length > 0) {
+        // Select the first visible zone only if no matching zone exists and no saved zone exists
+        const hasSavedZone = Boolean(localStorage.getItem("ncw_saved_zone") || store.currentZone);
+        if (!hasSavedZone && visibleZones.length > 0) {
           sel.value = visibleZones[0].id;
           if (selId === "zoneSelector") {
             store.currentZone = visibleZones[0].id;
             localStorage.setItem("ncw_saved_zone", visibleZones[0].id);
+          }
+        } else if (hasSavedZone) {
+          const savedZone = prev || store.currentZone || localStorage.getItem("ncw_saved_zone");
+          if (savedZone) {
+            sel.value = savedZone;
           }
         } else if (hasAllZoneAccess) {
           sel.value = "Admin-&-Staff-Duties";
@@ -20144,7 +20234,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if (datePicker) {
     datePicker.value = today;
   } // ── Initial render (with empty store — Firebase will populate) ──
-  renderDashboard(); // Set today's date for inventory
+  const initialView = store.currentView || getInitialAppView();
+  if (initialView && initialView !== "dashboard") {
+    switchView(initialView, true);
+  } else {
+    renderDashboard();
+  } // Set today's date for inventory
   if (document.getElementById("invDate")) {
     document.getElementById("invDate").value = today;
   } // ── Start Firebase listeners ──
@@ -20202,15 +20297,26 @@ document.addEventListener("click", (e) => {
   }
 }); // Profile Pic Load Failure Fallback Handler
 function handleProfilePicError(img, cleanNo) {
-  if (img.src.endsWith(".JPG")) {
-    img.src = `images/${cleanNo}.jpg`;
-  } else if (img.src.endsWith(".jpg")) {
-    img.src = `images/${cleanNo}.png`;
-  } else if (img.src.endsWith(".png")) {
-    img.src = `images/${cleanNo}.PNG`;
+  if (!img) return;
+  const currentSrc = (img.getAttribute("src") || img.src || "").split("?")[0];
+  if (cleanNo) {
+    if (currentSrc.endsWith(".JPG") || currentSrc.endsWith(".jpeg")) {
+      img.src = `images/${cleanNo}.jpg`;
+      return;
+    } else if (currentSrc.endsWith(".jpg")) {
+      img.src = `images/${cleanNo}.png`;
+      return;
+    } else if (currentSrc.endsWith(".png")) {
+      img.src = `images/${cleanNo}.PNG`;
+      return;
+    }
+  }
+  const fallback = img.getAttribute("data-fallback") || "OIC";
+  const parent = img.parentElement;
+  if (parent && parent.id === "profileMenuBtn") {
+    parent.innerHTML = fallback;
   } else {
-    const fallback = img.getAttribute("data-fallback");
-    img.outerHTML = fallback || "";
+    img.outerHTML = fallback;
   }
 } // ── Profile Dropdown and Switching ──
 function toggleProfileDropdown() {
@@ -20587,7 +20693,7 @@ function applyActiveProfile() {
   // Initialize currentView on load if not set
   if (!store.currentView) {
     store.currentView =
-      store.activeProfileType === "Sailor" ? "sailordashboard" : "dashboard";
+      store.activeProfileType === "Sailor" ? "sailordashboard" : getInitialAppView();
   }
   const type = store.activeProfileType;
   const zoneId = store.activeProfileZone;
@@ -21301,7 +21407,7 @@ function toggleViewsBasedOnZone() {
   ) {
     switchView("dashboard");
   }
-  if (!isSpecialZone && ["dailydetails", "summary", "projects"].includes(currentView)) {
+  if (!isSpecialZone && currentView === "projects") {
     switchView("dashboard");
   }
 }
@@ -21708,11 +21814,16 @@ function renderSummaryView() {
       (zoneId && zoneId.toLowerCase().includes("shop")) ||
       (zoneId && zoneId.toLowerCase().includes("signwriter"));
     if (isWorkshop) {
-      if (sections.workshop.subsections[zoneId]) {
-        return sections.workshop.subsections[zoneId];
+      const existingWsKey = Object.keys(sections.workshop.subsections).find(
+        (k) => isZoneMatch(k, zoneId)
+      );
+      if (existingWsKey) {
+        return sections.workshop.subsections[existingWsKey];
       }
+      const matchedZone = (store.zones || []).find(z => isZoneMatch(z.id, zoneId) || isZoneMatch(z.name, zoneId));
+      const subTitle = matchedZone ? matchedZone.name.toUpperCase() : (zoneId || "WORKSHOP").replace(/-/g, " ").toUpperCase();
       sections.workshop.subsections[zoneId] = {
-        title: (zoneId || "WORKSHOP").replace(/-/g, " ").toUpperCase(),
+        title: subTitle,
         rows: {},
       };
       return sections.workshop.subsections[zoneId];
@@ -21759,9 +21870,61 @@ function renderSummaryView() {
   }
 
   const allAllocatedSailorIds = new Set();
+  store._summaryAllocatedSailorIds = allAllocatedSailorIds;
+  const isSailorAllocated = (sailor) => {
+    if (!sailor) return true;
+    const sid = String(sailor.id);
+    const sfb = sailor._fbKey ? String(sailor._fbKey) : null;
+    return allAllocatedSailorIds.has(sid) || (sfb && allAllocatedSailorIds.has(sfb));
+  };
+  const markSailorAllocated = (sailor) => {
+    if (!sailor) return;
+    allAllocatedSailorIds.add(String(sailor.id));
+    if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
+  };
+
+  const [yyyy, mm, dd] = dateVal.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+
+  const isLeaveCodeDetailed = (val) => {
+    if (!val) return false;
+    const s = typeof val === "string" ? val.trim() : String(val).trim();
+    return /^(Leave|Days Leave|Weekend|Half Day|Sick|Sick Report|Sick Leave|SIQ|Medical|MED|M\/C|NGH|Admit|ADM|Run|AWOL|NA|N\/A|L|DL|WE|HD|T\/D|TD|Traveling Date|Travel Date|Travel Day|Temporary Duty|M\/D|R\/D|RD|Report Date|Reporting Date|Report Day|Rest Day|SL|R|Off|Holiday|Absent|නිවාඩු|ගිලන්)/i.test(
+      s,
+    );
+  };
+
+  const getSailorLeaveStatus = (sailor) => {
+    if (!sailor) return null;
+    const fbStatus =
+      store.availability &&
+      store.availability[monthKey] &&
+      store.availability[monthKey][dayKey]
+        ? store.availability[monthKey][dayKey][sailor._fbKey]
+        : null;
+    if (isLeaveCodeDetailed(fbStatus)) return fbStatus;
+    if (isLeaveCodeDetailed(sailor.attendance)) return sailor.attendance;
+    if (isLeaveCodeDetailed(sailor.status)) return sailor.status;
+    return null;
+  };
+
+  // 1. Active tasks on dateVal
   const allWorkOrders = store.workOrders || [];
   const allJobCards = store.jobCards || [];
-  const allTasks = [...allWorkOrders, ...allJobCards].filter((t) => isWorkOrderActiveOnDate(t, dateVal));
+  const seenTaskKeys = new Set();
+  const rawTasks = [];
+  allWorkOrders.forEach((wo) => {
+    const k = String(wo.id || wo._fbKey || "");
+    if (k) seenTaskKeys.add(k);
+    rawTasks.push(wo);
+  });
+  allJobCards.forEach((jc) => {
+    const k = String(jc.id || jc._fbKey || "");
+    if (k && seenTaskKeys.has(k)) return;
+    rawTasks.push(jc);
+  });
+  const allTasks = rawTasks.filter((t) => isWorkOrderActiveOnDate(t, dateVal));
 
   allTasks.forEach((wo) => {
     const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
@@ -21774,31 +21937,12 @@ function renderSummaryView() {
       }
       const targetRow = section.rows[rowKey];
       assignedSailors.forEach((sailor) => {
-        // Check fbStatus to accurately skip leaves
-        const [yyyy, mm, dd] = dateVal.split("-");
-        const monthKey = `${yyyy}-${mm}`;
-        const dayKey = parseInt(dd, 10).toString();
-        const fbStatus =
-          store.availability &&
-          store.availability[monthKey] &&
-          store.availability[monthKey][dayKey]
-            ? store.availability[monthKey][dayKey][sailor._fbKey]
-            : null;
-        const isLeaveCode = (val) => {
-          if (!val) return false;
-          const s = typeof val === "string" ? val.trim() : String(val).trim();
-          return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(
-            s,
-          );
-        };
-        const isLeave =
-          isLeaveCode(sailor.attendance) ||
-          isLeaveCode(sailor.status) ||
-          isLeaveCode(fbStatus);
-        if (isLeave) return;
+        // Exclude leaves — sailors on leave must only be counted in the leave section
+        if (getSailorLeaveStatus(sailor)) return;
+        // Strictly deduplicate to prevent double-counting across tasks
+        if (isSailorAllocated(sailor)) return;
 
-        allAllocatedSailorIds.add(String(sailor.id));
-        if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
+        markSailorAllocated(sailor);
         const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
         if (isVss) {
           targetRow.vss[tradeIdx]++;
@@ -21811,31 +21955,14 @@ function renderSummaryView() {
 
   // 2. Also process standalone daily allocations on dateVal that weren't captured in active workOrders/jobCards
   (store.dailyAllocations || []).forEach((alloc) => {
-    if (alloc.date !== dateVal) return;
+    if (alloc.date !== dateVal || alloc.status === "Cancelled") return;
     const sailorId = String(alloc.sailor_id);
-    if (allAllocatedSailorIds.has(sailorId)) return; // Already counted
-
     const sailor = (store.sailors || []).find(
       (s) => String(s.id) === sailorId || (s._fbKey && String(s._fbKey) === sailorId),
     );
     if (!sailor) return;
-
-    // Check leave
-    const [yyyy, mm, dd] = dateVal.split("-");
-    const monthKey = `${yyyy}-${mm}`;
-    const dayKey = parseInt(dd, 10).toString();
-    const fbStatus =
-      store.availability &&
-      store.availability[monthKey] &&
-      store.availability[monthKey][dayKey]
-        ? store.availability[monthKey][dayKey][sailor._fbKey]
-        : null;
-    const isLeaveCode = (val) => {
-      if (!val) return false;
-      const s = typeof val === "string" ? val.trim() : String(val).trim();
-      return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
-    };
-    if (isLeaveCode(sailor.attendance) || isLeaveCode(sailor.status) || isLeaveCode(fbStatus)) return;
+    if (getSailorLeaveStatus(sailor)) return;
+    if (isSailorAllocated(sailor)) return;
 
     const zoneId = alloc.zone_id || sailor.zone_id || store.currentZone;
     const section = getSectionForZone(zoneId);
@@ -21844,8 +21971,7 @@ function renderSummaryView() {
       section.rows[rowKey] = createRowMatrix(rowKey);
     }
     const targetRow = section.rows[rowKey];
-    allAllocatedSailorIds.add(String(sailor.id));
-    if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
+    markSailorAllocated(sailor);
 
     const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
     if (isVss) {
@@ -21853,31 +21979,17 @@ function renderSummaryView() {
     } else {
       targetRow.reg[tradeIdx]++;
     }
-  }); // Add long term deployments to summary
+  });
+
+  // 3. Add long term deployments to summary
   const longTerm = getLongTermAllocations();
   const processLongTermList = (list, section) => {
     list.forEach((alloc) => {
-      const [yyyy, mm, dd] = dateVal.split("-");
-      const monthKey = `${yyyy}-${mm}`;
-      const dayKey = parseInt(dd, 10).toString();
-      const fbStatus =
-        store.availability &&
-        store.availability[monthKey] &&
-        store.availability[monthKey][dayKey]
-          ? store.availability[monthKey][dayKey][alloc.sailor._fbKey]
-          : null;
-      const isLeaveCode = (val) => {
-        if (!val) return false;
-        const s = typeof val === "string" ? val.trim() : String(val).trim();
-        return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
-      };
-      const isLeave =
-        isLeaveCode(alloc.sailor.attendance) ||
-        isLeaveCode(alloc.sailor.status) ||
-        isLeaveCode(fbStatus);
-      if (isLeave) return;
-      allAllocatedSailorIds.add(String(alloc.sailor.id));
-      if (alloc.sailor._fbKey) allAllocatedSailorIds.add(String(alloc.sailor._fbKey));
+      if (!alloc || !alloc.sailor) return;
+      if (getSailorLeaveStatus(alloc.sailor)) return;
+      if (isSailorAllocated(alloc.sailor)) return;
+
+      markSailorAllocated(alloc.sailor);
       const rowKey = (alloc.projectName || "UNKNOWN").toUpperCase().trim();
       if (!section.rows[rowKey]) {
         section.rows[rowKey] = createRowMatrix(rowKey);
@@ -21893,121 +22005,67 @@ function renderSummaryView() {
   processLongTermList(longTerm.otherBase, sections.otherBases);
 
   // 4. Process explicit leaves/sick statuses from sailorsDB
-  store.sailors.forEach((sailor) => {
-    const isAllocated =
-      allAllocatedSailorIds.has(String(sailor.id)) ||
-      (sailor._fbKey && allAllocatedSailorIds.has(String(sailor._fbKey))); // Extract YYYY-MM and DD from dateVal
-    const [yyyy, mm, dd] = dateVal.split("-");
-    const monthKey = `${yyyy}-${mm}`;
-    const dayKey = parseInt(dd, 10).toString(); // Removes leading zero
-    const fbStatus =
-      store.availability &&
-      store.availability[monthKey] &&
-      store.availability[monthKey][dayKey]
-        ? store.availability[monthKey][dayKey][sailor._fbKey]
-        : null;
-    const isLeaveCode = (val) => {
-      if (!val) return false;
-      const s = typeof val === "string" ? val.trim() : String(val).trim();
-      return /^(Leave|Days Leave|Weekend|Half Day|Sick|Sick Report|Sick Leave|SIQ|Medical|MED|M\/C|NGH|Admit|ADM|Run|AWOL|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SL|R|Off|Holiday|Absent|නිවාඩු|ගිලන්)/i.test(
-        s,
-      );
-    };
-    const isLeave =
-      isLeaveCode(sailor.attendance) ||
-      isLeaveCode(sailor.status) ||
-      isLeaveCode(fbStatus);
+  (store.sailors || []).forEach((sailor) => {
+    const leaveStatus = getSailorLeaveStatus(sailor);
+    if (!leaveStatus) return;
+    if (isSailorAllocated(sailor)) return;
 
-    if (isLeave) {
-      const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
-      const rawStatus = String(fbStatus || sailor.attendance || sailor.status || "").trim();
-      let rowKey = "LEAVE";
+    markSailorAllocated(sailor);
+    const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
+    const rawStatus = String(leaveStatus).trim();
+    let rowKey = "LEAVE";
 
-      if (/^(S\/R|Sick Report)$/i.test(rawStatus)) {
-        rowKey = "SICK REPORT";
-      } else if (/^(SL|Sick Leave)$/i.test(rawStatus)) {
-        rowKey = "SICK LEAVE";
-      } else if (/^(SIQ)$/i.test(rawStatus)) {
-        rowKey = "SIQ";
-      } else if (/^(ADM|Admit)$/i.test(rawStatus)) {
-        rowKey = "ADMIT";
-      } else if (/^(MED|Medical|M\/C)$/i.test(rawStatus)) {
-        rowKey = "MEDICAL";
-      } else if (/^(NGH)$/i.test(rawStatus)) {
-        rowKey = "NGH";
-      } else if (/^(Run|AWOL|R)$/i.test(rawStatus)) {
-        rowKey = "RUN";
-      } else if (/^(Sick|M\/D)$/i.test(rawStatus)) {
-        rowKey = "SICK";
-      } else if (/^(WE|Weekend)$/i.test(rawStatus)) {
-        rowKey = "WEEKEND";
-      } else if (/^(DL|Days Leave)$/i.test(rawStatus)) {
-        rowKey = "DAYS LEAVE";
-      } else if (/^(HD|Half Day)$/i.test(rawStatus)) {
-        rowKey = "HALF DAY";
-      } else if (
-        sailor.status === "NA" &&
-        (!sailor.attendance ||
-          !/^(Leave|L|DL|Days Leave|WE|Weekend|HD|Half Day|T\/D)$/i.test(
-            typeof sailor.attendance === "string"
-              ? sailor.attendance.trim()
-              : String(sailor.attendance).trim(),
-          ))
-      ) {
-        // Try to infer if it was sick from work orders
-        let isSickWo = false;
-        const activeWo = store.workOrders || [];
-        const activeJc = store.jobCards || [];
-        let assignedWo = null;
-        if (dateVal === today) {
-          assignedWo = activeWo.find(
-            (wo) =>
-              wo.assigned &&
-              wo.assigned.some(id => String(id) === String(sailor.id) || String(id) === String(sailor._fbKey))
-          );
-          if (!assignedWo)
-            assignedWo = activeJc.find(
-              (jc) =>
-                jc.assigned &&
-                jc.assigned.some(id => String(id) === String(sailor.id) || String(id) === String(sailor._fbKey))
-            );
-        } else {
-          const alloc = (store.dailyAllocations || []).find(
-            (a) =>
-              a.date === dateVal &&
-              (String(a.sailor_id) === String(sailor.id) ||
-                String(a.sailor_id) === String(sailor._fbKey)),
-          );
-          if (alloc) {
-            assignedWo =
-              activeWo.find(
-                (w) => String(w.id) === String(alloc.work_order_id),
-              ) ||
-              activeJc.find(
-                (j) => String(j.id) === String(alloc.work_order_id),
-              );
-          }
-        }
-        if (
-          assignedWo &&
-          /(ගිලන්|\bsiq\b|\badmit\b|\bsick\b)/i.test(
-            assignedWo.description || assignedWo.title || "",
-          )
-        ) {
-          rowKey = "SICK";
-        }
-      }
-      if (!sections.leaveSick.rows[rowKey]) {
-        sections.leaveSick.rows[rowKey] = createRowMatrix(rowKey);
-      }
-      const targetRow = sections.leaveSick.rows[rowKey];
-      if (isVss) {
-        targetRow.vss[tradeIdx]++;
-      } else {
-        targetRow.reg[tradeIdx]++;
-      }
+    if (/^(S\/R|Sick Report)$/i.test(rawStatus)) {
+      rowKey = "SICK REPORT (S/R)";
+    } else if (/^(SL|Sick Leave)$/i.test(rawStatus)) {
+      rowKey = "SICK LEAVE (SL)";
+    } else if (/^(SIQ)$/i.test(rawStatus)) {
+      rowKey = "SIQ (SICK IN QUARTERS)";
+    } else if (/^(ADM|Admit)$/i.test(rawStatus)) {
+      rowKey = "HOSPITAL ADMIT (ADM)";
+    } else if (/^(NGH)$/i.test(rawStatus)) {
+      rowKey = "NAVY GENERAL HOSPITAL (NGH)";
+    } else if (/^(MED|Medical|M\/C)$/i.test(rawStatus)) {
+      rowKey = "MEDICAL";
+    } else if (/^(Sick|M\/D|ගිලන්)$/i.test(rawStatus)) {
+      rowKey = "SICK (M/D)";
+    } else if (/^(Run|AWOL|R)$/i.test(rawStatus)) {
+      rowKey = "RUN / AWOL";
+    } else {
+      // All sanctioned leave forms (Standard Leave, T/D Traveling Date, R/D Report Date, DL Days Leave, Weekend, Half Day)
+      rowKey = "LEAVE";
     }
-  }); // 5. Build and render the table rows with subtotals and grand totals
+
+    if (!sections.leaveSick.rows[rowKey]) {
+      sections.leaveSick.rows[rowKey] = createRowMatrix(rowKey);
+    }
+    const targetRow = sections.leaveSick.rows[rowKey];
+    if (isVss) {
+      targetRow.vss[tradeIdx]++;
+    } else {
+      targetRow.reg[tradeIdx]++;
+    }
+  });
+
+  // 4b. Process Available / Standby sailors (Camp / Yard) to guarantee 100% full complement balance
+  const standbyRowKey = "AVAILABLE / STANDBY SAILORS (CAMP / YARD)";
+  (store.sailors || []).forEach((sailor) => {
+    if (isSailorAllocated(sailor)) return;
+    markSailorAllocated(sailor);
+
+    if (!sections.othersDuty.rows[standbyRowKey]) {
+      sections.othersDuty.rows[standbyRowKey] = createRowMatrix(standbyRowKey);
+    }
+    const targetRow = sections.othersDuty.rows[standbyRowKey];
+    const { isVss, tradeIdx } = getSailorBranchAndTradeIdx(sailor);
+    if (isVss) {
+      targetRow.vss[tradeIdx]++;
+    } else {
+      targetRow.reg[tradeIdx]++;
+    }
+  });
+
+  // 5. Build and render the table rows with subtotals and grand totals
   let tableHtml = `
         <tr id="sec-dockyard" class="bg-slate-100 font-bold border-t-2 border-b border-slate-300">
             <td colspan="17" class="px-3 py-2 text-slate-800 font-extrabold uppercase text-[11px] tracking-wider flex items-center justify-between">
@@ -22043,8 +22101,29 @@ function renderSummaryView() {
     fullTotal: 0,
   };
   function appendSectionToTable(sectionObj, secAnchorId = "") {
-    const rowsList = Object.values(sectionObj.rows);
+    let rowsList = Object.values(sectionObj.rows);
     if (rowsList.length === 0) return; // Skip empty sections
+
+    // Sort Leave/Sick rows in logical naval sequence
+    if (secAnchorId === "sec-leaveSick") {
+      const leavePreferredOrder = [
+        "LEAVE",
+        "SICK REPORT (S/R)",
+        "SICK LEAVE (SL)",
+        "SIQ (SICK IN QUARTERS)",
+        "HOSPITAL ADMIT (ADM)",
+        "NAVY GENERAL HOSPITAL (NGH)",
+        "SICK (M/D)",
+        "MEDICAL",
+        "RUN / AWOL"
+      ];
+      rowsList.sort((a, b) => {
+        const ia = leavePreferredOrder.indexOf(a.description);
+        const ib = leavePreferredOrder.indexOf(b.description);
+        return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+      });
+    }
+
     const sums = getColumnsSum(rowsList);
     const anchorAttr = secAnchorId ? `id="${secAnchorId}"` : "";
     tableHtml += `
@@ -22053,14 +22132,22 @@ function renderSummaryView() {
             </tr>
         `;
     rowsList.forEach((r) => {
+      const isStandby = r.description.includes("AVAILABLE / STANDBY");
+      const rowCls = isStandby
+        ? "bg-amber-50/50 hover:bg-amber-100/50 border-b border-amber-200/70 text-center font-semibold"
+        : "hover:bg-slate-50 border-b border-slate-100 text-center";
+      const descCls = isStandby
+        ? "px-3 py-1.5 text-left text-amber-900 font-bold"
+        : "px-3 py-1.5 text-left text-slate-700 font-medium";
+      const descContent = isStandby ? `⚓ ${r.description}` : r.description;
       tableHtml += `
-                <tr class="hover:bg-slate-50 border-b border-slate-100 text-center">
-                    <td class="px-3 py-1.5 text-left text-slate-700 font-medium">${r.description}</td>
-                    ${r.vss.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
-                    <td class="px-1 py-1.5 bg-slate-50 font-bold border-l-2 border-r-2 border-slate-200">${r.vssSub || ""}</td>
-                    ${r.reg.map((val) => `<td class="px-0.5 py-1.5 border-l border-slate-200">${val || ""}</td>`).join("")}
-                    <td class="px-1 py-1.5 bg-slate-50 font-bold border-l-2 border-r border-slate-200">${r.regSub || ""}</td>
-                    <td class="px-2 py-1.5 bg-teal-50/50 font-bold text-slate-800 border-l border-slate-300">${r.fullTotal || ""}</td>
+                <tr class="${rowCls}">
+                    <td class="${descCls}">${descContent}</td>
+                    ${r.vss.map((val) => `<td class="px-0.5 py-1.5 border-l ${isStandby ? 'border-amber-200/60 font-semibold' : 'border-slate-200'}">${val || ""}</td>`).join("")}
+                    <td class="px-1 py-1.5 ${isStandby ? 'bg-amber-100/60 text-amber-950 font-extrabold' : 'bg-slate-50 font-bold'} border-l-2 border-r-2 ${isStandby ? 'border-amber-300' : 'border-slate-200'}">${r.vssSub || ""}</td>
+                    ${r.reg.map((val) => `<td class="px-0.5 py-1.5 border-l ${isStandby ? 'border-amber-200/60 font-semibold' : 'border-slate-200'}">${val || ""}</td>`).join("")}
+                    <td class="px-1 py-1.5 ${isStandby ? 'bg-amber-100/60 text-amber-950 font-extrabold' : 'bg-slate-50 font-bold'} border-l-2 border-r ${isStandby ? 'border-amber-300' : 'border-slate-200'}">${r.regSub || ""}</td>
+                    <td class="px-2 py-1.5 ${isStandby ? 'bg-amber-200/60 text-amber-950 font-black' : 'bg-teal-50/50 font-bold text-slate-800'} border-l ${isStandby ? 'border-amber-300' : 'border-slate-300'}">${r.fullTotal || ""}</td>
                 </tr>
             `;
     });
@@ -22290,8 +22377,36 @@ function exportSummaryCsv() {
   document.body.removeChild(link);
 }
 function printSummary() {
+  const container = document.getElementById("summaryTableScrollContainer");
+  if (container) {
+    container.classList.remove("max-h-[70vh]", "overflow-auto");
+    container.scrollTop = 0;
+  }
   window.print();
+  if (container) {
+    container.classList.add("max-h-[70vh]", "overflow-auto");
+  }
 }
+
+// Global print listeners to guarantee summary container expands across all pages
+window.addEventListener("beforeprint", () => {
+  const container = document.getElementById("summaryTableScrollContainer");
+  if (container) {
+    container.dataset.originalMaxH = container.style.maxHeight;
+    container.dataset.originalOverflow = container.style.overflow;
+    container.style.maxHeight = "none";
+    container.style.overflow = "visible";
+    container.scrollTop = 0;
+  }
+});
+
+window.addEventListener("afterprint", () => {
+  const container = document.getElementById("summaryTableScrollContainer");
+  if (container) {
+    container.style.maxHeight = container.dataset.originalMaxH || "";
+    container.style.overflow = container.dataset.originalOverflow || "";
+  }
+});
 function openLmdExportModal(action) {
   _lmdExportAction = action;
   let title = "Print / PDF Options";
@@ -22728,7 +22843,8 @@ function openEvalDetailsModal(mode) {
 let _isHistoryBackAction = false;
 function initPwaHistoryManagement() {
   // 1. Set initial history state for the landing view
-  const initialView = store.currentView || "dashboard";
+  const initialView = store.currentView || getInitialAppView();
+  store.currentView = initialView;
   window.history.replaceState({ view: initialView }, "", `#${initialView}`); // 2. Listen to popstate (back/forward navigation)
   window.addEventListener("popstate", (event) => {
     _isHistoryBackAction = true; // Handle modal state

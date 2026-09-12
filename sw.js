@@ -1,8 +1,8 @@
-const CACHE_NAME = 'ncw-ps-cache-v5.24.99';
+const CACHE_NAME = 'ncw-ps-cache-v5.25.18';
 const ASSETS = [
   './',
   './index.html',
-  './app.js?v=5.24.87',
+  './app.js?v=5.25.18',
   './mobile.html',
   './mobile.js?v=1.1.1',
   './manifest.json',
@@ -10,7 +10,8 @@ const ASSETS = [
   './icon-512.png',
   './icon-maskable-192.png',
   './icon-maskable-512.png',
-  './logo.png'
+  './logo.png',
+  './tailwind-static.css'
 ];
 
 self.addEventListener('install', e => {
@@ -74,19 +75,18 @@ self.addEventListener('fetch', e => {
     return;
   }
 
-  // Versioned Assets & Scripts: Stale-While-Revalidate
+  // Versioned Assets & Scripts: Network First, Fallback to Cache
   if (url.pathname.endsWith('.js') && url.search.includes('v=')) {
     e.respondWith(
-      caches.match(e.request).then(cached => {
-        const fetchPromise = fetch(e.request).then(networkRes => {
+      fetch(e.request)
+        .then(networkRes => {
           if (networkRes && networkRes.status === 200) {
             const clone = networkRes.clone();
             caches.open(CACHE_NAME).then(c => c.put(e.request, clone));
           }
           return networkRes;
-        }).catch(() => cached);
-        return cached || fetchPromise;
-      })
+        })
+        .catch(() => caches.match(e.request))
     );
     return;
   }
