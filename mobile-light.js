@@ -1,609 +1,553 @@
-// =============================================
-// CMSys MOBILE LIGHT CONTROLLER (mobile-light.js v2.0.0)
-// Designed for older & budget smartphones.
-// Fast, clean Light Naval Theme matching pic - 02.
-// Tabs: Home, Estimate, LMD, Sailors
-// =============================================
-
-function getLocalDateString() {
-  const d = new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function escapeHtml(str) {
-  if (str == null) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-const STANDARD_ZONES = [
-  { id: "A-Zone", name: "A-Zone" },
-  { id: "B-Zone", name: "B-Zone" },
-  { id: "BC-Zone", name: "BC-Zone" },
-  { id: "C-Zone", name: "C-Zone" },
-  { id: "D-Zone", name: "D-Zone" },
-  { id: "E-Zone", name: "E-Zone" },
-  { id: "G-Zone", name: "G-Zone" },
-  { id: "FH-Zone", name: "FH-Zone" },
-  { id: "OTW", name: "OTW" },
-  { id: "Supply-School", name: "Supply School" },
-  { id: "Pump-House", name: "Pump House" },
-  { id: "Carpentry-Shop", name: "Carpentry & Painter Shop" },
-  { id: "Welding-Shop", name: "Welding Shop" },
-  { id: "Aluminium-Workshop", name: "Aluminium Workshop" }
-];
-
-function isZoneMatch(z1, z2) {
-  if (!z1 || !z2) return false;
-  const s1 = String(z1).toLowerCase().replace(/[^a-z0-9]/g, "");
-  const s2 = String(z2).toLowerCase().replace(/[^a-z0-9]/g, "");
-  if (s1 === s2) return true;
-  if (s1.includes(s2) || s2.includes(s1)) return true;
-  return false;
-}
-
-// Store
-const mlStore = {
-  currentZone: (new URLSearchParams(window.location.search).get("zone")) || localStorage.getItem("ncw_saved_zone") || "A-Zone",
-  selectedDate: getLocalDateString(),
-  workOrders: [],
-  sailors: [],
-  dailyAllocations: [],
-  lmdRecords: [],
-  zoneInCharges: {},
-  activeTab: "home",
-  estCategory: "concrete",
-  selectedAssignKey: ""
-};
-
-// Dual Firebase Config
-const sailorsFirebaseConfig = {
-  apiKey: "AIzaSyDmHdg1FfgR_-4pKJ5z0inI8-BZ21MUtvg",
-  authDomain: "ce-admin-panel2025.firebaseapp.com",
-  databaseURL: "https://ce-admin-panel2025-default-rtdb.firebaseio.com",
-  projectId: "ce-admin-panel2025",
-  storageBucket: "ce-admin-panel2025.firebasestorage.app",
-  messagingSenderId: "1093761746400",
-  appId: "1:1093761746400:web:1984fad8019641b2ca5785"
-};
-
-const opsFirebaseConfig = {
-  apiKey: "AIzaSyCRgW9qcd42Ks_C56csNL85jXd5OsLD8q0",
-  authDomain: "ncw-ps-operations.firebaseapp.com",
-  databaseURL: "https://ncw-ps-operations-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "ncw-ps-operations",
-  storageBucket: "ncw-ps-operations.firebasestorage.app",
-  messagingSenderId: "992132561625",
-  appId: "1:992132561625:web:5b4f0c753c568cea66dcc8"
-};
-
-let sailorsDB = null;
-let opsDB = null;
-
-try {
-  const sApp = firebase.initializeApp(sailorsFirebaseConfig, "mlSailors");
-  sailorsDB = firebase.database(sApp);
-  const oApp = firebase.initializeApp(opsFirebaseConfig, "mlOperations");
-  opsDB = firebase.database(oApp);
-} catch (e) {
-  console.warn("Mobile Light Firebase Init:", e);
-}
-
 // ---------------------------------------------
-// TAB SWITCHER
+// TAB 2: ESTIMATES MANAGEMENT (PIC - 03 & 04)
 // ---------------------------------------------
-function switchLightTab(tabId) {
-  mlStore.activeTab = tabId;
-  const tabs = ["home", "estimate", "lmd", "sailors"];
-  
-  tabs.forEach(t => {
-    const view = document.getElementById(t === "home" ? "viewHome" : t === "estimate" ? "viewEstimate" : t === "lmd" ? "viewLmd" : "viewSailors");
-    const btn = document.getElementById(t === "home" ? "tabBtnHome" : t === "estimate" ? "tabBtnEstimate" : t === "lmd" ? "tabBtnLmd" : "tabBtnSailors");
-    
-    if (view) {
-      if (t === tabId) view.classList.remove("hidden");
-      else view.classList.add("hidden");
-    }
-    if (btn) {
-      if (t === tabId) {
-        btn.className = "flex flex-col items-center gap-0.5 active-tab active-scale px-3 py-1 text-teal-600 font-extrabold";
-      } else {
-        btn.className = "flex flex-col items-center gap-0.5 text-slate-500 hover:text-slate-800 active-scale px-3 py-1 font-semibold";
-      }
-    }
+function formatCurrency(val) {
+  const num = Number(val || 0);
+  return num.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function populateLocationDatalistMobile() {
+  const dl = document.getElementById("mlLocDatalist");
+  if (!dl) return;
+  const names = new Set();
+  (mlStore.locations || []).forEach(l => {
+    const name = l.building_name || l.name || "";
+    if (name) names.add(name);
   });
-
-  if (tabId === "estimate") calcLightEstimate();
-  else if (tabId === "lmd") loadLightLmdRecords();
-  else if (tabId === "sailors") renderLightSailorList();
+  dl.innerHTML = Array.from(names).map(n => `<option value="${escapeHtml(n)}">`).join("");
 }
 
-// ---------------------------------------------
-// INITIALIZATION
-// ---------------------------------------------
-// INITIALIZATION & ZONE SECURITY
-// ---------------------------------------------
-let pendingTargetZone = null;
-
-function initLightApp() {
-  const qZ = new URLSearchParams(window.location.search).get("zone");
-  if (qZ && STANDARD_ZONES.some(z => z.id === qZ)) {
-    mlStore.currentZone = qZ;
-  }
-
-  const zoneSelect = document.getElementById("mlZoneSelect");
-  if (zoneSelect) {
-    zoneSelect.innerHTML = STANDARD_ZONES.map(z => 
-      `<option value="${z.id}" ${z.id === mlStore.currentZone ? "selected" : ""}>${z.name}</option>`
-    ).join("");
-  }
-
-  const datePicker = document.getElementById("mlDatePicker");
-  if (datePicker) {
-    datePicker.value = mlStore.selectedDate;
-  }
-
-  loadLightData();
-}
-
-function changeLightZone(z) {
-  if (!z) return;
-  if (z === mlStore.currentZone) return;
-
-  // Check if target zone was already unlocked during this session
-  if (sessionStorage.getItem("ncw_mobile_zone_unlocked_" + z) === "true") {
-    applyZoneSwitch(z);
-    return;
-  }
-
-  // Otherwise prompt for that zone's password (pic - 01)
-  pendingTargetZone = z;
-  openZonePasswordModal(z);
-}
-
-function applyZoneSwitch(z) {
-  mlStore.currentZone = z;
-  localStorage.setItem("ncw_saved_zone", z);
-  const sel = document.getElementById("mlZoneSelect");
-  if (sel) sel.value = z;
-  showLightToast(`Switched to ${z}`, "📍");
-  renderLightTasks();
-  if (mlStore.activeTab === "lmd") loadLightLmdRecords();
-}
-
-function openZonePasswordModal(zoneId) {
-  const modal = document.getElementById("mlZonePasswordModal");
-  const sub = document.getElementById("mlZonePasswordSubtitle");
-  const input = document.getElementById("mlZonePasswordInput");
-  const err = document.getElementById("mlZonePasswordError");
-  const zoneObj = STANDARD_ZONES.find(x => x.id === zoneId) || { name: zoneId };
-
-  if (sub) sub.textContent = `📍 ${zoneObj.name}`;
-  if (input) {
-    input.value = "";
-    input.type = "password";
-  }
-  if (err) err.classList.add("hidden");
-
-  if (modal) modal.classList.remove("hidden");
-  setTimeout(() => {
-    if (input) input.focus();
-  }, 100);
-}
-
-function cancelZonePassword() {
-  const modal = document.getElementById("mlZonePasswordModal");
-  if (modal) modal.classList.add("hidden");
-
-  // Revert dropdown selector back to the active zone
-  const sel = document.getElementById("mlZoneSelect");
-  if (sel) sel.value = mlStore.currentZone;
-  pendingTargetZone = null;
-}
-
-function toggleZonePasswordVisibility() {
-  const input = document.getElementById("mlZonePasswordInput");
-  if (!input) return;
-  input.type = input.type === "password" ? "text" : "password";
-}
-
-function verifyZonePassword() {
-  if (!pendingTargetZone) return;
-
-  const input = document.getElementById("mlZonePasswordInput");
-  const err = document.getElementById("mlZonePasswordError");
-  const errMsg = document.getElementById("mlZonePasswordErrorMsg");
-  const entered = (input?.value || "").trim();
-
-  if (!entered) {
-    if (err) {
-      if (errMsg) errMsg.textContent = "Please enter the password or PIN!";
-      err.classList.remove("hidden");
-    }
-    if (input) input.focus();
-    return;
-  }
-
-  const targetZone = pendingTargetZone;
-  const inc = (mlStore.zoneInCharges || {})[targetZone] || {};
-  const correctPwd = inc.password ? String(inc.password).trim() : "";
-
-  // Master bypass and default PIN check:
-  // Same logic as desktop app.js: "MalitHZ", "1234", "3576", "navy123", "admin"
-  const masterPins = ["MalitHZ", "1234", "3576", "navy123", "admin"];
-  let isValid = false;
-
-  if (entered === "MalitHZ") {
-    isValid = true;
-  } else if (correctPwd && entered === correctPwd) {
-    isValid = true;
-  } else if (correctPwd && masterPins.includes(entered)) {
-    isValid = true;
-  } else if (!correctPwd && masterPins.includes(entered)) {
-    isValid = true;
-  }
-
-  if (isValid) {
-    sessionStorage.setItem("ncw_mobile_zone_unlocked_" + targetZone, "true");
-    const target = pendingTargetZone;
-    const modal = document.getElementById("mlZonePasswordModal");
-    if (modal) modal.classList.add("hidden");
-    pendingTargetZone = null;
-
-    applyZoneSwitch(target);
-    showLightToast(`Access Granted: ${target}`, "🔓");
-  } else {
-    if (err) {
-      if (errMsg) errMsg.textContent = "Incorrect password! Access denied.";
-      err.classList.remove("hidden");
-    }
-    if (input) {
-      input.value = "";
-      input.focus();
-    }
-    showLightToast("Access Denied: Incorrect Password", "❌");
-  }
-}
-
-function changeLightDate(d) {
-  mlStore.selectedDate = d;
-  renderLightTasks();
-}
-
-function refreshLightData() {
-  showLightToast("Refreshing data...", "🔄");
-  loadLightData();
-}
-
-function loadLightData() {
-  if (sailorsDB) {
-    sailorsDB.ref("sailors").once("value", snap => {
-      const d = snap.val();
-      mlStore.sailors = [];
-      if (d) {
-        Object.keys(d).forEach(k => {
-          if (d[k]) mlStore.sailors.push({ id: k, _fbKey: k, ...d[k] });
-        });
-      }
-      renderLightTasks();
-      if (mlStore.activeTab === "sailors") renderLightSailorList();
-    });
-  }
-
-  if (opsDB) {
-    opsDB.ref("settings/zoneInCharges").on("value", snap => {
-      mlStore.zoneInCharges = snap.val() || {};
-    });
-
-    opsDB.ref("work_orders").once("value", snap => {
-      const d = snap.val();
-      mlStore.workOrders = [];
-      if (d) {
-        Object.keys(d).forEach(k => {
-          if (d[k]) mlStore.workOrders.push({ id: k, _fbKey: k, ...d[k] });
-        });
-      }
-      renderLightTasks();
-    });
-
-    opsDB.ref("daily_allocations").once("value", snap => {
-      const d = snap.val();
-      mlStore.dailyAllocations = [];
-      if (d) {
-        Object.keys(d).forEach(k => {
-          if (d[k]) mlStore.dailyAllocations.push({ id: k, _fbKey: k, ...d[k] });
-        });
-      }
-      renderLightTasks();
-    });
-  }
-}
-
-// ---------------------------------------------
-// TAB 1: HOME (TASKS & DETAILS) - PIC - 02 LIGHT CARD
-// ---------------------------------------------
-function renderLightTasks() {
-  const container = document.getElementById("mlTaskList");
-  const countEl = document.getElementById("mlTaskCount");
+function renderLightEstimates() {
+  const container = document.getElementById("mlEstimateList");
+  const countEl = document.getElementById("mlEstimateCount");
   if (!container) return;
 
-  const targetDate = mlStore.selectedDate;
   const currentZone = mlStore.currentZone;
+  const cleanCur = String(currentZone || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
-  const currentZoneTasks = mlStore.workOrders.filter(wo => {
-    const z = wo.zone_id || wo.zone || "";
-    return isZoneMatch(z, currentZone);
+  const filtered = (mlStore.estimates || []).filter(e => {
+    if (!e) return false;
+    const estZone = e.zone_id || e.zone || "";
+    if (!estZone) return true;
+    const cleanEst = String(estZone).toLowerCase().replace(/[^a-z0-9]/g, "");
+    return cleanEst === cleanCur || cleanEst.includes(cleanCur) || cleanCur.includes(cleanEst);
   });
 
-  if (countEl) countEl.textContent = currentZoneTasks.length;
+  if (countEl) countEl.textContent = filtered.length;
 
-  if (currentZoneTasks.length === 0) {
+  if (filtered.length === 0) {
     container.innerHTML = `
-      <div class="p-6 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
-        <div class="text-3xl">📋</div>
-        <p class="text-xs font-bold text-slate-700">No active tasks in ${currentZone}</p>
-        <button type="button" onclick="openNewTaskModal()" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-bold active-scale">
-          ➕ Create First Job
+      <div class="p-8 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
+        <div class="text-3xl">📐</div>
+        <p class="text-xs font-bold text-slate-700">No estimates found in ${currentZone}</p>
+        <p class="text-[10px] text-slate-400">Tap below to prepare a new material & labor estimate</p>
+        <button type="button" onclick="openNewEstimateModalMobile()" class="mt-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black active-scale shadow-sm">
+          ➕ Create First Estimate
         </button>
       </div>`;
     return;
   }
 
   let html = "";
-  currentZoneTasks.forEach(wo => {
-    const key = wo._fbKey || wo.id;
-    const desc = escapeHtml(wo.description || wo.title || "Untitled Job");
-    const status = wo.status || "Active";
-    const progress = Math.min(100, Math.max(0, parseInt(wo.progress, 10) || 0));
-    const prio = wo.priority || "Medium";
-    const isCommittedToday = (wo.last_commit_date === targetDate || wo.last_committed_date === targetDate);
-
-    // Assigned Crew
-    const assignedIds = Array.isArray(wo.assigned) ? wo.assigned : (wo.assigned ? Object.values(wo.assigned) : []);
-    const crewCount = assignedIds.length;
-
-    // Badges (pic - 02)
-    let prioBadge = prio === "Low" 
-      ? '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🟢 Low</span>'
-      : (prio === "High" || prio === "Urgent" 
-          ? '<span class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🔴 ' + prio + '</span>'
-          : '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🟡 Medium</span>');
-
-    const statusBadge = '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">' + escapeHtml(status) + '</span>';
-    const activeTodayBadge = isCommittedToday 
-      ? '<span class="bg-emerald-50 text-emerald-700 border border-emerald-300 px-2 py-0.5 rounded-full text-[10px] font-bold">🟢 Active Today</span>'
-      : (crewCount > 0 ? '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⏳ Standby</span>' : '');
-
-    const typeBadge = '<span class="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-bold">' + (wo.type ? '📋 ' + wo.type : 'TASK') + '</span>';
-
-    // Sailor Pills (pic - 02)
-    let sailorPillsHtml = '';
-    if (crewCount > 0) {
-      sailorPillsHtml = assignedIds.slice(0, 3).map(sid => {
-        const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
-        const rawName = s ? (s.name || s.off_no || 'Sailor') : ('Sailor ' + sid);
-        const nameParts = rawName.split(' ');
-        const displayShort = nameParts.length > 1 ? nameParts[nameParts.length - 1].toUpperCase() : rawName.toUpperCase();
-        return '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">' + 
-               escapeHtml(displayShort) + ' <span class="bg-orange-500 text-white px-1.5 py-0.1 rounded-full text-[8px] font-black">7.0</span></span>';
-      }).join(' ');
-      if (crewCount > 3) sailorPillsHtml += ' <span class="text-[9px] text-slate-400 font-bold">+' + (crewCount - 3) + '</span>';
-    } else {
-      sailorPillsHtml = '<span class="text-slate-400 text-xs italic">No sailors assigned yet</span>';
-    }
-
-    // Quick Commit Button
-    let commitBtnHtml = '';
-    if (!isCommittedToday && status !== 'Completed' && crewCount > 0) {
-      commitBtnHtml = `
-        <div class="pt-2 border-t border-slate-100">
-          <button type="button" onclick="commitLightLabour('${key}')" class="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black shadow-sm flex items-center justify-center gap-1.5 active-scale">
-            <span>⚡</span> Proceed - Commit Daily Labour (${crewCount})
-          </button>
-        </div>`;
-    }
+  filtered.forEach(e => {
+    const key = e._fbKey || e.id;
+    const estNo = escapeHtml(e.estimate_number || "EST/--");
+    const desc = escapeHtml(e.description || e.workScope || "Untitled Estimate");
+    const loc = escapeHtml(e.location || "Location not set");
+    const isApproved = e.status === "Approved";
+    const statusText = isApproved ? "✓ Approved" : (e.status || "Pending");
+    const statusClass = isApproved ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-amber-100 text-amber-800 border-amber-300";
+    const cost = formatCurrency(e.total_cost || 0);
+    const manDays = e.totalManDays || e.manDays || 0;
 
     html += `
-      <!-- WORK ORDER CARD (PIC - 02) -->
-      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:shadow-md p-3.5 space-y-2.5 transition-all">
-        <!-- Badges Row -->
-        <div class="flex items-center gap-1.5 flex-wrap">
-          ${prioBadge}
-          ${statusBadge}
-          ${activeTodayBadge}
-          ${typeBadge}
+      <!-- ESTIMATE CARD (PIC - 04 LEFT) -->
+      <div onclick="openEstimateDetailMobile('${key}')" class="p-3 bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-amber-400 cursor-pointer transition-all active-scale space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="mono text-xs font-black text-amber-900 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">${estNo}</span>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusClass}">${statusText}</span>
         </div>
-
-        <!-- Title & Location -->
-        <div>
-          <h3 class="text-sm font-bold text-slate-900 leading-snug">${desc}</h3>
-          <p class="text-xs text-slate-500 font-medium mt-0.5">📍 ${escapeHtml(wo.location || (currentZone + ' Area'))}</p>
+        <p class="text-xs font-black text-slate-900 line-clamp-2 leading-snug">${desc}</p>
+        <p class="text-[11px] font-medium text-slate-500 flex items-center gap-1 truncate">
+          <span>📍</span> <span>${loc}</span>
+        </p>
+        <div class="flex justify-between items-center pt-2 border-t border-slate-100">
+          <span class="text-xs font-black text-teal-700">Rs. ${cost}</span>
+          <span class="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-full">${manDays} man-days</span>
         </div>
-
-        <!-- Progress Slider -->
-        <div class="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-          <div class="flex items-center justify-between text-xs font-bold text-slate-600">
-            <span>Progress</span>
-            <span id="progLabel_${key}" class="text-teal-700 font-mono font-black">${progress}%</span>
-          </div>
-          <input type="range" min="0" max="100" step="5" value="${progress}" 
-                 oninput="document.getElementById('progLabel_${key}').textContent = this.value + '%'"
-                 onchange="updateTaskProgress('${key}', this.value)"
-                 class="w-full accent-teal-600 cursor-pointer h-2 bg-slate-200 rounded-lg">
-        </div>
-
-        <!-- Assigned Crew Section -->
-        <div class="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1 flex-wrap">
-          <div class="flex items-center gap-1 flex-wrap flex-1">
-            <span class="text-xs font-bold text-slate-700">🧑 ${crewCount} active:</span>
-            ${sailorPillsHtml}
-          </div>
-          <button type="button" onclick="openAssignModal('${key}')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-teal-800 font-bold text-[10px] rounded-lg border border-slate-200 active-scale">
-            👥 Assign
-          </button>
-        </div>
-
-        ${commitBtnHtml}
-      </div>
-    `;
+      </div>`;
   });
 
   container.innerHTML = html;
 }
 
-function updateTaskProgress(key, val) {
-  if (!opsDB || !key) return;
-  const num = parseInt(val, 10) || 0;
-  opsDB.ref(`work_orders/${key}`).update({
-    progress: num,
-    last_updated: Date.now()
-  }).then(() => {
-    showLightToast(`Progress set to ${num}%`, "📈");
+function filterLightEstimates() {
+  const query = (document.getElementById("mlEstimateSearch")?.value || "").toLowerCase().trim();
+  const cards = document.querySelectorAll("#mlEstimateList > div");
+  cards.forEach(c => {
+    const text = c.textContent.toLowerCase();
+    c.style.display = text.includes(query) ? "" : "none";
   });
 }
 
-function commitLightLabour(key) {
-  const wo = mlStore.workOrders.find(w => String(w.id) === String(key) || String(w._fbKey) === String(key));
-  if (!wo) return;
-  const today = mlStore.selectedDate;
-  const assigned = Array.isArray(wo.assigned) ? wo.assigned : (wo.assigned ? Object.values(wo.assigned) : []);
+// ── ESTIMATE DETAIL MODAL (PIC - 04 RIGHT) ──
+function openEstimateDetailMobile(estKey) {
+  const est = (mlStore.estimates || []).find(e => String(e._fbKey) === String(estKey) || String(e.id) === String(estKey));
+  if (!est) return;
 
-  if (assigned.length === 0) {
-    showLightToast("No sailors assigned to commit", "⚠️");
+  mlStore.selectedEstKey = est._fbKey || est.id;
+
+  const numEl = document.getElementById("mlEstDetailNumber");
+  const refEl = document.getElementById("mlEstDetailRef");
+  const statusEl = document.getElementById("mlEstDetailStatus");
+  const locEl = document.getElementById("mlEstDetailLocation");
+  const endUserEl = document.getElementById("mlEstDetailEndUser");
+  const scopeEl = document.getElementById("mlEstDetailScope");
+  const matTotalEl = document.getElementById("mlEstDetailMatTotal");
+  const labTotalEl = document.getElementById("mlEstDetailLabTotal");
+  const matBody = document.getElementById("mlEstDetailMatTableBody");
+  const labBody = document.getElementById("mlEstDetailLabTableBody");
+  const sigEl = document.getElementById("mlEstDetailSignatories");
+  const approveBtn = document.getElementById("mlEstDetailApproveBtn");
+
+  if (numEl) numEl.textContent = est.estimate_number || "EST/--";
+  if (refEl) refEl.textContent = est.reference_no || est.reference_doc || "—";
+  
+  const isApproved = est.status === "Approved";
+  if (statusEl) {
+    statusEl.textContent = isApproved ? "✓ Approved" : (est.status || "Pending");
+    statusEl.className = "inline-block px-2 py-0.5 rounded-full text-[10px] font-bold " + 
+      (isApproved ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800");
+  }
+
+  if (approveBtn) {
+    approveBtn.style.display = isApproved ? "none" : "";
+  }
+
+  if (locEl) locEl.textContent = "📍 " + (est.location || "Not set") + (est.location2 ? " • " + est.location2 : "");
+  if (endUserEl) endUserEl.textContent = "👤 " + (est.endUser || est.end_user || "Not set");
+  if (scopeEl) scopeEl.textContent = est.workScope || est.description || "—";
+
+  // Materials Table
+  const mats = Array.isArray(est.materials) ? est.materials : [];
+  let matTotal = 0;
+  if (matBody) {
+    if (mats.length === 0) {
+      matBody.innerHTML = '<tr><td colspan="5" class="p-3 text-center text-slate-400 italic">No materials specified</td></tr>';
+    } else {
+      matBody.innerHTML = mats.map(m => {
+        const qty = parseFloat(m.qty || 0);
+        const cost = parseFloat(m.cost || m.rate || 0);
+        const total = parseFloat(m.total || (qty * cost));
+        matTotal += total;
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="p-2 font-bold">${escapeHtml(m.description || "Item")}</td>
+            <td class="p-2 text-center">${qty}</td>
+            <td class="p-2 text-center text-slate-500">${escapeHtml(m.unit || "Nos")}</td>
+            <td class="p-2 text-right font-mono">Rs. ${formatCurrency(cost)}</td>
+            <td class="p-2 text-right font-mono font-bold text-teal-700">Rs. ${formatCurrency(total)}</td>
+          </tr>`;
+      }).join("");
+    }
+  }
+  if (matTotalEl) matTotalEl.textContent = "Rs. " + formatCurrency(est.total_cost || matTotal);
+
+  // Labor Requirement Table
+  const labs = Array.isArray(est.labor) ? est.labor : [];
+  let labTotalDays = 0;
+  if (labBody) {
+    if (labs.length === 0) {
+      labBody.innerHTML = '<tr><td colspan="3" class="p-3 text-center text-slate-400 italic">No labor specified</td></tr>';
+    } else {
+      labBody.innerHTML = labs.map(l => {
+        const workers = parseInt(l.workers || 1, 10);
+        const days = parseFloat(l.manDays || l.man_days || 0);
+        labTotalDays += days;
+        return `
+          <tr class="hover:bg-slate-50">
+            <td class="p-2 font-bold">${escapeHtml(l.trade || "Tradesman")}</td>
+            <td class="p-2 text-center">${workers}</td>
+            <td class="p-2 text-right font-mono font-bold text-blue-700">${days}</td>
+          </tr>`;
+      }).join("");
+    }
+  }
+  if (labTotalEl) labTotalEl.textContent = (est.totalManDays || labTotalDays) + " man-days";
+
+  // Signatories
+  if (sigEl) {
+    const cb = est.createdBy || {};
+    const chk = est.checkedBy || {};
+    sigEl.innerHTML = `
+      <div class="flex justify-between">
+        <span><strong>Created By:</strong> ${escapeHtml(cb.name || "—")} (${escapeHtml(cb.rank || "")} ${escapeHtml(cb.serviceNo || "")})</span>
+      </div>
+      <div class="flex justify-between border-t border-slate-200 pt-1">
+        <span><strong>Checked By:</strong> ${escapeHtml(chk.name || "—")} (${escapeHtml(chk.rank || "")} ${escapeHtml(chk.serviceNo || "")})</span>
+      </div>`;
+  }
+
+  const modal = document.getElementById("mlEstimateDetailModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeEstimateDetailMobile() {
+  const modal = document.getElementById("mlEstimateDetailModal");
+  if (modal) modal.classList.add("hidden");
+  mlStore.selectedEstKey = null;
+}
+
+function approveCurrentEstimateMobile() {
+  if (!mlStore.selectedEstKey) return;
+  const key = mlStore.selectedEstKey;
+  if (!confirm("Are you sure you want to approve this estimate?")) return;
+
+  opsDB.ref(`estimates/${key}`).update({
+    status: "Approved",
+    approved_at: Date.now()
+  }).then(() => {
+    showLightToast("Estimate Approved!", "✅");
+    closeEstimateDetailMobile();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Error approving estimate", "❌");
+  });
+}
+
+function deleteCurrentEstimateMobile() {
+  if (!mlStore.selectedEstKey) return;
+  const key = mlStore.selectedEstKey;
+  if (!confirm("⚠️ Are you sure you want to permanently delete this estimate?")) return;
+
+  opsDB.ref(`estimates/${key}`).remove().then(() => {
+    showLightToast("Estimate Deleted!", "🗑️");
+    closeEstimateDetailMobile();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Error deleting estimate", "❌");
+  });
+}
+
+function editCurrentEstimateMobile() {
+  const key = mlStore.selectedEstKey;
+  closeEstimateDetailMobile();
+  if (key) openNewEstimateModalMobile(key);
+}
+
+// ── NEW / EDIT ESTIMATE FORM MODAL (PIC - 03) ──
+function openNewEstimateModalMobile(editKey) {
+  const modal = document.getElementById("mlNewEstimateModal");
+  const title = document.getElementById("mlNewEstModalTitle");
+  const editInput = document.getElementById("mlEstEditKey");
+  const matContainer = document.getElementById("mlEstMaterialsContainer");
+  const labContainer = document.getElementById("mlEstLaborContainer");
+
+  populateLocationDatalistMobile();
+
+  if (editKey) {
+    const est = (mlStore.estimates || []).find(e => String(e._fbKey) === String(editKey) || String(e.id) === String(editKey));
+    if (est) {
+      if (title) title.textContent = "Edit Estimate (" + (est.estimate_number || "") + ")";
+      if (editInput) editInput.value = est._fbKey || est.id;
+      document.getElementById("mlEstDesc").value = est.description || est.workScope || "";
+      document.getElementById("mlEstRefType").value = est.ref_type || est.reference_type || "Minute Sheet";
+      document.getElementById("mlEstRefNo").value = est.reference_no || est.reference_doc || "";
+      document.getElementById("mlEstProjType").value = est.project_type || est.type || "PROJECT";
+      document.getElementById("mlEstLoc").value = est.location || "";
+      document.getElementById("mlEstLoc2").value = est.location2 || est.sub_location || "";
+      document.getElementById("mlEstEndUser").value = est.endUser || est.end_user || "";
+
+      const cb = est.createdBy || {};
+      document.getElementById("mlEstCreatedName").value = cb.name || "";
+      document.getElementById("mlEstCreatedRank").value = cb.rank || "";
+      document.getElementById("mlEstCreatedSvc").value = cb.serviceNo || "";
+
+      const chk = est.checkedBy || {};
+      document.getElementById("mlEstCheckedName").value = chk.name || "";
+      document.getElementById("mlEstCheckedRank").value = chk.rank || "";
+      document.getElementById("mlEstCheckedSvc").value = chk.serviceNo || "";
+
+      // Populate Materials
+      if (matContainer) {
+        matContainer.innerHTML = "";
+        (est.materials || []).forEach(m => addMaterialRowMobile(m));
+      }
+
+      // Populate Labor
+      if (labContainer) {
+        labContainer.innerHTML = "";
+        (est.labor || []).forEach(l => addLaborRowMobile(l));
+      }
+
+      calcNewEstTotalsMobile();
+    }
+  } else {
+    if (title) title.textContent = "New Estimate";
+    if (editInput) editInput.value = "";
+    document.getElementById("mlNewEstForm").reset();
+
+    // Default Signatories from In-Charge if available
+    const inc = (mlStore.zoneInCharges || {})[mlStore.currentZone] || {};
+    document.getElementById("mlEstCheckedName").value = inc.name || "";
+    document.getElementById("mlEstCheckedRank").value = inc.rank || "";
+    document.getElementById("mlEstCheckedSvc").value = inc.service_no || "";
+
+    if (matContainer) {
+      matContainer.innerHTML = "";
+      addMaterialRowMobile({ description: "", qty: 1, unit: "Nos", cost: 0 });
+    }
+    if (labContainer) {
+      labContainer.innerHTML = "";
+      addLaborRowMobile({ trade: "Carpenter", workers: 1, manDays: 1 });
+    }
+
+    calcNewEstTotalsMobile();
+  }
+
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeNewEstimateModalMobile() {
+  const modal = document.getElementById("mlNewEstimateModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function addMaterialRowMobile(data) {
+  const container = document.getElementById("mlEstMaterialsContainer");
+  if (!container) return;
+  const d = data || { description: "", qty: 1, unit: "Nos", cost: 0 };
+  const total = parseFloat(d.qty || 0) * parseFloat(d.cost || 0);
+
+  const row = document.createElement("div");
+  row.className = "p-2 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs est-mat-row";
+  row.innerHTML = `
+    <div class="flex items-center gap-1.5">
+      <input type="text" placeholder="Material Description..." value="${escapeHtml(d.description)}" class="flex-1 bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-bold est-mat-desc">
+      <button type="button" onclick="removeMaterialRowMobile(this)" class="w-6 h-6 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-bold shrink-0">✕</button>
+    </div>
+    <div class="grid grid-cols-3 gap-1.5">
+      <div>
+        <label class="text-[9px] font-bold text-slate-500 block">Qty</label>
+        <input type="number" step="any" min="0" value="${d.qty || 1}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-mono est-mat-qty">
+      </div>
+      <div>
+        <label class="text-[9px] font-bold text-slate-500 block">Unit</label>
+        <select class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs est-mat-unit">
+          ${["Nos", "Kg", "Ltr", "Bags", "Cubes", "Ft", "lft", "Meters", "Sqft", "Sheets", "Pkts", "Tins"].map(u => 
+            `<option value="${u}" ${u === (d.unit || "Nos") ? "selected" : ""}>${u}</option>`
+          ).join("")}
+        </select>
+      </div>
+      <div>
+        <label class="text-[9px] font-bold text-slate-500 block">Rate (Rs)</label>
+        <input type="number" step="any" min="0" value="${d.cost || 0}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-mono est-mat-cost">
+      </div>
+    </div>`;
+  container.appendChild(row);
+  calcNewEstTotalsMobile();
+}
+
+function removeMaterialRowMobile(btn) {
+  const row = btn.closest(".est-mat-row");
+  if (row) row.remove();
+  calcNewEstTotalsMobile();
+}
+
+function addLaborRowMobile(data) {
+  const container = document.getElementById("mlEstLaborContainer");
+  if (!container) return;
+  const d = data || { trade: "Carpenter", workers: 1, manDays: 1 };
+
+  const trades = ["Carpenter", "Painter", "Mason", "Plumber", "Welder", "Electrician", "Blacksmith", "Labourer"];
+
+  const row = document.createElement("div");
+  row.className = "p-2 bg-slate-50 border border-slate-200 rounded-xl space-y-1 text-xs est-lab-row";
+  row.innerHTML = `
+    <div class="grid grid-cols-12 gap-1.5 items-center">
+      <div class="col-span-5">
+        <label class="text-[9px] font-bold text-slate-500 block">Trade</label>
+        <select class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-bold est-lab-trade">
+          ${trades.map(t => `<option value="${t}" ${t === (d.trade || "Carpenter") ? "selected" : ""}>${t}</option>`).join("")}
+        </select>
+      </div>
+      <div class="col-span-3">
+        <label class="text-[9px] font-bold text-slate-500 block">Workers</label>
+        <input type="number" min="1" value="${d.workers || 1}" class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-mono est-lab-workers">
+      </div>
+      <div class="col-span-3">
+        <label class="text-[9px] font-bold text-slate-500 block">Man-Days</label>
+        <input type="number" step="any" min="0" value="${d.manDays || 1}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-mono font-bold est-lab-days">
+      </div>
+      <div class="col-span-1 text-right pt-3">
+        <button type="button" onclick="removeLaborRowMobile(this)" class="w-6 h-6 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-bold">✕</button>
+      </div>
+    </div>`;
+  container.appendChild(row);
+  calcNewEstTotalsMobile();
+}
+
+function removeLaborRowMobile(btn) {
+  const row = btn.closest(".est-lab-row");
+  if (row) row.remove();
+  calcNewEstTotalsMobile();
+}
+
+function calcNewEstTotalsMobile() {
+  let matTotal = 0;
+  document.querySelectorAll(".est-mat-row").forEach(r => {
+    const qty = parseFloat(r.querySelector(".est-mat-qty")?.value || 0);
+    const cost = parseFloat(r.querySelector(".est-mat-cost")?.value || 0);
+    matTotal += (qty * cost);
+  });
+
+  let laborDays = 0;
+  document.querySelectorAll(".est-lab-row").forEach(r => {
+    const days = parseFloat(r.querySelector(".est-lab-days")?.value || 0);
+    laborDays += days;
+  });
+
+  const matCostEl = document.getElementById("mlEstSummaryMatCost");
+  const manDaysEl = document.getElementById("mlEstSummaryManDays");
+  const grandTotalEl = document.getElementById("mlEstSummaryGrandTotal");
+
+  if (matCostEl) matCostEl.textContent = "Rs. " + formatCurrency(matTotal);
+  if (manDaysEl) manDaysEl.textContent = laborDays.toString();
+  if (grandTotalEl) grandTotalEl.textContent = "Rs. " + formatCurrency(matTotal);
+}
+
+function saveEstimateMobile(e) {
+  if (e) e.preventDefault();
+
+  const desc = (document.getElementById("mlEstDesc")?.value || "").trim();
+  if (!desc) {
+    showLightToast("Please enter estimate description", "⚠️");
     return;
   }
 
-  assigned.forEach(sid => {
-    opsDB.ref(`daily_allocations/${today}_${sid}`).set({
-      date: today,
-      sailor_id: sid,
-      work_order_id: wo.id || key,
-      status: "Active"
+  const editKey = document.getElementById("mlEstEditKey")?.value;
+  const refType = document.getElementById("mlEstRefType")?.value || "Minute Sheet";
+  const refNo = (document.getElementById("mlEstRefNo")?.value || "").trim();
+  const projType = document.getElementById("mlEstProjType")?.value || "PROJECT";
+  const loc = (document.getElementById("mlEstLoc")?.value || "").trim();
+  const loc2 = (document.getElementById("mlEstLoc2")?.value || "").trim();
+  const endUser = (document.getElementById("mlEstEndUser")?.value || "").trim();
+
+  // Materials
+  const materials = [];
+  let grandMaterials = 0;
+  document.querySelectorAll(".est-mat-row").forEach(r => {
+    const mDesc = (r.querySelector(".est-mat-desc")?.value || "").trim();
+    const qty = parseFloat(r.querySelector(".est-mat-qty")?.value || 0);
+    const unit = r.querySelector(".est-mat-unit")?.value || "Nos";
+    const cost = parseFloat(r.querySelector(".est-mat-cost")?.value || 0);
+    const total = qty * cost;
+    if (mDesc) {
+      materials.push({ description: mDesc, qty, unit, cost, total });
+      grandMaterials += total;
+    }
+  });
+
+  // Labor
+  const labor = [];
+  let grandLabor = 0;
+  document.querySelectorAll(".est-lab-row").forEach(r => {
+    const trade = r.querySelector(".est-lab-trade")?.value || "Carpenter";
+    const workers = parseInt(r.querySelector(".est-lab-workers")?.value || 1, 10);
+    const manDays = parseFloat(r.querySelector(".est-lab-days")?.value || 0);
+    if (manDays > 0) {
+      labor.push({ trade, workers, manDays });
+      grandLabor += manDays;
+    }
+  });
+
+  // Signatories
+  const createdBy = {
+    name: (document.getElementById("mlEstCreatedName")?.value || "").trim(),
+    rank: (document.getElementById("mlEstCreatedRank")?.value || "").trim(),
+    serviceNo: (document.getElementById("mlEstCreatedSvc")?.value || "").trim()
+  };
+
+  const checkedBy = {
+    name: (document.getElementById("mlEstCheckedName")?.value || "").trim(),
+    rank: (document.getElementById("mlEstCheckedRank")?.value || "").trim(),
+    serviceNo: (document.getElementById("mlEstCheckedSvc")?.value || "").trim()
+  };
+
+  const currentZone = mlStore.currentZone;
+
+  if (editKey) {
+    const updateObj = {
+      description: desc,
+      workScope: desc,
+      ref_type: refType,
+      reference_type: refType,
+      reference_doc: refNo,
+      reference_no: refNo,
+      project_type: projType,
+      type: projType,
+      location: loc,
+      location2: loc2,
+      sub_location: loc2,
+      endUser: endUser,
+      materials: materials,
+      labor: labor,
+      total_cost: grandMaterials,
+      totalManDays: grandLabor,
+      createdBy: createdBy,
+      checkedBy: checkedBy,
+      updated_at: Date.now()
+    };
+
+    opsDB.ref(`estimates/${editKey}`).update(updateObj).then(() => {
+      showLightToast("Estimate updated successfully!", "✅");
+      closeNewEstimateModalMobile();
+    }).catch(err => {
+      console.error(err);
+      showLightToast("Error updating estimate", "❌");
     });
-  });
-
-  opsDB.ref(`work_orders/${key}`).update({
-    last_commit_date: today,
-    last_committed_date: today
-  }).then(() => {
-    wo.last_commit_date = today;
-    wo.last_committed_date = today;
-    showLightToast(`Committed ${assigned.length} sailor(s)!`, "⚡");
-    renderLightTasks();
-  });
-}
-
-// ---------------------------------------------
-// TAB 2: CIVIL ESTIMATOR (LIGHTWEIGHT)
-// ---------------------------------------------
-let mLightEstSummary = "";
-
-function selectLightEstCat(cat) {
-  mlStore.estCategory = cat;
-  ["concrete", "brick", "plaster"].forEach(c => {
-    const inputDiv = document.getElementById(c === "concrete" ? "mlEstConcInputs" : c === "brick" ? "mlEstBrickInputs" : "mlEstPlastInputs");
-    const btn = document.getElementById(c === "concrete" ? "mlCatBtnConc" : c === "brick" ? "mlCatBtnBrick" : "mlCatBtnPlast");
-    if (inputDiv) {
-      if (c === cat) inputDiv.classList.remove("hidden");
-      else inputDiv.classList.add("hidden");
-    }
-    if (btn) {
-      if (c === cat) btn.className = "flex-1 py-1.5 rounded-lg bg-teal-600 text-white active-scale";
-      else btn.className = "flex-1 py-1.5 rounded-lg text-slate-600 hover:text-slate-900 active-scale";
-    }
-  });
-  calcLightEstimate();
-}
-
-function calcLightEstimate() {
-  const grid = document.getElementById("mlEstResultGrid");
-  const costEl = document.getElementById("mlEstCost");
-  const sumEl = document.getElementById("mlEstSummary");
-  if (!grid || !costEl) return;
-
-  const cat = mlStore.estCategory;
-  let cards = [];
-  let summary = "";
-  let totalCost = 0;
-
-  if (cat === "concrete") {
-    const l = parseFloat(document.getElementById("mlConcL")?.value) || 0;
-    const w = parseFloat(document.getElementById("mlConcW")?.value) || 0;
-    const t = parseFloat(document.getElementById("mlConcT")?.value) || 0;
-    const wetVol = l * w * (t / 12);
-    const dryVol = wetVol * 1.54;
-
-    // 1:2:4 Mix
-    const cementBags = Math.ceil((1 / 7) * dryVol / 1.25);
-    const sandCubes = ((2 / 7) * dryVol / 100).toFixed(2);
-    const metalCubes = ((4 / 7) * dryVol / 100).toFixed(2);
-    totalCost = (cementBags * 2400) + (parseFloat(sandCubes) * 28000) + (parseFloat(metalCubes) * 26000);
-
-    cards = [
-      { label: "Cement Bags", val: cementBags + " Bags" },
-      { label: "River Sand", val: sandCubes + " Cubes" },
-      { label: "Metal (3/4)", val: metalCubes + " Cubes" },
-      { label: "Volume", val: wetVol.toFixed(1) + " cu.ft" }
-    ];
-    summary = `Concrete 1:2:4 (${l}ft × ${w}ft × ${t}"): ${cementBags} Cement Bags, ${sandCubes} Sand Cubes, ${metalCubes} Metal Cubes. Total: Rs ${totalCost.toLocaleString()}`;
-  } else if (cat === "brick") {
-    const l = parseFloat(document.getElementById("mlBrickL")?.value) || 0;
-    const h = parseFloat(document.getElementById("mlBrickH")?.value) || 0;
-    const area = l * h;
-    const count = Math.ceil(area * 5.5);
-    const cementBags = Math.ceil(area * 0.07);
-    const sandCubes = (area * 0.0035).toFixed(2);
-    totalCost = (count * 35) + (cementBags * 2400) + (parseFloat(sandCubes) * 28000);
-
-    cards = [
-      { label: "Clay Bricks", val: count + " Bricks" },
-      { label: "Mortar Cement", val: cementBags + " Bags" },
-      { label: "Mortar Sand", val: sandCubes + " Cubes" },
-      { label: "Wall Area", val: area.toFixed(0) + " Sq.Ft" }
-    ];
-    summary = `Brickwork (${l}ft × ${h}ft): ${count} Bricks, ${cementBags} Cement Bags, ${sandCubes} Sand Cubes. Total: Rs ${totalCost.toLocaleString()}`;
   } else {
-    const area = parseFloat(document.getElementById("mlPlastArea")?.value) || 0;
-    const cementBags = Math.ceil(area * 0.012);
-    const sandCubes = (area * 0.012 * 0.06).toFixed(2);
-    const paintLitres = Math.ceil((area / 180) * 4);
-    totalCost = (cementBags * 2400) + (parseFloat(sandCubes) * 28000) + (paintLitres * 1800);
+    const year = new Date().getFullYear();
+    const nextSeq = (mlStore.estimates.length + 1).toString().padStart(4, "0");
+    const estNumber = `EST/${year}/${nextSeq}`;
 
-    cards = [
-      { label: "Plaster Cement", val: cementBags + " Bags" },
-      { label: "Plaster Sand", val: sandCubes + " Cubes" },
-      { label: "Paint Litres", val: paintLitres + " L" },
-      { label: "Area", val: area.toFixed(0) + " Sq.Ft" }
-    ];
-    summary = `Plaster & Paint (${area} Sq.Ft): ${cementBags} Cement Bags, ${sandCubes} Sand, ${paintLitres}L Paint. Total: Rs ${totalCost.toLocaleString()}`;
+    const newRef = opsDB.ref("estimates").push();
+    const newEst = {
+      id: newRef.key,
+      estimate_number: estNumber,
+      description: desc,
+      workScope: desc,
+      ref_type: refType,
+      reference_type: refType,
+      reference_doc: refNo,
+      reference_no: refNo,
+      project_type: projType,
+      type: projType,
+      location: loc,
+      location2: loc2,
+      sub_location: loc2,
+      endUser: endUser,
+      materials: materials,
+      labor: labor,
+      total_cost: grandMaterials,
+      totalManDays: grandLabor,
+      status: "Pending",
+      createdBy: createdBy,
+      checkedBy: checkedBy,
+      zone_id: currentZone,
+      created_at: Date.now()
+    };
+
+    newRef.set(newEst).then(() => {
+      showLightToast("Estimate " + estNumber + " created!", "✅");
+      closeNewEstimateModalMobile();
+    }).catch(err => {
+      console.error(err);
+      showLightToast("Error creating estimate", "❌");
+    });
   }
-
-  mLightEstSummary = summary;
-  costEl.textContent = `Rs ${totalCost.toLocaleString()}`;
-  grid.innerHTML = cards.map(c => `
-    <div class="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-      <div class="text-[9px] font-bold text-slate-500 uppercase">${c.label}</div>
-      <div class="text-xs font-black text-slate-900 font-mono mt-0.5">${c.val}</div>
-    </div>
-  `).join("");
-  if (sumEl) sumEl.textContent = summary;
 }
 
-function copyLightEstimate() {
-  if (!mLightEstSummary) calcLightEstimate();
-  navigator.clipboard?.writeText(mLightEstSummary).then(() => {
-    showLightToast("Estimate copied to clipboard!", "📋");
-  });
-}
-
-// ---------------------------------------------
 // TAB 3: LMD TRACKER (LAST MAINTAINED DATE)
 // ---------------------------------------------
 function loadLightLmdRecords() {
