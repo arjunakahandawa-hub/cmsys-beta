@@ -400,85 +400,343 @@
         </div>
     </div>
 
-    <!-- MODAL: WORK ORDER DETAILS (PIC - 03 REQUIREMENT) -->
-    <div id="mlWorkOrderDetailModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-        <div class="bg-white rounded-2xl w-full max-w-sm sm:max-w-md max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
-            <!-- Header -->
-            <div class="bg-gradient-to-r from-slate-900 via-teal-900 to-slate-900 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
-                <div class="truncate">
-                    <span id="mlWoDetailTypeBadge" class="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-teal-500/30 text-teal-200 border border-teal-400/40">PROJECT</span>
-                    <h3 id="mlWoDetailTitle" class="text-xs font-bold text-white mt-1 truncate">Work Order Details</h3>
+    <!-- MODAL: FULL WORK ORDER DETAILS & ASSIGNMENT (PIC 02 FORMAT) -->
+    <div id="mlWorkOrderDetailModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-lg sm:max-w-xl md:max-w-2xl max-h-[95vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <!-- Header (Blue Banner matching Pic 02) -->
+            <div class="bg-gradient-to-r from-blue-700 via-indigo-700 to-blue-800 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
+                <div class="min-w-0 flex-1 pr-2">
+                    <h3 id="mlWoDetailTitle" class="text-xs sm:text-sm font-black text-white truncate">Work Order Details</h3>
+                    <p id="mlWoDetailRef" class="text-[10px] sm:text-xs text-blue-200 font-mono truncate">PROJECT • No Reference</p>
                 </div>
-                <button type="button" onclick="closeWorkOrderDetailMobile()" class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold active-scale shrink-0">✕</button>
+                <button type="button" onclick="closeWorkOrderDetailMobile()" class="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-xs font-bold active-scale shrink-0">✕</button>
             </div>
 
-            <!-- Content -->
+            <!-- Tab Bar -->
+            <div class="border-b border-slate-200 flex bg-slate-50 shrink-0">
+                <button type="button" onclick="switchMlWoTab('details')" id="mlWoTab-details-btn" class="flex-1 py-2.5 px-3 text-xs font-bold border-b-2 border-blue-600 text-blue-600 flex items-center justify-center gap-1.5 transition-all">
+                    <span>📋</span> Details & Assignment
+                </button>
+                <button type="button" onclick="switchMlWoTab('evaluation')" id="mlWoTab-evaluation-btn" class="flex-1 py-2.5 px-3 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 transition-all">
+                    <span>📝</span> Daily Evaluation <span id="mlWoEvalPendingBadge" class="hidden ml-1 text-[9px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full font-bold"></span>
+                </button>
+            </div>
+
+            <!-- Modal Body Scrollable -->
             <div class="p-3.5 space-y-3 overflow-y-auto touch-scroll flex-1 text-xs">
-                <!-- Badges & Status -->
-                <div class="flex items-center gap-1.5 flex-wrap">
-                    <span id="mlWoDetailPrioBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold border">Medium</span>
-                    <span id="mlWoDetailStatusBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold border">Active</span>
-                    <span id="mlWoDetailActiveTodayBadge" class="hidden px-2 py-0.5 rounded-full text-[10px] font-bold border bg-emerald-50 text-emerald-700 border-emerald-300">🟢 Active Today</span>
-                </div>
-
-                <!-- Scope / Description -->
-                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1">
-                    <label class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Scope of Work</label>
-                    <p id="mlWoDetailDesc" class="text-xs font-bold text-slate-800 whitespace-pre-wrap leading-relaxed"></p>
-                </div>
-
-                <!-- Location & Duration -->
-                <div class="grid grid-cols-2 gap-2 text-slate-700 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
-                    <div>
-                        <span class="block text-[9px] font-bold text-slate-400 uppercase">Location</span>
-                        <span id="mlWoDetailLocation" class="font-bold text-xs truncate block">📍 Not set</span>
+                
+                <!-- TAB 1: DETAILS & ASSIGNMENT -->
+                <div id="mlWoTab-details" class="space-y-3">
+                    <!-- Type Badge & Migration Row -->
+                    <div class="p-2.5 bg-gradient-to-r from-slate-50 to-indigo-50/70 border border-indigo-100 rounded-xl flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-[10px] font-bold text-slate-500 uppercase">Type:</span>
+                            <span id="mlWoDetailTypeBadge" class="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">PROJECT</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button type="button" id="mlBtnQuickConvert" onclick="mlToggleTypeMigration()" class="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-2xs active-scale">
+                                🔄 Change Type
+                            </button>
+                        </div>
                     </div>
-                    <div>
-                        <span class="block text-[9px] font-bold text-slate-400 uppercase">Duration</span>
-                        <span id="mlWoDetailDuration" class="font-bold text-xs block">⏱️ 1 Day</span>
-                    </div>
-                </div>
 
-                <!-- Progress Control -->
-                <div class="space-y-1.5 bg-teal-50/50 p-3 rounded-xl border border-teal-100">
-                    <div class="flex items-center justify-between text-xs font-bold text-slate-700">
-                        <span>Work Progress</span>
-                        <span id="mlWoDetailProgressText" class="text-teal-700 font-mono font-black text-sm">0%</span>
-                    </div>
-                    <input type="range" id="mlWoDetailProgressSlider" min="0" max="100" step="5" value="0"
-                           oninput="document.getElementById('mlWoDetailProgressText').textContent = this.value + '%'"
-                           onchange="updateWoDetailProgressMobile(this.value)"
-                           class="w-full accent-teal-600 cursor-pointer h-2 bg-slate-200 rounded-lg">
-                </div>
-
-                <!-- Assigned Crew -->
-                <div class="space-y-2">
-                    <div class="flex items-center justify-between">
-                        <label class="block text-[11px] font-bold text-slate-700">
-                            👷 Assigned Crew (<span id="mlWoDetailCrewCount">0</span>)
-                        </label>
-                        <button type="button" id="mlWoDetailManageCrewBtn" onclick="openAssignModalFromDetail()" class="text-[10px] font-bold px-2 py-1 bg-slate-100 hover:bg-slate-200 text-teal-800 rounded-lg border border-slate-200 active-scale">
-                            👥 Manage Crew
+                    <!-- Collapsible Type Migration Controls -->
+                    <div id="mlWoTypeMigrationPanel" class="hidden p-3 bg-indigo-50/50 border border-indigo-200 rounded-xl space-y-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-600 uppercase">Target Type</label>
+                                <select id="mlWoTargetTypeSelect" onchange="mlHandleTargetTypeChange(this.value)" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800">
+                                    <option value="PROJECT">📋 Project (Type P)</option>
+                                    <option value="JOB">🔧 Job (Type J)</option>
+                                    <option value="TASK">⚡ Task (Type T)</option>
+                                    <option value="ASSIGNMENT">💼 Assignment (Assign)</option>
+                                </select>
+                            </div>
+                            <div id="mlWoAssignTypeCol" class="hidden">
+                                <label class="block text-[10px] font-bold text-slate-600 uppercase">Category</label>
+                                <select id="mlWoAssignTypeSelect" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800">
+                                    <option value="In Charge">In Charge</option>
+                                    <option value="Duty">Duty</option>
+                                    <option value="Workshop Duty">Workshop Duty</option>
+                                    <option value="Driver">Driver</option>
+                                    <option value="Admin Staff">Admin Staff</option>
+                                    <option value="General Assignment">General Assignment</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button type="button" onclick="mlApplyTypeMigration()" class="w-full py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg shadow-2xs active-scale">
+                            ✓ Apply Change Type
                         </button>
                     </div>
-                    <div id="mlWoDetailCrewList" class="space-y-1 max-h-36 overflow-y-auto">
-                        <!-- Injected sailor rows -->
+
+                    <!-- Officer Clearance & Review Banner -->
+                    <div class="p-2.5 bg-gradient-to-r from-amber-50/80 via-white to-amber-50/80 border border-amber-200 rounded-xl space-y-2 shadow-2xs">
+                        <div class="flex items-center justify-between flex-wrap gap-1.5">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-xs">🛡️</span>
+                                <span class="text-[10px] font-black text-amber-950 uppercase">Officer Clearance:</span>
+                                <span id="mlWoOfficerStatusBadge" class="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300">In-Charge Draft</span>
+                            </div>
+                            <button type="button" id="mlBtnForwardToOfficer" onclick="mlToggleForwardPanel()" class="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white active-scale">
+                                📤 Officer Approval
+                            </button>
+                        </div>
+
+                        <!-- Forward Panel Form -->
+                        <div id="mlWoForwardPanel" class="hidden pt-2 border-t border-amber-200/80 space-y-2">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-600">Select Officer:</label>
+                                <select id="mlWoForwardOfficerSelect" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold">
+                                    <option value="">-- Choose Officer --</option>
+                                </select>
+                            </div>
+                            <div>
+                                <input type="text" id="mlWoForwardRemarks" placeholder="Remarks e.g. Site verified..." class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs">
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="button" onclick="mlSubmitForwardToOfficer()" class="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-lg active-scale">
+                                    🚀 Send Forward
+                                </button>
+                                <button type="button" onclick="mlOfficerApproveDirect()" id="mlBtnOfficerDirectApprove" class="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg active-scale">
+                                    ✅ Officer Approve
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Status & Priority Row -->
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Status *</label>
+                            <select id="mlWoDetailStatus" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:bg-white focus:border-teal-600">
+                                <option value="Active">🟢 Active (Ongoing)</option>
+                                <option value="Pending">🟡 Pending</option>
+                                <option value="Hold">⚪ Hold</option>
+                                <option value="Completed">✓ Completed</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Priority *</label>
+                            <select id="mlWoDetailPriority" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:bg-white focus:border-teal-600">
+                                <option value="High">🔴 High</option>
+                                <option value="Medium">🟡 Medium</option>
+                                <option value="Low">🟢 Low</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Description / Scope of Work -->
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Description / Scope of Work *</label>
+                        <textarea id="mlWoDetailDesc" rows="3" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-semibold text-slate-800 focus:bg-white focus:border-teal-600 resize-none" placeholder="Enter work order scope..."></textarea>
+                    </div>
+
+                    <!-- Authority, Budget, Duration -->
+                    <div class="grid grid-cols-3 gap-2">
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Authority</label>
+                            <input type="text" id="mlWoDetailAuthority" placeholder="e.g. NHQ(CE)" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-800 focus:bg-white focus:border-teal-600">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Budget (Rs)</label>
+                            <input type="number" id="mlWoDetailBudget" placeholder="0.00" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-800 focus:bg-white focus:border-teal-600 font-mono">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] font-bold text-slate-600 uppercase mb-0.5">Duration (Days)</label>
+                            <input type="number" id="mlWoDetailDuration" placeholder="1" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-2 py-1.5 text-xs font-semibold text-slate-800 focus:bg-white focus:border-teal-600 font-mono">
+                        </div>
+                    </div>
+
+                    <!-- Total Estimated Cost & Job Card Info Banner -->
+                    <div class="p-2.5 bg-emerald-50/60 border border-emerald-200 rounded-xl flex items-center justify-between gap-2 shadow-2xs">
+                        <div>
+                            <span class="text-[9px] font-bold text-slate-500 uppercase block">Total Estimated Cost</span>
+                            <span id="mlWoDetailCostRef" class="text-[10px] font-bold font-mono text-emerald-800">JC / Estimate Linked</span>
+                        </div>
+                        <div class="text-right">
+                            <span id="mlWoDetailTotalCost" class="text-sm font-black font-mono text-emerald-700">Rs. 0.00</span>
+                            <span class="text-[9px] text-slate-400 block">(Direct Material + Est)</span>
+                        </div>
+                    </div>
+
+                    <!-- Work Order Progress Slider (with 0%, 25%, 50%, 75%, 100% indicators matching Pic 02) -->
+                    <div class="space-y-1.5 bg-teal-50/50 p-3 rounded-xl border border-teal-100">
+                        <div class="flex items-center justify-between text-xs font-bold text-slate-700">
+                            <span class="flex items-center gap-1"><span>📊</span> Work Order Progress</span>
+                            <span id="mlWoDetailProgressText" class="text-teal-700 font-mono font-black text-sm">0%</span>
+                        </div>
+                        <input type="range" id="mlWoDetailProgressSlider" min="0" max="100" step="5" value="0"
+                               oninput="document.getElementById('mlWoDetailProgressText').textContent = this.value + '%'"
+                               class="w-full accent-teal-600 cursor-pointer h-2 bg-slate-200 rounded-lg">
+                        <div class="flex justify-between text-[9px] font-bold text-slate-400 px-0.5">
+                            <span>0%</span>
+                            <span>25%</span>
+                            <span>50%</span>
+                            <span>75%</span>
+                            <span class="text-teal-700">100% (Done)</span>
+                        </div>
+                    </div>
+
+                    <!-- Staff Responsibilities (In-charge, Supervisor, Project Artificer) -->
+                    <div class="space-y-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <span class="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Supervision & Staff</span>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div>
+                                <label class="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">In-charge</label>
+                                <select id="mlWoDetailIncharge" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800">
+                                    <option value="">Select...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Supervisor</label>
+                                <select id="mlWoDetailSupervisor" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800">
+                                    <option value="">Select...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-[9px] font-bold text-slate-600 uppercase mb-0.5">Project Artificer</label>
+                                <select id="mlWoDetailArtificer" class="w-full bg-white border border-slate-300 rounded-lg px-2 py-1 text-xs font-semibold text-slate-800">
+                                    <option value="">Select...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ASSIGN RESOURCES SECTION (Interactive Trade Pills & Search) -->
+                    <div class="space-y-2 bg-slate-900 text-white p-3 rounded-2xl shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-black uppercase tracking-wider text-teal-300 flex items-center gap-1">
+                                <span>➕</span> Assign Resources
+                            </span>
+                            <span class="text-[10px] text-slate-400">Tap card to add/remove</span>
+                        </div>
+
+                        <!-- Search -->
+                        <div class="relative">
+                            <input type="text" id="mlWoSailorSearch" oninput="mlFilterDetailSailors()" placeholder="Search by name, off no..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:border-teal-500">
+                        </div>
+
+                        <!-- Trade Filter Pills -->
+                        <div class="flex gap-1 overflow-x-auto touch-scroll pb-1">
+                            <button type="button" onclick="mlFilterDetailTrade('ALL')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-teal-600 text-white shrink-0">ALL</button>
+                            <button type="button" onclick="mlFilterDetailTrade('ELE')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">ELE</button>
+                            <button type="button" onclick="mlFilterDetailTrade('CW')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">CW</button>
+                            <button type="button" onclick="mlFilterDetailTrade('PC')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">PC</button>
+                            <button type="button" onclick="mlFilterDetailTrade('PL')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">PL</button>
+                            <button type="button" onclick="mlFilterDetailTrade('WP')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">WP</button>
+                            <button type="button" onclick="mlFilterDetailTrade('MAS')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">MAS</button>
+                            <button type="button" onclick="mlFilterDetailTrade('CA')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">CA</button>
+                            <button type="button" onclick="mlFilterDetailTrade('ME')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">ME</button>
+                            <button type="button" onclick="mlFilterDetailTrade('EA')" class="ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0">EA</button>
+                        </div>
+
+                        <!-- Available Sailor Grid -->
+                        <div id="mlWoSailorGrid" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-44 overflow-y-auto touch-scroll pt-1">
+                            <!-- Injected sailor chips -->
+                        </div>
+                    </div>
+
+                    <!-- ASSIGNED LABOUR LIST -->
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <label class="block text-[11px] font-bold text-slate-700">
+                                👷 Assigned Labour (<span id="mlWoDetailCrewCount">0</span> assigned)
+                            </label>
+                        </div>
+                        <div id="mlWoDetailCrewList" class="space-y-1.5 max-h-48 overflow-y-auto touch-scroll">
+                            <!-- Injected sailor rows -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2: DAILY EVALUATION -->
+                <div id="mlWoTab-evaluation" class="hidden space-y-3">
+                    <div class="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 flex items-center gap-2">
+                        <span class="text-base">📝</span>
+                        <div>
+                            <p class="font-bold text-[11px]">Daily Performance Evaluation</p>
+                            <p class="text-[10px] text-amber-700">Evaluate assigned sailors for today's work</p>
+                        </div>
+                    </div>
+                    <div id="mlWoEvalList" class="space-y-2 max-h-[60vh] overflow-y-auto touch-scroll">
+                        <!-- Injected evaluation sailor cards -->
                     </div>
                 </div>
             </div>
 
-            <!-- Footer Actions -->
-            <div class="p-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
-                <button type="button" onclick="deleteCurrentWorkOrderMobile()" class="px-3 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 active-scale flex items-center gap-1" title="Delete Work Order">
+            <!-- FOOTER ACTIONS (Matching Pic 02 Buttons) -->
+            <div class="p-3 bg-slate-100 border-t border-slate-200 flex items-center justify-between gap-1.5 shrink-0 flex-wrap">
+                <button type="button" onclick="deleteCurrentWorkOrderMobile()" class="px-3 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-2xs active-scale flex items-center gap-1" title="Delete Work Order">
                     <span>🗑️</span> Delete
                 </button>
-                <div class="flex items-center gap-2">
-                    <button type="button" id="mlWoDetailCommitBtn" onclick="commitCurrentWoLabourMobile()" class="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-xs active-scale flex items-center gap-1">
-                        <span>⚡</span> Commit Labour
-                    </button>
-                    <button type="button" id="mlWoDetailCompleteBtn" onclick="completeCurrentWoMobile()" class="px-3 py-2 rounded-xl bg-teal-800 hover:bg-teal-700 text-white font-bold text-xs shadow-xs active-scale flex items-center gap-1">
-                        <span>✓</span> Done
-                    </button>
+                <button type="button" onclick="closeWorkOrderDetailMobile()" class="px-3 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs active-scale">
+                    ✕ Cancel
+                </button>
+                <button type="button" onclick="saveWorkOrderDetailMobile()" class="flex-1 px-3 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-2xs active-scale flex items-center justify-center gap-1">
+                    <span>💾</span> Save Changes
+                </button>
+                <button type="button" id="mlWoDetailCommitBtn" onclick="commitCurrentWoLabourMobile()" class="px-3 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs shadow-2xs active-scale flex items-center gap-1">
+                    <span>⚡</span> Proceed - Commit
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: MOBILE SAILOR PERFORMANCE EVALUATION -->
+    <div id="mlEvaluationModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm sm:max-w-md max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="bg-gradient-to-r from-emerald-700 to-teal-700 text-white p-3.5 flex items-center justify-between shrink-0">
+                <div>
+                    <h3 class="text-xs sm:text-sm font-bold text-white">ක්‍රියාකාරීත්ව ඇගයීම (Evaluation)</h3>
+                    <p class="text-[10px] text-emerald-200">Daily Performance Rating (1-10 Scale)</p>
+                </div>
+                <button type="button" onclick="closeMlEvaluationModal()" class="w-6 h-6 rounded-full bg-white/20 text-white flex items-center justify-center text-xs font-bold active-scale">✕</button>
+            </div>
+            <div class="p-4 space-y-3.5 overflow-y-auto touch-scroll flex-1 text-xs">
+                <input type="hidden" id="mlEvalSailorId">
+                <input type="hidden" id="mlEvalWorkOrderId">
+                
+                <div class="flex items-center gap-2.5 p-2.5 bg-slate-50 border border-slate-200 rounded-xl">
+                    <span id="mlEvalSailorInitial" class="w-9 h-9 rounded-xl bg-teal-700 text-white font-black flex items-center justify-center text-xs shadow-2xs">AB</span>
+                    <div class="min-w-0 flex-1">
+                        <p id="mlEvalSailorName" class="font-bold text-slate-900 text-xs truncate">Kamal Perera</p>
+                        <p id="mlEvalWorkOrderTitle" class="text-[10px] text-slate-500 truncate">Job Description</p>
+                    </div>
+                </div>
+
+                <!-- 3 Evaluation Sliders -->
+                <div class="space-y-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-[11px] font-bold text-slate-700">ගුණාත්මකභාවය (Quality & Skill)</label>
+                            <span id="mlEvalQualityVal" class="text-xs font-black px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 font-mono">5</span>
+                        </div>
+                        <input type="range" id="mlEvalQualityScore" min="1" max="10" value="5" oninput="document.getElementById('mlEvalQualityVal').textContent = this.value" class="w-full accent-emerald-600 h-2 bg-slate-200 rounded-lg cursor-pointer">
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-[11px] font-bold text-slate-700">විනය හා ආකල්ප (Attitude & Discipline)</label>
+                            <span id="mlEvalAttitudeVal" class="text-xs font-black px-2 py-0.5 rounded bg-blue-100 text-blue-800 font-mono">5</span>
+                        </div>
+                        <input type="range" id="mlEvalAttitudeScore" min="1" max="10" value="5" oninput="document.getElementById('mlEvalAttitudeVal').textContent = this.value" class="w-full accent-blue-600 h-2 bg-slate-200 rounded-lg cursor-pointer">
+                    </div>
+                    <div>
+                        <div class="flex justify-between items-center mb-1">
+                            <label class="text-[11px] font-bold text-slate-700">කාර්යක්ෂමතාව (Efficiency & Material)</label>
+                            <span id="mlEvalEfficiencyVal" class="text-xs font-black px-2 py-0.5 rounded bg-amber-100 text-amber-800 font-mono">5</span>
+                        </div>
+                        <input type="range" id="mlEvalEfficiencyScore" min="1" max="10" value="5" oninput="document.getElementById('mlEvalEfficiencyVal').textContent = this.value" class="w-full accent-amber-600 h-2 bg-slate-200 rounded-lg cursor-pointer">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">Comments / සටහන් (Optional)</label>
+                    <input type="text" id="mlEvalComment" placeholder="e.g. Excellent work..." class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs">
+                </div>
+
+                <div class="flex gap-2 pt-1">
+                    <button type="button" onclick="closeMlEvaluationModal()" class="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 active-scale">Cancel</button>
+                    <button type="button" onclick="submitMlSailorEvaluation()" class="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-2xs active-scale">Submit Evaluation ✓</button>
                 </div>
             </div>
         </div>
@@ -589,16 +847,19 @@
     </div>
 
     <!-- MODAL: NEW / EDIT ESTIMATE (PIC - 03) -->
-    <div id="mlNewEstimateModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-        <div class="bg-white rounded-2xl w-full max-w-lg max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+    <div id="mlNewEstimateModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
             <!-- Orange Header (Matches pic - 03) -->
-            <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
-                <h3 id="mlNewEstModalTitle" class="text-sm font-bold text-white">New Estimate</h3>
-                <button type="button" onclick="closeNewEstimateModalMobile()" class="w-6 h-6 rounded-full bg-black/20 text-white flex items-center justify-center text-xs font-bold active-scale">✕</button>
+            <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-3 flex items-center justify-between shrink-0 shadow-sm">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">📐</span>
+                    <h3 id="mlNewEstModalTitle" class="text-xs sm:text-sm font-bold text-white">New Estimate</h3>
+                </div>
+                <button type="button" onclick="closeNewEstimateModalMobile()" class="w-7 h-7 rounded-full bg-black/20 text-white flex items-center justify-center text-xs font-bold active-scale">✕</button>
             </div>
 
-            <!-- Form Content -->
-            <form id="mlNewEstForm" onsubmit="saveEstimateMobile(event)" class="p-3.5 overflow-y-auto touch-scroll space-y-3 flex-1 text-xs">
+            <!-- Form Content (Scrollable) -->
+            <form id="mlNewEstForm" onsubmit="saveEstimateMobile(event)" class="p-3 overflow-y-auto touch-scroll space-y-3 flex-1 text-xs min-h-0">
                 <input type="hidden" id="mlEstEditKey" value="">
 
                 <!-- Description * -->
@@ -608,23 +869,23 @@
                 </div>
 
                 <!-- Reference Type, Ref No, Project Type (Matches pic - 03) -->
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-1">Reference Type *</label>
-                        <select id="mlEstRefType" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-1.5 text-xs font-medium text-slate-900 focus:bg-white">
-                            <option value="Minute Sheet">Minute</option>
+                        <select id="mlEstRefType" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-medium text-slate-900 focus:bg-white">
+                            <option value="Minute Sheet">Minute Sheet</option>
                             <option value="Letter">Letter</option>
-                            <option value="Verbal Order">Verbal order</option>
+                            <option value="Verbal Order">Verbal Order</option>
                             <option value="Signal">Signal</option>
                         </select>
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-1">Reference No</label>
-                        <input type="text" id="mlEstRefNo" placeholder="MS/NCW/2024/..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-1.5 text-xs font-mono text-slate-900 focus:bg-white">
+                        <input type="text" id="mlEstRefNo" placeholder="MS/NCW/2024/..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-mono text-slate-900 focus:bg-white">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-1">Project Type *</label>
-                        <select id="mlEstProjType" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-1.5 text-xs font-medium text-slate-900 focus:bg-white">
+                        <select id="mlEstProjType" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-medium text-slate-900 focus:bg-white">
                             <option value="PROJECT">Project (Type P)</option>
                             <option value="JOB">Job (Type J)</option>
                             <option value="TASK">Task (Type T)</option>
@@ -636,40 +897,40 @@
                 </div>
 
                 <!-- Location, Location 2, End User (Matches pic - 03) -->
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-1">Location</label>
-                        <input type="text" id="mlEstLoc" list="mlLocDatalist" placeholder="Location / Building..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-1.5 text-xs text-slate-900 focus:bg-white">
+                        <input type="text" id="mlEstLoc" list="mlLocDatalist" placeholder="Location / Building..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs text-slate-900 focus:bg-white">
                         <datalist id="mlLocDatalist"></datalist>
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-1">Location 2</label>
-                        <input type="text" id="mlEstLoc2" placeholder="Sub-location..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-1.5 text-xs text-slate-900 focus:bg-white">
+                        <input type="text" id="mlEstLoc2" placeholder="Sub-location..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs text-slate-900 focus:bg-white">
                     </div>
                     <div>
                         <label class="block text-[10px] font-bold text-slate-600 mb-1">End User *</label>
-                        <input type="text" id="mlEstEndUser" required placeholder="e.g. Dockyard / Wardroom" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-1.5 text-xs text-slate-900 focus:bg-white">
+                        <input type="text" id="mlEstEndUser" required placeholder="e.g. Dockyard / Wardroom" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs text-slate-900 focus:bg-white">
                     </div>
                 </div>
 
                 <!-- SIGNATORIES (Matches pic - 03) -->
                 <div class="border border-slate-200 rounded-xl p-2.5 bg-slate-50 space-y-2">
                     <span class="text-[10px] font-bold text-slate-700 uppercase flex items-center gap-1">✍️ Signatories</span>
-                    <div class="grid grid-cols-3 gap-1.5">
-                        <div class="col-span-3">
-                            <span class="text-[9px] font-bold text-blue-700">Created By (Sailor who inspected)</span>
+                    <div class="space-y-1">
+                        <span class="text-[9px] font-bold text-blue-700">Created By (Sailor who inspected)</span>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <input type="text" id="mlEstCreatedName" placeholder="Name" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs">
+                            <input type="text" id="mlEstCreatedRank" placeholder="Rank (e.g. SCE)" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs">
+                            <input type="text" id="mlEstCreatedSvc" placeholder="Service No" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-mono">
                         </div>
-                        <input type="text" id="mlEstCreatedName" placeholder="Name" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs">
-                        <input type="text" id="mlEstCreatedRank" placeholder="Rank (e.g. SCE)" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs">
-                        <input type="text" id="mlEstCreatedSvc" placeholder="Service No" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-mono">
                     </div>
-                    <div class="grid grid-cols-3 gap-1.5 pt-1 border-t border-slate-200">
-                        <div class="col-span-3">
-                            <span class="text-[9px] font-bold text-amber-800">Checked By (Zone In-Charge)</span>
+                    <div class="space-y-1 pt-1 border-t border-slate-200">
+                        <span class="text-[9px] font-bold text-amber-800">Checked By (Zone In-Charge)</span>
+                        <div class="grid grid-cols-3 gap-1.5">
+                            <input type="text" id="mlEstCheckedName" placeholder="Name" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs">
+                            <input type="text" id="mlEstCheckedRank" placeholder="Rank" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs">
+                            <input type="text" id="mlEstCheckedSvc" placeholder="Service No" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-mono">
                         </div>
-                        <input type="text" id="mlEstCheckedName" placeholder="Name" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs">
-                        <input type="text" id="mlEstCheckedRank" placeholder="Rank" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs">
-                        <input type="text" id="mlEstCheckedSvc" placeholder="Service No" class="bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-mono">
                     </div>
                 </div>
 
@@ -700,7 +961,7 @@
                 </div>
 
                 <!-- Summary (Matches pic - 03 / desktop) -->
-                <div class="bg-slate-100 p-2.5 rounded-xl border border-slate-200 grid grid-cols-3 gap-2 text-center">
+                <div class="bg-slate-100 p-2.5 rounded-xl border border-slate-200 grid grid-cols-3 gap-2 text-center shrink-0">
                     <div>
                         <span class="text-[9px] text-slate-500 font-bold block uppercase">Materials Cost</span>
                         <span id="mlEstSummaryMatCost" class="text-xs font-black text-emerald-700 font-mono">Rs 0.00</span>
@@ -714,13 +975,15 @@
                         <span id="mlEstSummaryGrandTotal" class="text-xs font-black text-amber-700 font-mono">Rs 0.00</span>
                     </div>
                 </div>
-
-                <!-- Buttons -->
-                <div class="flex gap-2 pt-2">
-                    <button type="button" onclick="closeNewEstimateModalMobile()" class="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 active-scale">Cancel</button>
-                    <button type="submit" class="flex-1 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-xs shadow-xs active-scale">Save Estimate</button>
-                </div>
             </form>
+
+            <!-- Sticky Fixed Footer Buttons -->
+            <div class="p-3 bg-slate-50 border-t border-slate-200 flex gap-2 shrink-0">
+                <button type="button" onclick="closeNewEstimateModalMobile()" class="flex-1 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs active-scale">Cancel</button>
+                <button type="submit" form="mlNewEstForm" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-black text-xs shadow-sm active-scale flex items-center justify-center gap-1.5">
+                    <span>💾</span> Save Estimate
+                </button>
+            </div>
         </div>
     </div>
 

@@ -268,15 +268,87 @@ function verifyZonePassword() {
 // ---------------------------------------------
 // TOP BAR: ZONE SAILORS COUNT (PIC - 04)
 // ---------------------------------------------
+// HELPER: NORMALIZE SAILOR OBJECT
+// ---------------------------------------------
+function normalizeSailor(s, idx) {
+  if (!s) return null;
+  const offNo = s.official_number || s.officialNumber || s.off_no || s.offNo || s.service_no || s.serviceNo || s.reg_no || s.regNo || s.personal_no || s.personalNo || s.army_no || s.navy_no || s.registration_no || s.sno || s.id_no || (s.id ? String(s.id) : `ID/${idx}`);
+  
+  const fullName = s.name || s.fullName || s.full_name || ((s.firstName || s.first_name || "") + " " + (s.lastName || s.last_name || "")).trim() || "Sailor";
+
+  const rank = s.rank || s.rankName || s.rank_name || "AB";
+  const rawTrade = (s.trade || s.tradeName || s.trade_name || s.branch || "MA").trim().toUpperCase();
+  const trade = rawTrade === "WEL" ? "WE" : rawTrade;
+  const zone_assigned = s.zone_assigned || s.zone || s.zoneId || s.zone_id || s.location || s.current_zone || "";
+
+  return {
+    ...s,
+    id: String(s.id || s._fbKey || idx + 1),
+    _fbKey: s._fbKey || String(s.id || idx + 1),
+    official_number: offNo,
+    off_no: offNo,
+    name: fullName,
+    rank: rank,
+    trade: trade,
+    zone_assigned: zone_assigned
+  };
+}
+
+// ---------------------------------------------
+// TOP BAR: ZONE SAILORS COUNT (PIC - 04)
+// ---------------------------------------------
 function updateZoneSailorCount() {
   const currentZone = mlStore.currentZone;
-  const zoneSailors = (mlStore.sailors || []).filter(s => {
-    const z = s.zone_assigned || s.zone || s.zoneId || "";
+  const targetDate = mlStore.selectedDate || getLocalDateString();
+  const allSailors = mlStore.sailors || [];
+
+  if (allSailors.length === 0) {
+    const countEl = document.getElementById("mlZoneSailorCount");
+    if (countEl) countEl.textContent = "0";
+    return;
+  }
+
+  // 1. Direct zone sailors
+  const directZoneSailors = allSailors.filter(s => {
+    const z = s.zone_assigned || s.zone || s.zoneId || s.zone_id || s.location || s.current_zone || "";
     return isZoneMatch(z, currentZone);
   });
 
+  // 2. Allocated to work orders or tasks in this zone on target date
+  const allocatedIds = new Set();
+  (mlStore.dailyAllocations || []).forEach(a => {
+    if (a && (!a.date || a.date === targetDate) && a.status !== "Cancelled") {
+      const aZone = a.zone_id || a.zone || a.zone_name || a.location || "";
+      if (isZoneMatch(aZone, currentZone)) {
+        const sid = a.sailor_id || a.sailorId || (a.sailor && (a.sailor.id || a.sailor._fbKey));
+        if (sid) allocatedIds.add(String(sid));
+      }
+    }
+  });
+
+  // Also check active work orders in current zone
+  (mlStore.workOrders || []).forEach(wo => {
+    if (wo && isZoneMatch(wo.zone_id || wo.zone, currentZone) && Array.isArray(wo.assigned)) {
+      wo.assigned.forEach(sid => { if (sid) allocatedIds.add(String(sid)); });
+    }
+  });
+
+  // Set of unique sailor IDs belonging to this zone
+  const zoneSailorSet = new Set();
+  directZoneSailors.forEach(s => zoneSailorSet.add(String(s.id || s._fbKey)));
+  allocatedIds.forEach(id => zoneSailorSet.add(String(id)));
+
+  let count = zoneSailorSet.size;
+  // If count is 0 because sailors in DB don't have zone_assigned explicitly specified
+  if (count === 0 && allSailors.length > 0) {
+    const anyHasOtherZone = allSailors.some(s => s.zone_assigned && !isZoneMatch(s.zone_assigned, currentZone));
+    if (!anyHasOtherZone) {
+      count = allSailors.length;
+    }
+  }
+
   const countEl = document.getElementById("mlZoneSailorCount");
-  if (countEl) countEl.textContent = zoneSailors.length;
+  if (countEl) countEl.textContent = count;
 }
 
 // ---------------------------------------------
@@ -286,6 +358,7 @@ function changeLightDate(d) {
   if (!d) return;
   mlStore.selectedDate = d;
   updateHistoricalBanner();
+  updateZoneSailorCount();
   renderLightTasks();
 }
 
@@ -295,6 +368,7 @@ function resetToTodayMobile() {
   const datePicker = document.getElementById("mlDatePicker");
   if (datePicker) datePicker.value = today;
   updateHistoricalBanner();
+  updateZoneSailorCount();
   renderLightTasks();
   showLightToast("Returned to Today", "⚡");
 }
@@ -331,9 +405,15 @@ function loadLightData() {
       const d = snap.val();
       mlStore.sailors = [];
       if (d) {
-        Object.keys(d).forEach(k => {
-          if (d[k]) mlStore.sailors.push({ id: k, _fbKey: k, ...d[k] });
-        });
+        if (Array.isArray(d)) {
+          d.forEach((s, idx) => {
+            if (s) mlStore.sailors.push(normalizeSailor(s, idx));
+          });
+        } else {
+          Object.keys(d).forEach((k, idx) => {
+            if (d[k]) mlStore.sailors.push(normalizeSailor({ ...d[k], _fbKey: k, id: d[k].id || k }, idx));
+          });
+        }
       }
       updateZoneSailorCount();
       renderLightTasks();
@@ -354,6 +434,7 @@ function loadLightData() {
           if (d[k]) mlStore.workOrders.push({ id: k, _fbKey: k, ...d[k] });
         });
       }
+      updateZoneSailorCount();
       renderLightTasks();
     });
 
@@ -365,6 +446,7 @@ function loadLightData() {
           if (d[k]) mlStore.dailyAllocations.push({ id: k, _fbKey: k, ...d[k] });
         });
       }
+      updateZoneSailorCount();
       renderLightTasks();
     });
 
@@ -707,6 +789,331 @@ function renderLightTasks() {
 // ---------------------------------------------
 // WORK ORDER DETAIL MODAL (PIC - 03 REQUIREMENT)
 // ---------------------------------------------
+// ---------------------------------------------
+// FULL WORK ORDER DETAILS CONTROLLER (PIC 02 FORMAT)
+// ---------------------------------------------
+let _mlDetailSelectedSailors = new Set();
+let _mlDetailCurrentTrade = "ALL";
+let _mlDetailActiveTab = "details";
+
+function switchMlWoTab(tabId) {
+  _mlDetailActiveTab = tabId;
+  const detailsTab = document.getElementById("mlWoTab-details");
+  const evalTab = document.getElementById("mlWoTab-evaluation");
+  const detailsBtn = document.getElementById("mlWoTab-details-btn");
+  const evalBtn = document.getElementById("mlWoTab-evaluation-btn");
+
+  if (tabId === "details") {
+    if (detailsTab) detailsTab.classList.remove("hidden");
+    if (evalTab) evalTab.classList.add("hidden");
+    if (detailsBtn) detailsBtn.className = "flex-1 py-2.5 px-3 text-xs font-bold border-b-2 border-blue-600 text-blue-600 flex items-center justify-center gap-1.5 transition-all";
+    if (evalBtn) evalBtn.className = "flex-1 py-2.5 px-3 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 transition-all";
+  } else {
+    if (detailsTab) detailsTab.classList.add("hidden");
+    if (evalTab) evalTab.classList.remove("hidden");
+    if (detailsBtn) detailsBtn.className = "flex-1 py-2.5 px-3 text-xs font-bold border-b-2 border-transparent text-slate-500 hover:text-slate-800 flex items-center justify-center gap-1.5 transition-all";
+    if (evalBtn) evalBtn.className = "flex-1 py-2.5 px-3 text-xs font-bold border-b-2 border-amber-600 text-amber-700 flex items-center justify-center gap-1.5 transition-all";
+  }
+}
+
+function mlToggleTypeMigration() {
+  const panel = document.getElementById("mlWoTypeMigrationPanel");
+  if (panel) panel.classList.toggle("hidden");
+}
+
+function mlHandleTargetTypeChange(val) {
+  const col = document.getElementById("mlWoAssignTypeCol");
+  if (col) col.classList.toggle("hidden", val !== "ASSIGNMENT");
+}
+
+function mlApplyTypeMigration() {
+  const key = mlStore.selectedWoKey;
+  if (!key) return;
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(key) || String(w._fbKey) === String(key));
+  if (!wo) return;
+
+  const targetType = document.getElementById("mlWoTargetTypeSelect")?.value || "PROJECT";
+  const assignCat = document.getElementById("mlWoAssignTypeSelect")?.value || "In Charge";
+
+  const updates = {};
+  if (targetType === "ASSIGNMENT") {
+    updates.assign_type = assignCat;
+    updates.type = "ASSIGN";
+    wo.assign_type = assignCat;
+    wo.type = "ASSIGN";
+  } else {
+    updates.assign_type = null;
+    updates.type = targetType;
+    wo.assign_type = null;
+    wo.type = targetType;
+  }
+
+  opsDB.ref(`work_orders/${key}`).update(updates).then(() => {
+    showLightToast(`Work Order changed to ${targetType}!`, "🔄");
+    mlToggleTypeMigration();
+    openWorkOrderDetailMobile(key);
+    renderLightTasks();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Failed to change type", "❌");
+  });
+}
+
+function mlToggleForwardPanel() {
+  const panel = document.getElementById("mlWoForwardPanel");
+  if (panel) panel.classList.toggle("hidden");
+}
+
+function mlSubmitForwardToOfficer() {
+  const key = mlStore.selectedWoKey;
+  if (!key) return;
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(key) || String(w._fbKey) === String(key));
+  if (!wo) return;
+
+  const offSelect = document.getElementById("mlWoForwardOfficerSelect");
+  const offId = offSelect?.value;
+  const offName = offSelect?.options[offSelect.selectedIndex]?.text || "Officer";
+  const remarks = (document.getElementById("mlWoForwardRemarks")?.value || "").trim();
+
+  if (!offId) {
+    showLightToast("Please select an Officer to forward", "⚠️");
+    return;
+  }
+
+  const updates = {
+    officer_review_status: "Pending Review",
+    forwarded_to_officer_id: offId,
+    forwarded_to_officer_name: offName,
+    incharge_forward_remarks: remarks,
+    forwarded_at: new Date().toISOString()
+  };
+
+  opsDB.ref(`work_orders/${key}`).update(updates).then(() => {
+    Object.assign(wo, updates);
+    showLightToast(`Forwarded to ${offName}! 🚀`, "✅");
+    mlToggleForwardPanel();
+    openWorkOrderDetailMobile(key);
+    renderLightTasks();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Failed to forward", "❌");
+  });
+}
+
+function mlOfficerApproveDirect() {
+  const key = mlStore.selectedWoKey;
+  if (!key) return;
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(key) || String(w._fbKey) === String(key));
+  if (!wo) return;
+
+  const updates = {
+    officer_review_status: "Approved",
+    officer_approved_by: "LCDR KMAU Kahandawa",
+    officer_approved_at: new Date().toISOString()
+  };
+
+  opsDB.ref(`work_orders/${key}`).update(updates).then(() => {
+    Object.assign(wo, updates);
+    showLightToast("Officer Cleared & Approved! 🛡️", "✅");
+    mlToggleForwardPanel();
+    openWorkOrderDetailMobile(key);
+    renderLightTasks();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Approval failed", "❌");
+  });
+}
+
+function mlFilterDetailTrade(trade) {
+  _mlDetailCurrentTrade = trade || "ALL";
+  document.querySelectorAll(".ml-wo-trade-btn").forEach(btn => {
+    if (btn.textContent.trim() === _mlDetailCurrentTrade) {
+      btn.className = "ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-teal-600 text-white shrink-0";
+    } else {
+      btn.className = "ml-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 shrink-0";
+    }
+  });
+  mlRenderDetailSailorChips();
+}
+
+function mlFilterDetailSailors() {
+  mlRenderDetailSailorChips();
+}
+
+function mlRenderDetailSailorChips() {
+  const grid = document.getElementById("mlWoSailorGrid");
+  if (!grid) return;
+
+  const query = (document.getElementById("mlWoSailorSearch")?.value || "").toLowerCase().trim();
+  const currentZone = mlStore.currentZone;
+
+  let sailors = (mlStore.sailors || []).filter(s => {
+    const isZone = isZoneMatch(s.zone_assigned || s.zone || s.zoneId || "", currentZone);
+    const tradeMatch = (_mlDetailCurrentTrade === "ALL" || (s.trade || "MA").toUpperCase() === _mlDetailCurrentTrade);
+    if (!tradeMatch) return false;
+
+    if (query) {
+      const name = (s.name || "").toLowerCase();
+      const off = (s.official_number || s.off_no || "").toLowerCase();
+      const rank = (s.rank || "").toLowerCase();
+      return name.includes(query) || off.includes(query) || rank.includes(query);
+    }
+    return true;
+  });
+
+  // Sort: Zone sailors first, then by name
+  sailors.sort((a, b) => {
+    const aZ = isZoneMatch(a.zone_assigned || a.zone || a.zoneId || "", currentZone);
+    const bZ = isZoneMatch(b.zone_assigned || b.zone || b.zoneId || "", currentZone);
+    if (aZ && !bZ) return -1;
+    if (!aZ && bZ) return 1;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+
+  if (sailors.length === 0) {
+    grid.innerHTML = '<p class="text-[10px] text-slate-400 italic col-span-2 sm:col-span-3 text-center py-2">No sailors matching filter</p>';
+    return;
+  }
+
+  grid.innerHTML = sailors.map(s => {
+    const sid = String(s.id !== undefined && s.id !== null ? s.id : s._fbKey);
+    const isSelected = _mlDetailSelectedSailors.has(sid);
+    const rank = s.rank || "AB";
+    const name = s.name || "Sailor";
+    const off = s.official_number || s.off_no || "—";
+    const trade = s.trade || "MA";
+    const isZone = isZoneMatch(s.zone_assigned || s.zone || s.zoneId || "", currentZone);
+
+    return `
+      <div onclick="mlWoToggleAssignSailor('${sid}')" class="p-2 rounded-xl border flex items-center justify-between gap-1.5 cursor-pointer transition-all active:scale-95 ${isSelected ? 'bg-teal-900/60 border-teal-400 shadow-xs' : 'bg-slate-800/80 border-slate-700 hover:border-slate-600'}">
+        <div class="flex items-center gap-1.5 min-w-0 flex-1">
+          <span class="w-6 h-6 rounded-lg ${isSelected ? 'bg-teal-500 text-white' : 'bg-slate-700 text-slate-300'} flex items-center justify-center text-[9px] font-bold shrink-0">${trade}</span>
+          <div class="min-w-0 flex-1">
+            <p class="font-bold text-white text-[10px] truncate leading-tight">${rank} ${escapeHtml(name)}</p>
+            <p class="text-[8px] text-slate-400 font-mono truncate">${escapeHtml(off)} ${isZone ? '• ⭐ Zone' : ''}</p>
+          </div>
+        </div>
+        <span class="text-xs font-black shrink-0 ${isSelected ? 'text-teal-300' : 'text-slate-500'}">${isSelected ? '✓' : '+'}</span>
+      </div>`;
+  }).join("");
+}
+
+function mlWoToggleAssignSailor(sid) {
+  if (_mlDetailSelectedSailors.has(sid)) {
+    _mlDetailSelectedSailors.delete(sid);
+  } else {
+    _mlDetailSelectedSailors.add(sid);
+  }
+  mlRenderDetailSailorChips();
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(mlStore.selectedWoKey) || String(w._fbKey) === String(mlStore.selectedWoKey));
+  mlRenderDetailAssignedCrew(wo);
+}
+
+function mlWoRemoveAssignedSailor(sid) {
+  _mlDetailSelectedSailors.delete(sid);
+  mlRenderDetailSailorChips();
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(mlStore.selectedWoKey) || String(w._fbKey) === String(mlStore.selectedWoKey));
+  mlRenderDetailAssignedCrew(wo);
+}
+
+function mlRenderDetailAssignedCrew(wo) {
+  const crewList = document.getElementById("mlWoDetailCrewList");
+  const crewCountEl = document.getElementById("mlWoDetailCrewCount");
+  const assignedArray = Array.from(_mlDetailSelectedSailors);
+
+  if (crewCountEl) crewCountEl.textContent = assignedArray.length;
+
+  if (!crewList) return;
+
+  if (assignedArray.length === 0) {
+    crewList.innerHTML = '<p class="text-xs text-slate-400 italic p-3 bg-slate-50 rounded-xl text-center border border-dashed border-slate-200">No labour assigned to this work order</p>';
+    return;
+  }
+
+  crewList.innerHTML = assignedArray.map(sid => {
+    const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+    const rank = s ? (s.rank || "AB") : "AB";
+    const name = s ? (s.name || "Sailor") : ("Sailor " + sid);
+    const off = s ? (s.official_number || s.off_no || "—") : "—";
+    const trade = s ? (s.trade || "MA") : "MA";
+    const isEvaluated = s ? Boolean(s.evaluated) : false;
+
+    return `
+      <div class="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <span class="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center text-[10px] font-black shrink-0">${trade}</span>
+          <div class="min-w-0 flex-1">
+            <p class="font-bold text-slate-900 text-xs leading-tight truncate">${rank} ${escapeHtml(name)}</p>
+            <div class="flex items-center gap-1.5 text-[9px] text-slate-500 font-mono mt-0.5">
+              <span>${escapeHtml(off)}</span>
+              <span>•</span>
+              <span>${trade}</span>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          ${isEvaluated ? '<span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md">✓ Evaluated</span>' : '<span class="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md">Pending</span>'}
+          <span class="bg-orange-500 text-white font-black text-[9px] px-1.5 py-0.5 rounded-md">7.0h</span>
+          <button type="button" onclick="mlWoRemoveAssignedSailor('${sid}')" class="w-6 h-6 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center text-xs font-black active-scale" title="Remove sailor">✕</button>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function mlRenderDailyEvaluationTab(wo) {
+  const evalList = document.getElementById("mlWoEvalList");
+  const pendingBadge = document.getElementById("mlWoEvalPendingBadge");
+  const assignedArray = Array.from(_mlDetailSelectedSailors);
+
+  let pendingCount = 0;
+  assignedArray.forEach(sid => {
+    const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+    if (s && !s.evaluated) pendingCount++;
+  });
+
+  if (pendingBadge) {
+    if (pendingCount > 0) {
+      pendingBadge.textContent = `${pendingCount} Pending`;
+      pendingBadge.classList.remove("hidden");
+    } else {
+      pendingBadge.classList.add("hidden");
+    }
+  }
+
+  if (!evalList) return;
+
+  if (assignedArray.length === 0) {
+    evalList.innerHTML = '<p class="text-xs text-slate-400 italic p-4 text-center">No labour assigned to evaluate for this work order.</p>';
+    return;
+  }
+
+  evalList.innerHTML = assignedArray.map(sid => {
+    const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+    const rank = s ? (s.rank || "AB") : "AB";
+    const name = s ? (s.name || "Sailor") : ("Sailor " + sid);
+    const trade = s ? (s.trade || "MA") : "MA";
+    const isEvaluated = s ? Boolean(s.evaluated) : false;
+    const avg = s && typeof s.avgScore === "number" ? s.avgScore.toFixed(1) : "7.0";
+
+    return `
+      <div class="p-3 bg-white border rounded-xl flex items-center justify-between gap-2 shadow-2xs ${isEvaluated ? 'border-emerald-300 bg-emerald-50/20' : 'border-amber-300 bg-amber-50/20'}">
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+          <span class="w-8 h-8 rounded-full bg-slate-700 text-white font-bold flex items-center justify-center text-xs shrink-0">${trade}</span>
+          <div class="min-w-0 flex-1">
+            <p class="font-bold text-slate-900 text-xs truncate leading-tight">${rank} ${escapeHtml(name)}</p>
+            <p class="text-[10px] text-slate-500 mt-0.5">${trade} • Avg: <span class="font-bold text-teal-700">${avg}</span></p>
+          </div>
+        </div>
+        <div class="shrink-0">
+          ${isEvaluated 
+            ? `<button type="button" onclick="openMlEvaluationModal('${sid}', '${wo._fbKey || wo.id}')" class="px-2.5 py-1 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-800 text-[10px] font-bold active-scale">✓ Rated (Re-rate)</button>`
+            : `<button type="button" onclick="openMlEvaluationModal('${sid}', '${wo._fbKey || wo.id}')" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-[11px] font-bold shadow-2xs active-scale">📝 Evaluate</button>`
+          }
+        </div>
+      </div>`;
+  }).join("");
+}
+
 function openWorkOrderDetailMobile(woKey) {
   const wo = mlStore.workOrders.find(w => String(w.id) === String(woKey) || String(w._fbKey) === String(woKey));
   if (!wo) return;
@@ -716,56 +1123,155 @@ function openWorkOrderDetailMobile(woKey) {
   const today = getLocalDateString();
   const isToday = (targetDate === today);
 
+  switchMlWoTab("details");
+
   const modal = document.getElementById("mlWorkOrderDetailModal");
   const titleEl = document.getElementById("mlWoDetailTitle");
+  const refEl = document.getElementById("mlWoDetailRef");
   const typeBadge = document.getElementById("mlWoDetailTypeBadge");
-  const prioBadge = document.getElementById("mlWoDetailPrioBadge");
-  const statBadge = document.getElementById("mlWoDetailStatusBadge");
-  const activeTodayBadge = document.getElementById("mlWoDetailActiveTodayBadge");
+  const statusEl = document.getElementById("mlWoDetailStatus");
+  const prioEl = document.getElementById("mlWoDetailPriority");
   const descEl = document.getElementById("mlWoDetailDesc");
-  const locEl = document.getElementById("mlWoDetailLocation");
+  const authEl = document.getElementById("mlWoDetailAuthority");
+  const budgetEl = document.getElementById("mlWoDetailBudget");
   const durEl = document.getElementById("mlWoDetailDuration");
   const progSlider = document.getElementById("mlWoDetailProgressSlider");
   const progText = document.getElementById("mlWoDetailProgressText");
-  const crewList = document.getElementById("mlWoDetailCrewList");
-  const crewCountEl = document.getElementById("mlWoDetailCrewCount");
+  const totalCostEl = document.getElementById("mlWoDetailTotalCost");
+  const costRefEl = document.getElementById("mlWoDetailCostRef");
+  const inchargeEl = document.getElementById("mlWoDetailIncharge");
+  const supervisorEl = document.getElementById("mlWoDetailSupervisor");
+  const artificerEl = document.getElementById("mlWoDetailArtificer");
   const commitBtn = document.getElementById("mlWoDetailCommitBtn");
-  const completeBtn = document.getElementById("mlWoDetailCompleteBtn");
 
-  const cat = getWorkOrderCategory(wo);
-  const prio = wo.priority || "Medium";
-  const status = wo.status || "Active";
-  const progress = Math.min(100, Math.max(0, parseInt(wo.progress, 10) || 0));
-
-  if (titleEl) titleEl.textContent = wo.description || wo.title || "Work Order";
-  if (typeBadge) typeBadge.textContent = wo.assign_type ? ('ASSIGN: ' + wo.assign_type) : (wo.type || 'PROJECT');
-  if (descEl) descEl.textContent = wo.description || "No description provided";
-  if (locEl) locEl.textContent = "📍 " + (wo.location || wo.building_name || "Zone Area") + (wo.sub_location ? (' / ' + wo.sub_location) : '');
-  if (durEl) durEl.textContent = "⏱️ " + (wo.duration || wo.estimated_duration || 1) + " Day(s)";
-
-  if (progSlider) {
-    progSlider.value = progress;
-    progSlider.disabled = !isToday;
+  // Title & Reference Subtitle
+  if (titleEl) titleEl.textContent = wo.description || wo.title || "Work Order Details";
+  if (refEl) {
+    const typeStr = wo.assign_type ? `ASSIGN: ${wo.assign_type}` : (wo.type || "PROJECT");
+    const refStr = wo.reference_no || wo.job_no || "No Reference";
+    refEl.textContent = `${typeStr} • ${refStr}`;
   }
+
+  // Type badge
+  if (typeBadge) {
+    if (wo.assign_type) {
+      typeBadge.textContent = `ASSIGN: ${wo.assign_type}`;
+      typeBadge.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200";
+    } else if (wo.type === "JOB") {
+      typeBadge.textContent = "JOB";
+      typeBadge.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200";
+    } else if (wo.type === "TASK") {
+      typeBadge.textContent = "TASK";
+      typeBadge.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-200";
+    } else {
+      typeBadge.textContent = "PROJECT";
+      typeBadge.className = "text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200";
+    }
+  }
+
+  // Target Type selector setup
+  const targetTypeSelect = document.getElementById("mlWoTargetTypeSelect");
+  const assignTypeSelect = document.getElementById("mlWoAssignTypeSelect");
+  const assignTypeCol = document.getElementById("mlWoAssignTypeCol");
+  if (targetTypeSelect) targetTypeSelect.value = wo.assign_type ? "ASSIGNMENT" : (wo.type || "PROJECT");
+  if (assignTypeSelect) assignTypeSelect.value = wo.assign_type || "In Charge";
+  if (assignTypeCol) assignTypeCol.classList.toggle("hidden", !wo.assign_type);
+  const migPanel = document.getElementById("mlWoTypeMigrationPanel");
+  if (migPanel) migPanel.classList.add("hidden");
+
+  // Officer Clearance status
+  const officerBadge = document.getElementById("mlWoOfficerStatusBadge");
+  const revStatus = wo.officer_review_status || "Draft";
+  if (officerBadge) {
+    if (revStatus === "Pending Review") {
+      officerBadge.textContent = `⏳ Pending (${wo.forwarded_to_officer_name || "Officer"})`;
+      officerBadge.className = "text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300";
+    } else if (revStatus === "Approved") {
+      officerBadge.textContent = `✅ Cleared (${wo.officer_approved_by || "Officer"})`;
+      officerBadge.className = "text-[9px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300";
+    } else {
+      officerBadge.textContent = "In-Charge Draft";
+      officerBadge.className = "text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-300";
+    }
+  }
+  const fwdPanel = document.getElementById("mlWoForwardPanel");
+  if (fwdPanel) fwdPanel.classList.add("hidden");
+
+  // Populate Officer Select Dropdown
+  const fwdOfficerSelect = document.getElementById("mlWoForwardOfficerSelect");
+  if (fwdOfficerSelect) {
+    const inc = (mlStore.zoneInCharges || {})[wo.zone_id || mlStore.currentZone] || {};
+    const zoneOfficers = Array.isArray(inc.officers) ? inc.officers : [];
+    let optHtml = '<option value="">-- Choose Officer --</option>';
+    if (zoneOfficers.length > 0) {
+      zoneOfficers.forEach(zo => {
+        optHtml += `<option value="${zo.id}">🎖️ ${zo.rank || "Officer"} ${zo.name} (${zo.role || "Zone OIC"})</option>`;
+      });
+    }
+    optHtml += '<option value="OIC_CE">⭐ LCDR KMAU Kahandawa (Master Admin / OIC CE)</option>';
+    optHtml += '<option value="OIC_PROJECTS">⭐ LT CDR B Seneviratne (OIC Projects)</option>';
+    fwdOfficerSelect.innerHTML = optHtml;
+  }
+
+  // Inputs
+  if (statusEl) statusEl.value = wo.status || "Active";
+  if (prioEl) prioEl.value = wo.priority || "Medium";
+  if (descEl) descEl.value = wo.description || "";
+  if (authEl) authEl.value = wo.authority_approval || wo.authority || "";
+  if (budgetEl) budgetEl.value = wo.budget_allocation || "";
+  const durVal = wo.estimated_duration || wo.duration || 1;
+  if (durEl) durEl.value = durVal;
+
+  const progress = Math.min(100, Math.max(0, parseInt(wo.progress, 10) || 0));
+  if (progSlider) progSlider.value = progress;
   if (progText) progText.textContent = progress + "%";
 
-  // Priority Badge
-  if (prioBadge) {
-    prioBadge.textContent = prio;
-    prioBadge.className = prio === "High" || prio === "Urgent"
-      ? "px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border-rose-300"
-      : "px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border-amber-300";
+  // Estimated Total Cost & Job Card
+  if (totalCostEl) {
+    const costVal = parseFloat(wo.total_cost || wo.estimated_cost || wo.budget_allocation || 0);
+    totalCostEl.textContent = `Rs. ${formatCurrency(costVal)}`;
+  }
+  if (costRefEl) {
+    costRefEl.textContent = wo.job_no || (wo.reference_no ? `Ref: ${wo.reference_no}` : "No Job Card Linked");
   }
 
-  // Status Badge
-  if (statBadge) {
-    statBadge.textContent = status;
-    statBadge.className = status === "Completed"
-      ? "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border-emerald-300"
-      : "px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border-blue-300";
-  }
+  // Populate Supervision Dropdowns
+  const ecSailors = (mlStore.sailors || []).filter(s => String(s.official_number || s.off_no || "").trim().toUpperCase().startsWith("EC"));
+  const acSailors = (mlStore.sailors || []).filter(s => String(s.official_number || s.off_no || "").trim().toUpperCase().startsWith("AC"));
 
-  // Allocations on targetDate
+  let inchargeOpts = '<option value="">-- Select In-Charge --</option>';
+  ecSailors.forEach(s => {
+    inchargeOpts += `<option value="${s.id || s._fbKey}" ${String(wo.incharge) === String(s.id || s._fbKey) ? "selected" : ""}>⭐ ${s.rank || "CPO"} ${s.name} (${s.official_number || s.off_no || ""})</option>`;
+  });
+  if (inchargeEl) inchargeEl.innerHTML = inchargeOpts;
+
+  let supervisorOpts = '<option value="">-- Select Supervisor --</option>';
+  ecSailors.forEach(s => {
+    supervisorOpts += `<option value="${s.id || s._fbKey}" ${String(wo.supervisor) === String(s.id || s._fbKey) ? "selected" : ""}>👷 ${s.rank || "PO"} ${s.name} (${s.official_number || s.off_no || ""})</option>`;
+  });
+  if (supervisorEl) supervisorEl.innerHTML = supervisorOpts;
+
+  let artificerOpts = '<option value="">-- Select Artificer --</option>';
+  acSailors.forEach(s => {
+    artificerOpts += `<option value="${s.id || s._fbKey}" ${String(wo.project_artificer) === String(s.id || s._fbKey) ? "selected" : ""}>🔧 ${s.rank || "CPO"} ${s.name} (${s.official_number || s.off_no || ""})</option>`;
+  });
+  if (artificerEl) artificerEl.innerHTML = artificerOpts;
+
+  // Selected sailors
+  let assignedIds = [];
+  if (Array.isArray(wo.assigned)) {
+    assignedIds = wo.assigned.map(String);
+  } else if (wo.assigned && typeof wo.assigned === "object") {
+    assignedIds = Object.values(wo.assigned).map(String);
+  }
+  _mlDetailSelectedSailors = new Set(assignedIds);
+
+  // Render sailor chips and list
+  mlFilterDetailTrade("ALL");
+  mlRenderDetailAssignedCrew(wo);
+  mlRenderDailyEvaluationTab(wo);
+
+  // Commit button status
   const woIdStr = String(wo.id || "");
   const woFbKeyStr = String(wo._fbKey || "");
   const targetAllocs = (mlStore.dailyAllocations || []).filter(a => {
@@ -773,68 +1279,73 @@ function openWorkOrderDetailMobile(woKey) {
     const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
     return (woIdStr && aWoId === woIdStr) || (woFbKeyStr && aWoId === woFbKeyStr);
   });
-
   const isCommittedToday = targetAllocs.length > 0;
-  if (activeTodayBadge) {
-    activeTodayBadge.classList.toggle("hidden", !isCommittedToday);
-  }
-
-  // Assigned crew
-  let assignedIds = [];
-  if (isCommittedToday) {
-    assignedIds = targetAllocs.map(a => String(a.sailor_id));
-  } else if (isToday) {
-    assignedIds = Array.isArray(wo.assigned) ? wo.assigned.map(String) : (wo.assigned ? Object.values(wo.assigned).map(String) : []);
-  }
-
-  if (crewCountEl) crewCountEl.textContent = assignedIds.length;
-
-  if (crewList) {
-    if (assignedIds.length === 0) {
-      crewList.innerHTML = '<p class="text-xs text-slate-400 italic p-2 bg-slate-50 rounded-xl text-center">No sailors assigned to this work order</p>';
-    } else {
-      crewList.innerHTML = assignedIds.map(sid => {
-        const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
-        const rank = s ? (s.rank || "AB") : "AB";
-        const name = s ? (s.name || "Sailor") : ("Sailor " + sid);
-        const off = s ? (s.official_number || s.off_no || "—") : "—";
-        const trade = s ? (s.trade || "MA") : "MA";
-        return `
-          <div class="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200">
-            <div class="flex items-center gap-2">
-              <span class="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center text-[10px] font-bold">${trade}</span>
-              <div>
-                <p class="font-bold text-slate-900 text-xs leading-tight">${rank} ${escapeHtml(name)}</p>
-                <p class="text-[10px] text-slate-500 font-mono">${escapeHtml(off)}</p>
-              </div>
-            </div>
-            <span class="bg-orange-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full shadow-2xs">7.0 hrs</span>
-          </div>`;
-      }).join("");
-    }
-  }
-
-  // Buttons visibility
   if (commitBtn) {
-    commitBtn.classList.toggle("hidden", !isToday || isCommittedToday || assignedIds.length === 0 || status === "Completed");
-  }
-  if (completeBtn) {
-    completeBtn.classList.toggle("hidden", !isToday || status === "Completed");
+    commitBtn.classList.toggle("hidden", !isToday || isCommittedToday || _mlDetailSelectedSailors.size === 0 || wo.status === "Completed");
   }
 
   if (modal) modal.classList.remove("hidden");
+}
+
+function saveWorkOrderDetailMobile() {
+  const key = mlStore.selectedWoKey;
+  if (!key) return;
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(key) || String(w._fbKey) === String(key));
+  if (!wo) return;
+
+  const status = document.getElementById("mlWoDetailStatus")?.value || "Active";
+  const priority = document.getElementById("mlWoDetailPriority")?.value || "Medium";
+  const desc = (document.getElementById("mlWoDetailDesc")?.value || "").trim();
+  const auth = (document.getElementById("mlWoDetailAuthority")?.value || "").trim();
+  const budget = parseFloat(document.getElementById("mlWoDetailBudget")?.value || 0) || 0;
+  const duration = parseInt(document.getElementById("mlWoDetailDuration")?.value || 1, 10) || 1;
+  const progress = parseInt(document.getElementById("mlWoDetailProgressSlider")?.value || 0, 10) || 0;
+  const incharge = document.getElementById("mlWoDetailIncharge")?.value || "";
+  const supervisor = document.getElementById("mlWoDetailSupervisor")?.value || "";
+  const artificer = document.getElementById("mlWoDetailArtificer")?.value || "";
+  const assigned = Array.from(_mlDetailSelectedSailors);
+
+  if (!desc) {
+    showLightToast("Please enter a description for the work order", "⚠️");
+    return;
+  }
+
+  const updates = {
+    status,
+    priority,
+    description: desc,
+    authority_approval: auth,
+    authority: auth,
+    budget_allocation: budget,
+    estimated_duration: duration,
+    duration: duration,
+    progress,
+    incharge,
+    supervisor,
+    project_artificer: artificer,
+    assigned
+  };
+
+  if (progress === 100) {
+    updates.status = "Completed";
+    updates.completed_date = getLocalDateString();
+  }
+
+  opsDB.ref(`work_orders/${key}`).update(updates).then(() => {
+    Object.assign(wo, updates);
+    showLightToast("Work Order Changes Saved! 💾", "✅");
+    closeWorkOrderDetailMobile();
+    renderLightTasks();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Failed to save work order", "❌");
+  });
 }
 
 function closeWorkOrderDetailMobile() {
   const modal = document.getElementById("mlWorkOrderDetailModal");
   if (modal) modal.classList.add("hidden");
   mlStore.selectedWoKey = null;
-}
-
-function updateWoDetailProgressMobile(val) {
-  const key = mlStore.selectedWoKey;
-  if (!key) return;
-  updateTaskProgress(key, val);
 }
 
 function commitCurrentWoLabourMobile() {
@@ -844,21 +1355,12 @@ function commitCurrentWoLabourMobile() {
   setTimeout(() => openWorkOrderDetailMobile(key), 300);
 }
 
-function completeCurrentWoMobile() {
-  const key = mlStore.selectedWoKey;
-  if (!key) return;
-  if (!confirm("Are you sure you want to mark this Work Order as Completed?")) return;
-  updateTaskProgress(key, 100);
-  closeWorkOrderDetailMobile();
-}
-
 function deleteCurrentWorkOrderMobile() {
   const key = mlStore.selectedWoKey;
   if (!key) return;
   if (!confirm("⚠️ Permanently delete this Work Order?")) return;
 
   opsDB.ref(`work_orders/${key}`).remove().then(() => {
-    // Also remove from daily_allocations
     (mlStore.dailyAllocations || []).forEach(a => {
       if (String(a.work_order_id) === String(key)) {
         opsDB.ref(`daily_allocations/${a._fbKey || a.id}`).remove();
@@ -873,10 +1375,83 @@ function deleteCurrentWorkOrderMobile() {
   });
 }
 
-function openAssignModalFromDetail() {
-  const key = mlStore.selectedWoKey;
-  closeWorkOrderDetailMobile();
-  if (key) openAssignModal(key);
+// ---------------------------------------------
+// MOBILE EVALUATION MODAL CONTROLLER
+// ---------------------------------------------
+function openMlEvaluationModal(sailorId, woKey) {
+  const sailor = mlStore.sailors.find(s => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(woKey) || String(w._fbKey) === String(woKey));
+  if (!sailor || !wo) return;
+
+  document.getElementById("mlEvalSailorId").value = sailorId;
+  document.getElementById("mlEvalWorkOrderId").value = woKey;
+  document.getElementById("mlEvalSailorName").textContent = `${sailor.rank || "AB"} ${sailor.name} (${sailor.official_number || sailor.off_no || ""})`;
+  document.getElementById("mlEvalSailorInitial").textContent = (sailor.name || "AB").split(" ").map(n => n[0]).slice(0, 2).join("");
+  document.getElementById("mlEvalWorkOrderTitle").textContent = wo.description || "Work Order";
+
+  // Reset sliders
+  document.getElementById("mlEvalQualityScore").value = 5;
+  document.getElementById("mlEvalQualityVal").textContent = 5;
+  document.getElementById("mlEvalAttitudeScore").value = 5;
+  document.getElementById("mlEvalAttitudeVal").textContent = 5;
+  document.getElementById("mlEvalEfficiencyScore").value = 5;
+  document.getElementById("mlEvalEfficiencyVal").textContent = 5;
+  document.getElementById("mlEvalComment").value = "";
+
+  const modal = document.getElementById("mlEvaluationModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeMlEvaluationModal() {
+  const modal = document.getElementById("mlEvaluationModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function submitMlSailorEvaluation() {
+  const sailorId = document.getElementById("mlEvalSailorId")?.value;
+  const woKey = document.getElementById("mlEvalWorkOrderId")?.value;
+  if (!sailorId || !woKey) return;
+
+  const s1 = parseInt(document.getElementById("mlEvalQualityScore")?.value || 5, 10) || 5;
+  const s2 = parseInt(document.getElementById("mlEvalAttitudeScore")?.value || 5, 10) || 5;
+  const s3 = parseInt(document.getElementById("mlEvalEfficiencyScore")?.value || 5, 10) || 5;
+  const avgScore = (s1 + s2 + s3) / 3;
+  const comment = (document.getElementById("mlEvalComment")?.value || "").trim();
+
+  const sailor = mlStore.sailors.find(s => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId));
+  if (sailor) {
+    sailor.yesterdayScore = avgScore;
+    sailor.avgScore = ((sailor.avgScore || 7.0) * 10 + avgScore) / 11;
+    sailor.evaluated = true;
+
+    const today = getLocalDateString();
+    const dateVal = mlStore.selectedDate || today;
+    const allocKey = `${dateVal}_${sailor.id || sailor._fbKey}`;
+
+    opsDB.ref(`daily_allocations/${allocKey}`).update({
+      date: dateVal,
+      sailor_id: sailor.id || sailor._fbKey,
+      work_order_id: woKey,
+      evaluated: true,
+      score: avgScore,
+      comment: comment
+    }).catch(e => console.warn(e));
+
+    if (sailorsDB) {
+      sailorsDB.ref(`sailors/${sailor._fbKey || sailor.id}`).update({
+        avgScore: sailor.avgScore,
+        yesterdayScore: avgScore,
+        evaluated: true
+      }).catch(e => console.warn(e));
+    }
+  }
+
+  closeMlEvaluationModal();
+  showLightToast(`Evaluation Submitted! Score: ${avgScore.toFixed(1)}/10 ⭐`, "✅");
+  if (mlStore.selectedWoKey) {
+    openWorkOrderDetailMobile(mlStore.selectedWoKey);
+    switchMlWoTab("evaluation");
+  }
 }
 
 function updateTaskProgress(key, val) {
@@ -1551,23 +2126,23 @@ function addMaterialRowMobile(data) {
   const container = document.getElementById("mlEstMaterialsContainer");
   if (!container) return;
   const d = data || { description: "", qty: 1, unit: "Nos", cost: 0 };
-  const total = parseFloat(d.qty || 0) * parseFloat(d.cost || 0);
+  const total = parseFloat(d.qty || 0) * parseFloat(d.cost || d.rate || 0);
 
   const row = document.createElement("div");
-  row.className = "p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs est-mat-row";
+  row.className = "p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs est-mat-row";
   row.innerHTML = `
     <div class="flex items-center gap-1.5">
       <input type="text" placeholder="Material item description..." value="${escapeHtml(d.description || '')}" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-bold text-slate-800 est-mat-desc">
       <button type="button" onclick="removeMaterialRowMobile(this)" class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center text-xs font-bold shrink-0">✕</button>
     </div>
-    <div class="grid grid-cols-4 gap-1.5">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
       <div>
         <label class="block text-[9px] font-bold text-slate-500">Qty</label>
-        <input type="number" step="any" min="0" value="${d.qty || 1}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-mono font-bold est-mat-qty">
+        <input type="number" step="any" min="0" value="${d.qty || 1}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-mono font-bold est-mat-qty">
       </div>
       <div>
         <label class="block text-[9px] font-bold text-slate-500">Unit</label>
-        <select class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-bold est-mat-unit">
+        <select class="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-bold est-mat-unit">
           <option value="Nos" ${d.unit === 'Nos' ? 'selected' : ''}>Nos</option>
           <option value="Kg" ${d.unit === 'Kg' ? 'selected' : ''}>Kg</option>
           <option value="Ft" ${d.unit === 'Ft' ? 'selected' : ''}>Ft</option>
@@ -1579,12 +2154,12 @@ function addMaterialRowMobile(data) {
         </select>
       </div>
       <div>
-        <label class="block text-[9px] font-bold text-slate-500">Unit Cost (LKR)</label>
-        <input type="number" step="any" min="0" value="${d.cost || d.rate || 0}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-mono font-bold est-mat-cost">
+        <label class="block text-[9px] font-bold text-slate-500">Unit Cost (Rs)</label>
+        <input type="number" step="any" min="0" value="${d.cost || d.rate || 0}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-mono font-bold est-mat-cost">
       </div>
       <div>
-        <label class="block text-[9px] font-bold text-slate-500">Total (LKR)</label>
-        <span class="block bg-slate-100 border border-slate-200 rounded-lg p-1 text-xs font-mono font-bold text-right text-teal-800 est-mat-line-total">Rs. ${formatCurrency(total)}</span>
+        <label class="block text-[9px] font-bold text-slate-500">Total (Rs)</label>
+        <span class="block bg-slate-100 border border-slate-200 rounded-lg p-1.5 text-xs font-mono font-bold text-right text-teal-800 est-mat-line-total">Rs. ${formatCurrency(total)}</span>
       </div>
     </div>`;
   container.appendChild(row);
@@ -1603,30 +2178,32 @@ function addLaborRowMobile(data) {
   const d = data || { trade: "Carpenter", workers: 1, manDays: 1 };
 
   const row = document.createElement("div");
-  row.className = "p-2.5 bg-slate-50 border border-slate-200 rounded-xl grid grid-cols-12 gap-1.5 items-center text-xs est-lab-row";
+  row.className = "p-2.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5 text-xs est-lab-row";
   row.innerHTML = `
-    <div class="col-span-5">
-      <label class="block text-[9px] font-bold text-slate-500">Trade</label>
-      <select class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-bold est-lab-trade">
-        <option value="Carpenter" ${d.trade === 'Carpenter' ? 'selected' : ''}>Carpenter</option>
-        <option value="Painter" ${d.trade === 'Painter' ? 'selected' : ''}>Painter</option>
-        <option value="Mason" ${d.trade === 'Mason' ? 'selected' : ''}>Mason</option>
-        <option value="Plumber" ${d.trade === 'Plumber' ? 'selected' : ''}>Plumber</option>
-        <option value="Welder" ${d.trade === 'Welder' ? 'selected' : ''}>Welder</option>
-        <option value="Electrician" ${d.trade === 'Electrician' ? 'selected' : ''}>Electrician</option>
-        <option value="Laborer" ${d.trade === 'Laborer' ? 'selected' : ''}>Laborer</option>
-      </select>
-    </div>
-    <div class="col-span-3">
-      <label class="block text-[9px] font-bold text-slate-500">Workers</label>
-      <input type="number" min="1" value="${d.workers || 1}" class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-mono font-bold est-lab-workers">
-    </div>
-    <div class="col-span-3">
-      <label class="block text-[9px] font-bold text-slate-500">Man-Days</label>
-      <input type="number" step="any" min="0" value="${d.manDays || 1}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1 text-xs font-mono font-bold est-lab-days">
-    </div>
-    <div class="col-span-1 text-right pt-3">
-      <button type="button" onclick="removeLaborRowMobile(this)" class="w-6 h-6 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-bold">✕</button>
+    <div class="grid grid-cols-12 gap-1.5 items-center">
+      <div class="col-span-5">
+        <label class="block text-[9px] font-bold text-slate-500">Trade</label>
+        <select class="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-bold est-lab-trade">
+          <option value="Carpenter" ${d.trade === 'Carpenter' ? 'selected' : ''}>Carpenter</option>
+          <option value="Painter" ${d.trade === 'Painter' ? 'selected' : ''}>Painter</option>
+          <option value="Mason" ${d.trade === 'Mason' ? 'selected' : ''}>Mason</option>
+          <option value="Plumber" ${d.trade === 'Plumber' ? 'selected' : ''}>Plumber</option>
+          <option value="Welder" ${d.trade === 'Welder' ? 'selected' : ''}>Welder</option>
+          <option value="Electrician" ${d.trade === 'Electrician' ? 'selected' : ''}>Electrician</option>
+          <option value="Laborer" ${d.trade === 'Laborer' ? 'selected' : ''}>Laborer</option>
+        </select>
+      </div>
+      <div class="col-span-3">
+        <label class="block text-[9px] font-bold text-slate-500">Workers</label>
+        <input type="number" min="1" value="${d.workers || 1}" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-mono font-bold est-lab-workers">
+      </div>
+      <div class="col-span-3">
+        <label class="block text-[9px] font-bold text-slate-500">Man-Days</label>
+        <input type="number" step="any" min="0" value="${d.manDays || 1}" oninput="calcNewEstTotalsMobile()" class="w-full bg-white border border-slate-300 rounded-lg p-1.5 text-xs font-mono font-bold est-lab-days">
+      </div>
+      <div class="col-span-1 text-right pt-3">
+        <button type="button" onclick="removeLaborRowMobile(this)" class="w-6 h-6 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 text-xs font-bold">✕</button>
+      </div>
     </div>`;
   container.appendChild(row);
   calcNewEstTotalsMobile();
