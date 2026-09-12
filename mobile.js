@@ -51,12 +51,13 @@ function isZoneMatch(z1, z2) {
 
 // Store
 const mlStore = {
-  currentZone: localStorage.getItem("ncw_saved_zone") || "A-Zone",
+  currentZone: (new URLSearchParams(window.location.search).get("zone")) || localStorage.getItem("ncw_saved_zone") || "A-Zone",
   selectedDate: getLocalDateString(),
   workOrders: [],
   sailors: [],
   dailyAllocations: [],
   lmdRecords: [],
+  zoneInCharges: {},
   activeTab: "home",
   estCategory: "concrete",
   selectedAssignKey: ""
@@ -127,7 +128,16 @@ function switchLightTab(tabId) {
 // ---------------------------------------------
 // INITIALIZATION
 // ---------------------------------------------
+// INITIALIZATION & ZONE SECURITY
+// ---------------------------------------------
+let pendingTargetZone = null;
+
 function initLightApp() {
+  const qZ = new URLSearchParams(window.location.search).get("zone");
+  if (qZ && STANDARD_ZONES.some(z => z.id === qZ)) {
+    mlStore.currentZone = qZ;
+  }
+
   const zoneSelect = document.getElementById("mlZoneSelect");
   if (zoneSelect) {
     zoneSelect.innerHTML = STANDARD_ZONES.map(z => 
@@ -144,10 +154,122 @@ function initLightApp() {
 }
 
 function changeLightZone(z) {
+  if (!z) return;
+  if (z === mlStore.currentZone) return;
+
+  // Check if target zone was already unlocked during this session
+  if (sessionStorage.getItem("ncw_mobile_zone_unlocked_" + z) === "true") {
+    applyZoneSwitch(z);
+    return;
+  }
+
+  // Otherwise prompt for that zone's password (pic - 01)
+  pendingTargetZone = z;
+  openZonePasswordModal(z);
+}
+
+function applyZoneSwitch(z) {
   mlStore.currentZone = z;
   localStorage.setItem("ncw_saved_zone", z);
+  const sel = document.getElementById("mlZoneSelect");
+  if (sel) sel.value = z;
+  showLightToast(`Switched to ${z}`, "📍");
   renderLightTasks();
   if (mlStore.activeTab === "lmd") loadLightLmdRecords();
+}
+
+function openZonePasswordModal(zoneId) {
+  const modal = document.getElementById("mlZonePasswordModal");
+  const sub = document.getElementById("mlZonePasswordSubtitle");
+  const input = document.getElementById("mlZonePasswordInput");
+  const err = document.getElementById("mlZonePasswordError");
+  const zoneObj = STANDARD_ZONES.find(x => x.id === zoneId) || { name: zoneId };
+
+  if (sub) sub.textContent = `📍 ${zoneObj.name}`;
+  if (input) {
+    input.value = "";
+    input.type = "password";
+  }
+  if (err) err.classList.add("hidden");
+
+  if (modal) modal.classList.remove("hidden");
+  setTimeout(() => {
+    if (input) input.focus();
+  }, 100);
+}
+
+function cancelZonePassword() {
+  const modal = document.getElementById("mlZonePasswordModal");
+  if (modal) modal.classList.add("hidden");
+
+  // Revert dropdown selector back to the active zone
+  const sel = document.getElementById("mlZoneSelect");
+  if (sel) sel.value = mlStore.currentZone;
+  pendingTargetZone = null;
+}
+
+function toggleZonePasswordVisibility() {
+  const input = document.getElementById("mlZonePasswordInput");
+  if (!input) return;
+  input.type = input.type === "password" ? "text" : "password";
+}
+
+function verifyZonePassword() {
+  if (!pendingTargetZone) return;
+
+  const input = document.getElementById("mlZonePasswordInput");
+  const err = document.getElementById("mlZonePasswordError");
+  const errMsg = document.getElementById("mlZonePasswordErrorMsg");
+  const entered = (input?.value || "").trim();
+
+  if (!entered) {
+    if (err) {
+      if (errMsg) errMsg.textContent = "Please enter the password or PIN!";
+      err.classList.remove("hidden");
+    }
+    if (input) input.focus();
+    return;
+  }
+
+  const targetZone = pendingTargetZone;
+  const inc = (mlStore.zoneInCharges || {})[targetZone] || {};
+  const correctPwd = inc.password ? String(inc.password).trim() : "";
+
+  // Master bypass and default PIN check:
+  // Same logic as desktop app.js: "MalitHZ", "1234", "3576", "navy123", "admin"
+  const masterPins = ["MalitHZ", "1234", "3576", "navy123", "admin"];
+  let isValid = false;
+
+  if (entered === "MalitHZ") {
+    isValid = true;
+  } else if (correctPwd && entered === correctPwd) {
+    isValid = true;
+  } else if (correctPwd && masterPins.includes(entered)) {
+    isValid = true;
+  } else if (!correctPwd && masterPins.includes(entered)) {
+    isValid = true;
+  }
+
+  if (isValid) {
+    sessionStorage.setItem("ncw_mobile_zone_unlocked_" + targetZone, "true");
+    const target = pendingTargetZone;
+    const modal = document.getElementById("mlZonePasswordModal");
+    if (modal) modal.classList.add("hidden");
+    pendingTargetZone = null;
+
+    applyZoneSwitch(target);
+    showLightToast(`Access Granted: ${target}`, "🔓");
+  } else {
+    if (err) {
+      if (errMsg) errMsg.textContent = "Incorrect password! Access denied.";
+      err.classList.remove("hidden");
+    }
+    if (input) {
+      input.value = "";
+      input.focus();
+    }
+    showLightToast("Access Denied: Incorrect Password", "❌");
+  }
 }
 
 function changeLightDate(d) {
@@ -176,6 +298,10 @@ function loadLightData() {
   }
 
   if (opsDB) {
+    opsDB.ref("settings/zoneInCharges").on("value", snap => {
+      mlStore.zoneInCharges = snap.val() || {};
+    });
+
     opsDB.ref("work_orders").once("value", snap => {
       const d = snap.val();
       mlStore.workOrders = [];
@@ -705,6 +831,7 @@ function submitNewTask() {
   });
 }
 
+let mlToastTimer = null;
 function showLightToast(msg, icon) {
   const toast = document.getElementById("mlToast");
   const msgEl = document.getElementById("mlToastMsg");
@@ -714,12 +841,19 @@ function showLightToast(msg, icon) {
   msgEl.textContent = msg;
   if (iconEl) iconEl.textContent = icon || "✅";
 
-  toast.classList.remove("translate-y-24");
-  toast.classList.add("translate-y-0");
+  if (mlToastTimer) clearTimeout(mlToastTimer);
 
-  setTimeout(() => {
-    toast.classList.remove("translate-y-0");
-    toast.classList.add("translate-y-24");
+  toast.classList.remove("hidden");
+  void toast.offsetWidth; // Force layout reflow
+  toast.style.opacity = "1";
+  toast.style.transform = "translateY(0)";
+
+  mlToastTimer = setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(8px)";
+    setTimeout(() => {
+      toast.classList.add("hidden");
+    }, 260);
   }, 2200);
 }
 

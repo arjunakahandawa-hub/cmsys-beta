@@ -288,13 +288,51 @@
         </div>
     </div>
 
+    <!-- MODAL: ZONE ACCESS PASSWORD -->
+    <div id="mlZonePasswordModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm p-4 space-y-3 shadow-2xl border border-slate-200">
+            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">🔒</span>
+                    <div>
+                        <h3 class="text-xs font-bold text-slate-900">Zone Access Verification</h3>
+                        <p id="mlZonePasswordSubtitle" class="text-[10px] text-teal-700 font-bold">Select Zone</p>
+                    </div>
+                </div>
+                <button type="button" onclick="cancelZonePassword()" class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 flex items-center justify-center text-xs">✕</button>
+            </div>
+            
+            <div class="space-y-2">
+                <label class="block text-[11px] font-bold text-slate-700">Enter In-Charge PIN / Password:</label>
+                <div class="relative flex items-center">
+                    <input type="password" id="mlZonePasswordInput" placeholder="Password / PIN" autocomplete="current-password"
+                        class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-teal-600 focus:ring-1 focus:ring-teal-600"
+                        onkeydown="if(event.key==='Enter') verifyZonePassword()" />
+                    <button type="button" onclick="toggleZonePasswordVisibility()" class="absolute right-2.5 text-slate-400 hover:text-slate-600 text-xs p-1" title="Show/Hide">
+                        👁️
+                    </button>
+                </div>
+                <div id="mlZonePasswordError" class="hidden text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 rounded-lg p-1.5 flex items-center gap-1.5">
+                    <span>⚠️</span>
+                    <span id="mlZonePasswordErrorMsg">Incorrect password! Access denied.</span>
+                </div>
+                <p class="text-[9px] text-slate-400 font-medium">Default: 1234 or your Zone In-Charge Password</p>
+            </div>
+
+            <div class="flex gap-2 pt-2">
+                <button type="button" onclick="cancelZonePassword()" class="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 active-scale">Cancel</button>
+                <button type="button" onclick="verifyZonePassword()" class="flex-1 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-xs active-scale">Unlock Zone</button>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST NOTIFICATION -->
-    <div id="mlToast" class="fixed bottom-16 left-4 right-4 z-50 p-2.5 rounded-xl bg-slate-900 border border-teal-500/50 text-white text-xs font-bold shadow-2xl flex items-center gap-2 transform translate-y-24 transition-transform duration-200 pointer-events-none">
+    <div id="mlToast" class="hidden fixed left-4 right-4 z-50 p-2.5 rounded-xl bg-slate-900 border border-teal-500/50 text-white text-xs font-bold shadow-2xl flex items-center gap-2 pointer-events-none" style="bottom: 4.5rem; transition: opacity 0.25s ease, transform 0.25s ease; opacity: 0; transform: translateY(8px);">
         <span id="mlToastIcon">✅</span>
         <span id="mlToastMsg" class="flex-1">Notification</span>
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile-light.js?v=2.0.0"></script>
+    <script src="mobile.js?v=2.0.1"></script>
 </body>
 </html>
