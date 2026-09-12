@@ -1,0 +1,165 @@
+<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head>
+<meta charset="utf-8">
+<title>System Architecture & Multi-Tier Repository Separation Plan</title>
+<!--[if gte mso 9]>
+<xml>
+<w:WordDocument>
+<w:View>Print</w:View>
+<w:Zoom>100</w:Zoom>
+<w:DoNotOptimizeForBrowser/>
+</w:WordDocument>
+</xml>
+<![endif]-->
+<style>
+body {
+    font-family: 'Calibri', 'Segoe UI', 'Noto Sans Sinhala', Arial, sans-serif;
+    line-height: 1.5;
+    color: #1e293b;
+    margin: 30px;
+}
+h1 {
+    color: #0f172a;
+    font-size: 20pt;
+    border-bottom: 2pt solid #0284c7;
+    padding-bottom: 6px;
+    margin-bottom: 12px;
+}
+h2 {
+    color: #0369a1;
+    font-size: 14pt;
+    border-bottom: 1pt solid #cbd5e1;
+    padding-bottom: 4px;
+    margin-top: 18px;
+    margin-bottom: 8px;
+}
+h3 {
+    color: #0f766e;
+    font-size: 12pt;
+    margin-top: 14px;
+    margin-bottom: 4px;
+}
+p, li {
+    font-size: 11pt;
+    margin-bottom: 6px;
+}
+.header-box {
+    background-color: #0f172a;
+    color: #ffffff;
+    padding: 16px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+}
+.header-box h2 {
+    color: #38bdf8;
+    border: none;
+    margin: 0 0 4px 0;
+    font-size: 16pt;
+}
+.header-box p {
+    color: #cbd5e1;
+    margin: 0;
+    font-size: 10pt;
+}
+.alert-box {
+    background-color: #f0fdf4;
+    border-left: 4pt solid #16a34a;
+    padding: 10px 14px;
+    margin: 12px 0;
+    font-size: 10.5pt;
+}
+.alert-warning {
+    background-color: #fffbeb;
+    border-left: 4pt solid #d97706;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 10.5pt;
+}
+th {
+    background-color: #0f172a;
+    color: #ffffff;
+    font-weight: bold;
+    text-align: left;
+    padding: 8px 10px;
+    border: 1px solid #334155;
+}
+td {
+    padding: 7px 10px;
+    border: 1px solid #cbd5e1;
+}
+tr:nth-child(even) {
+    background-color: #f8fafc;
+}
+</style>
+</head>
+<body>
+
+<div class="header-box">
+    <h2>SRI LANKA NAVY - CIVIL ENGINEERING DEPARTMENT</h2>
+    <p>CMSys (Civil Engineering Management System) · Naval Dockyard Trincomalee</p>
+    <p style="margin-top: 6px; font-weight: bold; color: #a5f3fc;">TECHNICAL SPECIFICATION: MOBILE LIGHT, MOBILE STANDARD & DUAL REPOSITORY TIERS</p>
+</div>
+
+<h1>පද්ධති ව්‍යුහය සහ Mobile අනුවාද වෙන් කිරීමේ සැලැස්ම</h1>
+
+<div class="alert-box">
+    <strong>මූලික සංකල්පය (Core Philosophy):</strong> "Detail feed කරන එක විතරයි වෙන්නේ" - දුරකථනයෙන් සිදු කරන්නේ ක්ෂේත්‍රයේ දත්ත පද්ධතියට ඇතුළත් කිරීම (Data Input / Progress Feeding) පමණි. බර Print/Report ජනනය ඩෙස්ක්ටොප් එකට සීමා වේ.
+</div>
+
+<h2>1. Mobile අනුවාද 2 හි කාර්යභාරය (Mobile Two-Tier Breakdown)</h2>
+
+<table>
+    <tr>
+        <th style="width: 25%;">අනුවාදය</th>
+        <th style="width: 40%;">ඇතුළත් වන අත්‍යවශ්‍ය අංග</th>
+        <th style="width: 35%;">ඉවත් කර ඇති බර කොටස් (Bloat Removed)</th>
+    </tr>
+    <tr>
+        <td><strong>1. Mobile Light (අතිශය සැහැල්ලු)</strong><br><small>පරණ / අඩු මිල දුරකථන සඳහා</small></td>
+        <td>
+            • Work Order Create & Proceed කිරීම.<br>
+            • Work Order Progress (%) යාවත්කාලීන කිරීම.<br>
+            • Daily Labour Allocation & Sailors Evaluate කිරීම.<br>
+            • Job Card Status පවත්වාගෙන යාම.<br>
+            • Basic Inventory (ද්‍රව්‍ය/උපකරණ තොග බැලීම).
+        </td>
+        <td>
+            • Print / PDF බොත්තම් නැත.<br>
+            • Export (CSV/Excel) නැත.<br>
+            • Sidebar drawers (Available Sailors) නැත.<br>
+            • 2x4 muster sheet generators නැත.<br>
+            • Sailor Bio dossiers / Documents නැත.
+        </td>
+    </tr>
+    <tr>
+        <td><strong>2. Mobile Standard</strong><br><small>නවීන ස්මාර්ට්ෆෝන් සඳහා</small></td>
+        <td>
+            • Mobile Light හි සියලු අංග.<br>
+            • <strong>Estimate Calculator</strong> (ඇස්තමේන්තු හැදීම).<br>
+            • <strong>Last Maintained Date (LMD)</strong> Tracker.<br>
+            • Basic Sailor profile viewer.
+        </td>
+        <td>
+            • ඩෙස්ක්ටොප් එකට පමණක් අවශ්‍ය බර Matrix table summary සහ සම්පූර්ණ පරිපාලන මෙවලම් මෙහිද සීමා කෙරේ.
+        </td>
+    </tr>
+</table>
+
+<h2>2. Desktop පද්ධතිය සහ PWA හැකියාව (Full System & PWA)</h2>
+<ul>
+    <li><strong>Production (Main) සහ Beta</strong> යන පද්ධති දෙකම <strong>PWA (Progressive Web App)</strong> තාක්ෂණයෙන් සමන්විත බැවින්, ටැබ්ලට් පරිගණක (Tablets) හෝ ඉහළ ධාරිතාවයක් ඇති ස්මාර්ට්ෆෝන් හිමි නිලධාරීන්ට අවශ්‍ය නම් Full System එක Install කරගෙන පරිහරණය කළ හැක.</li>
+    <li><strong>Beta Platform:</strong> සියලුම අත්හදාබැලීම් දෙවන ගිණුමේ Beta Repo එක හරහා සිදු වේ.</li>
+    <li><strong>Production Platform:</strong> සම්පූර්ණයෙන්ම තහවුරු කළ Stable අනුවාදය පමණක් Main Repo එකේ පවතී.</li>
+</ul>
+
+<br>
+<hr style="border: 0; border-top: 1px solid #cbd5e1;">
+<p style="text-align: center; font-size: 10pt; color: #64748b;">
+    Sri Lanka Navy Civil Engineering Department · Eastern Naval Area · Official / Operational
+</p>
+
+</body>
+</html>

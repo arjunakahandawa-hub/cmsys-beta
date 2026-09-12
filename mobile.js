@@ -2351,6 +2351,605 @@ function printMobileLmdReport() {
 }
 
 // Start listeners on window load
+
+// =============================================
+// CMSys MOBILE STANDARD EXTENSIONS:
+// 1. Tab Navigation & State Controller
+// 2. Civil Engineering Estimate Calculator
+// 3. Last Maintained Date (LMD) Facility Tracker
+// 4. Compact Sailor Directory Viewer
+// =============================================
+
+let mCurrentTab = 'tasks';
+let mEstCurrentCategory = 'concrete';
+let mLmdRecords = [];
+let mSailorDirTradeFilter = 'ALL';
+
+// --- 1. TAB NAVIGATION CONTROLLER ---
+function switchMobileTab(tabId) {
+  mCurrentTab = tabId;
+  const tabs = ['tasks', 'estimate', 'lmd', 'sailors'];
+  
+  tabs.forEach(t => {
+    const view = document.getElementById(t === 'tasks' ? 'mViewTasks' : t === 'estimate' ? 'mViewEstimate' : t === 'lmd' ? 'mViewLmd' : 'mViewSailors');
+    const btn = document.getElementById(t === 'tasks' ? 'mTabBtnTasks' : t === 'estimate' ? 'mTabBtnEstimate' : t === 'lmd' ? 'mTabBtnLmd' : 'mTabBtnSailors');
+    
+    if (view) {
+      if (t === tabId) {
+        view.classList.remove('hidden');
+      } else {
+        view.classList.add('hidden');
+      }
+    }
+    if (btn) {
+      if (t === tabId) {
+        btn.className = 'flex flex-col items-center gap-0.5 text-teal-400 font-bold px-3 py-1 rounded-xl active-scale';
+      } else {
+        btn.className = 'flex flex-col items-center gap-0.5 text-slate-400 hover:text-white font-medium px-3 py-1 rounded-xl active-scale';
+      }
+    }
+  });
+
+  if (tabId === 'estimate') {
+    runEstimateCalc();
+  } else if (tabId === 'lmd') {
+    loadLmdRecords();
+  } else if (tabId === 'sailors') {
+    renderMobileSailorDirectory();
+  }
+}
+
+// --- 2. CIVIL ENGINEERING ESTIMATE CALCULATOR ---
+function selectEstimateSubTab(cat) {
+  mEstCurrentCategory = cat;
+  const cats = ['concrete', 'brick', 'plaster', 'labour'];
+  cats.forEach(c => {
+    const sec = document.getElementById(c === 'concrete' ? 'mEstSectionConcrete' : c === 'brick' ? 'mEstSectionBrick' : c === 'plaster' ? 'mEstSectionPlaster' : 'mEstSectionLabour');
+    const tabBtn = document.getElementById(c === 'concrete' ? 'mEstTabConcrete' : c === 'brick' ? 'mEstTabBrick' : c === 'plaster' ? 'mEstTabPlaster' : 'mEstTabLabour');
+    if (sec) {
+      if (c === cat) sec.classList.remove('hidden');
+      else sec.classList.add('hidden');
+    }
+    if (tabBtn) {
+      if (c === cat) {
+        tabBtn.className = 'flex-1 py-1.5 rounded-lg bg-teal-600 text-white active-scale shadow-sm transition-all';
+      } else {
+        tabBtn.className = 'flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white active-scale transition-all';
+      }
+    }
+  });
+  runEstimateCalc();
+}
+
+let mLastEstimateSummary = '';
+let mLastEstimateTotalCost = 0;
+
+function runEstimateCalc() {
+  const grid = document.getElementById('mEstResultsGrid');
+  const summaryEl = document.getElementById('mEstSummaryText');
+  const totalCostEl = document.getElementById('mEstTotalCost');
+  if (!grid || !summaryEl) return;
+
+  let cards = [];
+  let summary = '';
+  let totalCost = 0;
+
+  if (mEstCurrentCategory === 'concrete') {
+    const l = parseFloat(document.getElementById('mEstConcL')?.value) || 0;
+    const w = parseFloat(document.getElementById('mEstConcW')?.value) || 0;
+    const tInches = parseFloat(document.getElementById('mEstConcT')?.value) || 0;
+    const mix = document.getElementById('mEstConcMix')?.value || '1:2:4';
+
+    const wetVol = l * w * (tInches / 12.0); // cu.ft
+    const dryVol = wetVol * 1.54; // Dry volume factor for shrinkage & voids
+
+    let parts = [1, 2, 4];
+    if (mix === '1:1.5:3') parts = [1, 1.5, 3];
+    else if (mix === '1:3:6') parts = [1, 3, 6];
+    else if (mix === '1:4:8') parts = [1, 4, 8];
+
+    const sumParts = parts[0] + parts[1] + parts[2];
+    const cementCuFt = (parts[0] / sumParts) * dryVol;
+    const cementBags = Math.ceil(cementCuFt / 1.25); // 1 bag = 1.25 cu.ft (50kg)
+    const sandCuFt = (parts[1] / sumParts) * dryVol;
+    const sandCubes = (sandCuFt / 100).toFixed(2); // 1 cube = 100 cu.ft
+    const metalCuFt = (parts[2] / sumParts) * dryVol;
+    const metalCubes = (metalCuFt / 100).toFixed(2);
+
+    // Approximate cost in Sri Lanka (Cement: Rs 2,400/bag, Sand: Rs 28,000/cube, Metal: Rs 26,000/cube)
+    const cementCost = cementBags * 2400;
+    const sandCost = parseFloat(sandCubes) * 28000;
+    const metalCost = parseFloat(metalCubes) * 26000;
+    totalCost = cementCost + sandCost + metalCost;
+
+    cards = [
+      { label: 'Wet Volume', val: `${wetVol.toFixed(1)} cu.ft (${(wetVol * 0.0283).toFixed(2)} m³)`, color: 'teal' },
+      { label: 'Cement Bags (50kg)', val: `${cementBags} Bags`, color: 'emerald' },
+      { label: 'River Sand', val: `${sandCubes} Cubes (${sandCuFt.toFixed(1)} cu.ft)`, color: 'amber' },
+      { label: 'Metal (3/4 Aggregates)', val: `${metalCubes} Cubes (${metalCuFt.toFixed(1)} cu.ft)`, color: 'indigo' }
+    ];
+
+    summary = `📋 CONCRETE ESTIMATE (${mix})
+Dimensions: ${l}ft × ${w}ft × ${tInches}" (Wet Vol: ${wetVol.toFixed(1)} cu.ft)
+• Cement: ${cementBags} Bags (Rs ${cementCost.toLocaleString()})
+• River Sand: ${sandCubes} Cubes (Rs ${sandCost.toLocaleString()})
+• Aggregates (Metal): ${metalCubes} Cubes (Rs ${metalCost.toLocaleString()})
+Estimated Material Total: Rs ${totalCost.toLocaleString()}`;
+
+  } else if (mEstCurrentCategory === 'brick') {
+    const l = parseFloat(document.getElementById('mEstBrickL')?.value) || 0;
+    const h = parseFloat(document.getElementById('mEstBrickH')?.value) || 0;
+    const type = document.getElementById('mEstBrickType')?.value || 'brick_half';
+
+    const area = l * h; // sq.ft
+    let count = 0;
+    let cementBags = 0;
+    let sandCubes = 0;
+    let unitLabel = '';
+
+    if (type === 'brick_half') {
+      // 4.5" half brick wall: 5.5 bricks/sq.ft
+      count = Math.ceil(area * 5.5);
+      cementBags = Math.ceil(area * 0.07);
+      sandCubes = (area * 0.0035).toFixed(2);
+      unitLabel = 'Red Clay Bricks';
+    } else if (type === 'brick_full') {
+      // 9" full brick wall: 11 bricks/sq.ft
+      count = Math.ceil(area * 11);
+      cementBags = Math.ceil(area * 0.14);
+      sandCubes = (area * 0.007).toFixed(2);
+      unitLabel = 'Red Clay Bricks';
+    } else if (type === 'block_4') {
+      // 4" Cement block: 1.15 blocks/sq.ft
+      count = Math.ceil(area * 1.15);
+      cementBags = Math.ceil(area * 0.05);
+      sandCubes = (area * 0.0025).toFixed(2);
+      unitLabel = 'Cement Blocks (4")';
+    } else {
+      // 6" Cement block: 1.15 blocks/sq.ft
+      count = Math.ceil(area * 1.15);
+      cementBags = Math.ceil(area * 0.07);
+      sandCubes = (area * 0.0035).toFixed(2);
+      unitLabel = 'Cement Blocks (6")';
+    }
+
+    const unitPrice = type.includes('block') ? 110 : 35; // Block Rs 110, Brick Rs 35
+    const unitTotal = count * unitPrice;
+    const cementCost = cementBags * 2400;
+    const sandCost = parseFloat(sandCubes) * 28000;
+    totalCost = unitTotal + cementCost + sandCost;
+
+    cards = [
+      { label: 'Wall Surface Area', val: `${area.toFixed(0)} Sq.Ft`, color: 'teal' },
+      { label: unitLabel, val: `${count} Units`, color: 'rose' },
+      { label: 'Cement for Mortar', val: `${cementBags} Bags`, color: 'emerald' },
+      { label: 'Sand for Mortar', val: `${sandCubes} Cubes`, color: 'amber' }
+    ];
+
+    summary = `🧱 BRICK/BLOCKWORK ESTIMATE
+Wall Area: ${area.toFixed(0)} Sq.Ft (${l}ft × ${h}ft)
+• ${unitLabel}: ${count} Units (Rs ${unitTotal.toLocaleString()})
+• Cement Bags: ${cementBags} Bags (Rs ${cementCost.toLocaleString()})
+• River Sand: ${sandCubes} Cubes (Rs ${sandCost.toLocaleString()})
+Estimated Material Total: Rs ${totalCost.toLocaleString()}`;
+
+  } else if (mEstCurrentCategory === 'plaster') {
+    const area = parseFloat(document.getElementById('mEstPlasterArea')?.value) || 0;
+    const thick = parseInt(document.getElementById('mEstPlasterThick')?.value, 10) || 16;
+    const paintType = document.getElementById('mEstPaintType')?.value || 'emulsion';
+
+    // 100 sq.ft plaster requires ~1.2 bags (16mm) or 0.9 bags (12mm)
+    const factor = thick === 12 ? 0.009 : thick === 20 ? 0.015 : 0.012;
+    const cementBags = Math.ceil(area * factor);
+    const sandCubes = (area * factor * 0.06).toFixed(2);
+
+    // 1 Gallon (4L) paint covers ~180-200 sq.ft for 2 coats
+    const paintLitres = Math.ceil((area / 180) * 4);
+
+    const cementCost = cementBags * 2400;
+    const sandCost = parseFloat(sandCubes) * 28000;
+    const paintCost = paintLitres * 1800; // ~Rs 1,800/L
+    totalCost = cementCost + sandCost + paintCost;
+
+    cards = [
+      { label: 'Surface Area', val: `${area.toFixed(0)} Sq.Ft`, color: 'teal' },
+      { label: 'Plaster Cement', val: `${cementBags} Bags`, color: 'emerald' },
+      { label: 'Plaster Sand', val: `${sandCubes} Cubes`, color: 'amber' },
+      { label: 'Paint Required (2 Coats)', val: `${paintLitres} Litres`, color: 'indigo' }
+    ];
+
+    summary = `🎨 PLASTER & PAINT ESTIMATE
+Area: ${area.toFixed(0)} Sq.Ft (${thick}mm plaster)
+• Cement: ${cementBags} Bags (Rs ${cementCost.toLocaleString()})
+• Sand: ${sandCubes} Cubes (Rs ${sandCost.toLocaleString()})
+• Paint (${paintType}): ${paintLitres} Litres (Rs ${paintCost.toLocaleString()})
+Estimated Material Total: Rs ${totalCost.toLocaleString()}`;
+
+  } else if (mEstCurrentCategory === 'labour') {
+    const skilled = parseInt(document.getElementById('mEstSkilled')?.value, 10) || 0;
+    const unskilled = parseInt(document.getElementById('mEstUnskilled')?.value, 10) || 0;
+    const days = parseInt(document.getElementById('mEstDays')?.value, 10) || 0;
+    const rateSkilled = parseFloat(document.getElementById('mEstRateSkilled')?.value) || 4500;
+    const rateUnskilled = rateSkilled * 0.7; // ~70% of skilled rate
+
+    const skilledCost = skilled * days * rateSkilled;
+    const unskilledCost = unskilled * days * rateUnskilled;
+    totalCost = skilledCost + unskilledCost;
+
+    cards = [
+      { label: 'Skilled Tradesmen', val: `${skilled} (${skilled * days} Man-Days)`, color: 'teal' },
+      { label: 'Helpers / Labourers', val: `${unskilled} (${unskilled * days} Man-Days)`, color: 'emerald' },
+      { label: 'Work Duration', val: `${days} Days`, color: 'indigo' },
+      { label: 'Total Man-Days', val: `${(skilled + unskilled) * days} Days`, color: 'amber' }
+    ];
+
+    summary = `👷 LABOUR COST ESTIMATE
+Crew: ${skilled} Skilled + ${unskilled} Helpers for ${days} Days
+• Skilled Cost: Rs ${skilledCost.toLocaleString()} (${skilled * days} man-days @ ${rateSkilled})
+• Helper Cost: Rs ${unskilledCost.toLocaleString()} (${unskilled * days} man-days @ ${rateUnskilled.toFixed(0)})
+Estimated Labour Total: Rs ${totalCost.toLocaleString()}`;
+  }
+
+  mLastEstimateSummary = summary;
+  mLastEstimateTotalCost = totalCost;
+
+  if (totalCostEl) {
+    totalCostEl.textContent = `Rs ${totalCost.toLocaleString()}`;
+  }
+
+  grid.innerHTML = cards.map(c => `
+    <div class="bg-slate-800/80 p-2 rounded-xl border border-slate-700/80">
+      <div class="text-[9px] font-bold text-slate-400 uppercase tracking-wider">${c.label}</div>
+      <div class="text-xs font-black text-white font-mono mt-0.5">${c.val}</div>
+    </div>
+  `).join('');
+
+  summaryEl.textContent = summary;
+}
+
+function copyEstimateSummary() {
+  if (!mLastEstimateSummary) runEstimateCalc();
+  navigator.clipboard?.writeText(mLastEstimateSummary).then(() => {
+    showToast('📋 Estimate copied to clipboard!', 'success');
+  }).catch(() => {
+    showToast('Failed to copy', 'error');
+  });
+}
+
+function useEstimateInWorkOrder() {
+  if (!mLastEstimateSummary) runEstimateCalc();
+  switchMobileTab('tasks');
+  openNewWoSheet();
+  
+  const budgetInput = document.getElementById('mWoBudget');
+  const descInput = document.getElementById('mWoDesc');
+  if (budgetInput && mLastEstimateTotalCost > 0) {
+    budgetInput.value = mLastEstimateTotalCost;
+  }
+  if (descInput) {
+    descInput.value = (descInput.value ? descInput.value + '\n\n' : '') + mLastEstimateSummary;
+  }
+  showToast('✅ Estimate applied to new Work Order!', 'success');
+}
+
+
+// --- 3. LAST MAINTAINED DATE (LMD) TRACKER ---
+function getZoneAssetTemplates(zone) {
+  return [
+    { id: 'pmp_01', name: 'Primary Water Pump #1', location: 'Pump House', cycle_days: 30, last_date: '2026-08-15', notes: 'Impeller lubrication & seal check' },
+    { id: 'pmp_02', name: 'Standby Water Pump #2', location: 'Pump House', cycle_days: 30, last_date: '2026-08-10', notes: 'Motor winding test' },
+    { id: 'elec_db', name: 'Main Electrical Distribution Board', location: 'Main Substation', cycle_days: 90, last_date: '2026-06-20', notes: 'Breaker thermal check' },
+    { id: 'gen_set', name: 'Emergency Backup Generator', location: 'Gen Room', cycle_days: 30, last_date: '2026-08-25', notes: 'Oil & coolant level verified' },
+    { id: 'ac_unit', name: 'Office A/C Condensers', location: 'Admin Block', cycle_days: 90, last_date: '2026-05-30', notes: 'Gas pressure & filter clean' },
+    { id: 'roof_gtr', name: 'Roofing & Rainwater Gutters', location: 'Barracks Block', cycle_days: 180, last_date: '2026-03-15', notes: 'Cleared monsoon debris' },
+    { id: 'fire_ext', name: 'Fire Extinguishers & Hydrants', location: 'Entire Zone', cycle_days: 180, last_date: '2026-04-10', notes: 'Pressure gauge verification' }
+  ];
+}
+
+function loadLmdRecords() {
+  const zone = mStore.currentZone || 'A-Zone';
+  const cleanZone = zone.replace(/[^a-zA-Z0-9_-]/g, '_');
+  
+  if (!opsDB) {
+    mLmdRecords = getZoneAssetTemplates(zone);
+    renderLmdList();
+    return;
+  }
+
+  opsDB.ref(`lmd_records/${cleanZone}`).once('value', snapshot => {
+    const data = snapshot.val();
+    if (data) {
+      mLmdRecords = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+    } else {
+      // Seed default templates for this zone
+      const templates = getZoneAssetTemplates(zone);
+      templates.forEach(tpl => {
+        opsDB.ref(`lmd_records/${cleanZone}/${tpl.id}`).set(tpl);
+      });
+      mLmdRecords = templates;
+    }
+    renderLmdList();
+  }).catch(err => {
+    console.warn('LMD fetch fallback:', err);
+    mLmdRecords = getZoneAssetTemplates(zone);
+    renderLmdList();
+  });
+}
+
+function calculateLmdStatus(lastDateStr, cycleDays) {
+  if (!lastDateStr) return { status: 'OVERDUE', daysDiff: -999, nextDate: 'N/A' };
+  
+  const parts = lastDateStr.split('-');
+  const lastD = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  if (isNaN(lastD.getTime())) return { status: 'OVERDUE', daysDiff: -999, nextDate: 'N/A' };
+
+  const nextD = new Date(lastD);
+  nextD.setDate(nextD.getDate() + (cycleDays || 30));
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const diffMs = nextD.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  const y = nextD.getFullYear();
+  const m = String(nextD.getMonth() + 1).padStart(2, '0');
+  const d = String(nextD.getDate()).padStart(2, '0');
+  const nextDate = `${y}-${m}-${d}`;
+
+  if (diffDays < 0) {
+    return { status: 'OVERDUE', daysDiff: diffDays, nextDate };
+  } else if (diffDays <= 7) {
+    return { status: 'DUE_SOON', daysDiff: diffDays, nextDate };
+  } else {
+    return { status: 'GOOD', daysDiff: diffDays, nextDate };
+  }
+}
+
+function renderLmdList() {
+  const container = document.getElementById('mLmdList');
+  if (!container) return;
+
+  const search = (document.getElementById('mLmdSearch')?.value || '').toLowerCase().trim();
+  let good = 0;
+  let due = 0;
+  let overdue = 0;
+
+  const filtered = mLmdRecords.filter(item => {
+    const match = !search || 
+      (item.name && item.name.toLowerCase().includes(search)) ||
+      (item.location && item.location.toLowerCase().includes(search)) ||
+      (item.notes && item.notes.toLowerCase().includes(search));
+    return match;
+  });
+
+  mLmdRecords.forEach(item => {
+    const calc = calculateLmdStatus(item.last_date, item.cycle_days);
+    if (calc.status === 'GOOD') good++;
+    else if (calc.status === 'DUE_SOON') due++;
+    else overdue++;
+  });
+
+  const statGood = document.getElementById('mLmdStatGood');
+  const statDue = document.getElementById('mLmdStatDue');
+  const statOverdue = document.getElementById('mLmdStatOverdue');
+  if (statGood) statGood.textContent = good;
+  if (statDue) statDue.textContent = due;
+  if (statOverdue) statOverdue.textContent = overdue;
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="p-4 text-center text-slate-500 text-xs">No facility assets match your filter.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.map(item => {
+    const calc = calculateLmdStatus(item.last_date, item.cycle_days);
+    let badgeClass = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40';
+    let badgeLabel = `🟢 ${calc.daysDiff}d left`;
+
+    if (calc.status === 'DUE_SOON') {
+      badgeClass = 'bg-amber-500/20 text-amber-300 border-amber-500/40 animate-pulse';
+      badgeLabel = `🟡 Due in ${calc.daysDiff}d`;
+    } else if (calc.status === 'OVERDUE') {
+      badgeClass = 'bg-rose-500/20 text-rose-300 border-rose-500/40 animate-pulse';
+      badgeLabel = `🔴 Overdue by ${Math.abs(calc.daysDiff)}d`;
+    }
+
+    return `
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 space-y-2 shadow-sm">
+        <div class="flex items-start justify-between gap-2">
+          <div class="min-w-0 flex-1">
+            <h4 class="text-xs font-bold text-white truncate">${escapeHtml(item.name)}</h4>
+            <p class="text-[10px] text-slate-400">📍 ${escapeHtml(item.location || 'Zone Facility')}</p>
+          </div>
+          <span class="text-[9px] font-black border px-2 py-0.5 rounded-full uppercase ${badgeClass}">
+            ${badgeLabel}
+          </span>
+        </div>
+
+        <div class="grid grid-cols-2 gap-1.5 text-[10px] bg-slate-800/60 p-2 rounded-xl border border-slate-700/50">
+          <div>
+            <span class="text-slate-400">Last Serviced:</span>
+            <strong class="text-slate-200 font-mono ml-1">${item.last_date || 'None'}</strong>
+          </div>
+          <div>
+            <span class="text-slate-400">Next Due:</span>
+            <strong class="text-slate-200 font-mono ml-1">${calc.nextDate}</strong>
+          </div>
+          <div class="col-span-2 text-slate-400 text-[9px] truncate">
+            📝 ${escapeHtml(item.notes || 'Routine maintenance cycle')} (${item.cycle_days || 30} days)
+          </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-1.5 pt-0.5">
+          <button type="button" onclick="markLmdMaintainedToday('${item.id}')" class="px-2.5 py-1 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-black active-scale flex items-center gap-1 shadow-sm">
+            <span>⚡</span> Mark Serviced Today
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function filterLmdList() {
+  renderLmdList();
+}
+
+function markLmdMaintainedToday(assetId) {
+  const item = mLmdRecords.find(a => String(a.id) === String(assetId));
+  if (!item) return;
+
+  const today = getLocalDateString();
+  item.last_date = today;
+  item.notes = `Serviced on ${today} by ${(mStore.currentUser && mStore.currentUser.name) || 'Duty LME'}`;
+
+  const zone = mStore.currentZone || 'A-Zone';
+  const cleanZone = zone.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  if (opsDB) {
+    opsDB.ref(`lmd_records/${cleanZone}/${assetId}`).update({
+      last_date: today,
+      notes: item.notes
+    });
+  }
+
+  showToast(`✅ ${item.name} marked as maintained today!`, 'success');
+  renderLmdList();
+}
+
+function openNewLmdModal() {
+  const modal = document.getElementById('mNewLmdModal');
+  const dateInput = document.getElementById('mNewLmdDate');
+  if (dateInput) dateInput.value = getLocalDateString();
+  if (modal) modal.classList.remove('hidden');
+}
+
+function closeNewLmdModal() {
+  const modal = document.getElementById('mNewLmdModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function submitNewLmdAsset() {
+  const name = (document.getElementById('mNewLmdName')?.value || '').trim();
+  const location = (document.getElementById('mNewLmdLocation')?.value || '').trim();
+  const date = document.getElementById('mNewLmdDate')?.value || getLocalDateString();
+  const cycle = parseInt(document.getElementById('mNewLmdCycle')?.value, 10) || 90;
+  const notes = (document.getElementById('mNewLmdNotes')?.value || '').trim();
+
+  if (!name) {
+    showToast('Please enter asset name', 'error');
+    return;
+  }
+
+  const assetId = 'ast_' + Date.now().toString(36);
+  const newAsset = {
+    id: assetId,
+    name,
+    location,
+    last_date: date,
+    cycle_days: cycle,
+    notes: notes || 'Registered in CMSys Mobile'
+  };
+
+  mLmdRecords.unshift(newAsset);
+
+  const zone = mStore.currentZone || 'A-Zone';
+  const cleanZone = zone.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  if (opsDB) {
+    opsDB.ref(`lmd_records/${cleanZone}/${assetId}`).set(newAsset);
+  }
+
+  closeNewLmdModal();
+  showToast('✅ New asset registered to LMD Tracker!', 'success');
+  renderLmdList();
+}
+
+
+// --- 4. BASIC SAILOR DIRECTORY VIEWER ---
+function setSailorDirTradeFilter(trade) {
+  mSailorDirTradeFilter = trade;
+  const btns = document.querySelectorAll('.m-trade-btn');
+  btns.forEach(b => {
+    if (b.textContent.toUpperCase().includes(trade) || (trade === 'ALL' && b.textContent.includes('All'))) {
+      b.className = 'm-trade-btn px-2.5 py-1 rounded-lg bg-teal-600 text-white whitespace-nowrap active-scale';
+    } else {
+      b.className = 'm-trade-btn px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 whitespace-nowrap active-scale';
+    }
+  });
+  renderMobileSailorDirectory();
+}
+
+function filterMobileSailorDirectory() {
+  renderMobileSailorDirectory();
+}
+
+function renderMobileSailorDirectory() {
+  const container = document.getElementById('mSailorDirList');
+  const countBadge = document.getElementById('mSailorDirTotal');
+  if (!container) return;
+
+  const search = (document.getElementById('mSailorDirSearch')?.value || '').toLowerCase().trim();
+  const sailors = mStore.sailors || [];
+
+  const filtered = sailors.filter(s => {
+    const off = (s.off_no || s.official_number || '').toLowerCase();
+    const name = (s.name || '').toLowerCase();
+    const rank = (s.rank || '').toLowerCase();
+    const trade = (s.trade || s.branch || '').toLowerCase();
+
+    const matchesSearch = !search || off.includes(search) || name.includes(search) || rank.includes(search) || trade.includes(search);
+    if (!matchesSearch) return false;
+
+    if (mSailorDirTradeFilter !== 'ALL') {
+      const target = mSailorDirTradeFilter.toLowerCase();
+      if (!trade.includes(target)) return false;
+    }
+    return true;
+  });
+
+  if (countBadge) {
+    countBadge.textContent = `${filtered.length} Sailors`;
+  }
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<div class="p-4 text-center text-slate-500 text-xs">No sailors found matching criteria.</div>`;
+    return;
+  }
+
+  container.innerHTML = filtered.slice(0, 100).map(s => {
+    const off = s.off_no || s.official_number || '—';
+    const rank = s.rank || 'AB';
+    const name = s.name || 'Sailor';
+    const trade = s.trade || s.branch || 'General';
+    const status = s.status || 'Available';
+    const isAvail = status === 'Available' || !status;
+
+    return `
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-xs">
+        <div class="flex items-center gap-2 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center text-xs font-black text-teal-400 shrink-0">
+            ${rank}
+          </div>
+          <div class="min-w-0">
+            <h4 class="text-xs font-bold text-white truncate">${escapeHtml(name)}</h4>
+            <div class="flex items-center gap-1.5 text-[9px] text-slate-400">
+              <span class="font-mono text-teal-300 font-semibold">${escapeHtml(off)}</span>
+              <span>•</span>
+              <span>${escapeHtml(trade)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="shrink-0 text-right">
+          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded border ${isAvail ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30' : 'bg-rose-500/15 text-rose-300 border-rose-500/30'}">
+            ${escapeHtml(status)}
+          </span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   updateDateUI();
   initListeners();

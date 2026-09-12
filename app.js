@@ -20452,20 +20452,7 @@ function renderProfileDropdown() {
       }
     });
   }
-  // Add PWA Install option if not already in standalone app mode
-  const isStandaloneMode =
-    window.matchMedia("(display-mode: standalone)").matches ||
-    window.navigator.standalone;
-  if (!isStandaloneMode) {
-    html += `
-            <div class="border-t border-slate-100 mt-1">
-                <div onclick="toggleProfileDropdown(); triggerPwaInstall();" class="px-4 py-2.5 hover:bg-teal-50 text-teal-600 font-semibold cursor-pointer transition-colors text-xs flex items-center gap-3">
-                    <span class="text-base">📲</span>
-                    <span>Install App on PC / Mobile</span>
-                </div>
-            </div>
-        `;
-  } // Add logout button
+  // Add logout button
   html += `
         <div class="border-t border-slate-100 mt-1">
             <div onclick="logoutProfile()" class="px-4 py-2.5 hover:bg-red-50 text-red-600 font-semibold cursor-pointer transition-colors text-xs flex items-center gap-3">

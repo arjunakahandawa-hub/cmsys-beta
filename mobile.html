@@ -84,7 +84,7 @@
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col antialiased select-none pb-safe">
+<body class="min-h-screen flex flex-col antialiased select-none pb-16">
 
     <!-- TOP APP BAR -->
     <header class="sticky top-0 z-40 bg-[#0a1628]/95 backdrop-blur border-b border-teal-500/20 px-4 py-2.5 flex items-center justify-between shadow-lg">
@@ -102,14 +102,9 @@
         </div>
 
         <div class="flex items-center gap-1.5">
-            <!-- Print / PDF Button -->
-            <button type="button" onclick="printMobileLmdReport()" class="px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-teal-500/30 text-[11px] font-bold text-teal-300 hover:text-white flex items-center gap-1 active-scale shadow-sm" title="Print / PDF Daily Deployment Sheet">
-                <span>🖨️</span> Print / PDF
+            <button type="button" onclick="refreshData(true)" class="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 active-scale" title="Refresh Data">
+                🔄
             </button>
-            <!-- Full App Link -->
-            <a href="index.html" onclick="this.href='index.html?zone=' + encodeURIComponent((typeof mStore !== 'undefined' && mStore.currentZone) ? mStore.currentZone : (localStorage.getItem('ncw_saved_zone') || 'A-Zone'))" class="px-2.5 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-[11px] font-bold text-slate-300 flex items-center gap-1 active-scale">
-                <span>🖥️</span> Full App
-            </a>
         </div>
     </header>
 
@@ -174,7 +169,10 @@
     <!-- MAIN CONTENT: LIST OR DETAIL SHEET -->
     <main class="flex-1 overflow-y-auto touch-scroll p-4 space-y-4">
 
-        <!-- SEARCH BAR & NEW ACTIONS (ASSIGN & WORK ORDER) -->
+        
+        <!-- TAB 1: TASKS & WORK ORDERS -->
+        <div id="mViewTasks" class="space-y-4">
+<!-- SEARCH BAR & NEW ACTIONS (ASSIGN & WORK ORDER) -->
         <div class="space-y-2">
             <div class="flex items-center gap-2">
                 <div class="relative flex-1 min-w-0">
@@ -210,7 +208,231 @@
             </div>
         </div>
 
-        <!-- WORK ORDER DETAIL / LABOUR COMMIT SHEET (SMOOTH POPUP MODAL) -->
+        
+        </div>
+
+        <!-- TAB 2: CIVIL ESTIMATE CALCULATOR -->
+        <div id="mViewEstimate" class="hidden space-y-4">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xs font-black uppercase tracking-wider text-teal-300 flex items-center gap-1.5">
+                        <span>🧮</span> Civil Engineering Estimator
+                    </h2>
+                    <p class="text-[10px] text-slate-400">Quick field material & cost estimation</p>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button type="button" onclick="copyEstimateSummary()" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 text-[10px] font-bold active-scale flex items-center gap-1 shadow-sm">
+                        <span>📋</span> Copy
+                    </button>
+                    <button type="button" onclick="useEstimateInWorkOrder()" class="px-2.5 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-[10px] font-black active-scale flex items-center gap-1 shadow-sm">
+                        <span>➕</span> To W.O
+                    </button>
+                </div>
+            </div>
+
+            <!-- Estimator Category Selector Tabs -->
+            <div class="flex gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
+                <button type="button" onclick="selectEstimateSubTab('concrete')" id="mEstTabConcrete" class="flex-1 py-1.5 rounded-lg bg-teal-600 text-white active-scale shadow-sm transition-all">Concrete</button>
+                <button type="button" onclick="selectEstimateSubTab('brick')" id="mEstTabBrick" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white active-scale transition-all">Brick/Block</button>
+                <button type="button" onclick="selectEstimateSubTab('plaster')" id="mEstTabPlaster" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white active-scale transition-all">Plaster/Paint</button>
+                <button type="button" onclick="selectEstimateSubTab('labour')" id="mEstTabLabour" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white active-scale transition-all">Labour Cost</button>
+            </div>
+
+            <!-- CONCRETE SECTION -->
+            <div id="mEstSectionConcrete" class="space-y-3 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Length (ft)</label>
+                        <input type="number" id="mEstConcL" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Width (ft)</label>
+                        <input type="number" id="mEstConcW" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Thick (in)</label>
+                        <input type="number" id="mEstConcT" value="6" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 mb-1">Concrete Mix Grade</label>
+                    <select id="mEstConcMix" onchange="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                        <option value="1:2:4">1:2:4 (Grade 20 - Standard Slabs & Beams)</option>
+                        <option value="1:1.5:3">1:1.5:3 (Grade 25 - Heavy Structural / Columns)</option>
+                        <option value="1:3:6">1:3:6 (Grade 15 - Lean Concrete / Sub-base)</option>
+                        <option value="1:4:8">1:4:8 (Foundations & Mass Filling)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- BRICK / BLOCK SECTION -->
+            <div id="mEstSectionBrick" class="hidden space-y-3 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Wall Length (ft)</label>
+                        <input type="number" id="mEstBrickL" value="20" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Wall Height (ft)</label>
+                        <input type="number" id="mEstBrickH" value="10" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 mb-1">Wall Material & Thickness</label>
+                    <select id="mEstBrickType" onchange="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                        <option value="brick_half">Red Clay Brick - 4.5" (Single Half-Brick Wall)</option>
+                        <option value="brick_full">Red Clay Brick - 9" (Double Full-Brick Wall)</option>
+                        <option value="block_4">Cement Block 4" (Standard Partition)</option>
+                        <option value="block_6">Cement Block 6" (Standard Load-Bearing)</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- PLASTER & PAINT SECTION -->
+            <div id="mEstSectionPlaster" class="hidden space-y-3 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 mb-1">Surface Area (Sq.Ft)</label>
+                    <input type="number" id="mEstPlasterArea" value="200" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Plaster Thickness</label>
+                        <select id="mEstPlasterThick" onchange="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                            <option value="12">12 mm (Internal Wall)</option>
+                            <option value="16">16 mm (External Wall)</option>
+                            <option value="20">20 mm (Rough Cast / 2-Coat)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Paint Specification</label>
+                        <select id="mEstPaintType" onchange="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                            <option value="emulsion">Emulsion (2 Coats + Filler)</option>
+                            <option value="weather">Weather Shield (External 2 Coats)</option>
+                            <option value="enamel">Enamel / Oil (Wood/Metal 2 Coats)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LABOUR COST SECTION -->
+            <div id="mEstSectionLabour" class="hidden space-y-3 bg-slate-900/80 p-3.5 rounded-2xl border border-slate-800">
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Masons / Carpenters</label>
+                        <input type="number" id="mEstSkilled" value="2" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Labourers / Helpers</label>
+                        <input type="number" id="mEstUnskilled" value="2" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Estimated Days</label>
+                        <input type="number" id="mEstDays" value="3" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-400 mb-1">Skilled Daily Rate (Rs)</label>
+                        <input type="number" id="mEstRateSkilled" value="4500" oninput="runEstimateCalc()" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                    </div>
+                </div>
+            </div>
+
+            <!-- ESTIMATE RESULTS DISPLAY CARD -->
+            <div class="bg-gradient-to-br from-slate-900 to-[#0c182c] p-4 rounded-2xl border border-teal-500/30 shadow-xl space-y-3">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <span class="text-xs font-black uppercase text-white flex items-center gap-1.5">
+                        <span>📦</span> Material Breakdown
+                    </span>
+                    <span id="mEstTotalCost" class="text-sm font-black text-emerald-400 font-mono">Rs 0.00</span>
+                </div>
+                <div id="mEstResultsGrid" class="grid grid-cols-2 gap-2 text-xs">
+                    <!-- Dynamic material cards -->
+                </div>
+                <div id="mEstSummaryText" class="text-[10px] text-slate-400 bg-slate-900/90 p-2.5 rounded-xl border border-slate-800 leading-relaxed font-mono whitespace-pre-line">
+                    Ready to calculate.
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: LAST MAINTAINED DATE (LMD) TRACKER -->
+        <div id="mViewLmd" class="hidden space-y-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xs font-black uppercase tracking-wider text-teal-300 flex items-center gap-1.5">
+                        <span>🛠️</span> Last Maintained Date (LMD)
+                    </h2>
+                    <p class="text-[10px] text-slate-400">Zone facility & asset servicing schedules</p>
+                </div>
+                <button type="button" onclick="openNewLmdModal()" class="px-2.5 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold active-scale flex items-center gap-1 shadow-sm">
+                    <span>➕</span> Add Asset
+                </button>
+            </div>
+
+            <!-- Status Metric Chips -->
+            <div class="grid grid-cols-3 gap-1.5 text-center text-[10px] font-bold">
+                <div class="bg-emerald-950/60 border border-emerald-500/40 p-1.5 rounded-xl text-emerald-300">
+                    <div id="mLmdStatGood" class="text-sm font-black text-white font-mono">0</div>
+                    <span>Good / Up-to-Date</span>
+                </div>
+                <div class="bg-amber-950/60 border border-amber-500/40 p-1.5 rounded-xl text-amber-300">
+                    <div id="mLmdStatDue" class="text-sm font-black text-white font-mono">0</div>
+                    <span>Due Within 7d</span>
+                </div>
+                <div class="bg-rose-950/60 border border-rose-500/40 p-1.5 rounded-xl text-rose-300">
+                    <div id="mLmdStatOverdue" class="text-sm font-black text-white font-mono">0</div>
+                    <span>Overdue</span>
+                </div>
+            </div>
+
+            <!-- Asset Search -->
+            <div class="relative">
+                <input type="text" id="mLmdSearch" oninput="filterLmdList()" placeholder="Search asset or facility..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 pl-8 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-400">
+                <span class="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+            </div>
+
+            <!-- Asset List Container -->
+            <div id="mLmdList" class="space-y-2 max-h-[60vh] overflow-y-auto touch-scroll">
+                <!-- Injected cards -->
+            </div>
+        </div>
+
+        <!-- TAB 4: BASIC SAILORS DIRECTORY -->
+        <div id="mViewSailors" class="hidden space-y-3">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xs font-black uppercase tracking-wider text-teal-300 flex items-center gap-1.5">
+                        <span>👥</span> Sailor Directory
+                    </h2>
+                    <p class="text-[10px] text-slate-400">Fast compliment lookup & trade verification</p>
+                </div>
+                <span id="mSailorDirTotal" class="text-[10px] font-mono font-bold bg-slate-800 text-teal-300 px-2 py-0.5 rounded-full border border-slate-700">0 Sailors</span>
+            </div>
+
+            <!-- Sailor Search & Trade Filter -->
+            <div class="space-y-2">
+                <div class="relative">
+                    <input type="text" id="mSailorDirSearch" oninput="filterMobileSailorDirectory()" placeholder="Search by Off No, Rank, Name, Trade..." class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 pl-8 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-400">
+                    <span class="absolute left-2.5 top-2 text-xs text-slate-400">🔍</span>
+                </div>
+                <div class="flex items-center gap-1 overflow-x-auto touch-scroll pb-1 scrollbar-none text-[10px] font-bold">
+                    <button type="button" onclick="setSailorDirTradeFilter('ALL')" class="m-trade-btn px-2.5 py-1 rounded-lg bg-teal-600 text-white whitespace-nowrap active-scale">All Trades</button>
+                    <button type="button" onclick="setSailorDirTradeFilter('MASON')" class="m-trade-btn px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 whitespace-nowrap active-scale">Mason</button>
+                    <button type="button" onclick="setSailorDirTradeFilter('CARPENTER')" class="m-trade-btn px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 whitespace-nowrap active-scale">Carpenter</button>
+                    <button type="button" onclick="setSailorDirTradeFilter('PLUMBER')" class="m-trade-btn px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 whitespace-nowrap active-scale">Plumber</button>
+                    <button type="button" onclick="setSailorDirTradeFilter('WELDER')" class="m-trade-btn px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 whitespace-nowrap active-scale">Welder</button>
+                    <button type="button" onclick="setSailorDirTradeFilter('PAINTER')" class="m-trade-btn px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 whitespace-nowrap active-scale">Painter</button>
+                    <button type="button" onclick="setSailorDirTradeFilter('ELECTRICIAN')" class="m-trade-btn px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white border border-slate-700 whitespace-nowrap active-scale">Electrician</button>
+                </div>
+            </div>
+
+            <!-- Sailor Directory List -->
+            <div id="mSailorDirList" class="space-y-1.5 max-h-[60vh] overflow-y-auto touch-scroll">
+                <!-- Dynamic cards -->
+            </div>
+        </div>
+<!-- WORK ORDER DETAIL / LABOUR COMMIT SHEET (SMOOTH POPUP MODAL) -->
         <div id="mWoSheet" onclick="handleBackdropClick(event)" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col justify-end sheet-hidden transition-all duration-300">
             <div onclick="event.stopPropagation()" class="bg-slate-900 border-t border-slate-700/80 rounded-t-3xl max-h-[92dvh] flex flex-col shadow-2xl overflow-hidden transition-transform duration-300 ease-out">
                 
@@ -423,14 +645,35 @@
 
     </main>
 
+    
+    <!-- FIXED BOTTOM APP NAVIGATION BAR -->
+    <nav id="mBottomNav" class="fixed bottom-0 left-0 right-0 z-40 bg-[#0a1628]/95 backdrop-blur border-t border-slate-800 flex items-center justify-around px-2 py-1.5 shadow-2xl">
+        <button type="button" onclick="switchMobileTab('tasks')" id="mTabBtnTasks" class="flex flex-col items-center gap-0.5 text-teal-400 font-bold px-3 py-1 rounded-xl active-scale">
+            <span class="text-base">📋</span>
+            <span class="text-[9px]">Tasks</span>
+        </button>
+        <button type="button" onclick="switchMobileTab('estimate')" id="mTabBtnEstimate" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-white font-medium px-3 py-1 rounded-xl active-scale">
+            <span class="text-base">🧮</span>
+            <span class="text-[9px]">Estimate</span>
+        </button>
+        <button type="button" onclick="switchMobileTab('lmd')" id="mTabBtnLmd" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-white font-medium px-3 py-1 rounded-xl active-scale">
+            <span class="text-base">🛠️</span>
+            <span class="text-[9px]">LMD Tracker</span>
+        </button>
+        <button type="button" onclick="switchMobileTab('sailors')" id="mTabBtnSailors" class="flex flex-col items-center gap-0.5 text-slate-400 hover:text-white font-medium px-3 py-1 rounded-xl active-scale">
+            <span class="text-base">👥</span>
+            <span class="text-[9px]">Sailors</span>
+        </button>
+    </nav>
+
     <!-- TOAST NOTIFICATION -->
-    <div id="mToast" class="fixed bottom-4 left-4 right-4 z-50 p-3 rounded-2xl bg-slate-900/95 border border-teal-500/40 text-white text-xs font-bold shadow-2xl flex items-center gap-2 transform translate-y-24 transition-transform duration-200 pointer-events-none">
+    <div id="mToast" class="fixed bottom-16 left-4 right-4 z-50 p-3 rounded-2xl bg-slate-900/95 border border-teal-500/40 text-white text-xs font-bold shadow-2xl flex items-center gap-2 transform translate-y-24 transition-transform duration-200 pointer-events-none">
         <span id="mToastIcon">✅</span>
         <span id="mToastMsg" class="flex-1">Notification</span>
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=1.1.1"></script>
+    <script src="mobile.js?v=1.2.0"></script>
 
     <!-- ROBUST MOUSE WHEEL & CLICK-AND-DRAG (PAN) CONTROLLER -->
     <script>
@@ -590,5 +833,49 @@
         }, true);
     })();
     </script>
+
+    <!-- ADD ASSET LMD MODAL -->
+    <div id="mNewLmdModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-sm p-4 space-y-3 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                <h3 class="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <span>🛠️</span> Add Asset to Track
+                </h3>
+                <button type="button" onclick="closeNewLmdModal()" class="w-6 h-6 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center text-xs">✕</button>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 mb-1">Asset / Facility Name</label>
+                <input type="text" id="mNewLmdName" placeholder="e.g. Wardroom Water Pump #2" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 mb-1">Location / Quarters</label>
+                <input type="text" id="mNewLmdLocation" placeholder="e.g. Block C, Upper Floor" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 mb-1">Last Maintained</label>
+                    <input type="date" id="mNewLmdDate" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-400 mb-1">Cycle (Days)</label>
+                    <select id="mNewLmdCycle" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400 font-semibold">
+                        <option value="30">30 Days (Monthly)</option>
+                        <option value="90" selected>90 Days (Quarterly)</option>
+                        <option value="180">180 Days (Bi-Annual)</option>
+                        <option value="365">365 Days (Annual)</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="block text-[10px] font-bold text-slate-400 mb-1">Notes / Condition</label>
+                <input type="text" id="mNewLmdNotes" placeholder="e.g. Serviced impeller, grease bearing" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-teal-400">
+            </div>
+            <div class="flex gap-2 pt-2">
+                <button type="button" onclick="closeNewLmdModal()" class="flex-1 py-2 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs border border-slate-700">Cancel</button>
+                <button type="button" onclick="submitNewLmdAsset()" class="flex-1 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-black text-xs">Save Asset</button>
+            </div>
+        </div>
+    </div>
+
 </body>
 </html>
