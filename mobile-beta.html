@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0a1628">
-    <title>CMSys Mobile | CE Management System — SLN</title>
+    <title>CMSys Mobile BETA | Staging Testing Portal</title>
 
     <link rel="preconnect" href="https://ncw-ps-operations-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link rel="preconnect" href="https://ce-admin-panel2025-default-rtdb.firebaseio.com">
@@ -43,6 +43,13 @@
 <body class="min-h-screen flex flex-col antialiased select-none pb-16">
 
     <!-- TOP HEADER -->
+    
+    <!-- BETA NOTICE BAR -->
+    <div class="bg-gradient-to-r from-amber-600 to-orange-600 text-slate-950 px-3 py-1 text-[10px] font-black flex items-center justify-between shadow-xs">
+        <span class="flex items-center gap-1">🧪 <strong>MOBILE BETA TEST:</strong> Staging build for testing</span>
+        <a href="mobile.html" class="bg-slate-900 text-white px-2 py-0.5 rounded text-[9px] font-bold">Switch to Live ➔</a>
+    </div>
+
     <header class="sticky top-0 z-40 bg-[#0a1628] border-b border-teal-500/30 px-3 py-2 flex items-center justify-between shadow-md text-white">
         <div class="flex items-center gap-2">
             <div class="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-slate-900 border border-teal-500/30 p-0.5 shrink-0">
@@ -51,9 +58,9 @@
             <div>
                 <div class="flex items-center gap-1.5">
                     <h1 class="text-xs font-black tracking-tight text-white">CMSys</h1>
-                    <span class="text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded uppercase">LIVE</span>
+                    <span class="text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40 px-1.5 py-0.2 rounded uppercase animate-pulse">🧪 BETA</span>
                 </div>
-                <p class="text-[9px] text-slate-400 font-medium">Field Operations Portal</p>
+                <p class="text-[9px] text-amber-300 font-medium">Testing & Verification</p>
             </div>
         </div>
 
