@@ -1,6 +1,6 @@
 // =============================================
 // CMSys MOBILE CONTROLLER (mobile.js & mobile-light.js)
-// Unified Light Naval Architecture
+// Unified Light Naval Architecture v2.2.0
 // Tabs: Home (Work Orders/Details), Estimates, LMD, Sailors
 // =============================================
 
@@ -57,6 +57,7 @@ function isZoneMatch(z1, z2) {
 const mlStore = {
   currentZone: (new URLSearchParams(window.location.search).get("zone")) || localStorage.getItem("ncw_saved_zone") || "A-Zone",
   selectedDate: getLocalDateString(),
+  selectedWoType: "ALL",
   workOrders: [],
   sailors: [],
   dailyAllocations: [],
@@ -66,8 +67,16 @@ const mlStore = {
   zoneInCharges: {},
   activeTab: "home",
   selectedAssignKey: "",
-  selectedEstKey: null
+  selectedEstKey: null,
+  selectedWoKey: null
 };
+
+// Selection sets for creation modals
+let _mlNewWoSelectedSailors = new Set();
+let _mlNewWoCurrentTrade = "ALL";
+
+let _mlNewAssignSelectedSailors = new Set();
+let _mlNewAssignCurrentTrade = "ALL";
 
 // Dual Firebase Config
 const sailorsFirebaseConfig = {
@@ -163,13 +172,11 @@ function changeLightZone(z) {
   if (!z) return;
   if (z === mlStore.currentZone) return;
 
-  // Check if target zone was already unlocked during this session
   if (sessionStorage.getItem("ncw_mobile_zone_unlocked_" + z) === "true") {
     applyZoneSwitch(z);
     return;
   }
 
-  // Check password protection
   pendingZoneSwitch = z;
   openZonePasswordModal(z);
 }
@@ -181,6 +188,7 @@ function applyZoneSwitch(z) {
   if (zoneSelect) zoneSelect.value = z;
 
   showLightToast("Switched to " + z, "📍");
+  updateZoneSailorCount();
   renderLightTasks();
   if (mlStore.activeTab === "estimate") renderLightEstimates();
   if (mlStore.activeTab === "lmd") loadLightLmdRecords();
@@ -234,8 +242,6 @@ function verifyZonePassword() {
   }
 
   const targetZone = pendingZoneSwitch;
-
-  // Check against settings/zoneInCharges in Firebase
   const inCharges = mlStore.zoneInCharges || {};
   let expectedPassword = inCharges[targetZone]?.password;
 
@@ -257,6 +263,20 @@ function verifyZonePassword() {
     }
     showLightToast("Access Denied: Incorrect Password", "❌");
   }
+}
+
+// ---------------------------------------------
+// TOP BAR: ZONE SAILORS COUNT (PIC - 04)
+// ---------------------------------------------
+function updateZoneSailorCount() {
+  const currentZone = mlStore.currentZone;
+  const zoneSailors = (mlStore.sailors || []).filter(s => {
+    const z = s.zone_assigned || s.zone || s.zoneId || "";
+    return isZoneMatch(z, currentZone);
+  });
+
+  const countEl = document.getElementById("mlZoneSailorCount");
+  if (countEl) countEl.textContent = zoneSailors.length;
 }
 
 // ---------------------------------------------
@@ -293,7 +313,7 @@ function updateHistoricalBanner() {
     if (sectionTitle) sectionTitle.textContent = `Work Orders (${mlStore.selectedDate})`;
   } else {
     banner.classList.add("hidden");
-    if (sectionTitle) sectionTitle.textContent = "Active Work Orders";
+    if (sectionTitle) sectionTitle.textContent = "Work Orders";
   }
 }
 
@@ -315,6 +335,7 @@ function loadLightData() {
           if (d[k]) mlStore.sailors.push({ id: k, _fbKey: k, ...d[k] });
         });
       }
+      updateZoneSailorCount();
       renderLightTasks();
       if (mlStore.activeTab === "sailors") renderLightSailorList();
     });
@@ -381,8 +402,19 @@ function loadLightData() {
 }
 
 // ---------------------------------------------
-// TAB 1: HOME (TASKS & DETAILS) - PIC 01, 02, 03
+// WORK ORDER CLASSIFICATION & ACTIVITY LOGIC
 // ---------------------------------------------
+function getWorkOrderCategory(wo) {
+  if (!wo) return "TASK";
+  if (wo.assign_type || wo.type === "ASSIGN" || wo.type === "ASSIGNMENT") {
+    return "ASSIGN";
+  }
+  const t = String(wo.type || "TASK").toUpperCase();
+  if (t === "PROJECT") return "PROJECT";
+  if (t === "JOB" || t === "MAINTENANCE") return "JOB";
+  return "TASK";
+}
+
 function isWorkOrderActiveOnDate(wo, targetDate) {
   if (!wo) return false;
 
@@ -417,13 +449,12 @@ function isWorkOrderActiveOnDate(wo, targetDate) {
   const hasAllocationsOnDate = dateAllocations.length > 0;
   if (hasAllocationsOnDate) return true;
 
-  // 2. FOR TODAY'S VIEW:
+  // 2. TODAY'S VIEW:
   if (isToday) {
-    // Completed or cancelled work orders DO NOT show on today's active list
     if (wo.status === "Completed" || wo.status === "Hold" || wo.status === "Cancelled") {
       return false;
     }
-    // Check 1-day lifecycle for one-off tasks created on previous days without today's allocation
+    // Check 1-day lifecycle for one-off tasks without allocations
     if ((wo.type === "TASK" || !wo.type) && !wo.assign_type && wo.created_at) {
       try {
         const cd = new Date(wo.created_at).toISOString().split("T")[0];
@@ -433,28 +464,43 @@ function isWorkOrderActiveOnDate(wo, targetDate) {
     return true;
   }
 
-  // 3. FOR BACK-DATE VIEW (targetDate < today):
-  // Show if it had allocations on that date (already handled by hasAllocationsOnDate)
-  // Or if it was active during that date
+  // 3. BACK-DATE VIEW:
   if (targetDate < today) {
     if (wo.created_at) {
       try {
         const cd = new Date(wo.created_at).toISOString().split("T")[0];
-        if (cd > targetDate) return false; // Created after this date
+        if (cd > targetDate) return false;
       } catch (e) {}
     }
     if (wo.status === "Completed") {
       const compDate = wo.completed_date || wo.last_commit_date || today;
-      if (compDate < targetDate) return false; // Completed before this date
+      if (compDate < targetDate) return false;
     }
-    // Only show Project / Job if not allocated, skip ephemeral tasks without allocations
-    if (wo.type === "TASK" || !wo.type) {
+    if ((wo.type === "TASK" || !wo.type) && !hasAllocationsOnDate) {
       return false;
     }
     return true;
   }
 
   return false;
+}
+
+// ---------------------------------------------
+// TAB 1: HOME WORK ORDERS & CATEGORY FILTERING
+// ---------------------------------------------
+function filterWoType(type) {
+  mlStore.selectedWoType = type || "ALL";
+
+  document.querySelectorAll(".ml-wo-filter-btn").forEach(btn => {
+    const btnType = btn.id.replace("btnWoFilter_", "");
+    if (btnType === mlStore.selectedWoType) {
+      btn.className = "ml-wo-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-teal-700 text-white shadow-xs shrink-0 transition-all";
+    } else {
+      btn.className = "ml-wo-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 transition-all";
+    }
+  });
+
+  renderLightTasks();
 }
 
 function renderLightTasks() {
@@ -467,21 +513,37 @@ function renderLightTasks() {
   const isToday = (targetDate === today);
   const currentZone = mlStore.currentZone;
 
-  // Filter tasks for current zone that are active/allocated on targetDate
-  const currentZoneTasks = mlStore.workOrders.filter(wo => {
+  // 1. Filter tasks for current zone active on targetDate
+  const allActiveTasks = mlStore.workOrders.filter(wo => {
     const z = wo.zone_id || wo.zone || "";
     if (!isZoneMatch(z, currentZone)) return false;
     return isWorkOrderActiveOnDate(wo, targetDate);
   });
 
-  if (countEl) countEl.textContent = currentZoneTasks.length;
+  // 2. Calculate category counts
+  const counts = { ALL: allActiveTasks.length, PROJECT: 0, JOB: 0, TASK: 0, ASSIGN: 0 };
+  allActiveTasks.forEach(wo => {
+    const cat = getWorkOrderCategory(wo);
+    if (counts[cat] !== undefined) counts[cat]++;
+  });
 
-  if (currentZoneTasks.length === 0) {
+  if (countEl) countEl.textContent = allActiveTasks.length;
+  ["ALL", "PROJECT", "JOB", "TASK", "ASSIGN"].forEach(cat => {
+    const el = document.getElementById("count_" + cat);
+    if (el) el.textContent = counts[cat];
+  });
+
+  // 3. Filter by selected category tab
+  const filteredTasks = mlStore.selectedWoType === "ALL"
+    ? allActiveTasks
+    : allActiveTasks.filter(wo => getWorkOrderCategory(wo) === mlStore.selectedWoType);
+
+  if (filteredTasks.length === 0) {
     if (!isToday) {
       container.innerHTML = `
         <div class="p-6 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
           <div class="text-3xl">📜</div>
-          <p class="text-xs font-bold text-slate-700">No work orders or allocations found for ${targetDate}</p>
+          <p class="text-xs font-bold text-slate-700">No ${mlStore.selectedWoType === 'ALL' ? '' : mlStore.selectedWoType} records found for ${targetDate}</p>
           <p class="text-[10px] text-slate-400">There were no recorded activities in ${currentZone} on this date.</p>
           <button type="button" onclick="resetToTodayMobile()" class="mt-2 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black active-scale shadow-sm">
             ⚡ Return to Today
@@ -491,24 +553,31 @@ function renderLightTasks() {
       container.innerHTML = `
         <div class="p-6 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-sm space-y-2">
           <div class="text-3xl">📋</div>
-          <p class="text-xs font-bold text-slate-700">No active tasks in ${currentZone}</p>
-          <button type="button" onclick="openNewTaskModal()" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold active-scale shadow-xs">
-            ➕ Create First Work Order
-          </button>
+          <p class="text-xs font-bold text-slate-700">No ${mlStore.selectedWoType === 'ALL' ? 'active' : mlStore.selectedWoType} work orders in ${currentZone}</p>
+          <div class="flex items-center justify-center gap-2 pt-2">
+            <button type="button" onclick="openNewTaskModal()" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold active-scale shadow-xs">
+              ➕ Create Work Order
+            </button>
+            <button type="button" onclick="openNewAssignModal()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold active-scale shadow-xs">
+              💼 New Assign
+            </button>
+          </div>
         </div>`;
     }
     return;
   }
 
+  // 4. Render Task Cards
   let html = "";
-  currentZoneTasks.forEach(wo => {
+  filteredTasks.forEach(wo => {
     const key = wo._fbKey || wo.id;
     const desc = escapeHtml(wo.description || wo.title || "Untitled Job");
     const status = wo.status || "Active";
     const progress = Math.min(100, Math.max(0, parseInt(wo.progress, 10) || 0));
     const prio = wo.priority || "Medium";
+    const cat = getWorkOrderCategory(wo);
 
-    // Check allocations strictly for targetDate
+    // Allocations check for targetDate
     const woIdStr = String(wo.id || "");
     const woFbKeyStr = String(wo._fbKey || "");
     const targetAllocs = (mlStore.dailyAllocations || []).filter(a => {
@@ -519,7 +588,6 @@ function renderLightTasks() {
 
     const isCommittedOnTargetDate = targetAllocs.length > 0;
 
-    // Assigned sailor IDs
     let assignedIds = [];
     if (isCommittedOnTargetDate) {
       assignedIds = targetAllocs.map(a => String(a.sailor_id));
@@ -529,12 +597,12 @@ function renderLightTasks() {
 
     const crewCount = assignedIds.length;
 
-    // Priority Badge
+    // Badges
     let prioBadge = prio === "Low" 
       ? '<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🟢 Low</span>'
       : (prio === "High" || prio === "Urgent" 
           ? '<span class="bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🔴 ' + prio + '</span>'
-          : '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🟡 Medium</span>');
+          : '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🟡 ' + prio + '</span>');
 
     const statusBadge = `<span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">${escapeHtml(status)}</span>`;
 
@@ -547,7 +615,14 @@ function renderLightTasks() {
       activeBadge = '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⏳ Standby</span>';
     }
 
-    const typeBadge = `<span class="bg-slate-100 text-slate-600 border border-slate-200 px-2 py-0.5 rounded-full text-[10px] font-bold">📋 ${escapeHtml(wo.type || 'PROJECT')}</span>`;
+    // Category Badge
+    let typeBadgeClass = "bg-slate-100 text-slate-700 border-slate-200";
+    let typeIcon = "📋";
+    if (cat === "PROJECT") { typeBadgeClass = "bg-blue-50 text-blue-800 border-blue-200"; typeIcon = "📐"; }
+    else if (cat === "JOB") { typeBadgeClass = "bg-amber-50 text-amber-800 border-amber-200"; typeIcon = "🔧"; }
+    else if (cat === "ASSIGN") { typeBadgeClass = "bg-indigo-50 text-indigo-800 border-indigo-200"; typeIcon = "💼"; }
+
+    const typeBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${typeBadgeClass}">${typeIcon} ${escapeHtml(wo.assign_type ? ('ASSIGN: ' + wo.assign_type) : (wo.type || 'TASK'))}</span>`;
 
     // Sailor Pills
     let sailorPillsHtml = '';
@@ -566,12 +641,12 @@ function renderLightTasks() {
       sailorPillsHtml = '<span class="text-slate-400 text-xs italic">No sailors assigned</span>';
     }
 
-    // Commit button only available today for uncommitted tasks with sailors
+    // Quick commit button for cards
     let commitBtnHtml = '';
     if (isToday && !isCommittedOnTargetDate && status !== 'Completed' && crewCount > 0) {
       commitBtnHtml = `
         <div class="pt-2 border-t border-slate-100">
-          <button type="button" onclick="commitLightLabour('${key}')" class="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 active-scale">
+          <button type="button" onclick="event.stopPropagation(); commitLightLabour('${key}')" class="w-full py-2 px-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-black shadow-xs flex items-center justify-center gap-1.5 active-scale">
             <span>⚡</span> Proceed - Commit Daily Labour (${crewCount})
           </button>
         </div>`;
@@ -581,8 +656,8 @@ function renderLightTasks() {
     const subLoc = wo.sub_location ? ` / ${escapeHtml(wo.sub_location)}` : '';
 
     html += `
-      <!-- WORK ORDER CARD -->
-      <div class="bg-white rounded-2xl border border-slate-200/90 shadow-sm p-3.5 space-y-2.5 transition-all">
+      <!-- WORK ORDER CARD (PIC - 03) -->
+      <div onclick="openWorkOrderDetailMobile('${key}')" class="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-teal-400 p-3.5 space-y-2.5 transition-all cursor-pointer active-scale">
         <div class="flex items-center gap-1.5 flex-wrap">
           ${prioBadge}
           ${statusBadge}
@@ -596,7 +671,7 @@ function renderLightTasks() {
         </div>
 
         <!-- Progress Slider -->
-        <div class="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+        <div class="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200" onclick="event.stopPropagation()">
           <div class="flex items-center justify-between text-xs font-bold text-slate-600">
             <span>Progress</span>
             <span id="progLabel_${key}" class="text-teal-700 font-mono font-black">${progress}%</span>
@@ -615,7 +690,7 @@ function renderLightTasks() {
             ${sailorPillsHtml}
           </div>
           ${isToday ? `
-            <button type="button" onclick="openAssignModal('${key}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-teal-800 font-bold text-[11px] rounded-lg border border-slate-200 active-scale">
+            <button type="button" onclick="event.stopPropagation(); openAssignModal('${key}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-teal-800 font-bold text-[11px] rounded-lg border border-slate-200 active-scale">
               👥 Assign
             </button>
           ` : ''}
@@ -627,6 +702,181 @@ function renderLightTasks() {
   });
 
   container.innerHTML = html;
+}
+
+// ---------------------------------------------
+// WORK ORDER DETAIL MODAL (PIC - 03 REQUIREMENT)
+// ---------------------------------------------
+function openWorkOrderDetailMobile(woKey) {
+  const wo = mlStore.workOrders.find(w => String(w.id) === String(woKey) || String(w._fbKey) === String(woKey));
+  if (!wo) return;
+
+  mlStore.selectedWoKey = wo._fbKey || wo.id;
+  const targetDate = mlStore.selectedDate || getLocalDateString();
+  const today = getLocalDateString();
+  const isToday = (targetDate === today);
+
+  const modal = document.getElementById("mlWorkOrderDetailModal");
+  const titleEl = document.getElementById("mlWoDetailTitle");
+  const typeBadge = document.getElementById("mlWoDetailTypeBadge");
+  const prioBadge = document.getElementById("mlWoDetailPrioBadge");
+  const statBadge = document.getElementById("mlWoDetailStatusBadge");
+  const activeTodayBadge = document.getElementById("mlWoDetailActiveTodayBadge");
+  const descEl = document.getElementById("mlWoDetailDesc");
+  const locEl = document.getElementById("mlWoDetailLocation");
+  const durEl = document.getElementById("mlWoDetailDuration");
+  const progSlider = document.getElementById("mlWoDetailProgressSlider");
+  const progText = document.getElementById("mlWoDetailProgressText");
+  const crewList = document.getElementById("mlWoDetailCrewList");
+  const crewCountEl = document.getElementById("mlWoDetailCrewCount");
+  const commitBtn = document.getElementById("mlWoDetailCommitBtn");
+  const completeBtn = document.getElementById("mlWoDetailCompleteBtn");
+
+  const cat = getWorkOrderCategory(wo);
+  const prio = wo.priority || "Medium";
+  const status = wo.status || "Active";
+  const progress = Math.min(100, Math.max(0, parseInt(wo.progress, 10) || 0));
+
+  if (titleEl) titleEl.textContent = wo.description || wo.title || "Work Order";
+  if (typeBadge) typeBadge.textContent = wo.assign_type ? ('ASSIGN: ' + wo.assign_type) : (wo.type || 'PROJECT');
+  if (descEl) descEl.textContent = wo.description || "No description provided";
+  if (locEl) locEl.textContent = "📍 " + (wo.location || wo.building_name || "Zone Area") + (wo.sub_location ? (' / ' + wo.sub_location) : '');
+  if (durEl) durEl.textContent = "⏱️ " + (wo.duration || wo.estimated_duration || 1) + " Day(s)";
+
+  if (progSlider) {
+    progSlider.value = progress;
+    progSlider.disabled = !isToday;
+  }
+  if (progText) progText.textContent = progress + "%";
+
+  // Priority Badge
+  if (prioBadge) {
+    prioBadge.textContent = prio;
+    prioBadge.className = prio === "High" || prio === "Urgent"
+      ? "px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border-rose-300"
+      : "px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border-amber-300";
+  }
+
+  // Status Badge
+  if (statBadge) {
+    statBadge.textContent = status;
+    statBadge.className = status === "Completed"
+      ? "px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border-emerald-300"
+      : "px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 border-blue-300";
+  }
+
+  // Allocations on targetDate
+  const woIdStr = String(wo.id || "");
+  const woFbKeyStr = String(wo._fbKey || "");
+  const targetAllocs = (mlStore.dailyAllocations || []).filter(a => {
+    if (!a || a.date !== targetDate || a.status === "Cancelled") return false;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    return (woIdStr && aWoId === woIdStr) || (woFbKeyStr && aWoId === woFbKeyStr);
+  });
+
+  const isCommittedToday = targetAllocs.length > 0;
+  if (activeTodayBadge) {
+    activeTodayBadge.classList.toggle("hidden", !isCommittedToday);
+  }
+
+  // Assigned crew
+  let assignedIds = [];
+  if (isCommittedToday) {
+    assignedIds = targetAllocs.map(a => String(a.sailor_id));
+  } else if (isToday) {
+    assignedIds = Array.isArray(wo.assigned) ? wo.assigned.map(String) : (wo.assigned ? Object.values(wo.assigned).map(String) : []);
+  }
+
+  if (crewCountEl) crewCountEl.textContent = assignedIds.length;
+
+  if (crewList) {
+    if (assignedIds.length === 0) {
+      crewList.innerHTML = '<p class="text-xs text-slate-400 italic p-2 bg-slate-50 rounded-xl text-center">No sailors assigned to this work order</p>';
+    } else {
+      crewList.innerHTML = assignedIds.map(sid => {
+        const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+        const rank = s ? (s.rank || "AB") : "AB";
+        const name = s ? (s.name || "Sailor") : ("Sailor " + sid);
+        const off = s ? (s.official_number || s.off_no || "—") : "—";
+        const trade = s ? (s.trade || "MA") : "MA";
+        return `
+          <div class="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-lg bg-teal-600 text-white flex items-center justify-center text-[10px] font-bold">${trade}</span>
+              <div>
+                <p class="font-bold text-slate-900 text-xs leading-tight">${rank} ${escapeHtml(name)}</p>
+                <p class="text-[10px] text-slate-500 font-mono">${escapeHtml(off)}</p>
+              </div>
+            </div>
+            <span class="bg-orange-500 text-white font-black text-[9px] px-2 py-0.5 rounded-full shadow-2xs">7.0 hrs</span>
+          </div>`;
+      }).join("");
+    }
+  }
+
+  // Buttons visibility
+  if (commitBtn) {
+    commitBtn.classList.toggle("hidden", !isToday || isCommittedToday || assignedIds.length === 0 || status === "Completed");
+  }
+  if (completeBtn) {
+    completeBtn.classList.toggle("hidden", !isToday || status === "Completed");
+  }
+
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeWorkOrderDetailMobile() {
+  const modal = document.getElementById("mlWorkOrderDetailModal");
+  if (modal) modal.classList.add("hidden");
+  mlStore.selectedWoKey = null;
+}
+
+function updateWoDetailProgressMobile(val) {
+  const key = mlStore.selectedWoKey;
+  if (!key) return;
+  updateTaskProgress(key, val);
+}
+
+function commitCurrentWoLabourMobile() {
+  const key = mlStore.selectedWoKey;
+  if (!key) return;
+  commitLightLabour(key);
+  setTimeout(() => openWorkOrderDetailMobile(key), 300);
+}
+
+function completeCurrentWoMobile() {
+  const key = mlStore.selectedWoKey;
+  if (!key) return;
+  if (!confirm("Are you sure you want to mark this Work Order as Completed?")) return;
+  updateTaskProgress(key, 100);
+  closeWorkOrderDetailMobile();
+}
+
+function deleteCurrentWorkOrderMobile() {
+  const key = mlStore.selectedWoKey;
+  if (!key) return;
+  if (!confirm("⚠️ Permanently delete this Work Order?")) return;
+
+  opsDB.ref(`work_orders/${key}`).remove().then(() => {
+    // Also remove from daily_allocations
+    (mlStore.dailyAllocations || []).forEach(a => {
+      if (String(a.work_order_id) === String(key)) {
+        opsDB.ref(`daily_allocations/${a._fbKey || a.id}`).remove();
+      }
+    });
+    showLightToast("Work Order Deleted!", "🗑️");
+    closeWorkOrderDetailMobile();
+    renderLightTasks();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Failed to delete Work Order", "❌");
+  });
+}
+
+function openAssignModalFromDetail() {
+  const key = mlStore.selectedWoKey;
+  closeWorkOrderDetailMobile();
+  if (key) openAssignModal(key);
 }
 
 function updateTaskProgress(key, val) {
@@ -646,7 +896,7 @@ function updateTaskProgress(key, val) {
   opsDB.ref(`work_orders/${key}`).update(updateObj).then(() => {
     showLightToast(`Progress: ${num}%`, "📊");
     if (num === 100) {
-      showLightToast("Work Order Marked Completed! ✅", "🏆");
+      showLightToast("Work Order Completed! ✅", "🏆");
       renderLightTasks();
     }
   });
@@ -691,6 +941,310 @@ function commitLightLabour(key) {
 }
 
 // ---------------------------------------------
+// EMBEDDED SAILOR SELECTION IN CREATE WORK ORDER
+// ---------------------------------------------
+function filterNewWoTrade(trade) {
+  _mlNewWoCurrentTrade = trade || "ALL";
+  document.querySelectorAll(".ml-new-wo-trade-btn").forEach(btn => {
+    if (btn.textContent.trim() === _mlNewWoCurrentTrade) {
+      btn.className = "ml-new-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-700 text-white shrink-0";
+    } else {
+      btn.className = "ml-new-wo-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 shrink-0";
+    }
+  });
+  renderNewWoSailorChips();
+}
+
+function filterNewWoSailors() {
+  renderNewWoSailorChips();
+}
+
+function renderNewWoSailorChips() {
+  const container = document.getElementById("mlNewWoSailorGrid");
+  if (!container) return;
+
+  const query = (document.getElementById("mlNewWoSailorSearch")?.value || "").toLowerCase().trim();
+  const currentZone = mlStore.currentZone;
+
+  // Filter sailors: prioritize zone sailors & filter by trade
+  let sailors = (mlStore.sailors || []).filter(s => {
+    if (_mlNewWoCurrentTrade !== "ALL" && s.trade !== _mlNewWoCurrentTrade) return false;
+    if (query) {
+      const off = (s.official_number || s.off_no || "").toLowerCase();
+      const name = (s.name || "").toLowerCase();
+      return off.includes(query) || name.includes(query);
+    }
+    return true;
+  });
+
+  // Sort: current zone team first
+  sailors.sort((a, b) => {
+    const aZone = isZoneMatch(a.zone_assigned || a.zone || a.zoneId, currentZone);
+    const bZone = isZoneMatch(b.zone_assigned || b.zone || b.zoneId, currentZone);
+    if (aZone && !bZone) return -1;
+    if (!aZone && bZone) return 1;
+    return 0;
+  });
+
+  if (sailors.length === 0) {
+    container.innerHTML = '<p class="text-slate-400 text-center text-xs py-2">No matching sailors found</p>';
+    return;
+  }
+
+  container.innerHTML = sailors.slice(0, 60).map(s => {
+    const sid = String(s.id || s._fbKey);
+    const isSelected = _mlNewWoSelectedSailors.has(sid);
+    const off = s.official_number || s.off_no || "—";
+    const rank = s.rank || "AB";
+    const name = s.name || "Sailor";
+    const trade = s.trade || "MA";
+    const isZone = isZoneMatch(s.zone_assigned || s.zone || s.zoneId, currentZone);
+
+    const borderClass = isSelected 
+      ? "bg-teal-50 border-teal-500 shadow-xs" 
+      : "bg-white border-slate-200 hover:border-slate-300";
+
+    return `
+      <div onclick="toggleNewWoSailor('${sid}')" class="p-1.5 rounded-xl border ${borderClass} flex items-center justify-between cursor-pointer transition-all active-scale">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="w-6 h-6 rounded-lg ${isSelected ? 'bg-teal-600' : 'bg-slate-700'} text-white flex items-center justify-center text-[9px] font-black shrink-0">${trade}</span>
+          <div class="truncate">
+            <p class="font-bold text-slate-800 text-[11px] truncate leading-tight">${rank} ${escapeHtml(name)}</p>
+            <p class="text-[9px] text-slate-400 font-mono">${escapeHtml(off)} ${isZone ? '• ⭐ Zone Team' : ''}</p>
+          </div>
+        </div>
+        <input type="checkbox" ${isSelected ? 'checked' : ''} class="w-4 h-4 accent-teal-600 pointer-events-none shrink-0">
+      </div>`;
+  }).join("");
+
+  const countEl = document.getElementById("mlNewWoSelectedCount");
+  if (countEl) countEl.textContent = `${_mlNewWoSelectedSailors.size} selected`;
+}
+
+function toggleNewWoSailor(sid) {
+  if (_mlNewWoSelectedSailors.has(sid)) {
+    _mlNewWoSelectedSailors.delete(sid);
+  } else {
+    _mlNewWoSelectedSailors.add(sid);
+  }
+  renderNewWoSailorChips();
+}
+
+function openNewTaskModal() {
+  const modal = document.getElementById("mlNewTaskModal");
+  _mlNewWoSelectedSailors = new Set();
+  _mlNewWoCurrentTrade = "ALL";
+  populateLocationDatalistMobile();
+  renderNewWoSailorChips();
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeNewTaskModal() {
+  const modal = document.getElementById("mlNewTaskModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function submitNewTask(e) {
+  if (e) e.preventDefault();
+
+  const desc = (document.getElementById("mlNewDesc")?.value || "").trim();
+  const type = document.getElementById("mlNewType")?.value || "PROJECT";
+  const loc = (document.getElementById("mlNewLocation")?.value || "").trim();
+  const subLoc = (document.getElementById("mlNewSubLocation")?.value || "").trim();
+  const prio = document.getElementById("mlNewPriority")?.value || "Medium";
+  const dur = parseInt(document.getElementById("mlNewDuration")?.value, 10) || 1;
+
+  if (!desc) {
+    showLightToast("Please enter work order description", "⚠️");
+    return;
+  }
+
+  const zone = mlStore.currentZone;
+  const assignedCrew = Array.from(_mlNewWoSelectedSailors);
+  const newRef = opsDB.ref("work_orders").push();
+  const newWo = {
+    id: newRef.key,
+    description: desc,
+    title: desc,
+    type: type,
+    location: loc || (zone + " Area"),
+    building_name: loc || (zone + " Area"),
+    sub_location: subLoc,
+    zone_id: zone,
+    status: "Active",
+    priority: prio,
+    progress: 0,
+    duration: dur,
+    assigned: assignedCrew,
+    created_at: Date.now()
+  };
+
+  newRef.set(newWo).then(() => {
+    closeNewTaskModal();
+    const form = document.getElementById("mlNewTaskForm");
+    if (form) form.reset();
+    _mlNewWoSelectedSailors = new Set();
+    showLightToast(`Work Order created with ${assignedCrew.length} sailor(s)!`, "✅");
+    renderLightTasks();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Error creating work order", "❌");
+  });
+}
+
+// ---------------------------------------------
+// NEW ASSIGNMENT MODAL LOGIC (PIC - 02 REQUIREMENT)
+// ---------------------------------------------
+function filterNewAssignTrade(trade) {
+  _mlNewAssignCurrentTrade = trade || "ALL";
+  document.querySelectorAll(".ml-new-assign-trade-btn").forEach(btn => {
+    if (btn.textContent.trim() === _mlNewAssignCurrentTrade) {
+      btn.className = "ml-new-assign-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-700 text-white shrink-0";
+    } else {
+      btn.className = "ml-new-assign-trade-btn px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 shrink-0";
+    }
+  });
+  renderNewAssignSailorChips();
+}
+
+function filterNewAssignSailors() {
+  renderNewAssignSailorChips();
+}
+
+function renderNewAssignSailorChips() {
+  const container = document.getElementById("mlNewAssignSailorGrid");
+  if (!container) return;
+
+  const query = (document.getElementById("mlNewAssignSailorSearch")?.value || "").toLowerCase().trim();
+  const currentZone = mlStore.currentZone;
+
+  let sailors = (mlStore.sailors || []).filter(s => {
+    if (_mlNewAssignCurrentTrade !== "ALL" && s.trade !== _mlNewAssignCurrentTrade) return false;
+    if (query) {
+      const off = (s.official_number || s.off_no || "").toLowerCase();
+      const name = (s.name || "").toLowerCase();
+      return off.includes(query) || name.includes(query);
+    }
+    return true;
+  });
+
+  sailors.sort((a, b) => {
+    const aZone = isZoneMatch(a.zone_assigned || a.zone || a.zoneId, currentZone);
+    const bZone = isZoneMatch(b.zone_assigned || b.zone || b.zoneId, currentZone);
+    if (aZone && !bZone) return -1;
+    if (!aZone && bZone) return 1;
+    return 0;
+  });
+
+  if (sailors.length === 0) {
+    container.innerHTML = '<p class="text-slate-400 text-center text-xs py-2">No matching sailors found</p>';
+    return;
+  }
+
+  container.innerHTML = sailors.slice(0, 60).map(s => {
+    const sid = String(s.id || s._fbKey);
+    const isSelected = _mlNewAssignSelectedSailors.has(sid);
+    const off = s.official_number || s.off_no || "—";
+    const rank = s.rank || "AB";
+    const name = s.name || "Sailor";
+    const trade = s.trade || "MA";
+    const isZone = isZoneMatch(s.zone_assigned || s.zone || s.zoneId, currentZone);
+
+    const borderClass = isSelected 
+      ? "bg-indigo-50 border-indigo-500 shadow-xs" 
+      : "bg-white border-slate-200 hover:border-slate-300";
+
+    return `
+      <div onclick="toggleNewAssignSailor('${sid}')" class="p-1.5 rounded-xl border ${borderClass} flex items-center justify-between cursor-pointer transition-all active-scale">
+        <div class="flex items-center gap-1.5 min-w-0">
+          <span class="w-6 h-6 rounded-lg ${isSelected ? 'bg-indigo-600' : 'bg-slate-700'} text-white flex items-center justify-center text-[9px] font-black shrink-0">${trade}</span>
+          <div class="truncate">
+            <p class="font-bold text-slate-800 text-[11px] truncate leading-tight">${rank} ${escapeHtml(name)}</p>
+            <p class="text-[9px] text-slate-400 font-mono">${escapeHtml(off)} ${isZone ? '• ⭐ Zone Team' : ''}</p>
+          </div>
+        </div>
+        <input type="checkbox" ${isSelected ? 'checked' : ''} class="w-4 h-4 accent-indigo-600 pointer-events-none shrink-0">
+      </div>`;
+  }).join("");
+
+  const countEl = document.getElementById("mlNewAssignSelectedCount");
+  if (countEl) countEl.textContent = `${_mlNewAssignSelectedSailors.size} selected`;
+}
+
+function toggleNewAssignSailor(sid) {
+  if (_mlNewAssignSelectedSailors.has(sid)) {
+    _mlNewAssignSelectedSailors.delete(sid);
+  } else {
+    _mlNewAssignSelectedSailors.add(sid);
+  }
+  renderNewAssignSailorChips();
+}
+
+function handleAssignTypeChange(val) {
+  const descInput = document.getElementById("mlAssignDesc");
+  if (descInput && (!descInput.value || descInput.value === "In Charge" || descInput.value === "Admin Staff" || descInput.value === "Duty / Watch")) {
+    descInput.value = val;
+  }
+}
+
+function openNewAssignModal() {
+  const modal = document.getElementById("mlNewAssignModal");
+  _mlNewAssignSelectedSailors = new Set();
+  _mlNewAssignCurrentTrade = "ALL";
+  renderNewAssignSailorChips();
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeNewAssignModal() {
+  const modal = document.getElementById("mlNewAssignModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function submitNewAssign(e) {
+  if (e) e.preventDefault();
+
+  const assignType = document.getElementById("mlAssignType")?.value || "In Charge";
+  const desc = (document.getElementById("mlAssignDesc")?.value || "").trim() || assignType;
+
+  if (_mlNewAssignSelectedSailors.size === 0) {
+    showLightToast("Please select at least 1 sailor for assignment", "⚠️");
+    return;
+  }
+
+  const zone = mlStore.currentZone;
+  const assignedCrew = Array.from(_mlNewAssignSelectedSailors);
+  const newRef = opsDB.ref("work_orders").push();
+  const newWo = {
+    id: newRef.key,
+    type: "ASSIGN",
+    assign_type: assignType,
+    description: desc,
+    title: desc,
+    location: zone + " HQ",
+    building_name: zone + " HQ",
+    zone_id: zone,
+    status: "Active",
+    priority: "Medium",
+    progress: 0,
+    duration: 1,
+    assigned: assignedCrew,
+    created_at: Date.now()
+  };
+
+  newRef.set(newWo).then(() => {
+    closeNewAssignModal();
+    const form = document.getElementById("mlNewAssignForm");
+    if (form) form.reset();
+    _mlNewAssignSelectedSailors = new Set();
+    showLightToast(`Assignment created for ${assignedCrew.length} sailor(s)!`, "💼");
+    renderLightTasks();
+  }).catch(err => {
+    console.error(err);
+    showLightToast("Error creating assignment", "❌");
+  });
+}
+
+// ---------------------------------------------
 // TAB 2: ESTIMATES MANAGEMENT (PIC 03 & 04)
 // ---------------------------------------------
 function populateLocationDatalistMobile() {
@@ -724,7 +1278,7 @@ function renderLightEstimates() {
   const filtered = (mlStore.estimates || []).filter(e => {
     if (!e) return false;
     const estZone = e.zone_id || e.zone || "";
-    if (!estZone) return true; // Show unassigned estimates
+    if (!estZone) return true;
     const cleanEst = String(estZone).toLowerCase().replace(/[^a-z0-9]/g, "");
     return cleanEst === cleanCur || cleanEst.includes(cleanCur) || cleanCur.includes(cleanEst);
   });
@@ -826,7 +1380,6 @@ function openEstimateDetailMobile(estKey) {
   if (userEl) userEl.textContent = est.endUser || est.end_user || "N/A";
   if (scopeEl) scopeEl.textContent = est.description || est.workScope || "No scope described";
 
-  // Materials
   const materials = Array.isArray(est.materials) ? est.materials : (est.materials ? Object.values(est.materials) : []);
   if (matList) {
     if (materials.length === 0) {
@@ -844,7 +1397,6 @@ function openEstimateDetailMobile(estKey) {
   }
   if (matTot) matTot.textContent = "Rs. " + formatCurrency(est.total_cost || 0);
 
-  // Labor
   const labor = Array.isArray(est.labor) ? est.labor : (est.labor ? Object.values(est.labor) : []);
   if (labList) {
     if (labor.length === 0) {
@@ -861,7 +1413,6 @@ function openEstimateDetailMobile(estKey) {
   if (labTot) labTot.textContent = (est.totalManDays || est.manDays || 0) + " man-days";
   if (grandTot) grandTot.textContent = "Rs. " + formatCurrency(est.total_cost || 0);
 
-  // Signatories
   if (sigEl) {
     const cb = est.createdBy || {};
     const chk = est.checkedBy || {};
@@ -1158,7 +1709,6 @@ function saveEstimateMobile(e) {
     }
   });
 
-  // Signatories
   const createdBy = {
     name: (document.getElementById("mlEstCreatedName")?.value || "").trim(),
     rank: (document.getElementById("mlEstCreatedRank")?.value || "").trim(),
@@ -1385,7 +1935,7 @@ function filterLightSailors() {
 }
 
 // ---------------------------------------------
-// MODALS: QUICK ASSIGN & NEW TASK
+// QUICK ASSIGN CREW MODAL (FROM CARD BUTTON)
 // ---------------------------------------------
 function openAssignModal(woKey) {
   mlStore.selectedAssignKey = woKey;
@@ -1431,63 +1981,6 @@ function saveAssignedCrew() {
   });
 }
 
-function openNewTaskModal() {
-  const modal = document.getElementById("mlNewTaskModal");
-  populateLocationDatalistMobile();
-  if (modal) modal.classList.remove("hidden");
-}
-
-function closeNewTaskModal() {
-  const modal = document.getElementById("mlNewTaskModal");
-  if (modal) modal.classList.add("hidden");
-}
-
-function submitNewTask(e) {
-  if (e) e.preventDefault();
-
-  const desc = (document.getElementById("mlNewDesc")?.value || "").trim();
-  const type = document.getElementById("mlNewType")?.value || "PROJECT";
-  const loc = (document.getElementById("mlNewLocation")?.value || "").trim();
-  const subLoc = (document.getElementById("mlNewSubLocation")?.value || "").trim();
-  const prio = document.getElementById("mlNewPriority")?.value || "Medium";
-  const dur = parseInt(document.getElementById("mlNewDuration")?.value, 10) || 1;
-
-  if (!desc) {
-    showLightToast("Please enter work order description", "⚠️");
-    return;
-  }
-
-  const zone = mlStore.currentZone;
-  const newRef = opsDB.ref("work_orders").push();
-  const newWo = {
-    id: newRef.key,
-    description: desc,
-    title: desc,
-    type: type,
-    location: loc || (zone + " Area"),
-    building_name: loc || (zone + " Area"),
-    sub_location: subLoc,
-    zone_id: zone,
-    status: "Active",
-    priority: prio,
-    progress: 0,
-    duration: dur,
-    assigned: [],
-    created_at: Date.now()
-  };
-
-  newRef.set(newWo).then(() => {
-    closeNewTaskModal();
-    const form = document.getElementById("mlNewTaskForm");
-    if (form) form.reset();
-    showLightToast("Work Order created successfully!", "✅");
-    renderLightTasks();
-  }).catch(err => {
-    console.error(err);
-    showLightToast("Error creating work order", "❌");
-  });
-}
-
 // ---------------------------------------------
 // TOAST SYSTEM
 // ---------------------------------------------
@@ -1504,7 +1997,7 @@ function showLightToast(msg, icon) {
   if (mlToastTimer) clearTimeout(mlToastTimer);
 
   toast.classList.remove("hidden");
-  void toast.offsetWidth; // Force layout reflow
+  void toast.offsetWidth;
   toast.style.opacity = "1";
   toast.style.transform = "translateY(0)";
 
