@@ -83,12 +83,25 @@
 
     <!-- MAIN VIEWS CONTAINER -->
     <main class="flex-1 p-3 space-y-3 touch-scroll overflow-y-auto">
+        <!-- Historical Banner (Shown when selectedDate !== today) -->
+        <div id="mlHistoricalBanner" class="hidden bg-amber-50 border border-amber-300 rounded-2xl p-2.5 flex items-center justify-between text-xs text-amber-900 shadow-xs">
+            <div class="flex items-center gap-2">
+                <span class="text-base">📜</span>
+                <div>
+                    <p class="font-bold text-[11px] leading-tight">Historical View: <span id="mlHistoricalDateText"></span></p>
+                    <p class="text-[9px] text-amber-700">Displaying work orders & allocations for this date</p>
+                </div>
+            </div>
+            <button type="button" onclick="resetToTodayMobile()" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-[10px] font-black shadow-xs active-scale">
+                ⚡ Return to Today
+            </button>
+        </div>
 
         <!-- TAB 1: HOME (TASKS, DETAILS, PROGRESS & LABOUR COMMIT) -->
         <div id="viewHome" class="space-y-3">
             <div class="flex items-center justify-between">
                 <h2 class="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                    <span>📋</span> Active Work Orders
+                    <span>📋</span> <span id="mlHomeSectionTitle">Active Work Orders</span>
                 </h2>
                 <div class="flex items-center gap-1.5">
                     <span id="mlTaskCount" class="text-[10px] font-bold bg-slate-100 text-teal-800 px-2 py-0.5 rounded-full border border-slate-200">0</span>
@@ -206,42 +219,65 @@
         </div>
     </div>
 
-    <!-- MODAL: CREATE NEW TASK -->
-    <div id="mlNewTaskModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-        <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-sm p-4 space-y-3 shadow-2xl border border-slate-200">
-            <div class="flex items-center justify-between border-b border-slate-100 pb-2">
-                <h3 class="text-xs font-bold text-slate-900">➕ Create Work Order</h3>
-                <button type="button" onclick="closeNewTaskModal()" class="w-6 h-6 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center text-xs">✕</button>
+    <!-- MODAL: CREATE NEW TASK (PIC - 01 FULL & CENTERED) -->
+    <div id="mlNewTaskModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-base">➕</span>
+                    <h3 class="text-xs font-black uppercase tracking-wider text-white">Create Work Order</h3>
+                </div>
+                <button type="button" onclick="closeNewTaskModal()" class="w-6 h-6 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-xs font-bold active-scale">✕</button>
             </div>
-            <div>
-                <label class="block text-[10px] font-bold text-slate-500 mb-1">Description / Title</label>
-                <textarea id="mlNewDesc" rows="2" placeholder="Enter work scope..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"></textarea>
-            </div>
-            <div class="grid grid-cols-2 gap-2">
+            <form id="mlNewTaskForm" onsubmit="submitNewTask(event)" class="p-3.5 space-y-2.5 overflow-y-auto touch-scroll flex-1 text-xs">
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Priority</label>
-                    <select id="mlNewPriority" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-bold">
-                        <option value="Routine">Routine</option>
-                        <option value="Medium" selected>Medium</option>
-                        <option value="High">High</option>
-                        <option value="Urgent">Urgent</option>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Work Order Type</label>
+                    <select id="mlNewType" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-teal-500">
+                        <option value="PROJECT" selected>PROJECT</option>
+                        <option value="JOB">JOB</option>
+                        <option value="TASK">TASK</option>
+                        <option value="ROUTINE">ROUTINE</option>
+                        <option value="ASSIGN">ASSIGN</option>
                     </select>
                 </div>
                 <div>
-                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Duration (Days)</label>
-                    <input type="number" id="mlNewDuration" value="1" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900">
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Location / Building</label>
+                    <input type="text" id="mlNewLocation" list="mlLocDatalist" placeholder="Select or enter location..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-teal-500">
                 </div>
-            </div>
-            <div class="flex gap-2 pt-2">
-                <button type="button" onclick="closeNewTaskModal()" class="flex-1 py-2 rounded-xl bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200">Cancel</button>
-                <button type="button" onclick="submitNewTask()" class="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs">Create Task</button>
-            </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Sub Location (Optional)</label>
+                    <input type="text" id="mlNewSubLocation" placeholder="e.g. Room 12, Ground Floor..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-medium focus:bg-white focus:outline-none focus:border-teal-500">
+                </div>
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-500 mb-1">Description / Scope of Work *</label>
+                    <textarea id="mlNewDesc" rows="3" required placeholder="Enter work scope..." class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">Priority</label>
+                        <select id="mlNewPriority" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-teal-500">
+                            <option value="Routine">Routine</option>
+                            <option value="Medium" selected>Medium</option>
+                            <option value="High">High</option>
+                            <option value="Urgent">Urgent</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-500 mb-1">Duration (Days)</label>
+                        <input type="number" id="mlNewDuration" min="1" value="1" class="w-full bg-slate-50 border border-slate-200 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-teal-500">
+                    </div>
+                </div>
+                <div class="flex gap-2 pt-2 border-t border-slate-100">
+                    <button type="button" onclick="closeNewTaskModal()" class="flex-1 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 active-scale">Cancel</button>
+                    <button type="submit" class="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs active-scale">Create Task</button>
+                </div>
+            </form>
         </div>
     </div>
 
     <!-- MODAL: ESTIMATE DETAILS (PIC - 04) -->
-    <div id="mlEstimateDetailModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-        <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+    <div id="mlEstimateDetailModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
             <!-- Orange Header -->
             <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
                 <div>
@@ -344,8 +380,8 @@
     </div>
 
     <!-- MODAL: NEW / EDIT ESTIMATE (PIC - 03) -->
-    <div id="mlNewEstimateModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-        <div class="bg-white rounded-t-3xl sm:rounded-2xl w-full max-w-lg max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+    <div id="mlNewEstimateModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-lg max-h-[94vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
             <!-- Orange Header (Matches pic - 03) -->
             <div class="bg-gradient-to-r from-amber-500 to-orange-500 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
                 <h3 id="mlNewEstModalTitle" class="text-sm font-bold text-white">New Estimate</h3>
