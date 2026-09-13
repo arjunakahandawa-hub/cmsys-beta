@@ -504,7 +504,14 @@ function loadLightData() {
 // ---------------------------------------------
 function getWorkOrderCategory(wo) {
   if (!wo) return "TASK";
-  if (wo.assign_type || wo.type === "ASSIGN" || wo.type === "ASSIGNMENT") {
+  if (
+    wo.assign_type || 
+    String(wo.type || "").toUpperCase() === "ASSIGN" || 
+    String(wo.type || "").toUpperCase() === "ASSIGNMENT" ||
+    String(wo.category || "").toUpperCase() === "ASSIGN" ||
+    String(wo.category || "").toUpperCase() === "ASSIGNMENT" ||
+    wo.is_assignment
+  ) {
     return "ASSIGN";
   }
   const t = String(wo.type || "TASK").toUpperCase();
@@ -753,9 +760,10 @@ function renderLightTasks() {
       if (crewCount > 4) sailorPillsHtml += ` <span class="text-[9px] text-slate-400 font-bold">+${crewCount - 4} more</span>`;
     }
 
-    // Progress Bar (Only for Projects & Jobs; Omitted for Assignments)
+    // Progress Bar (Strictly ONLY for Projects & Jobs; NEVER for Assignments or other tasks)
     let progressHtml = '';
-    if (cat !== 'ASSIGN' && !wo.assign_type) {
+    const isProjectOrJob = (cat === 'PROJECT' || cat === 'JOB') && !wo.assign_type && !wo.is_assignment;
+    if (isProjectOrJob) {
       const barColor = cat === 'PROJECT' ? 'bg-teal-600' : 'bg-blue-600';
       const textColor = cat === 'PROJECT' ? 'text-teal-700' : 'text-blue-700';
       progressHtml = `
@@ -773,7 +781,7 @@ function renderLightTasks() {
 
     // Duration Tag (Only for Projects & Jobs)
     let durationHtml = '';
-    if (cat !== 'ASSIGN' && !wo.assign_type) {
+    if (isProjectOrJob) {
       const dur = wo.duration || wo.estimated_duration || 1;
       durationHtml = `<div class="flex items-center gap-1 text-[10px] text-slate-400 font-medium"><span>🕒</span> <span>${dur}d</span></div>`;
     }
