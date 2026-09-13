@@ -53,6 +53,22 @@ function isZoneMatch(z1, z2) {
   return false;
 }
 
+function findSailor(sid) {
+  if (!sid) return null;
+  const sidStr = String(sid).trim().toLowerCase();
+  return (mlStore.sailors || []).find(s => {
+    if (!s) return false;
+    return (
+      String(s.id).toLowerCase() === sidStr ||
+      String(s._fbKey).toLowerCase() === sidStr ||
+      String(s.official_number || "").toLowerCase() === sidStr ||
+      String(s.off_no || "").toLowerCase() === sidStr ||
+      String(s.service_no || "").toLowerCase() === sidStr ||
+      String(s.name || "").toLowerCase() === sidStr
+    );
+  }) || null;
+}
+
 // Global Mobile Store
 const mlStore = {
   currentZone: (new URLSearchParams(window.location.search).get("zone")) || localStorage.getItem("ncw_saved_zone") || "A-Zone",
@@ -999,21 +1015,32 @@ function mlRenderDetailSailorChips() {
 }
 
 function mlWoToggleAssignSailor(sid) {
-  if (_mlDetailSelectedSailors.has(sid)) {
-    _mlDetailSelectedSailors.delete(sid);
+  const found = findSailor(sid);
+  const canonId = found ? String(found.id || found._fbKey) : String(sid);
+  if (_mlDetailSelectedSailors.has(canonId)) {
+    _mlDetailSelectedSailors.delete(canonId);
   } else {
-    _mlDetailSelectedSailors.add(sid);
+    _mlDetailSelectedSailors.add(canonId);
   }
   mlRenderDetailSailorChips();
   const wo = mlStore.workOrders.find(w => String(w.id) === String(mlStore.selectedWoKey) || String(w._fbKey) === String(mlStore.selectedWoKey));
-  mlRenderDetailAssignedCrew(wo);
+  if (wo) {
+    mlRenderDetailAssignedCrew(wo);
+    mlRenderDailyEvaluationTab(wo);
+  }
 }
 
 function mlWoRemoveAssignedSailor(sid) {
-  _mlDetailSelectedSailors.delete(sid);
+  const found = findSailor(sid);
+  const canonId = found ? String(found.id || found._fbKey) : String(sid);
+  _mlDetailSelectedSailors.delete(canonId);
+  _mlDetailSelectedSailors.delete(String(sid));
   mlRenderDetailSailorChips();
   const wo = mlStore.workOrders.find(w => String(w.id) === String(mlStore.selectedWoKey) || String(w._fbKey) === String(mlStore.selectedWoKey));
-  mlRenderDetailAssignedCrew(wo);
+  if (wo) {
+    mlRenderDetailAssignedCrew(wo);
+    mlRenderDailyEvaluationTab(wo);
+  }
 }
 
 function mlRenderDetailAssignedCrew(wo) {
@@ -1021,7 +1048,20 @@ function mlRenderDetailAssignedCrew(wo) {
   const crewCountEl = document.getElementById("mlWoDetailCrewCount");
   const assignedArray = Array.from(_mlDetailSelectedSailors);
 
-  if (crewCountEl) crewCountEl.textContent = assignedArray.length;
+  // Group by trade
+  const tradeCounts = {};
+  assignedArray.forEach(sid => {
+    const s = findSailor(sid);
+    const t = s ? (s.trade || "MA") : "MA";
+    tradeCounts[t] = (tradeCounts[t] || 0) + 1;
+  });
+
+  const tradeSummaryStr = Object.entries(tradeCounts).map(([t, c]) => `${c} ${t}`).join(", ");
+  const countText = assignedArray.length > 0 
+    ? `${assignedArray.length} Total${tradeSummaryStr ? ` (${tradeSummaryStr})` : ''}` 
+    : "0 assigned";
+
+  if (crewCountEl) crewCountEl.textContent = countText;
 
   if (!crewList) return;
 
@@ -1031,30 +1071,35 @@ function mlRenderDetailAssignedCrew(wo) {
   }
 
   crewList.innerHTML = assignedArray.map(sid => {
-    const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+    const s = findSailor(sid);
     const rank = s ? (s.rank || "AB") : "AB";
     const name = s ? (s.name || "Sailor") : ("Sailor " + sid);
     const off = s ? (s.official_number || s.off_no || "—") : "—";
     const trade = s ? (s.trade || "MA") : "MA";
+    const avg = s && typeof s.avgScore === "number" ? s.avgScore.toFixed(1) : (s && s.avgScore ? String(s.avgScore) : "7.0");
     const isEvaluated = s ? Boolean(s.evaluated) : false;
 
     return `
       <div class="flex items-center justify-between p-2 rounded-xl bg-white border border-slate-200 shadow-2xs">
-        <div class="flex items-center gap-2 min-w-0 flex-1">
-          <span class="w-7 h-7 rounded-lg bg-teal-700 text-white flex items-center justify-center text-[10px] font-black shrink-0">${trade}</span>
+        <div class="flex items-center gap-2.5 min-w-0 flex-1">
+          <span class="w-7 h-7 rounded-lg bg-teal-800 text-white flex items-center justify-center text-[10px] font-black shrink-0 shadow-2xs">${trade}</span>
           <div class="min-w-0 flex-1">
             <p class="font-bold text-slate-900 text-xs leading-tight truncate">${rank} ${escapeHtml(name)}</p>
             <div class="flex items-center gap-1.5 text-[9px] text-slate-500 font-mono mt-0.5">
-              <span>${escapeHtml(off)}</span>
+              <span>Official: ${escapeHtml(off)}</span>
               <span>•</span>
-              <span>${trade}</span>
+              <span>Trade: ${trade}</span>
+              <span>•</span>
+              <span>Avg: <b class="text-teal-700">${avg}</b></span>
             </div>
           </div>
         </div>
         <div class="flex items-center gap-1.5 shrink-0">
-          ${isEvaluated ? '<span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-md">✓ Evaluated</span>' : '<span class="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.5 rounded-md">Pending</span>'}
-          <span class="bg-orange-500 text-white font-black text-[9px] px-1.5 py-0.5 rounded-md">7.0h</span>
-          <button type="button" onclick="mlWoRemoveAssignedSailor('${sid}')" class="w-6 h-6 rounded-full bg-rose-50 text-rose-600 hover:bg-rose-100 flex items-center justify-center text-xs font-black active-scale" title="Remove sailor">✕</button>
+          ${isEvaluated 
+            ? '<span class="text-[9px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-md">✓ Evaluated</span>' 
+            : '<span class="text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-md">Pending</span>'
+          }
+          <button type="button" onclick="mlWoRemoveAssignedSailor('${sid}')" class="w-6 h-6 rounded-full bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 flex items-center justify-center text-xs font-black active-scale" title="Remove sailor">✕</button>
         </div>
       </div>`;
   }).join("");
@@ -1067,7 +1112,7 @@ function mlRenderDailyEvaluationTab(wo) {
 
   let pendingCount = 0;
   assignedArray.forEach(sid => {
-    const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+    const s = findSailor(sid);
     if (s && !s.evaluated) pendingCount++;
   });
 
@@ -1088,12 +1133,13 @@ function mlRenderDailyEvaluationTab(wo) {
   }
 
   evalList.innerHTML = assignedArray.map(sid => {
-    const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+    const s = findSailor(sid);
     const rank = s ? (s.rank || "AB") : "AB";
     const name = s ? (s.name || "Sailor") : ("Sailor " + sid);
+    const off = s ? (s.official_number || s.off_no || "—") : "—";
     const trade = s ? (s.trade || "MA") : "MA";
     const isEvaluated = s ? Boolean(s.evaluated) : false;
-    const avg = s && typeof s.avgScore === "number" ? s.avgScore.toFixed(1) : "7.0";
+    const avg = s && typeof s.avgScore === "number" ? s.avgScore.toFixed(1) : (s && s.avgScore ? String(s.avgScore) : "7.0");
 
     return `
       <div class="p-3 bg-white border rounded-xl flex items-center justify-between gap-2 shadow-2xs ${isEvaluated ? 'border-emerald-300 bg-emerald-50/20' : 'border-amber-300 bg-amber-50/20'}">
@@ -1101,7 +1147,7 @@ function mlRenderDailyEvaluationTab(wo) {
           <span class="w-8 h-8 rounded-full bg-slate-700 text-white font-bold flex items-center justify-center text-xs shrink-0">${trade}</span>
           <div class="min-w-0 flex-1">
             <p class="font-bold text-slate-900 text-xs truncate leading-tight">${rank} ${escapeHtml(name)}</p>
-            <p class="text-[10px] text-slate-500 mt-0.5">${trade} • Avg: <span class="font-bold text-teal-700">${avg}</span></p>
+            <p class="text-[10px] text-slate-500 mt-0.5">${escapeHtml(off)} • ${trade} • Avg: <span class="font-bold text-teal-700">${avg}</span></p>
           </div>
         </div>
         <div class="shrink-0">
@@ -1257,14 +1303,66 @@ function openWorkOrderDetailMobile(woKey) {
   });
   if (artificerEl) artificerEl.innerHTML = artificerOpts;
 
-  // Selected sailors
-  let assignedIds = [];
-  if (Array.isArray(wo.assigned)) {
-    assignedIds = wo.assigned.map(String);
-  } else if (wo.assigned && typeof wo.assigned === "object") {
-    assignedIds = Object.values(wo.assigned).map(String);
+  // Selected sailors resolution: combine daily_allocations (targetDate or most recent date) and wo.assigned
+  const woIdStr = String(wo.id || "");
+  const woFbKeyStr = String(wo._fbKey || "");
+  const woRefStr = String(wo.reference_no || "");
+  const woJobNoStr = String(wo.job_no || "");
+  const woDescStr = String(wo.description || "").trim().toLowerCase();
+
+  const isMatchingAlloc = (a) => {
+    if (!a || a.status === "Cancelled") return false;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    const aRef = String(a.reference_no || "");
+    return (
+      (woIdStr && aWoId === woIdStr) ||
+      (woFbKeyStr && aWoId === woFbKeyStr) ||
+      (woRefStr && (aRef === woRefStr || aWoId === woRefStr)) ||
+      (woJobNoStr && aWoId === woJobNoStr) ||
+      (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)))
+    );
+  };
+
+  const targetDateAllocs = (mlStore.dailyAllocations || []).filter(a => a && a.date === targetDate && isMatchingAlloc(a));
+  
+  let recentAllocs = [];
+  if (targetDateAllocs.length === 0) {
+    const allWoAllocs = (mlStore.dailyAllocations || []).filter(a => isMatchingAlloc(a));
+    if (allWoAllocs.length > 0) {
+      const sortedDates = Array.from(new Set(allWoAllocs.map(a => a.date))).filter(Boolean).sort().reverse();
+      if (sortedDates.length > 0) {
+        const latestDate = sortedDates[0];
+        recentAllocs = allWoAllocs.filter(a => a.date === latestDate);
+      }
+    }
   }
-  _mlDetailSelectedSailors = new Set(assignedIds);
+
+  const rawAssigned = Array.isArray(wo.assigned) 
+    ? wo.assigned 
+    : (wo.assigned && typeof wo.assigned === "object" ? Object.values(wo.assigned) : []);
+
+  const assignedSet = new Set();
+  const effectiveAllocs = targetDateAllocs.length > 0 ? targetDateAllocs : recentAllocs;
+
+  effectiveAllocs.forEach(a => {
+    const sid = a.sailor_id || a.sailorId || (a.sailor && (a.sailor.id || a.sailor._fbKey || a.sailor.official_number || a.sailor.off_no));
+    if (sid) {
+      const found = findSailor(sid);
+      assignedSet.add(found ? String(found.id || found._fbKey) : String(sid));
+    }
+  });
+
+  rawAssigned.forEach(s => {
+    if (!s) return;
+    const sid = typeof s === "object" ? (s.id || s._fbKey || s.official_number || s.off_no) : s;
+    if (sid) {
+      const found = findSailor(sid);
+      assignedSet.add(found ? String(found.id || found._fbKey) : String(sid));
+    }
+  });
+
+  _mlDetailSelectedSailors = assignedSet;
 
   // Render sailor chips and list
   mlFilterDetailTrade("ALL");
@@ -1272,14 +1370,7 @@ function openWorkOrderDetailMobile(woKey) {
   mlRenderDailyEvaluationTab(wo);
 
   // Commit button status
-  const woIdStr = String(wo.id || "");
-  const woFbKeyStr = String(wo._fbKey || "");
-  const targetAllocs = (mlStore.dailyAllocations || []).filter(a => {
-    if (!a || a.date !== targetDate || a.status === "Cancelled") return false;
-    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
-    return (woIdStr && aWoId === woIdStr) || (woFbKeyStr && aWoId === woFbKeyStr);
-  });
-  const isCommittedToday = targetAllocs.length > 0;
+  const isCommittedToday = targetDateAllocs.length > 0;
   if (commitBtn) {
     commitBtn.classList.toggle("hidden", !isToday || isCommittedToday || _mlDetailSelectedSailors.size === 0 || wo.status === "Completed");
   }
@@ -1331,7 +1422,46 @@ function saveWorkOrderDetailMobile() {
     updates.completed_date = getLocalDateString();
   }
 
-  opsDB.ref(`work_orders/${key}`).update(updates).then(() => {
+  const today = getLocalDateString();
+  const woId = wo.id || key;
+  const rootUpdates = {};
+  rootUpdates[`work_orders/${key}`] = { ...wo, ...updates };
+
+  // Sync today's daily_allocations if they exist
+  const existingTodayAllocs = (mlStore.dailyAllocations || []).filter(a => {
+    if (!a || a.date !== today || a.status === "Cancelled") return false;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    return aWoId === String(woId) || aWoId === String(key);
+  });
+
+  if (existingTodayAllocs.length > 0) {
+    existingTodayAllocs.forEach(a => {
+      const aSid = String(a.sailor_id || a.sailorId || (a.sailor && (a.sailor.id || a.sailor._fbKey)));
+      if (!assigned.includes(aSid)) {
+        rootUpdates[`daily_allocations/${a._fbKey || a.id}`] = null;
+      }
+    });
+
+    assigned.forEach(sid => {
+      const alreadyAlloc = existingTodayAllocs.some(a => {
+        const aSid = String(a.sailor_id || a.sailorId || (a.sailor && (a.sailor.id || a.sailor._fbKey)));
+        return aSid === sid;
+      });
+      if (!alreadyAlloc) {
+        const allocKey = `${today}_${sid}`;
+        rootUpdates[`daily_allocations/${allocKey}`] = {
+          date: today,
+          sailor_id: sid,
+          work_order_id: woId,
+          status: "Active",
+          hours: 7.0,
+          zone_id: mlStore.currentZone
+        };
+      }
+    });
+  }
+
+  opsDB.ref().update(rootUpdates).then(() => {
     Object.assign(wo, updates);
     showLightToast("Work Order Changes Saved! 💾", "✅");
     closeWorkOrderDetailMobile();
@@ -1481,7 +1611,15 @@ function commitLightLabour(key) {
   const wo = mlStore.workOrders.find(w => String(w.id) === String(key) || String(w._fbKey) === String(key));
   if (!wo) return;
   const today = getLocalDateString();
-  const assigned = Array.isArray(wo.assigned) ? wo.assigned : (wo.assigned ? Object.values(wo.assigned) : []);
+  
+  let assigned = [];
+  if (_mlDetailSelectedSailors && _mlDetailSelectedSailors.size > 0 && String(mlStore.selectedWoKey) === String(key)) {
+    assigned = Array.from(_mlDetailSelectedSailors);
+  } else if (Array.isArray(wo.assigned)) {
+    assigned = wo.assigned.map(String);
+  } else if (wo.assigned && typeof wo.assigned === "object") {
+    assigned = Object.values(wo.assigned).map(String);
+  }
 
   if (assigned.length === 0) {
     showLightToast("No sailors assigned to commit", "⚠️");
@@ -1489,22 +1627,27 @@ function commitLightLabour(key) {
   }
 
   const updates = {};
+  const woId = wo.id || key;
   assigned.forEach(sid => {
-    const allocKey = `${today}_${sid}`;
+    const found = findSailor(sid);
+    const canonId = found ? String(found.id || found._fbKey) : String(sid);
+    const allocKey = `${today}_${canonId}`;
     updates[`daily_allocations/${allocKey}`] = {
       date: today,
-      sailor_id: sid,
-      work_order_id: wo.id || key,
+      sailor_id: canonId,
+      work_order_id: woId,
       status: "Active",
       hours: 7.0,
       zone_id: mlStore.currentZone
     };
   });
 
+  updates[`work_orders/${key}/assigned`] = assigned;
   updates[`work_orders/${key}/last_commit_date`] = today;
   updates[`work_orders/${key}/last_committed_date`] = today;
 
   opsDB.ref().update(updates).then(() => {
+    wo.assigned = assigned;
     wo.last_commit_date = today;
     wo.last_committed_date = today;
     showLightToast(`Committed ${assigned.length} sailor(s) for today!`, "⚡");
