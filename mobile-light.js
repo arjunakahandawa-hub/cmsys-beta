@@ -688,7 +688,7 @@ function renderLightTasks() {
 
     let assignedIds = [];
     if (isCommittedOnTargetDate) {
-      assignedIds = targetAllocs.map(a => String(a.sailor_id));
+      assignedIds = targetAllocs.map(a => String(a.sailor_id || a.sailorId || (a.sailor && (a.sailor.id || a.sailor._fbKey))));
     } else if (isToday) {
       assignedIds = Array.isArray(wo.assigned) ? wo.assigned.map(String) : (wo.assigned ? Object.values(wo.assigned).map(String) : []);
     }
@@ -710,7 +710,12 @@ function renderLightTasks() {
         ? '<span class="bg-emerald-50 text-emerald-700 border border-emerald-300 px-2 py-0.5 rounded-full text-[10px] font-bold">🟢 Active Today</span>'
         : `<span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">📜 Allocated (${targetDate})</span>`;
     } else if (crewCount > 0 && isToday) {
-      activeBadge = '<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⏳ Standby</span>';
+      activeBadge = `<span class="bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-full text-[10px] font-bold">⏳ Standby (${crewCount} Planned)</span>`;
+    }
+
+    let officerBadge = "";
+    if (wo.officer_review_status === "Approved") {
+      officerBadge = '<span class="bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full text-[10px] font-bold">🛡️ Approved</span>';
     }
 
     // Category Badge
@@ -722,21 +727,55 @@ function renderLightTasks() {
 
     const typeBadge = `<span class="px-2 py-0.5 rounded-full text-[10px] font-extrabold border ${typeBadgeClass}">${typeIcon} ${escapeHtml(wo.assign_type ? ('ASSIGN: ' + wo.assign_type) : (wo.type || 'TASK'))}</span>`;
 
-    // Sailor Pills
+    // Sailor Trade Breakdown & Sailor Pills
+    const tradeCounts = {};
+    assignedIds.forEach(sid => {
+      const s = findSailor(sid);
+      const tr = s ? (s.trade || s.category || "OTHER") : "OTHER";
+      tradeCounts[tr] = (tradeCounts[tr] || 0) + 1;
+    });
+    const tradeParts = Object.entries(tradeCounts).map(([tr, cnt]) => `${cnt} ${tr}`);
+    const tradeBadgeStr = tradeParts.length > 0 
+      ? `<span class="bg-slate-100 text-slate-600 border border-slate-200 px-1.5 py-0.2 rounded-md text-[9px] font-bold">${tradeParts.join(', ')}</span>` 
+      : '';
+
     let sailorPillsHtml = '';
     if (crewCount > 0) {
-      sailorPillsHtml = assignedIds.slice(0, 3).map(sid => {
-        const s = mlStore.sailors.find(sailor => String(sailor.id) === String(sid) || String(sailor._fbKey) === String(sid));
+      sailorPillsHtml = assignedIds.slice(0, 4).map(sid => {
+        const s = findSailor(sid);
         const rawName = s ? (s.name || s.off_no || 'Sailor') : ('Sailor ' + sid);
-        const nameParts = rawName.split(' ');
+        const nameParts = rawName.trim().split(/\s+/);
         const displayShort = nameParts.length > 1 ? nameParts[nameParts.length - 1].toUpperCase() : rawName.toUpperCase();
-        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
-          ${escapeHtml(displayShort)} <span class="bg-orange-500 text-white px-1.5 py-0.1 rounded-full text-[8px] font-black">7.0</span>
+        return `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-50 text-slate-700 border border-slate-200 text-[10px] font-bold">
+          ${escapeHtml(displayShort)} <span class="bg-amber-500 text-white px-1.5 py-0.1 rounded-full text-[8px] font-black">7.0</span>
         </span>`;
       }).join(' ');
-      if (crewCount > 3) sailorPillsHtml += ` <span class="text-[9px] text-slate-400 font-bold">+${crewCount - 3}</span>`;
-    } else {
-      sailorPillsHtml = '<span class="text-slate-400 text-xs italic">No sailors assigned</span>';
+      if (crewCount > 4) sailorPillsHtml += ` <span class="text-[9px] text-slate-400 font-bold">+${crewCount - 4} more</span>`;
+    }
+
+    // Progress Bar (Only for Projects & Jobs; Omitted for Assignments)
+    let progressHtml = '';
+    if (cat !== 'ASSIGN' && !wo.assign_type) {
+      const barColor = cat === 'PROJECT' ? 'bg-teal-600' : 'bg-blue-600';
+      const textColor = cat === 'PROJECT' ? 'text-teal-700' : 'text-blue-700';
+      progressHtml = `
+        <div class="space-y-1">
+          <div class="flex items-center justify-between text-xs font-semibold text-slate-500">
+            <span>Progress</span>
+            <span class="font-extrabold ${textColor}">${progress}%</span>
+          </div>
+          <div class="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+            <div class="${barColor} h-1.5 rounded-full transition-all duration-300" style="width: ${progress}%"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    // Duration Tag (Only for Projects & Jobs)
+    let durationHtml = '';
+    if (cat !== 'ASSIGN' && !wo.assign_type) {
+      const dur = wo.duration || wo.estimated_duration || 1;
+      durationHtml = `<div class="flex items-center gap-1 text-[10px] text-slate-400 font-medium"><span>🕒</span> <span>${dur}d</span></div>`;
     }
 
     // Quick commit button for cards
@@ -754,12 +793,13 @@ function renderLightTasks() {
     const subLoc = wo.sub_location ? ` / ${escapeHtml(wo.sub_location)}` : '';
 
     html += `
-      <!-- WORK ORDER CARD (PIC - 03) -->
+      <!-- WORK ORDER CARD (PIC - 01) -->
       <div onclick="openWorkOrderDetailMobile('${key}')" class="bg-white rounded-2xl border border-slate-200/90 shadow-sm hover:border-teal-400 p-3.5 space-y-2.5 transition-all cursor-pointer active-scale">
         <div class="flex items-center gap-1.5 flex-wrap">
           ${prioBadge}
           ${statusBadge}
           ${activeBadge}
+          ${officerBadge}
           ${typeBadge}
         </div>
 
@@ -768,30 +808,23 @@ function renderLightTasks() {
           <p class="text-xs text-slate-500 font-medium mt-0.5">📍 ${locDisplay}${subLoc}</p>
         </div>
 
-        <!-- Progress Slider -->
-        <div class="space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200" onclick="event.stopPropagation()">
-          <div class="flex items-center justify-between text-xs font-bold text-slate-600">
-            <span>Progress</span>
-            <span id="progLabel_${key}" class="text-teal-700 font-mono font-black">${progress}%</span>
-          </div>
-          <input type="range" min="0" max="100" step="5" value="${progress}" 
-                 oninput="document.getElementById('progLabel_${key}').textContent = this.value + '%'"
-                 onchange="updateTaskProgress('${key}', this.value)"
-                 ${!isToday ? 'disabled' : ''}
-                 class="w-full accent-teal-600 cursor-pointer h-2 bg-slate-200 rounded-lg ${!isToday ? 'opacity-50 cursor-not-allowed' : ''}">
-        </div>
+        ${progressHtml}
+        ${durationHtml}
 
         <!-- Assigned Crew Section -->
-        <div class="pt-1.5 border-t border-slate-100 flex items-center justify-between gap-1 flex-wrap">
-          <div class="flex items-center gap-1 flex-wrap flex-1">
-            <span class="text-xs font-bold text-slate-700">👷 ${crewCount} active:</span>
-            ${sailorPillsHtml}
+        <div class="pt-1.5 border-t border-slate-100 space-y-1.5">
+          <div class="flex items-center justify-between gap-1 flex-wrap">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="text-xs font-bold text-slate-700">👷 ${crewCount} ${isCommittedOnTargetDate ? 'active' : 'planned'}</span>
+              ${tradeBadgeStr}
+            </div>
+            ${isToday ? `
+              <button type="button" onclick="event.stopPropagation(); openAssignModal('${key}')" class="px-2.5 py-0.5 bg-slate-100 hover:bg-slate-200 text-teal-800 font-bold text-[10px] rounded-lg border border-slate-200 active-scale">
+                👥 Assign
+              </button>
+            ` : ''}
           </div>
-          ${isToday ? `
-            <button type="button" onclick="event.stopPropagation(); openAssignModal('${key}')" class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-teal-800 font-bold text-[11px] rounded-lg border border-slate-200 active-scale">
-              👥 Assign
-            </button>
-          ` : ''}
+          ${crewCount > 0 ? `<div class="flex items-center gap-1 flex-wrap">${sailorPillsHtml}</div>` : '<span class="text-slate-400 text-xs italic block">No sailors assigned</span>'}
         </div>
 
         ${commitBtnHtml}
@@ -1267,6 +1300,12 @@ function openWorkOrderDetailMobile(woKey) {
   if (budgetEl) budgetEl.value = wo.budget_allocation || "";
   const durVal = wo.estimated_duration || wo.duration || 1;
   if (durEl) durEl.value = durVal;
+
+  const isAssign = Boolean(wo.assign_type || getWorkOrderCategory(wo) === "ASSIGN");
+  const progSection = document.getElementById("mlWoDetailProgressSection");
+  if (progSection) {
+    progSection.classList.toggle("hidden", isAssign);
+  }
 
   const progress = Math.min(100, Math.max(0, parseInt(wo.progress, 10) || 0));
   if (progSlider) progSlider.value = progress;
