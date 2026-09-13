@@ -2114,16 +2114,15 @@ function openEstimateDetailMobile(estKey) {
 
   const numEl = document.getElementById("mlEstDetailNumber");
   const refEl = document.getElementById("mlEstDetailRef");
-  const statEl = document.getElementById("mlEstDetailStatusBadge");
+  const statEl = document.getElementById("mlEstDetailStatus") || document.getElementById("mlEstDetailStatusBadge");
   const locEl = document.getElementById("mlEstDetailLocation");
   const userEl = document.getElementById("mlEstDetailEndUser");
   const scopeEl = document.getElementById("mlEstDetailScope");
-  const matList = document.getElementById("mlEstDetailMaterialsList");
-  const matTot = document.getElementById("mlEstDetailMaterialsTotal");
-  const labList = document.getElementById("mlEstDetailLaborList");
-  const labTot = document.getElementById("mlEstDetailLaborTotal");
+  const matList = document.getElementById("mlEstDetailMatTableBody") || document.getElementById("mlEstDetailMaterialsList");
+  const matTot = document.getElementById("mlEstDetailMatTotal") || document.getElementById("mlEstDetailMaterialsTotal");
+  const labList = document.getElementById("mlEstDetailLabTableBody") || document.getElementById("mlEstDetailLaborList");
+  const labTot = document.getElementById("mlEstDetailLabTotal") || document.getElementById("mlEstDetailLaborTotal");
   const grandTot = document.getElementById("mlEstDetailGrandTotal");
-  const sigEl = document.getElementById("mlEstDetailSignatures");
 
   if (numEl) numEl.textContent = est.estimate_number || "EST/--";
   if (refEl) refEl.textContent = (est.ref_type || est.reference_type || "REF") + ": " + (est.reference_no || est.reference_doc || "N/A");
@@ -2178,15 +2177,20 @@ function openEstimateDetailMobile(estKey) {
   if (labTot) labTot.textContent = (est.totalManDays || est.manDays || 0) + " man-days";
   if (grandTot) grandTot.textContent = "Rs. " + formatCurrency(est.total_cost || 0);
 
+  const sigEl = document.getElementById("mlEstDetailSignatories") || document.getElementById("mlEstDetailSignatures");
   if (sigEl) {
     const cb = est.createdBy || {};
     const chk = est.checkedBy || {};
+    const apv = est.approvedBy || {};
     sigEl.innerHTML = `
       <div class="flex justify-between">
-        <span><strong>Created By:</strong> ${escapeHtml(cb.name || "—")} (${escapeHtml(cb.rank || "")} ${escapeHtml(cb.serviceNo || "")})</span>
+        <span><strong>Created By:</strong> ${escapeHtml(cb.name || "—")} (${escapeHtml(cb.rank || "")} ${escapeHtml(cb.serviceNo || cb.official_number || "")})</span>
       </div>
       <div class="flex justify-between border-t border-slate-200 pt-1">
-        <span><strong>Checked By:</strong> ${escapeHtml(chk.name || "—")} (${escapeHtml(chk.rank || "")} ${escapeHtml(chk.serviceNo || "")})</span>
+        <span><strong>Checked By:</strong> ${escapeHtml(chk.name || "—")} (${escapeHtml(chk.rank || "")} ${escapeHtml(chk.serviceNo || chk.official_number || "")})</span>
+      </div>
+      <div class="flex justify-between border-t border-slate-200 pt-1 text-emerald-800">
+        <span><strong>Approved By:</strong> ${escapeHtml(apv.name || "—")} (${escapeHtml(apv.rank || "")} ${escapeHtml(apv.serviceNo || apv.official_number || "")})</span>
       </div>`;
   }
 
@@ -2237,6 +2241,197 @@ function editCurrentEstimateMobile() {
   if (key) openNewEstimateModalMobile(key);
 }
 
+// ── SIGNATORY AUTOCOMPLETE FOR MOBILE (FIND & SEARCH) ──
+function setupMobileSignatoryAutocomplete(prefix) {
+  const nameInput = document.getElementById(`mlEst${prefix}Name`);
+  const rankInput = document.getElementById(`mlEst${prefix}Rank`);
+  const svcInput = document.getElementById(`mlEst${prefix}Svc`);
+  const dropdown = document.getElementById(`mlSigDropdown_${prefix}`);
+  if (!nameInput || !dropdown) return;
+
+  let isInteractingWithDropdown = false;
+  dropdown.onpointerdown = () => { isInteractingWithDropdown = true; };
+  dropdown.onpointerup = () => { setTimeout(() => { isInteractingWithDropdown = false; }, 400); };
+  dropdown.onmousedown = (e) => e.preventDefault();
+
+  const closeDropdown = () => {
+    dropdown.classList.add("hidden");
+  };
+
+  const renderResults = (query) => {
+    const q = (query || "").trim().toLowerCase();
+    let items = [];
+
+    if (prefix === "Created") {
+      items = (mlStore.sailors || []).map(s => {
+        const off = s.official_number || s.off_no || s.service_no || "";
+        const rank = s.rank || s.trade || "Sailor";
+        return {
+          name: s.name || off,
+          rank: rank,
+          svc: off,
+          label: `${rank} ${s.name || off}`,
+          sub: `${off} • ${s.trade || "Sailor"}`,
+          badge: s.trade || "Sailor",
+          badgeColor: "bg-blue-100 text-blue-800"
+        };
+      });
+    } else if (prefix === "Checked") {
+      const incMap = mlStore.zoneInCharges || {};
+      Object.values(incMap).forEach(inc => {
+        if (inc && inc.name) {
+          items.push({
+            name: inc.name,
+            rank: inc.rank || "In-Charge",
+            svc: inc.service_no || inc.official_number || "",
+            label: inc.name,
+            sub: `${inc.rank || "In-Charge"} • ${inc.service_no || ""} (Zone In-Charge)`,
+            badge: "In-Charge",
+            badgeColor: "bg-amber-100 text-amber-800"
+          });
+        }
+      });
+      (mlStore.sailors || []).forEach(s => {
+        const off = s.official_number || s.off_no || s.service_no || "";
+        const rank = s.rank || s.trade || "Staff";
+        items.push({
+          name: s.name || off,
+          rank: rank,
+          svc: off,
+          label: `${rank} ${s.name || off}`,
+          sub: `${off} • ${s.trade || "Staff"}`,
+          badge: s.trade || "Staff",
+          badgeColor: "bg-slate-100 text-slate-700"
+        });
+      });
+    } else if (prefix === "Approved") {
+      items.push({
+        name: "",
+        rank: "",
+        svc: "",
+        label: "🚫 Clear / Leave Blank",
+        sub: "No approval signature required (Keep blank)",
+        badge: "Blank",
+        badgeColor: "bg-slate-100 text-slate-500"
+      });
+
+      const ceOfficersList = [
+        { rank: "CAPTAIN (CE)", name: "BGL BALASURIYA", svc: "NRC 1843", desig: "CCED(E)" },
+        { rank: "CDR (CE)", name: "TM VITHARANA", svc: "NRC 2541", desig: "CCEO(E)" },
+        { rank: "LCDR (CE)", name: "JAJD SENARATHNA", svc: "NRC 3068", desig: "SCE(M)" },
+        { rank: "LCDR (CE)", name: "JATK JAYAKODI", svc: "NRC 3542", desig: "SCE(P&P)" },
+        { rank: "LCDR (CE)", name: "KMAU KAHANDAWA", svc: "NRC 3576", desig: "SCE(W/W)" },
+        { rank: "LCDR (CE)", name: "HMMI JAYATHUNGA", svc: "NRC 3977", desig: "CE (W/W), CE (P&P)" },
+        { rank: "LT (CE)", name: "WP DARSHANA", svc: "NRC 4126", desig: "QS (E)" },
+        { rank: "LT (CE)", name: "JADU JAYASINGHE", svc: "NRC 4310", desig: "CE(M) I" },
+        { rank: "LT (CE)", name: "PHKR KUMARA", svc: "NRC 4570", desig: "CE(M) II" },
+      ];
+
+      ceOfficersList.forEach(off => {
+        items.push({
+          name: off.name,
+          rank: off.rank,
+          svc: `${off.svc} - ${off.desig}`,
+          label: `${off.rank} ${off.name}`,
+          sub: `${off.svc} • ${off.desig}`,
+          badge: off.desig,
+          badgeColor: "bg-emerald-100 text-emerald-800"
+        });
+      });
+
+      (mlStore.sailors || []).forEach(s => {
+        const r = String(s.rank || "").toUpperCase();
+        if (r.includes("LT") || r.includes("CDR") || r.includes("CAPT") || r.includes("OIC")) {
+          const off = s.official_number || s.off_no || s.service_no || "";
+          items.push({
+            name: s.name,
+            rank: s.rank || "Officer",
+            svc: off,
+            label: `${s.rank || "Officer"} ${s.name}`,
+            sub: `${off} • Officer`,
+            badge: "Officer",
+            badgeColor: "bg-teal-100 text-teal-800"
+          });
+        }
+      });
+
+      (mlStore.users || []).forEach(u => {
+        if (u.role === "Admin" || u.role === "Officer" || (u.rank && String(u.rank).toUpperCase().includes("LT"))) {
+          items.push({
+            name: u.name,
+            rank: u.rank || "Officer",
+            svc: u.serviceNo || u.official_number || "",
+            label: `${u.rank || ""} ${u.name}`.trim(),
+            sub: `${u.rank || "Officer"} • ${u.serviceNo || u.official_number || ""}`,
+            badge: "Officer",
+            badgeColor: "bg-teal-100 text-teal-800"
+          });
+        }
+      });
+    }
+
+    if (q) {
+      items = items.filter(it => {
+        const haystack = `${it.name} ${it.rank} ${it.svc} ${it.sub} ${it.label}`.toLowerCase();
+        return haystack.includes(q);
+      });
+    }
+
+    const seen = new Set();
+    items = items.filter(it => {
+      const key = `${it.name}_${it.svc}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    const visibleItems = items.slice(0, 30);
+    if (visibleItems.length === 0) {
+      dropdown.innerHTML = `<div class="p-2.5 text-center text-slate-400 italic text-[11px]">No matches found (type freely)</div>`;
+    } else {
+      dropdown.innerHTML = visibleItems.map((it, idx) => `
+        <div class="p-2 hover:bg-teal-50 active:bg-teal-100 cursor-pointer flex items-center justify-between gap-1 transition-colors" data-sig-idx="${idx}">
+          <div class="min-w-0 flex-1 pointer-events-none">
+            <p class="font-bold text-slate-800 text-xs truncate">${escapeHtml(it.label)}</p>
+            <p class="text-[10px] text-slate-500 font-mono truncate">${escapeHtml(it.sub)}</p>
+          </div>
+          <span class="text-[9px] font-bold px-1.5 py-0.5 rounded ${it.badgeColor} shrink-0 pointer-events-none">${escapeHtml(it.badge)}</span>
+        </div>
+      `).join("");
+    }
+
+    dropdown.classList.remove("hidden");
+
+    dropdown.querySelectorAll("[data-sig-idx]").forEach(el => {
+      const onSelect = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const idx = parseInt(el.getAttribute("data-sig-idx"), 10);
+        const item = visibleItems[idx];
+        if (item) {
+          nameInput.value = item.name || "";
+          if (rankInput) rankInput.value = item.rank || "";
+          if (svcInput) svcInput.value = item.svc || "";
+          closeDropdown();
+        }
+      };
+      el.onmousedown = onSelect;
+      el.ontouchend = onSelect;
+      el.onclick = onSelect;
+    });
+  };
+
+  nameInput.onfocus = () => renderResults(nameInput.value);
+  nameInput.oninput = () => renderResults(nameInput.value);
+  nameInput.onblur = () => {
+    setTimeout(() => {
+      if (!isInteractingWithDropdown) {
+        closeDropdown();
+      }
+    }, 300);
+  };
+}
+
 // ── NEW / EDIT ESTIMATE FORM MODAL (PIC - 03) ──
 function openNewEstimateModalMobile(editKey) {
   const modal = document.getElementById("mlNewEstimateModal");
@@ -2263,12 +2458,20 @@ function openNewEstimateModalMobile(editKey) {
       const cb = est.createdBy || {};
       document.getElementById("mlEstCreatedName").value = cb.name || "";
       document.getElementById("mlEstCreatedRank").value = cb.rank || "";
-      document.getElementById("mlEstCreatedSvc").value = cb.serviceNo || "";
+      document.getElementById("mlEstCreatedSvc").value = cb.serviceNo || cb.official_number || "";
 
       const chk = est.checkedBy || {};
       document.getElementById("mlEstCheckedName").value = chk.name || "";
       document.getElementById("mlEstCheckedRank").value = chk.rank || "";
-      document.getElementById("mlEstCheckedSvc").value = chk.serviceNo || "";
+      document.getElementById("mlEstCheckedSvc").value = chk.serviceNo || chk.official_number || "";
+
+      const apv = est.approvedBy || {};
+      const apvNameEl = document.getElementById("mlEstApprovedName");
+      const apvRankEl = document.getElementById("mlEstApprovedRank");
+      const apvSvcEl = document.getElementById("mlEstApprovedSvc");
+      if (apvNameEl) apvNameEl.value = apv.name || "";
+      if (apvRankEl) apvRankEl.value = apv.rank || "";
+      if (apvSvcEl) apvSvcEl.value = apv.serviceNo || apv.official_number || "";
 
       if (matContainer) {
         matContainer.innerHTML = "";
@@ -2287,10 +2490,21 @@ function openNewEstimateModalMobile(editKey) {
     if (editInput) editInput.value = "";
     document.getElementById("mlNewEstForm").reset();
 
+    document.getElementById("mlEstCreatedName").value = "";
+    document.getElementById("mlEstCreatedRank").value = "";
+    document.getElementById("mlEstCreatedSvc").value = "";
+
     const inc = (mlStore.zoneInCharges || {})[mlStore.currentZone] || {};
     document.getElementById("mlEstCheckedName").value = inc.name || "";
     document.getElementById("mlEstCheckedRank").value = inc.rank || "";
-    document.getElementById("mlEstCheckedSvc").value = inc.service_no || "";
+    document.getElementById("mlEstCheckedSvc").value = inc.service_no || inc.official_number || "";
+
+    const apvNameEl = document.getElementById("mlEstApprovedName");
+    const apvRankEl = document.getElementById("mlEstApprovedRank");
+    const apvSvcEl = document.getElementById("mlEstApprovedSvc");
+    if (apvNameEl) apvNameEl.value = "";
+    if (apvRankEl) apvRankEl.value = "";
+    if (apvSvcEl) apvSvcEl.value = "";
 
     if (matContainer) {
       matContainer.innerHTML = "";
@@ -2303,6 +2517,10 @@ function openNewEstimateModalMobile(editKey) {
 
     calcNewEstTotalsMobile();
   }
+
+  setupMobileSignatoryAutocomplete("Created");
+  setupMobileSignatoryAutocomplete("Checked");
+  setupMobileSignatoryAutocomplete("Approved");
 
   if (modal) modal.classList.remove("hidden");
 }
@@ -2488,6 +2706,12 @@ function saveEstimateMobile(e) {
     serviceNo: (document.getElementById("mlEstCheckedSvc")?.value || "").trim()
   };
 
+  const approvedBy = {
+    name: (document.getElementById("mlEstApprovedName")?.value || "").trim(),
+    rank: (document.getElementById("mlEstApprovedRank")?.value || "").trim(),
+    serviceNo: (document.getElementById("mlEstApprovedSvc")?.value || "").trim()
+  };
+
   const currentZone = mlStore.currentZone;
 
   if (editKey) {
@@ -2510,6 +2734,8 @@ function saveEstimateMobile(e) {
       totalManDays: grandLabor,
       createdBy: createdBy,
       checkedBy: checkedBy,
+      approvedBy: approvedBy,
+      approvedAuthority: approvedBy.name || null,
       updated_at: Date.now()
     };
 
@@ -2548,6 +2774,8 @@ function saveEstimateMobile(e) {
       status: "Pending",
       createdBy: createdBy,
       checkedBy: checkedBy,
+      approvedBy: approvedBy,
+      approvedAuthority: approvedBy.name || null,
       zone_id: currentZone,
       created_at: Date.now()
     };
