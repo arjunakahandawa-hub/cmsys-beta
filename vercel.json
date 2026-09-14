@@ -1,6 +1,16 @@
 {
   "cleanUrls": true,
   "redirects": [
-    { "source": "/", "destination": "/mobile-beta", "permanent": false }
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "cmsys-beta.vercel.app"
+        }
+      ],
+      "destination": "/mobile-beta",
+      "permanent": false
+    }
   ]
 }
