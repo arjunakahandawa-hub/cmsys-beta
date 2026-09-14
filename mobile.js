@@ -3152,6 +3152,14 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
   `;
 }
 
+function getDailyDetailsReportTitle(zoneId, targetDate) {
+  const selectedZone = zoneId || mlStore.currentZone || "A-Zone";
+  const dateVal = targetDate || mlStore.selectedDate || getLocalDateString();
+  const isAll = String(selectedZone).toUpperCase() === "ALL";
+  const zoneDisplayName = isAll ? "ALL ZONES" : (formatZoneDisplayName(selectedZone) || selectedZone);
+  return `${zoneDisplayName} | Daily Details | ${dateVal}`;
+}
+
 function openDailyReportPrintMobile() {
   const currentZone = mlStore.currentZone;
   const targetDate = mlStore.selectedDate || getLocalDateString();
@@ -3162,60 +3170,93 @@ function openDailyReportPrintMobile() {
     container.innerHTML = reportHtml;
   }
 
+  const printTitle = getDailyDetailsReportTitle(currentZone, targetDate);
+  const isAll = String(currentZone).toUpperCase() === "ALL";
+  const zoneDisplayName = isAll ? "ALL ZONES" : (formatZoneDisplayName(currentZone) || currentZone);
+
+  // Update modal header title text
+  const titleEl = document.getElementById("mlPrintModalTitle");
+  if (titleEl) titleEl.textContent = `${zoneDisplayName} - Daily Details`;
+  const subEl = document.getElementById("mlPrintModalSubtitle");
+  if (subEl) subEl.textContent = `${targetDate} • Print Preview &bull; A4`;
+
+  // Preserve original title and set requested format: "Zone or workshop name | Daily Details | Date"
+  if (!mlStore._originalDocumentTitle) {
+    mlStore._originalDocumentTitle = document.title || "CMSys Mobile | CE Management System — SLN";
+  }
+  document.title = printTitle;
+
   const modal = document.getElementById("mlPrintPreviewModal");
   if (modal) {
     modal.classList.remove("hidden");
   }
 
-  const prevTitle = document.title;
-  document.title = "Daily Details";
+  // Push state to browser history so mobile hardware/gesture Back button closes the modal instead of exiting the app
+  try {
+    history.pushState({ modal: "dailyPrintPreview" }, "", window.location.href);
+  } catch (e) {}
 
   setTimeout(() => {
     try {
       window.print();
     } catch (e) {
       console.warn("Auto print failed, user can tap Print button:", e);
-    } finally {
-      setTimeout(() => {
-        document.title = prevTitle;
-      }, 2500);
     }
   }, 400);
 }
 
-function closeDailyReportPrintMobile() {
+function closeDailyReportPrintMobile(triggeredByPopstate = false) {
   const modal = document.getElementById("mlPrintPreviewModal");
   if (modal) {
     modal.classList.add("hidden");
   }
+
+  // Restore original document title
+  if (mlStore._originalDocumentTitle) {
+    document.title = mlStore._originalDocumentTitle;
+  } else {
+    document.title = "CMSys Mobile | CE Management System — SLN";
+  }
+
+  // Cleanly pop history state if closed by button click (not popstate)
+  if (!triggeredByPopstate && history.state && history.state.modal === "dailyPrintPreview") {
+    try {
+      history.back();
+    } catch (e) {}
+  }
 }
 
 function triggerNativePrintMobile() {
-  const prevTitle = document.title;
-  document.title = "Daily Details";
+  const currentZone = mlStore.currentZone;
+  const targetDate = mlStore.selectedDate || getLocalDateString();
+  const printTitle = getDailyDetailsReportTitle(currentZone, targetDate);
+
+  if (!mlStore._originalDocumentTitle) {
+    mlStore._originalDocumentTitle = document.title || "CMSys Mobile | CE Management System — SLN";
+  }
+  document.title = printTitle;
+
   try {
     window.print();
   } catch (e) {
     console.warn("Manual print error:", e);
     showLightToast("Please use browser menu to Print / Save as PDF", "⚠️");
-  } finally {
-    setTimeout(() => {
-      document.title = prevTitle;
-    }, 2500);
   }
 }
 
 function openDailyReportInNewWindowMobile() {
   const currentZone = mlStore.currentZone;
   const targetDate = mlStore.selectedDate || getLocalDateString();
+  const printTitle = getDailyDetailsReportTitle(currentZone, targetDate);
   const reportHtml = buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate);
+
   const win = window.open("", "_blank");
   if (win) {
     win.document.write(`<!DOCTYPE html>
 <html>
   <head>
     <meta charset="UTF-8">
-    <title>Daily Details</title>
+    <title>${escapeHtml(printTitle)}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
       body { margin: 0; padding: 12px; background: #ffffff; }
@@ -3228,15 +3269,17 @@ function openDailyReportInNewWindowMobile() {
   </head>
   <body>
     ${reportHtml}
+    <script>
+      window.onload = function() {
+        setTimeout(function() {
+          try { window.print(); } catch (e) {}
+        }, 350);
+      };
+    <\/script>
   </body>
 </html>`);
     win.document.close();
     win.focus();
-    setTimeout(() => {
-      try {
-        win.print();
-      } catch (e) {}
-    }, 350);
   } else {
     triggerNativePrintMobile();
   }
@@ -4015,5 +4058,54 @@ function showLightToast(msg, icon) {
   }, 2200);
 }
 
+// ---------------------------------------------
+// DEVICE BACK BUTTON / POPSTATE NAVIGATION HANDLER
+// ---------------------------------------------
+window.addEventListener("popstate", (event) => {
+  // 1. Daily Report Print Modal
+  const printModal = document.getElementById("mlPrintPreviewModal");
+  if (printModal && !printModal.classList.contains("hidden")) {
+    closeDailyReportPrintMobile(true);
+    return;
+  }
+
+  // 2. Work Order Detail Modal
+  const woModal = document.getElementById("mlWoDetailModal");
+  if (woModal && !woModal.classList.contains("hidden")) {
+    if (typeof closeWorkOrderDetailMobile === "function") {
+      closeWorkOrderDetailMobile();
+      return;
+    }
+  }
+
+  // 3. New Task Modal
+  const taskModal = document.getElementById("mlNewTaskModal");
+  if (taskModal && !taskModal.classList.contains("hidden")) {
+    if (typeof closeNewTaskModal === "function") {
+      closeNewTaskModal();
+      return;
+    }
+  }
+
+  // 4. Assign Modal
+  const assignModal = document.getElementById("mlAssignModal");
+  if (assignModal && !assignModal.classList.contains("hidden")) {
+    if (typeof closeAssignModal === "function") {
+      closeAssignModal();
+      return;
+    }
+  }
+
+  // 5. Estimate Modal
+  const estModal = document.getElementById("mlNewEstimateModal");
+  if (estModal && !estModal.classList.contains("hidden")) {
+    if (typeof closeNewEstimateModalMobile === "function") {
+      closeNewEstimateModalMobile();
+      return;
+    }
+  }
+});
+
 // Global bootstrap
 window.addEventListener("DOMContentLoaded", initLightApp);
+

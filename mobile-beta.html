@@ -1130,31 +1130,46 @@
     </div>
 
     <!-- MODAL: PRINT PREVIEW FOR DAILY REPORT -->
-    <div id="mlPrintPreviewModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
-        <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[94vh] flex flex-col shadow-2xl border border-slate-300 overflow-hidden">
+    <div id="mlPrintPreviewModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4" onclick="if(event.target===this)closeDailyReportPrintMobile()">
+        <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[94vh] flex flex-col shadow-2xl border border-slate-300 overflow-hidden" onclick="event.stopPropagation()">
             <!-- Modal Header (no-print) -->
-            <div class="no-print bg-slate-900 text-white p-3 flex items-center justify-between shrink-0 shadow-md">
-                <div class="flex items-center gap-2">
-                    <span class="text-base">🖨️</span>
-                    <div>
-                        <h3 class="text-xs sm:text-sm font-bold text-white">Daily Details Report</h3>
-                        <p class="text-[10px] text-teal-300 font-medium">Print Preview &bull; A4 Format</p>
-                    </div>
+            <div class="no-print bg-slate-900 text-white p-2.5 sm:p-3 flex items-center justify-between shrink-0 shadow-md gap-2">
+                <button type="button" onclick="closeDailyReportPrintMobile()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 active-scale border border-slate-700 shadow-xs shrink-0" title="Back to Dashboard">
+                    <span class="text-sm">⬅️</span>
+                    <span>Dashboard</span>
+                </button>
+                <div class="text-center flex-1 px-1 min-w-0">
+                    <h3 class="text-xs sm:text-sm font-bold text-white truncate" id="mlPrintModalTitle">Daily Details</h3>
+                    <p class="text-[9px] sm:text-[10px] text-teal-300 font-medium truncate" id="mlPrintModalSubtitle">Print Preview &bull; A4</p>
                 </div>
-                <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="openDailyReportInNewWindowMobile()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale" title="Open in new window / tab">
-                        <span>↗️</span> Tab
+                <div class="flex items-center gap-1.5 shrink-0">
+                    <button type="button" onclick="triggerNativePrintMobile()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-md active-scale">
+                        <span>🖨️</span>
+                        <span>Print</span>
                     </button>
-                    <button type="button" onclick="triggerNativePrintMobile()" class="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
-                        <span>🖨️</span> Print Now
-                    </button>
-                    <button type="button" onclick="closeDailyReportPrintMobile()" class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold active-scale ml-1">✕</button>
+                    <button type="button" onclick="closeDailyReportPrintMobile()" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold active-scale ml-0.5" title="Close">✕</button>
                 </div>
             </div>
             <!-- Scrollable Report Area -->
             <div class="p-2 sm:p-4 overflow-y-auto touch-scroll flex-1 bg-slate-100/60">
                 <div id="mlPrintReportArea" class="bg-white rounded-xl shadow-xs border border-slate-200 p-2 sm:p-4">
                     <!-- Dynamic Report HTML Injected Here -->
+                </div>
+            </div>
+            <!-- Sticky Bottom Action Bar (no-print) -->
+            <div class="no-print bg-slate-900 border-t border-slate-800 p-2.5 px-3 sm:px-4 flex items-center justify-between shrink-0 shadow-lg">
+                <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 active-scale border border-slate-700 shadow-sm">
+                    <span class="text-sm">⬅️</span>
+                    <span>Dashboard වෙත ආපසු</span>
+                </button>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="openDailyReportInNewWindowMobile()" class="px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale" title="Open in new window / tab">
+                        <span>↗️</span> Tab
+                    </button>
+                    <button type="button" onclick="triggerNativePrintMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active-scale">
+                        <span>🖨️</span>
+                        <span>Print / Save PDF</span>
+                    </button>
                 </div>
             </div>
         </div>
@@ -1167,6 +1182,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=2.2.5"></script>
+    <script src="mobile.js?v=2.2.6"></script>
 </body>
 </html>
