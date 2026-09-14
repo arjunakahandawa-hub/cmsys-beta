@@ -2872,6 +2872,40 @@ function printCurrentEstimateMobile(specificKey) {
   printWin.document.close();
 }
 
+// ── SAILOR CLASSIFICATION FOR ZONE DAILY DETAILS SUMMARY TABLE ──
+function classifySailorForSummary(s, isInCharge) {
+  if (!s) return "MA";
+  const r = (s.rank || "").toUpperCase().trim();
+  const t = (s.trade || "").toUpperCase().trim();
+
+  // 1. PO: Petty Officer / Chief Petty Officer / Fleet Chief / Master Chief Artificer / Chief Artificer
+  if (r.includes("PO") || r.includes("CHIEF") || r.includes("MCA") || r.includes("CA (CE)")) {
+    return "PO";
+  }
+
+  // 2. LME: If rank is LME and (is actual In-Charge of the zone, OR trade is empty / N/A / CE / LME)
+  if (r.includes("LME")) {
+    if (isInCharge || !t || t === "CE" || t === "LME" || t === "N/A" || t === "—" || t === "-") {
+      return "LME";
+    }
+  }
+
+  // 3. Trade Columns (Pic - 03: MA, PA, CA, AL, SW, PL, WE, BB, WR)
+  if (t === "MA" || t === "MASON") return "MA";
+  if (t === "PA" || t === "PAINTER") return "PA";
+  if (t === "CA" || t === "CARPENTER") return "CA";
+  if (t === "AL" || t.includes("ALUM")) return "AL";
+  if (t === "SW" || t.includes("SIGN")) return "SW";
+  if (t === "PL" || t === "PLUMBER") return "PL";
+  if (t === "WE" || t === "WEL" || t === "WL" || t === "WELDER") return "WE";
+  if (t === "BB" || t.includes("BEND")) return "BB";
+  if (t === "WR" || t === "RW" || t.includes("WIRE")) return "WR";
+
+  // 4. Fallback: If rank is LME, classify as LME, else default to MA
+  if (r.includes("LME")) return "LME";
+  return "MA";
+}
+
 // ── DAILY ZONE WORK ORDERS PDF EXPORT FOR HOME SCREEN (ON-DEMAND / ZERO-LAG) ──
 function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
   const selectedZone = zoneId || mlStore.currentZone || "A-Zone";
@@ -2894,6 +2928,13 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
       zones.push({ id: selectedZone, name: formatZoneDisplayName(selectedZone) || selectedZone });
     }
   }
+
+  // Summary counts for all unique sailors in the report
+  const seenReportSailorKeys = new Set();
+  const reportSailorCounts = {
+    PO: 0, LME: 0, MA: 0, PA: 0, CA: 0, AL: 0, SW: 0, PL: 0, WE: 0, BB: 0, WR: 0
+  };
+  let totalReportStrength = 0;
 
   let rowsHtml = "";
   zones.forEach((z) => {
@@ -2932,6 +2973,7 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
     wos.forEach((wo) => {
       const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
       if (sailors && sailors.length > 0) {
+        const isActualInCharge = (wo.description || "").toLowerCase().trim() === "in charge";
         const workTitle = (wo.description || wo.title || wo.reference_no || wo.job_no || "Active Work").trim();
         zoneRowsHtml += `
           <tr style="background-color: #f1f5f9; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
@@ -2955,6 +2997,19 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
               <td style="text-align:center;">${escapeHtml(s.trade || "—")}</td>
             </tr>
           `;
+
+          // Tally unique sailors for the strength summary table
+          const sKey = String(s.id || s._fbKey || s.official_number || s.service_no || s.name || "");
+          if (sKey && !seenReportSailorKeys.has(sKey)) {
+            seenReportSailorKeys.add(sKey);
+            const col = classifySailorForSummary(s, isActualInCharge);
+            if (reportSailorCounts[col] !== undefined) {
+              reportSailorCounts[col]++;
+            } else {
+              reportSailorCounts.MA++;
+            }
+            totalReportStrength++;
+          }
         });
       }
     });
@@ -2996,7 +3051,14 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
         .daily-details-table th, .daily-details-table td { border: 1px solid #94a3b8; padding: 6px 8px; text-align: left; vertical-align: middle; }
         .daily-details-table th { background: #f1f5f9; color: #1e293b; font-weight: bold; text-transform: uppercase; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         
-        .daily-details-signatures { margin-top: 50px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
+        .daily-details-summary { margin-top: 18px; margin-bottom: 22px; page-break-inside: avoid; }
+        .daily-details-summary table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; border: 1.5px solid #0f172a; }
+        .daily-details-summary th, .daily-details-summary td { border: 1px solid #0f172a; padding: 5px 2px; text-align: center; vertical-align: middle; }
+        .daily-details-summary th { background-color: #f8fafc; color: #0f172a; font-weight: 700; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .daily-details-summary td { font-weight: 700; font-size: 11px; color: #0f172a; }
+        .daily-details-summary .summary-total { background-color: #f1f5f9; font-weight: 800; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+        .daily-details-signatures { margin-top: 25px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
         .daily-details-sig { text-align: center; width: 220px; }
         .daily-details-sig p { margin: 2px 0; }
         
@@ -3038,6 +3100,44 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
         </tbody>
       </table>
       
+      <!-- ZONE STRENGTH SUMMARY TABLE -->
+      <div class="daily-details-summary">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 8.33%;">PO</th>
+              <th style="width: 8.33%;">LME</th>
+              <th style="width: 8.33%;">MA</th>
+              <th style="width: 8.33%;">PA</th>
+              <th style="width: 8.33%;">CA</th>
+              <th style="width: 8.33%;">AL</th>
+              <th style="width: 8.33%;">SW</th>
+              <th style="width: 8.33%;">PL</th>
+              <th style="width: 8.33%;">WE</th>
+              <th style="width: 8.33%;">BB</th>
+              <th style="width: 8.33%;">WR</th>
+              <th style="width: 8.33%;" class="summary-total">TOTAL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${String(reportSailorCounts.PO || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.LME || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.MA || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.PA || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.CA || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.AL || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.SW || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.PL || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.WE || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.BB || 0).padStart(2, "0")}</td>
+              <td>${String(reportSailorCounts.WR || 0).padStart(2, "0")}</td>
+              <td class="summary-total">${String(totalReportStrength || 0).padStart(2, "0")}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
       <div class="daily-details-signatures">
         <div class="daily-details-sig">
           <p>..................................................</p>
