@@ -105,51 +105,54 @@
 </head>
 <body class="min-h-screen flex flex-col antialiased select-none pb-16">
 
-    <!-- TOP HEADER -->
-    <header class="sticky top-0 z-40 bg-[#0a1628] border-b border-teal-500/30 px-3 py-2 flex items-center justify-between shadow-md text-white">
-        <div class="flex items-center gap-2">
-            <div class="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-slate-900 border border-teal-500/30 p-0.5 shrink-0">
-                <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
-            </div>
-            <div>
-                <div class="flex items-center gap-1.5">
-                    <h1 class="text-xs font-black tracking-tight text-white">CMSys</h1>
-                    <span class="text-[9px] font-black bg-teal-500/20 text-teal-300 border border-teal-500/40 px-1.5 py-0.2 rounded uppercase">LIGHT</span>
+    <!-- STICKY TOP APP BAR (HEADER + ZONE/DATE) -->
+    <div class="sticky top-0 z-40 shadow-sm">
+        <!-- TOP HEADER -->
+        <header class="bg-[#0a1628] border-b border-teal-500/30 px-3 py-2 flex items-center justify-between shadow-md text-white">
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-8 rounded-lg overflow-hidden flex items-center justify-center bg-slate-900 border border-teal-500/30 p-0.5 shrink-0">
+                    <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
                 </div>
-                <p class="text-[9px] text-slate-400 font-medium">Fast Field Portal</p>
+                <div>
+                    <div class="flex items-center gap-1.5">
+                        <h1 class="text-xs font-black tracking-tight text-white">CMSys</h1>
+                        <span class="text-[9px] font-black bg-teal-500/20 text-teal-300 border border-teal-500/40 px-1.5 py-0.2 rounded uppercase">LIGHT</span>
+                    </div>
+                    <p class="text-[9px] text-slate-400 font-medium">Fast Field Portal</p>
+                </div>
             </div>
-        </div>
 
-        <div class="flex items-center gap-1.5">
-            <button type="button" onclick="refreshLightData()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 active-scale" title="Refresh">
-                🔄
-            </button>
-        </div>
-    </header>
+            <div class="flex items-center gap-1.5">
+                <button type="button" onclick="refreshLightData()" class="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 active-scale" title="Refresh">
+                    🔄
+                </button>
+            </div>
+        </header>
 
-    <!-- ZONE & DATE BAR -->
-    <section class="bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-2 flex items-center justify-between gap-2 shadow-xs">
-        <!-- Zone Selector -->
-        <div class="flex items-center gap-1.5 min-w-0 flex-1">
-            <span class="text-xs">📍</span>
-            <select id="mlZoneSelect" onchange="changeLightZone(this.value)" class="bg-slate-50 text-teal-800 font-bold text-xs border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:border-teal-600 truncate w-full">
-                <!-- Injected via JS -->
-            </select>
-        </div>
+        <!-- ZONE & DATE BAR -->
+        <section class="bg-white/95 backdrop-blur border-b border-slate-200 px-3 py-2 flex items-center justify-between gap-2 shadow-xs">
+            <!-- Zone Selector -->
+            <div class="flex items-center gap-1.5 min-w-0 flex-1">
+                <span class="text-xs">📍</span>
+                <select id="mlZoneSelect" onchange="changeLightZone(this.value)" class="bg-slate-50 text-teal-800 font-bold text-xs border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:border-teal-600 truncate w-full">
+                    <!-- Injected via JS -->
+                </select>
+            </div>
 
-        <!-- Date Display / Switcher -->
-        <!-- Zone Sailors Count Badge (pic - 04) -->
-        <div id="mlZoneSailorBadge" class="flex items-center gap-1 bg-teal-50 border border-teal-200 px-2 py-1 rounded-lg text-teal-800 text-[10px] font-black shrink-0 shadow-xs" title="Sailors assigned to this Zone">
-            <span>⚓</span>
-            <span id="mlZoneSailorCount">0</span>
-            <span class="text-[9px] font-bold text-teal-700">Sailors</span>
-        </div>
+            <!-- Date Display / Switcher -->
+            <!-- Zone Sailors Count Badge (pic - 04) -->
+            <div id="mlZoneSailorBadge" class="flex items-center gap-1 bg-teal-50 border border-teal-200 px-2 py-1 rounded-lg text-teal-800 text-[10px] font-black shrink-0 shadow-xs" title="Sailors assigned to this Zone">
+                <span>⚓</span>
+                <span id="mlZoneSailorCount">0</span>
+                <span class="text-[9px] font-bold text-teal-700">Sailors</span>
+            </div>
 
-        <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg shrink-0">
-            <span class="text-xs">📅</span>
-            <input type="date" id="mlDatePicker" onchange="changeLightDate(this.value)" class="bg-transparent text-[11px] font-bold text-slate-800 border-0 p-0 focus:ring-0 cursor-pointer">
-        </div>
-    </section>
+            <div class="flex items-center gap-1 bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg shrink-0">
+                <span class="text-xs">📅</span>
+                <input type="date" id="mlDatePicker" onchange="changeLightDate(this.value)" class="bg-transparent text-[11px] font-bold text-slate-800 border-0 p-0 focus:ring-0 cursor-pointer">
+            </div>
+        </section>
+    </div>
 
     <!-- MAIN VIEWS CONTAINER -->
     <main class="flex-1 p-3 space-y-3 touch-scroll overflow-y-auto">
@@ -1164,6 +1167,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=2.2.1"></script>
+    <script src="mobile.js?v=2.2.2"></script>
 </body>
 </html>

@@ -9,12 +9,12 @@
           "value": "cmsys-beta.vercel.app"
         }
       ],
-      "destination": "/mobile-beta",
+      "destination": "/mobile-beta?zone=A-Zone",
       "permanent": false
     },
     {
       "source": "/",
-      "destination": "/mobile",
+      "destination": "/mobile?zone=A-Zone",
       "permanent": false
     }
   ]

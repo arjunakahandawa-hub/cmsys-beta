@@ -105,7 +105,7 @@ function findSailor(sid) {
 
 // Global Mobile Store
 const mlStore = {
-  currentZone: (new URLSearchParams(window.location.search).get("zone")) || localStorage.getItem("ncw_saved_zone") || "A-Zone",
+  currentZone: (new URLSearchParams(window.location.search).get("zone")) || "A-Zone",
   selectedDate: getLocalDateString(),
   selectedWoType: "ALL",
   workOrders: [],
@@ -200,6 +200,8 @@ function initLightApp() {
   const qZ = new URLSearchParams(window.location.search).get("zone");
   if (qZ && STANDARD_ZONES.some(z => z.id === qZ)) {
     mlStore.currentZone = qZ;
+  } else if (!mlStore.currentZone || !STANDARD_ZONES.some(z => z.id === mlStore.currentZone)) {
+    mlStore.currentZone = "A-Zone";
   }
 
   const zoneSelect = document.getElementById("mlZoneSelect");
@@ -224,7 +226,7 @@ function changeLightZone(z) {
   if (!z) return;
   if (z === mlStore.currentZone) return;
 
-  if (sessionStorage.getItem("ncw_mobile_zone_unlocked_" + z) === "true") {
+  if (z === "A-Zone" || sessionStorage.getItem("ncw_mobile_zone_unlocked_" + z) === "true") {
     applyZoneSwitch(z);
     return;
   }
