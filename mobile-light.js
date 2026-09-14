@@ -3031,6 +3031,36 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
     rowsHtml = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #64748b;">No allocations found for this selection on this date.</td></tr>`;
   }
 
+  // Build dynamic summary table showing ONLY relevant categories for this zone/date
+  let summaryHtml = "";
+  const STANDARD_SUMMARY_COLS = ["PO", "LME", "MA", "PA", "CA", "AL", "SW", "PL", "WE", "BB", "WR"];
+  const activeCols = STANDARD_SUMMARY_COLS.filter(col => (reportSailorCounts[col] || 0) > 0);
+  Object.keys(reportSailorCounts).forEach(k => {
+    if (reportSailorCounts[k] > 0 && !activeCols.includes(k)) {
+      activeCols.push(k);
+    }
+  });
+
+  if (activeCols.length > 0) {
+    const colWidth = (100 / (activeCols.length + 1)).toFixed(2);
+    const ths = activeCols.map(col => `<th style="width: ${colWidth}%;">${escapeHtml(col)}</th>`).join("") + `<th style="width: ${colWidth}%;" class="summary-total">TOTAL</th>`;
+    const tds = activeCols.map(col => `<td>${String(reportSailorCounts[col] || 0).padStart(2, "0")}</td>`).join("") + `<td class="summary-total">${String(totalReportStrength || 0).padStart(2, "0")}</td>`;
+
+    summaryHtml = `
+      <!-- ZONE STRENGTH SUMMARY TABLE (DYNAMIC ACTIVE CATEGORIES ONLY) -->
+      <div class="daily-details-summary">
+        <table>
+          <thead>
+            <tr>${ths}</tr>
+          </thead>
+          <tbody>
+            <tr>${tds}</tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   const scopeLabel = isAll ? "ALL ZONES" : "ZONE: " + (formatZoneDisplayName(selectedZone) || selectedZone).toUpperCase();
   const logoSrc = "logo.png";
 
@@ -3052,9 +3082,9 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
         .daily-details-table th { background: #f1f5f9; color: #1e293b; font-weight: bold; text-transform: uppercase; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         
         .daily-details-summary { margin-top: 18px; margin-bottom: 22px; page-break-inside: avoid; }
-        .daily-details-summary table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; border: 1.5px solid #0f172a; }
-        .daily-details-summary th, .daily-details-summary td { border: 1px solid #0f172a; padding: 5px 2px; text-align: center; vertical-align: middle; }
-        .daily-details-summary th { background-color: #f8fafc; color: #0f172a; font-weight: 700; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .daily-details-summary table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; border: 1.5px solid #0f172a; table-layout: fixed; }
+        .daily-details-summary th, .daily-details-summary td { border: 1px solid #0f172a; padding: 6px 4px; text-align: center; vertical-align: middle; }
+        .daily-details-summary th { background-color: #f8fafc; color: #0f172a; font-weight: 700; font-size: 10.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .daily-details-summary td { font-weight: 700; font-size: 11px; color: #0f172a; }
         .daily-details-summary .summary-total { background-color: #f1f5f9; font-weight: 800; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
@@ -3100,43 +3130,7 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
         </tbody>
       </table>
       
-      <!-- ZONE STRENGTH SUMMARY TABLE -->
-      <div class="daily-details-summary">
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 8.33%;">PO</th>
-              <th style="width: 8.33%;">LME</th>
-              <th style="width: 8.33%;">MA</th>
-              <th style="width: 8.33%;">PA</th>
-              <th style="width: 8.33%;">CA</th>
-              <th style="width: 8.33%;">AL</th>
-              <th style="width: 8.33%;">SW</th>
-              <th style="width: 8.33%;">PL</th>
-              <th style="width: 8.33%;">WE</th>
-              <th style="width: 8.33%;">BB</th>
-              <th style="width: 8.33%;">WR</th>
-              <th style="width: 8.33%;" class="summary-total">TOTAL</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td>${String(reportSailorCounts.PO || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.LME || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.MA || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.PA || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.CA || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.AL || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.SW || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.PL || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.WE || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.BB || 0).padStart(2, "0")}</td>
-              <td>${String(reportSailorCounts.WR || 0).padStart(2, "0")}</td>
-              <td class="summary-total">${String(totalReportStrength || 0).padStart(2, "0")}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      ${summaryHtml}
 
       <div class="daily-details-signatures">
         <div class="daily-details-sig">
