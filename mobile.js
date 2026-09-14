@@ -2241,6 +2241,325 @@ function editCurrentEstimateMobile() {
   if (key) openNewEstimateModalMobile(key);
 }
 
+// ── ESTIMATE PDF EXPORT & PRINT FOR MOBILE (ON-DEMAND / ZERO-LAG) ──
+function loadHtml2PdfMobile(callback) {
+  if (typeof html2pdf !== "undefined") {
+    return callback();
+  }
+  showLightToast("Loading PDF engine...", "⏳");
+  const script = document.createElement("script");
+  script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+  script.onload = () => {
+    callback();
+  };
+  script.onerror = () => {
+    showLightToast("Failed to load PDF library. Opening Print view...", "⚠️");
+    printCurrentEstimateMobile();
+  };
+  document.head.appendChild(script);
+}
+
+function buildEstimatePrintHTMLMobile(est) {
+  const zoneObj = (mlStore.zones || []).find(z => z.id === (est.zone_id || mlStore.currentZone));
+  const zoneName = zoneObj && zoneObj.name ? zoneObj.name : (mlStore.currentZone || "Civil Engineering Department");
+
+  const sigBlock = (label, p) => `
+    <div style="text-align:center;width:30%;">
+      <div style="height:36px;border-bottom:1.5px solid #0f172a;margin-bottom:4px;"></div>
+      <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#0f172a;">${label}</div>
+      <div style="font-size:11px;font-weight:700;color:#1e293b;margin-top:2px;">${p && p.name ? escapeHtml(p.name) : "&nbsp;"}</div>
+      <div style="font-size:10px;color:#475569;font-weight:600;">${p && p.rank ? escapeHtml(p.rank) : ""}${p && (p.serviceNo || p.official_number) ? " • " + escapeHtml(p.serviceNo || p.official_number) : ""}</div>
+    </div>`;
+
+  let sectionsHtml = "";
+  if (est.workScopes && est.workScopes.length > 0) {
+    est.workScopes.forEach((s, sIdx) => {
+      const matRows = (s.materials || []).map((m, i) => `
+        <tr>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:6%;font-weight:600;">${i + 1}</td>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;font-weight:600;color:#0f172a;">${escapeHtml(m.description || m.name || "")}</td>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:10%;font-weight:700;">${m.qty || 1}</td>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:10%;">${escapeHtml(m.unit || 'Nos')}</td>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:right;width:17%;font-family:monospace;font-weight:600;">${formatCurrency(m.cost || m.rate || 0)}</td>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:right;width:20%;font-family:monospace;font-weight:800;color:#0f172a;">${formatCurrency((m.qty || 1) * (m.cost || 0))}</td>
+        </tr>`).join("");
+
+      const labRows = (s.labor || []).map(l => `
+        <tr>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;font-weight:700;color:#0f172a;">${escapeHtml(l.trade || "Worker")}</td>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:20%;font-weight:700;">${l.workers || 1}</td>
+          <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:20%;font-weight:800;color:#2563eb;">${l.manDays || l.man_days || 0}</td>
+        </tr>`).join("");
+
+      const sTotalCost = (s.materials || []).reduce((sum, m) => sum + ((m.qty || 1) * (m.cost || 0)), 0);
+
+      sectionsHtml += `
+        <div style="margin-top:8px;border:1px solid #cbd5e1;border-radius:6px;padding:8px;background:#fafbfc;page-break-inside:avoid;">
+          <div style="font-size:11px;font-weight:800;border-bottom:1px solid #94a3b8;padding-bottom:3px;margin-bottom:6px;text-transform:uppercase;color:#0f172a;display:flex;justify-content:space-between;">
+            <span>📌 Section ${sIdx + 1}: ${escapeHtml(s.description || "Scope")}</span>
+            <span style="color:#059669;font-family:monospace;">Cost: Rs. ${formatCurrency(sTotalCost)}</span>
+          </div>
+          ${matRows ? `
+            <table class="est-table" style="width:100%;border-collapse:collapse;font-size:10px;margin-bottom:6px;">
+              <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #94a3b8;padding:3px 5px;width:6%;text-align:center;">#</th><th style="border:1px solid #94a3b8;padding:3px 5px;text-align:left;">Material</th><th style="border:1px solid #94a3b8;padding:3px 5px;width:10%;text-align:center;">Qty</th><th style="border:1px solid #94a3b8;padding:3px 5px;width:10%;text-align:center;">Unit</th><th style="border:1px solid #94a3b8;padding:3px 5px;width:17%;text-align:right;">Cost</th><th style="border:1px solid #94a3b8;padding:3px 5px;width:20%;text-align:right;">Total</th></tr></thead>
+              <tbody>${matRows}</tbody>
+            </table>` : ""}
+          ${labRows ? `
+            <table class="est-table" style="width:100%;border-collapse:collapse;font-size:10px;">
+              <thead><tr style="background:#f1f5f9;"><th style="border:1px solid #94a3b8;padding:3px 5px;text-align:left;">Trade</th><th style="border:1px solid #94a3b8;padding:3px 5px;width:20%;text-align:center;">Workers</th><th style="border:1px solid #94a3b8;padding:3px 5px;width:20%;text-align:center;">Man-Days</th></tr></thead>
+              <tbody>${labRows}</tbody>
+            </table>` : ""}
+        </div>`;
+    });
+  } else {
+    const materials = Array.isArray(est.materials) ? est.materials : (est.materials ? Object.values(est.materials) : []);
+    const matRows = materials.length > 0
+      ? materials.map((m, i) => `
+          <tr>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:6%;font-weight:600;">${i + 1}</td>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;font-weight:600;color:#0f172a;">${escapeHtml(m.description || m.name || "")}</td>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:10%;font-weight:700;">${m.qty || 1}</td>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:10%;">${escapeHtml(m.unit || 'Nos')}</td>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:right;width:17%;font-family:monospace;font-weight:600;">${formatCurrency(m.cost || m.rate || 0)}</td>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:right;width:20%;font-family:monospace;font-weight:800;color:#0f172a;">${formatCurrency(m.total || ((m.qty || 1) * (m.cost || 0)))}</td>
+          </tr>`).join("")
+      : '<tr><td colspan="6" style="border:1px solid #cbd5e1;text-align:center;font-style:italic;padding:8px;color:#94a3b8;">No materials specified</td></tr>';
+
+    const labor = Array.isArray(est.labor) ? est.labor : (est.labor ? Object.values(est.labor) : []);
+    const labRows = labor.length > 0
+      ? labor.map(l => `
+          <tr>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;font-weight:700;color:#0f172a;">${escapeHtml(l.trade || "Worker")}</td>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:20%;font-weight:700;">${l.workers || 1}</td>
+            <td style="border:1px solid #cbd5e1;padding:4px 6px;text-align:center;width:20%;font-weight:800;color:#2563eb;">${l.manDays || l.man_days || 0}</td>
+          </tr>`).join("")
+      : '<tr><td colspan="3" style="border:1px solid #cbd5e1;text-align:center;font-style:italic;padding:8px;color:#94a3b8;">No labor specified</td></tr>';
+
+    sectionsHtml = `
+      <div style="margin-top:8px;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#0f172a;margin-bottom:4px;display:flex;justify-content:space-between;">
+          <span>📦 Materials Required</span>
+          <span style="font-family:monospace;color:#059669;">Total: Rs. ${formatCurrency(est.total_cost || 0)}</span>
+        </div>
+        <table class="est-table" style="width:100%;border-collapse:collapse;font-size:10.5px;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="border:1px solid #94a3b8;padding:4px 6px;width:6%;text-align:center;">#</th>
+              <th style="border:1px solid #94a3b8;padding:4px 6px;text-align:left;">Material Description</th>
+              <th style="border:1px solid #94a3b8;padding:4px 6px;width:10%;text-align:center;">Qty</th>
+              <th style="border:1px solid #94a3b8;padding:4px 6px;width:10%;text-align:center;">Unit</th>
+              <th style="border:1px solid #94a3b8;padding:4px 6px;width:17%;text-align:right;">Unit Cost (Rs)</th>
+              <th style="border:1px solid #94a3b8;padding:4px 6px;width:20%;text-align:right;">Total (Rs)</th>
+            </tr>
+          </thead>
+          <tbody>${matRows}</tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div style="font-size:11px;font-weight:800;text-transform:uppercase;color:#0f172a;margin-bottom:4px;display:flex;justify-content:space-between;">
+          <span>👷 Labor Requirements</span>
+          <span style="font-family:monospace;color:#2563eb;">Total: ${est.totalManDays || est.manDays || 0} Man-Days</span>
+        </div>
+        <table class="est-table" style="width:100%;border-collapse:collapse;font-size:10.5px;">
+          <thead>
+            <tr style="background:#f1f5f9;">
+              <th style="border:1px solid #94a3b8;padding:4px 6px;text-align:left;">Trade / Skill</th>
+              <th style="border:1px solid #94a3b8;padding:4px 6px;width:20%;text-align:center;">Workers</th>
+              <th style="border:1px solid #94a3b8;padding:4px 6px;width:20%;text-align:center;">Man-Days</th>
+            </tr>
+          </thead>
+          <tbody>${labRows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  const createdDate = est.created_at
+    ? (typeof est.created_at === "number" ? new Date(est.created_at).toISOString().split("T")[0] : String(est.created_at).split("T")[0])
+    : new Date().toISOString().split("T")[0];
+
+  const hasSignatures = est.createdBy || est.checkedBy || est.approvedBy;
+  const sigSection = hasSignatures ? `
+    <div style="display:flex;justify-content:space-between;margin-top:20px;padding-top:10px;page-break-inside:avoid;">
+      ${sigBlock("Created By", est.createdBy)}
+      ${sigBlock("Checked By", est.checkedBy)}
+      ${sigBlock("Approved By", est.approvedBy)}
+    </div>` : "";
+
+  return `
+    <div class="est-sheet" style="font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;background:#fff;padding:14px 16px;border:1.5px solid #0f172a;border-radius:8px;box-sizing:border-box;">
+      <!-- Header -->
+      <div style="width:100%;border-bottom:2px solid #0f172a;padding-bottom:10px;margin-bottom:10px;">
+        <table style="width:100%;border:none;border-collapse:collapse;">
+          <tr>
+            <td style="border:none;padding:0;width:52px;vertical-align:middle;">
+              <img src="images/navy_crest_cropped.png" onerror="this.onerror=null;this.src='logo.png'" style="height:48px;width:auto;display:block;" alt="SLN Crest">
+            </td>
+            <td style="border:none;padding:0 0 0 12px;vertical-align:middle;">
+              <div style="font-size:15px;font-weight:900;letter-spacing:0.5px;color:#0f172a;line-height:1.2;">CAPTAIN CIVIL ENGINEERING DEPARTMENT (E)</div>
+              <div style="font-size:11.5px;font-weight:700;color:#334155;margin-top:2px;">${escapeHtml(zoneName)} — Cost Estimate & Bill of Quantities</div>
+            </td>
+            <td style="border:none;padding:0;text-align:right;vertical-align:middle;">
+              <div style="font-size:14px;font-weight:900;color:#b91c1c;font-family:monospace;">${escapeHtml(est.estimate_number || "EST/--")}</div>
+              <div style="font-size:11px;color:#475569;font-weight:600;font-family:monospace;margin-top:2px;">Date: ${createdDate}</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Info Grid -->
+      <table style="width:100%;font-size:11px;line-height:1.6;margin-bottom:8px;border:none;border-collapse:collapse;">
+        <tr>
+          <td style="border:none;padding:2px 0;width:34%;color:#1e293b;"><b>Ref Type:</b> ${escapeHtml(est.ref_type || est.reference_type || "Minute Sheet")}</td>
+          <td style="border:none;padding:2px 0;width:38%;color:#1e293b;"><b>Ref No:</b> ${escapeHtml(est.reference_no || est.reference_doc || "—")}</td>
+          <td style="border:none;padding:2px 0;width:28%;text-align:right;color:#1e293b;"><b>Type:</b> ${escapeHtml(est.project_type || est.type || "PROJECT")}</td>
+        </tr>
+        <tr>
+          <td style="border:none;padding:2px 0;color:#1e293b;"><b>Location:</b> ${escapeHtml(est.location || "—")}</td>
+          <td style="border:none;padding:2px 0;color:#1e293b;"><b>Site 2:</b> ${escapeHtml(est.location2 || est.sub_location || "—")}</td>
+          <td style="border:none;padding:2px 0;text-align:right;color:#1e293b;"><b>End User:</b> ${escapeHtml(est.endUser || est.end_user || "—")}</td>
+        </tr>
+        <tr>
+          <td colspan="3" style="border:none;padding:4px 0;color:#0f172a;font-size:11.5px;border-top:1px dashed #cbd5e1;margin-top:3px;">
+            <b>Description / Scope:</b> ${escapeHtml(est.description || est.workScope || "—")}
+            ${est.approvedAuthority ? ` &nbsp;|&nbsp; <b>Approval Authority:</b> ${escapeHtml(est.approvedAuthority)}` : ""}
+          </td>
+        </tr>
+      </table>
+
+      ${sectionsHtml}
+
+      <!-- Grand Summary Bar -->
+      <div style="margin-top:12px;border:1.5px solid #0f172a;border-radius:6px;padding:8px 12px;background:#f8fafc;display:flex;justify-content:space-between;align-items:center;font-size:11.5px;page-break-inside:avoid;">
+        <span>Materials: <strong style="color:#059669;font-family:monospace;">Rs. ${formatCurrency(est.total_cost || 0)}</strong></span>
+        <span>Labor: <strong style="color:#2563eb;">${est.totalManDays || est.manDays || 0} Man-Days</strong></span>
+        <span>Grand Total: <strong style="color:#b45309;font-weight:900;font-family:monospace;font-size:13px;">Rs. ${formatCurrency(est.total_cost || 0)}</strong></span>
+      </div>
+
+      <!-- Signatures -->
+      ${sigSection}
+    </div>`;
+}
+
+function exportCurrentEstimatePDFMobile(specificKey) {
+  const estKey = specificKey || mlStore.selectedEstKey;
+  if (!estKey) {
+    showLightToast("Please open an estimate first", "⚠️");
+    return;
+  }
+  const est = (mlStore.estimates || []).find(e => String(e._fbKey) === String(estKey) || String(e.id) === String(estKey));
+  if (!est) {
+    showLightToast("Estimate details not found", "❌");
+    return;
+  }
+
+  // Show sleek overlay spinner
+  let overlay = document.getElementById("mlPdfLoadingOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "mlPdfLoadingOverlay";
+    overlay.className = "fixed inset-0 z-[100000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4";
+    overlay.innerHTML = `
+      <div class="bg-white rounded-2xl p-5 shadow-2xl flex flex-col items-center gap-3 max-w-xs text-center border border-slate-200">
+        <div class="w-9 h-9 border-3 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+        <p class="font-bold text-slate-800 text-xs sm:text-sm">PDF එක සකස් වෙමින් පවතී...</p>
+        <p class="text-[10px] text-slate-500">Generating PDF, please wait...</p>
+      </div>`;
+    document.body.appendChild(overlay);
+  } else {
+    overlay.classList.remove("hidden");
+  }
+
+  loadHtml2PdfMobile(() => {
+    const tempDiv = document.createElement("div");
+    tempDiv.style.position = "absolute";
+    tempDiv.style.top = "0";
+    tempDiv.style.left = "0";
+    tempDiv.style.zIndex = "99998";
+    tempDiv.style.width = "794px";
+    tempDiv.style.backgroundColor = "#ffffff";
+    tempDiv.innerHTML = `
+      <style>
+        .est-table th { border: 1px solid #94a3b8; padding: 4px 6px; background: #f1f5f9; text-align: left; font-size: 10px; font-weight: bold; color: #0f172a; }
+        .est-table td { border: 1px solid #cbd5e1; padding: 4px 6px; word-wrap: break-word; font-size: 10px; color: #1e293b; }
+      </style>
+      ${buildEstimatePrintHTMLMobile(est)}
+    `;
+    document.body.appendChild(tempDiv);
+
+    const safeNumber = (est.estimate_number || "EST").replace(/[^a-zA-Z0-9]/g, "_");
+    const opt = {
+      margin: [8, 10, 8, 10],
+      filename: `Estimate_${safeNumber}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: 794,
+        width: 794
+      },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+    };
+
+    html2pdf()
+      .set(opt)
+      .from(tempDiv)
+      .save()
+      .then(() => {
+        if (overlay && document.body.contains(overlay)) overlay.remove();
+        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
+        showLightToast("PDF exported successfully! ✅", "✅");
+      })
+      .catch(err => {
+        console.error("PDF Export Error:", err);
+        if (overlay && document.body.contains(overlay)) overlay.remove();
+        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
+        showLightToast("Direct download failed. Opening Print view...", "⚠️");
+        printCurrentEstimateMobile(estKey);
+      });
+  });
+}
+
+function printCurrentEstimateMobile(specificKey) {
+  const estKey = specificKey || mlStore.selectedEstKey;
+  if (!estKey) return;
+  const est = (mlStore.estimates || []).find(e => String(e._fbKey) === String(estKey) || String(e.id) === String(estKey));
+  if (!est) return;
+
+  const printWin = window.open("", "_blank");
+  if (!printWin) {
+    window.print();
+    return;
+  }
+  printWin.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${escapeHtml(est.estimate_number || "Estimate")}</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        @page { size: A4 portrait; margin: 8mm 10mm; }
+        body { margin: 0; padding: 12px; font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #0f172a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .est-table th { border: 1px solid #94a3b8; padding: 4px 6px; background: #f1f5f9; text-align: left; font-size: 10px; font-weight: bold; color: #0f172a; }
+        .est-table td { border: 1px solid #cbd5e1; padding: 4px 6px; font-size: 10px; color: #1e293b; }
+      </style>
+    </head>
+    <body>
+      ${buildEstimatePrintHTMLMobile(est)}
+      <script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+          }, 300);
+        };
+      <\/script>
+    </body>
+    </html>
+  `);
+  printWin.document.close();
+}
+
 // ── SIGNATORY AUTOCOMPLETE FOR MOBILE (FIND & SEARCH) ──
 function setupMobileSignatoryAutocomplete(prefix) {
   const nameInput = document.getElementById(`mlEst${prefix}Name`);
