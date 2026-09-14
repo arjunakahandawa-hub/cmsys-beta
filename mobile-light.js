@@ -77,6 +77,8 @@ const mlStore = {
   workOrders: [],
   sailors: [],
   dailyAllocations: [],
+  jobCards: [],
+  availability: {},
   estimates: [],
   locations: [],
   lmdRecords: [],
@@ -311,60 +313,276 @@ function normalizeSailor(s, idx) {
 }
 
 // ---------------------------------------------
-// TOP BAR: ZONE SAILORS COUNT (PIC - 04)
+// TOP BAR: ZONE SAILORS COUNT (DESKTOP ALIGNED - PIC 02)
 // ---------------------------------------------
-function updateZoneSailorCount() {
-  const currentZone = mlStore.currentZone;
-  const targetDate = mlStore.selectedDate || getLocalDateString();
-  const allSailors = mlStore.sailors || [];
+function isAdminStaffDuties(zoneId) {
+  if (!zoneId) return false;
+  const s = String(zoneId).toLowerCase();
+  return s.includes("admin") && s.includes("staff");
+}
 
-  if (allSailors.length === 0) {
-    const countEl = document.getElementById("mlZoneSailorCount");
-    if (countEl) countEl.textContent = "0";
-    return;
+function isLeaveCode(val) {
+  if (!val) return false;
+  const str = typeof val === "string" ? val.trim() : String(val).trim();
+  return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
+}
+
+function isWorkOrderActiveOnDate(wo, dateStr) {
+  if (!wo) return false;
+  const today = getLocalDateString();
+  if (!dateStr) dateStr = today;
+
+  const woIdStr = String(wo.id || "");
+  const woFbKeyStr = String(wo._fbKey || "");
+  const woRefStr = String(wo.reference_no || "");
+  const woJobNoStr = String(wo.job_no || "");
+  const woDescStr = String(wo.description || "").trim().toLowerCase();
+
+  const hasAllocations = (mlStore.dailyAllocations || []).some((a) => {
+    if (!a || a.date !== dateStr || a.status === "Cancelled") return false;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    return (
+      (woIdStr && aWoId === woIdStr) ||
+      (woFbKeyStr && aWoId === woFbKeyStr) ||
+      (woRefStr && aWoId === woRefStr) ||
+      (woJobNoStr && aWoId === woJobNoStr) ||
+      (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)))
+    );
+  });
+  if (hasAllocations) return true;
+
+  if (wo.type === "TASK" && !wo.assign_type) {
+    if (wo.created_at) {
+      try {
+        const cd = new Date(wo.created_at);
+        if (!isNaN(cd.getTime())) {
+          const createdDate = cd.toISOString().split("T")[0];
+          if (createdDate < dateStr && !hasAllocations) return false;
+        }
+      } catch (e) {}
+    }
   }
 
-  // 1. Direct zone sailors
-  const directZoneSailors = allSailors.filter(s => {
-    const z = s.zone_assigned || s.zone || s.zoneId || s.zone_id || s.location || s.current_zone || "";
-    return isZoneMatch(z, currentZone);
+  if (wo.created_at) {
+    try {
+      const d = new Date(wo.created_at);
+      if (!isNaN(d.getTime())) {
+        const createdDate = d.toISOString().split("T")[0];
+        if (createdDate <= dateStr) {
+          if (wo.status === "Completed") return false;
+          return true;
+        }
+      }
+    } catch (e) {}
+  }
+
+  return wo.status === "Active" || wo.status === "In Progress" || wo.status === "Pending" || !wo.status;
+}
+
+function getWorkOrderAssignedSailors(wo, dateStr) {
+  if (!wo) return { sailors: [] };
+  const today = getLocalDateString();
+  if (!dateStr) dateStr = today;
+
+  const extractKeys = (val) => {
+    const keys = [];
+    if (!val) return keys;
+    if (Array.isArray(val)) {
+      val.forEach((item) => {
+        if (!item) return;
+        if (typeof item === "object") {
+          if (item.id) keys.push(String(item.id));
+          if (item._fbKey) keys.push(String(item._fbKey));
+          if (item.sailor_id) keys.push(String(item.sailor_id));
+          if (item.official_number) keys.push(String(item.official_number));
+          if (item.service_no) keys.push(String(item.service_no));
+        } else {
+          keys.push(String(item).trim());
+        }
+      });
+    } else if (typeof val === "object") {
+      Object.keys(val).forEach(k => keys.push(String(k).trim()));
+      Object.values(val).forEach(v => {
+        if (!v) return;
+        if (typeof v === "object") {
+          if (v.id) keys.push(String(v.id));
+          if (v._fbKey) keys.push(String(v._fbKey));
+          if (v.sailor_id) keys.push(String(v.sailor_id));
+        } else if (typeof v === "string" || typeof v === "number") {
+          keys.push(String(v).trim());
+        }
+      });
+    }
+    return keys;
+  };
+
+  const assignedKeys = new Set();
+  if (wo.status === "Active" || wo.status === "Pending" || !wo.status || wo.status === "In Progress") {
+    extractKeys(wo.assigned).forEach(k => assignedKeys.add(k));
+  }
+
+  const woIdStr = String(wo.id || "");
+  const woFbKeyStr = String(wo._fbKey || "");
+  const woRefStr = String(wo.reference_no || "");
+  const woJobNoStr = String(wo.job_no || "");
+  const woDescStr = String(wo.description || "").trim().toLowerCase();
+
+  (mlStore.dailyAllocations || []).forEach(a => {
+    if (!a || a.date !== dateStr || a.status === "Cancelled") return;
+    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    const isWoMatch =
+      (woIdStr && aWoId === woIdStr) ||
+      (woFbKeyStr && aWoId === woFbKeyStr) ||
+      (woRefStr && aWoId === woRefStr) ||
+      (woJobNoStr && aWoId === woJobNoStr) ||
+      (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)));
+    if (isWoMatch) {
+      const sid = a.sailor_id || a.sailorId || a.official_number || a.offNo || "";
+      if (sid) assignedKeys.add(String(sid).trim());
+    }
   });
 
-  // 2. Allocated to work orders or tasks in this zone on target date
-  const allocatedIds = new Set();
-  (mlStore.dailyAllocations || []).forEach(a => {
-    if (a && (!a.date || a.date === targetDate) && a.status !== "Cancelled") {
-      const aZone = a.zone_id || a.zone || a.zone_name || a.location || "";
-      if (isZoneMatch(aZone, currentZone)) {
-        const sid = a.sailor_id || a.sailorId || (a.sailor && (a.sailor.id || a.sailor._fbKey));
-        if (sid) allocatedIds.add(String(sid));
+  const resultSailors = [];
+  assignedKeys.forEach(k => {
+    const s = findSailor(k);
+    if (s) resultSailors.push(s);
+  });
+  return { sailors: resultSailors };
+}
+
+function getZoneActiveSailors(zoneId, dateVal) {
+  const currentZone = zoneId || mlStore.currentZone;
+  const targetDate = dateVal || mlStore.selectedDate || getLocalDateString();
+  const [yyyy, mm, dd] = targetDate.split("-");
+  const monthKey = `${yyyy}-${mm}`;
+  const dayKey = parseInt(dd, 10).toString();
+
+  const isZoneMatchLocal = (zField) => {
+    if (!zField) return false;
+    if (isAdminStaffDuties(currentZone)) return isAdminStaffDuties(zField);
+    return isZoneMatch(zField, currentZone);
+  };
+
+  const zoneSailorMap = new Map();
+
+  const addSailor = (s) => {
+    if (!s) return;
+    const fbStatus =
+      mlStore.availability &&
+      mlStore.availability[monthKey] &&
+      mlStore.availability[monthKey][dayKey]
+        ? mlStore.availability[monthKey][dayKey][s._fbKey] || mlStore.availability[monthKey][dayKey][s.id]
+        : null;
+    if (
+      isLeaveCode(fbStatus) ||
+      (!fbStatus && isLeaveCode(s.attendance))
+    ) {
+      return;
+    }
+    const key = String(s.id || s._fbKey || s.official_number || s.service_no || s.name || "");
+    if (key && !zoneSailorMap.has(key)) {
+      zoneSailorMap.set(key, s);
+    }
+  };
+
+  const addSailorById = (id) => {
+    if (!id) return;
+    if (typeof id === "object") {
+      addSailor(id);
+      return;
+    }
+    const s = findSailor(id);
+    if (s) addSailor(s);
+  };
+
+  // 1. Work Orders
+  (mlStore.workOrders || []).forEach((wo) => {
+    if (!wo || wo.status === "Cancelled" || wo.status === "Completed") return;
+    const zoneField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
+    if (isZoneMatchLocal(zoneField)) {
+      if (isWorkOrderActiveOnDate(wo, targetDate)) {
+        const { sailors: woSailors } = getWorkOrderAssignedSailors(wo, targetDate);
+        woSailors.forEach(addSailor);
       }
     }
   });
 
-  // Also check active work orders in current zone
-  (mlStore.workOrders || []).forEach(wo => {
-    if (wo && isZoneMatch(wo.zone_id || wo.zone, currentZone) && Array.isArray(wo.assigned)) {
-      wo.assigned.forEach(sid => { if (sid) allocatedIds.add(String(sid)); });
+  // 2. Job Cards
+  (mlStore.jobCards || []).forEach((jc) => {
+    if (!jc || jc.status === "Cancelled" || jc.status === "Completed") return;
+    const zoneField = jc.zone_id || jc.zone || jc.zoneId || jc.zone_name || jc.location_zone || jc.location;
+    if (isZoneMatchLocal(zoneField)) {
+      if (isWorkOrderActiveOnDate(jc, targetDate)) {
+        const { sailors: jcSailors } = getWorkOrderAssignedSailors(jc, targetDate);
+        jcSailors.forEach(addSailor);
+      }
     }
   });
 
-  // Set of unique sailor IDs belonging to this zone
-  const zoneSailorSet = new Set();
-  directZoneSailors.forEach(s => zoneSailorSet.add(String(s.id || s._fbKey)));
-  allocatedIds.forEach(id => zoneSailorSet.add(String(id)));
+  // 3. Daily Allocations recorded for targetDate
+  (mlStore.dailyAllocations || []).forEach((alloc) => {
+    if (!alloc || alloc.date !== targetDate || alloc.status === "Cancelled") return;
+    const sid = alloc.sailor_id || alloc.sailorId || alloc.official_number || alloc.offNo || "";
+    if (!sid) return;
 
-  let count = zoneSailorSet.size;
-  // If count is 0 because sailors in DB don't have zone_assigned explicitly specified
-  if (count === 0 && allSailors.length > 0) {
-    const anyHasOtherZone = allSailors.some(s => s.zone_assigned && !isZoneMatch(s.zone_assigned, currentZone));
-    if (!anyHasOtherZone) {
-      count = allSailors.length;
+    if (isZoneMatchLocal(alloc.zone_id || alloc.zone || alloc.zone_name || alloc.location)) {
+      addSailorById(sid);
+      return;
     }
-  }
+
+    if (alloc.work_order_id) {
+      const matchedWo = (mlStore.workOrders || []).find(
+        (w) =>
+          String(w.id) === String(alloc.work_order_id) ||
+          String(w._fbKey) === String(alloc.work_order_id) ||
+          (w.description && alloc.description && w.description.trim().toLowerCase() === alloc.description.trim().toLowerCase())
+      );
+      if (matchedWo && isZoneMatchLocal(matchedWo.zone_id || matchedWo.zone || matchedWo.zoneId || matchedWo.zone_name)) {
+        addSailorById(sid);
+        return;
+      }
+
+      const matchedJc = (mlStore.jobCards || []).find(
+        (j) =>
+          String(j.id) === String(alloc.work_order_id) ||
+          String(j._fbKey) === String(alloc.work_order_id) ||
+          (j.description && alloc.description && j.description.trim().toLowerCase() === alloc.description.trim().toLowerCase())
+      );
+      if (matchedJc && isZoneMatchLocal(matchedJc.zone_id || matchedJc.zone || matchedJc.zoneId || matchedJc.zone_name)) {
+        addSailorById(sid);
+        return;
+      }
+    }
+  });
+
+  return Array.from(zoneSailorMap.values());
+}
+
+function updateZoneSelectOptionsMobile() {
+  const zoneSelect = document.getElementById("mlZoneSelect");
+  if (!zoneSelect) return;
+  const targetDate = mlStore.selectedDate || getLocalDateString();
+  Array.from(zoneSelect.options).forEach(opt => {
+    const zid = opt.value;
+    const baseZone = STANDARD_ZONES.find(z => z.id === zid);
+    const baseName = baseZone ? baseZone.name : opt.text.split("(")[0].trim();
+    const sailors = getZoneActiveSailors(zid, targetDate);
+    opt.textContent = `${baseName} (🟢 ${sailors.length})`;
+  });
+}
+
+function updateZoneSailorCount() {
+  const currentZone = mlStore.currentZone;
+  const targetDate = mlStore.selectedDate || getLocalDateString();
+  const activeSailors = getZoneActiveSailors(currentZone, targetDate);
+  const count = activeSailors.length;
 
   const countEl = document.getElementById("mlZoneSailorCount");
   if (countEl) countEl.textContent = count;
+
+  updateZoneSelectOptionsMobile();
 }
 
 // ---------------------------------------------
@@ -417,6 +635,12 @@ function refreshLightData() {
 // ---------------------------------------------
 function loadLightData() {
   if (sailorsDB) {
+    sailorsDB.ref("availability").on("value", snap => {
+      mlStore.availability = snap.val() || {};
+      updateZoneSailorCount();
+      renderLightTasks();
+    });
+
     sailorsDB.ref("sailors").on("value", snap => {
       const d = snap.val();
       mlStore.sailors = [];
@@ -440,6 +664,18 @@ function loadLightData() {
   if (opsDB) {
     opsDB.ref("settings/zoneInCharges").on("value", snap => {
       mlStore.zoneInCharges = snap.val() || {};
+    });
+
+    opsDB.ref("job_cards").on("value", snap => {
+      const d = snap.val();
+      mlStore.jobCards = [];
+      if (d) {
+        Object.keys(d).forEach(k => {
+          if (d[k]) mlStore.jobCards.push({ id: k, _fbKey: k, ...d[k] });
+        });
+      }
+      updateZoneSailorCount();
+      renderLightTasks();
     });
 
     opsDB.ref("work_orders").on("value", snap => {
@@ -2547,6 +2783,297 @@ function printCurrentEstimateMobile(specificKey) {
     </head>
     <body>
       ${buildEstimatePrintHTMLMobile(est)}
+      <script>
+        window.onload = function() {
+          setTimeout(function() {
+            window.print();
+          }, 300);
+        };
+      <\/script>
+    </body>
+    </html>
+  `);
+  printWin.document.close();
+}
+
+// ── DAILY ZONE WORK ORDERS PDF EXPORT FOR HOME SCREEN (ON-DEMAND / ZERO-LAG) ──
+function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
+  const currentZone = zoneId || mlStore.currentZone;
+  const dateStr = targetDate || mlStore.selectedDate || getLocalDateString();
+  const baseZone = STANDARD_ZONES.find(z => z.id === currentZone);
+  const zoneName = baseZone ? baseZone.name : currentZone;
+
+  const activeSailors = getZoneActiveSailors(currentZone, dateStr);
+
+  const isZoneMatchLocal = (zField) => {
+    if (!zField) return false;
+    if (isAdminStaffDuties(currentZone)) return isAdminStaffDuties(zField);
+    return isZoneMatch(zField, currentZone);
+  };
+
+  const zoneWorkOrders = (mlStore.workOrders || []).filter(wo => {
+    if (!wo || wo.status === "Cancelled") return false;
+    const zField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
+    return isZoneMatchLocal(zField) && isWorkOrderActiveOnDate(wo, dateStr);
+  });
+
+  const typeOrder = { PROJECT: 1, JOB: 2, TASK: 3, ASSIGNMENT: 4 };
+  zoneWorkOrders.sort((a, b) => {
+    const ta = typeOrder[(a.type || "PROJECT").toUpperCase()] || 5;
+    const tb = typeOrder[(b.type || "PROJECT").toUpperCase()] || 5;
+    return ta - tb;
+  });
+
+  const inc = (mlStore.zoneInCharges || {})[currentZone] || {};
+  const incName = inc.name ? `${inc.rank || ""} ${inc.name}`.trim() : "Zone In-Charge";
+
+  let woRows = "";
+  if (zoneWorkOrders.length === 0) {
+    woRows = `<tr><td colspan="7" style="text-align: center; padding: 12px; color: #64748b; font-style: italic;">No active work orders recorded for this date.</td></tr>`;
+  } else {
+    zoneWorkOrders.forEach((wo, idx) => {
+      const ref = wo.reference_no || wo.ref_no || wo.job_no || `WO-${idx + 1}`;
+      const type = (wo.type || "PROJECT").toUpperCase();
+      const desc = wo.description || wo.title || "—";
+      const loc = [wo.location, wo.location2].filter(Boolean).join(" - ") || "Zone Site";
+      const { sailors: woSailors } = getWorkOrderAssignedSailors(wo, dateStr);
+      const crewList = woSailors.map(s => `${s.rank || 'AB'} ${s.name || s.off_no} (${s.official_number || s.off_no || ''})`).join("<br/>") || '<span style="color:#94a3b8;">Unassigned</span>';
+      const status = wo.status || "Active";
+      const priority = wo.priority || "Medium";
+      const budget = wo.budget ? `Rs. ${formatCurrency(wo.budget)}` : "—";
+
+      woRows += `
+        <tr>
+          <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; padding: 4px;">${idx + 1}</td>
+          <td style="font-weight: bold; color: #0284c7; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(type)}</td>
+          <td style="font-family: monospace; font-weight: bold; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(ref)}</td>
+          <td style="border: 1px solid #cbd5e1; padding: 4px;">
+            <strong>${escapeHtml(desc)}</strong>
+            <div style="font-size: 8px; color: #64748b; margin-top: 2px;">📍 ${escapeHtml(loc)}</div>
+          </td>
+          <td style="font-size: 8.5px; line-height: 1.3; border: 1px solid #cbd5e1; padding: 4px;">${crewList}</td>
+          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 4px;">
+            <span style="display: inline-block; padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; background: #e0f2fe; color: #0369a1;">${escapeHtml(status)}</span>
+            <div style="font-size: 8px; color: #dc2626; font-weight: bold; margin-top: 2px;">${escapeHtml(priority)}</div>
+          </td>
+          <td style="text-align: right; font-family: monospace; font-size: 9px; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(budget)}</td>
+        </tr>
+      `;
+    });
+  }
+
+  let sailorRows = "";
+  if (activeSailors.length === 0) {
+    sailorRows = `<tr><td colspan="6" style="text-align: center; padding: 10px; color: #64748b;">No personnel allocated.</td></tr>`;
+  } else {
+    activeSailors.forEach((s, idx) => {
+      const off = s.official_number || s.off_no || s.service_no || "—";
+      const rank = s.rank || "AB";
+      const name = s.name || "Sailor";
+      const trade = s.trade || s.branch || "MA";
+      
+      const assignedWos = zoneWorkOrders.filter(wo => {
+        const { sailors } = getWorkOrderAssignedSailors(wo, dateStr);
+        return sailors.some(ws => String(ws.id) === String(s.id) || String(ws._fbKey) === String(s._fbKey));
+      });
+      const duty = assignedWos.map(w => `[${w.type || 'WO'}] ${w.description || w.reference_no}`).join("; ") || "Zone Duty";
+
+      sailorRows += `
+        <tr>
+          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 4px;">${idx + 1}</td>
+          <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(rank)}</td>
+          <td style="font-family: monospace; text-align: center; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(off)}</td>
+          <td style="font-weight: bold; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(name)}</td>
+          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(trade)}</td>
+          <td style="font-size: 8.5px; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(duty)}</td>
+        </tr>
+      `;
+    });
+  }
+
+  return `
+    <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a; padding: 12px; max-width: 794px; margin: 0 auto; background: #fff;">
+      <div style="text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 8px; margin-bottom: 12px;">
+        <div style="font-size: 14px; font-weight: 900; letter-spacing: 0.5px; color: #0f172a; text-transform: uppercase;">Sri Lanka Navy • Civil Engineering Department</div>
+        <div style="font-size: 16px; font-weight: 800; color: #0f766e; margin-top: 2px; text-transform: uppercase;">Daily Work Orders & Labour Allocation Report</div>
+        <div style="font-size: 10px; color: #475569; margin-top: 3px; font-weight: 600;">Naval Civil Works Field Management Portal (CMSys)</div>
+      </div>
+
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; background: #f8fafc; border: 1px solid #cbd5e1;">
+        <tr>
+          <td style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%;"><strong>Zone / Section:</strong> <span style="color: #0f766e; font-weight: bold;">${escapeHtml(zoneName)}</span></td>
+          <td style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%;"><strong>Date:</strong> <span style="font-family: monospace; font-weight: bold;">${escapeHtml(dateStr)}</span></td>
+          <td style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%;"><strong>Active Workforce:</strong> <span style="color: #059669; font-weight: 900;">🟢 ${activeSailors.length} Sailors Allocated</span></td>
+          <td style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%;"><strong>Zone In-Charge:</strong> <span>${escapeHtml(incName)}</span></td>
+        </tr>
+      </table>
+
+      <div style="margin-bottom: 14px;">
+        <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 6px; text-transform: uppercase; border-left: 3px solid #0f766e; padding-left: 6px;">
+          1. Active Work Orders, Projects & Quick Assignments (${zoneWorkOrders.length})
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 9px;" class="est-table">
+          <thead>
+            <tr style="background: #e2e8f0; color: #0f172a;">
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 24px; text-align: center;">#</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 55px;">Type</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 75px;">Job / Ref</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px;">Description & Scope of Work</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 140px;">Assigned Workforce</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 60px; text-align: center;">Status</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 65px; text-align: right;">Budget</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${woRows}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-bottom: 14px;">
+        <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 6px; text-transform: uppercase; border-left: 3px solid #0f766e; padding-left: 6px;">
+          2. Allocated Personnel Roster (${activeSailors.length} Sailors)
+        </div>
+        <table style="width: 100%; border-collapse: collapse; font-size: 9px;" class="est-table">
+          <thead>
+            <tr style="background: #e2e8f0; color: #0f172a;">
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 24px; text-align: center;">#</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 45px; text-align: center;">Rank</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 75px; text-align: center;">Official No</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 160px;">Name</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px; width: 50px; text-align: center;">Trade</th>
+              <th style="border: 1px solid #94a3b8; padding: 4px;">Assigned Task / Duty</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sailorRows}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top: 24px; padding-top: 10px; border-top: 1px solid #cbd5e1;">
+        <table style="width: 100%; text-align: center; font-size: 9.5px;">
+          <tr>
+            <td style="width: 33%; vertical-align: top;">
+              <div style="min-height: 36px;"></div>
+              <div style="border-top: 1px dashed #64748b; padding-top: 4px; font-weight: bold;">Prepared by: Zone In-Charge</div>
+              <div style="font-size: 8px; color: #64748b;">${escapeHtml(incName)}</div>
+            </td>
+            <td style="width: 33%; vertical-align: top;">
+              <div style="min-height: 36px;"></div>
+              <div style="border-top: 1px dashed #64748b; padding-top: 4px; font-weight: bold;">Supervised by: Artificer</div>
+              <div style="font-size: 8px; color: #64748b;">Project / Zone Artificer</div>
+            </td>
+            <td style="width: 33%; vertical-align: top;">
+              <div style="min-height: 36px;"></div>
+              <div style="border-top: 1px dashed #64748b; padding-top: 4px; font-weight: bold;">Approved by: Civil Engineer</div>
+              <div style="font-size: 8px; color: #64748b;">Staff Civil Engineer / CCEO(E)</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="font-size: 8px; color: #94a3b8; text-align: right; margin-top: 10px;">
+        Generated via CMSys Mobile on ${new Date().toLocaleString()}
+      </div>
+    </div>
+  `;
+}
+
+function exportZoneDailyWorkOrdersPDFMobile() {
+  const currentZone = mlStore.currentZone;
+  const targetDate = mlStore.selectedDate || getLocalDateString();
+
+  let overlay = document.getElementById("mlPdfLoadingOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "mlPdfLoadingOverlay";
+    overlay.className = "fixed inset-0 z-[100000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4";
+    overlay.innerHTML = `
+      <div class="bg-white rounded-2xl p-5 shadow-2xl flex flex-col items-center gap-3 max-w-xs text-center border border-slate-200">
+        <div class="w-9 h-9 border-3 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+        <p class="font-bold text-slate-800 text-xs sm:text-sm">PDF එක සකස් වෙමින් පවතී...</p>
+        <p class="text-[10px] text-slate-500">Generating Daily PDF report, please wait...</p>
+      </div>`;
+    document.body.appendChild(overlay);
+  } else {
+    overlay.classList.remove("hidden");
+  }
+
+  loadHtml2PdfMobile(() => {
+    const tempDiv = document.createElement("div");
+    tempDiv.style.position = "absolute";
+    tempDiv.style.top = "0";
+    tempDiv.style.left = "0";
+    tempDiv.style.zIndex = "99998";
+    tempDiv.style.width = "794px";
+    tempDiv.style.backgroundColor = "#ffffff";
+    tempDiv.innerHTML = `
+      <style>
+        .est-table th { border: 1px solid #94a3b8; padding: 4px; background: #f1f5f9; text-align: left; font-size: 9px; font-weight: bold; color: #0f172a; }
+        .est-table td { border: 1px solid #cbd5e1; padding: 4px; word-wrap: break-word; font-size: 9px; color: #1e293b; }
+      </style>
+      ${buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate)}
+    `;
+    document.body.appendChild(tempDiv);
+
+    const safeZone = String(currentZone).replace(/[^a-zA-Z0-9]/g, "_");
+    const opt = {
+      margin: [6, 6, 6, 6],
+      filename: `Daily_Work_Orders_${safeZone}_${targetDate}.pdf`,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: 794,
+        width: 794
+      },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+    };
+
+    html2pdf()
+      .set(opt)
+      .from(tempDiv)
+      .save()
+      .then(() => {
+        if (overlay && document.body.contains(overlay)) overlay.remove();
+        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
+        showLightToast("Daily PDF exported successfully! ✅", "✅");
+      })
+      .catch(err => {
+        console.error("PDF Export Error:", err);
+        if (overlay && document.body.contains(overlay)) overlay.remove();
+        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
+        showLightToast("Direct download failed. Opening Print view...", "⚠️");
+        printZoneDailyWorkOrdersMobile(currentZone, targetDate);
+      });
+  });
+}
+
+function printZoneDailyWorkOrdersMobile(zoneId, targetDate) {
+  const currentZone = zoneId || mlStore.currentZone;
+  const dateStr = targetDate || mlStore.selectedDate || getLocalDateString();
+  const printWin = window.open("", "_blank");
+  if (!printWin) {
+    window.print();
+    return;
+  }
+  printWin.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Daily Work Orders - ${escapeHtml(currentZone)}</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <style>
+        @page { size: A4 portrait; margin: 6mm 6mm; }
+        body { margin: 0; padding: 10px; font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #0f172a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .est-table th { border: 1px solid #94a3b8; padding: 4px; background: #f1f5f9; text-align: left; font-size: 9px; font-weight: bold; color: #0f172a; }
+        .est-table td { border: 1px solid #cbd5e1; padding: 4px; font-size: 9px; color: #1e293b; }
+      </style>
+    </head>
+    <body>
+      ${buildZoneDailyWorkOrdersHTMLMobile(currentZone, dateStr)}
       <script>
         window.onload = function() {
           setTimeout(function() {
