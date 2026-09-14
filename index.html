@@ -8,9 +8,13 @@
     <link rel="preconnect" href="https://ncw-ps-operations-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link rel="preconnect" href="https://ce-admin-panel2025-default-rtdb.firebaseio.com">
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="manifest" href="manifest.json">
     <title>CMSys v2.2 | CE Management System — SLN Trincomalee</title>
+    <script>
+      if (window.location.hostname.includes("cmsys-beta")) {
+        window.location.replace("/mobile-beta");
+      }
+    </script>
     <link rel="stylesheet" href="tailwind-static.css">
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-database-compat.js"></script>
