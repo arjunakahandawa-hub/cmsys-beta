@@ -53,6 +53,40 @@ function isZoneMatch(z1, z2) {
   return false;
 }
 
+function isAdminStaffDuties(zoneIdOrName) {
+  if (!zoneIdOrName) return false;
+  const normalized = String(zoneIdOrName).toLowerCase().replace(/[-&\s]+/g, "");
+  return normalized === "adminstaffduties";
+}
+
+function formatZoneDisplayName(zoneId) {
+  if (!zoneId) return "";
+  if (isAdminStaffDuties(zoneId)) return "Admin & Staff Duties";
+  const zObj = STANDARD_ZONES.find(
+    (z) => z.id === zoneId || z.name === zoneId || isZoneMatch(z.id, zoneId)
+  );
+  if (zObj && zObj.name) return zObj.name;
+  return zoneId;
+}
+
+function parseOfficialNumber(offNo) {
+  if (!offNo) return { type: "•", num: "-" };
+  const clean = String(offNo).trim().replace(/^[^a-zA-Z0-9]+/, "");
+  const match = clean.match(/^([A-Za-z\/&]+)[\s\.\-]*(\d+[A-Za-z]*)$/);
+  if (match) {
+    return { type: match[1], num: match[2] };
+  }
+  const parts = clean.split(/[\s]+/);
+  if (parts.length > 1) {
+    return { type: parts[0], num: parts.slice(1).join(" ") };
+  }
+  if (/^\d+$/.test(clean)) {
+    return { type: "•", num: clean };
+  }
+  return { type: "•", num: clean || "-" };
+}
+
+
 function findSailor(sid) {
   if (!sid) return null;
   const sidStr = String(sid).trim().toLowerCase();
@@ -2798,184 +2832,186 @@ function printCurrentEstimateMobile(specificKey) {
 
 // ── DAILY ZONE WORK ORDERS PDF EXPORT FOR HOME SCREEN (ON-DEMAND / ZERO-LAG) ──
 function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
-  const currentZone = zoneId || mlStore.currentZone;
-  const dateStr = targetDate || mlStore.selectedDate || getLocalDateString();
-  const baseZone = STANDARD_ZONES.find(z => z.id === currentZone);
-  const zoneName = baseZone ? baseZone.name : currentZone;
+  const selectedZone = zoneId || mlStore.currentZone || "A-Zone";
+  const dateVal = targetDate || mlStore.selectedDate || getLocalDateString();
+  const isAll = String(selectedZone).toUpperCase() === "ALL";
 
-  const activeSailors = getZoneActiveSailors(currentZone, dateStr);
-
-  const isZoneMatchLocal = (zField) => {
-    if (!zField) return false;
-    if (isAdminStaffDuties(currentZone)) return isAdminStaffDuties(zField);
-    return isZoneMatch(zField, currentZone);
-  };
-
-  const zoneWorkOrders = (mlStore.workOrders || []).filter(wo => {
-    if (!wo || wo.status === "Cancelled") return false;
-    const zField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
-    return isZoneMatchLocal(zField) && isWorkOrderActiveOnDate(wo, dateStr);
-  });
-
-  const typeOrder = { PROJECT: 1, JOB: 2, TASK: 3, ASSIGNMENT: 4 };
-  zoneWorkOrders.sort((a, b) => {
-    const ta = typeOrder[(a.type || "PROJECT").toUpperCase()] || 5;
-    const tb = typeOrder[(b.type || "PROJECT").toUpperCase()] || 5;
-    return ta - tb;
-  });
-
-  const inc = (mlStore.zoneInCharges || {})[currentZone] || {};
-  const incName = inc.name ? `${inc.rank || ""} ${inc.name}`.trim() : "Zone In-Charge";
-
-  let woRows = "";
-  if (zoneWorkOrders.length === 0) {
-    woRows = `<tr><td colspan="7" style="text-align: center; padding: 12px; color: #64748b; font-style: italic;">No active work orders recorded for this date.</td></tr>`;
+  let zones = [];
+  if (isAll) {
+    zones = [...STANDARD_ZONES];
+    if (!zones.some(z => isAdminStaffDuties(z.id || z.name))) {
+      zones.push({ id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" });
+    }
   } else {
-    zoneWorkOrders.forEach((wo, idx) => {
-      const ref = wo.reference_no || wo.ref_no || wo.job_no || `WO-${idx + 1}`;
-      const type = (wo.type || "PROJECT").toUpperCase();
-      const desc = wo.description || wo.title || "—";
-      const loc = [wo.location, wo.location2].filter(Boolean).join(" - ") || "Zone Site";
-      const { sailors: woSailors } = getWorkOrderAssignedSailors(wo, dateStr);
-      const crewList = woSailors.map(s => `${s.rank || 'AB'} ${s.name || s.off_no} (${s.official_number || s.off_no || ''})`).join("<br/>") || '<span style="color:#94a3b8;">Unassigned</span>';
-      const status = wo.status || "Active";
-      const priority = wo.priority || "Medium";
-      const budget = wo.budget ? `Rs. ${formatCurrency(wo.budget)}` : "—";
-
-      woRows += `
-        <tr>
-          <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; padding: 4px;">${idx + 1}</td>
-          <td style="font-weight: bold; color: #0284c7; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(type)}</td>
-          <td style="font-family: monospace; font-weight: bold; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(ref)}</td>
-          <td style="border: 1px solid #cbd5e1; padding: 4px;">
-            <strong>${escapeHtml(desc)}</strong>
-            <div style="font-size: 8px; color: #64748b; margin-top: 2px;">📍 ${escapeHtml(loc)}</div>
-          </td>
-          <td style="font-size: 8.5px; line-height: 1.3; border: 1px solid #cbd5e1; padding: 4px;">${crewList}</td>
-          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 4px;">
-            <span style="display: inline-block; padding: 2px 5px; border-radius: 4px; font-size: 8.5px; font-weight: bold; background: #e0f2fe; color: #0369a1;">${escapeHtml(status)}</span>
-            <div style="font-size: 8px; color: #dc2626; font-weight: bold; margin-top: 2px;">${escapeHtml(priority)}</div>
-          </td>
-          <td style="text-align: right; font-family: monospace; font-size: 9px; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(budget)}</td>
-        </tr>
-      `;
-    });
+    const zObj = STANDARD_ZONES.find(
+      (z) => z.id === selectedZone || z.name === selectedZone || isZoneMatch(z.id, selectedZone)
+    );
+    if (zObj) {
+      zones.push(zObj);
+    } else {
+      zones.push({ id: selectedZone, name: formatZoneDisplayName(selectedZone) || selectedZone });
+    }
   }
 
-  let sailorRows = "";
-  if (activeSailors.length === 0) {
-    sailorRows = `<tr><td colspan="6" style="text-align: center; padding: 10px; color: #64748b;">No personnel allocated.</td></tr>`;
-  } else {
-    activeSailors.forEach((s, idx) => {
-      const off = s.official_number || s.off_no || s.service_no || "—";
-      const rank = s.rank || "AB";
-      const name = s.name || "Sailor";
-      const trade = s.trade || s.branch || "MA";
-      
-      const assignedWos = zoneWorkOrders.filter(wo => {
-        const { sailors } = getWorkOrderAssignedSailors(wo, dateStr);
-        return sailors.some(ws => String(ws.id) === String(s.id) || String(ws._fbKey) === String(s._fbKey));
-      });
-      const duty = assignedWos.map(w => `[${w.type || 'WO'}] ${w.description || w.reference_no}`).join("; ") || "Zone Duty";
+  let rowsHtml = "";
+  zones.forEach((z) => {
+    const isZoneMatchLocal = (zField) => {
+      if (!zField) return false;
+      if (isAdminStaffDuties(z.id)) return isAdminStaffDuties(zField);
+      return isZoneMatch(zField, z.id);
+    };
 
-      sailorRows += `
-        <tr>
-          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 4px;">${idx + 1}</td>
-          <td style="text-align: center; font-weight: bold; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(rank)}</td>
-          <td style="font-family: monospace; text-align: center; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(off)}</td>
-          <td style="font-weight: bold; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(name)}</td>
-          <td style="text-align: center; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(trade)}</td>
-          <td style="font-size: 8.5px; border: 1px solid #cbd5e1; padding: 4px;">${escapeHtml(duty)}</td>
-        </tr>
-      `;
+    const allWorks = [
+      ...(mlStore.workOrders || []).filter(
+        (wo) => isZoneMatchLocal(wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location) && isWorkOrderActiveOnDate(wo, dateVal)
+      ),
+      ...(mlStore.jobCards || []).filter(
+        (jc) => isZoneMatchLocal(jc.zone_id || jc.zone || jc.zoneId || jc.zone_name || jc.location_zone || jc.location) && isWorkOrderActiveOnDate(jc, dateVal)
+      )
+    ];
+
+    const seenWorkIds = new Set();
+    const wos = allWorks.filter((w) => {
+      const wid = String(w.id || w._fbKey || "");
+      if (!wid || seenWorkIds.has(wid)) return false;
+      seenWorkIds.add(wid);
+      return true;
     });
-  }
 
-  return `
-    <div style="font-family: 'Segoe UI', Arial, sans-serif; color: #0f172a; padding: 12px; max-width: 794px; margin: 0 auto; background: #fff;">
-      <div style="text-align: center; border-bottom: 2px solid #0f766e; padding-bottom: 8px; margin-bottom: 12px;">
-        <div style="font-size: 14px; font-weight: 900; letter-spacing: 0.5px; color: #0f172a; text-transform: uppercase;">Sri Lanka Navy • Civil Engineering Department</div>
-        <div style="font-size: 16px; font-weight: 800; color: #0f766e; margin-top: 2px; text-transform: uppercase;">Daily Work Orders & Labour Allocation Report</div>
-        <div style="font-size: 10px; color: #475569; margin-top: 3px; font-weight: 600;">Naval Civil Works Field Management Portal (CMSys)</div>
-      </div>
+    wos.sort((a, b) => {
+      const aInCharge = (a.description || a.title || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
+      const bInCharge = (b.description || b.title || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
+      if (aInCharge && !bInCharge) return -1;
+      if (!aInCharge && bInCharge) return 1;
+      return 0;
+    });
 
-      <table style="width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; background: #f8fafc; border: 1px solid #cbd5e1;">
-        <tr>
-          <td style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%;"><strong>Zone / Section:</strong> <span style="color: #0f766e; font-weight: bold;">${escapeHtml(zoneName)}</span></td>
-          <td style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%;"><strong>Date:</strong> <span style="font-family: monospace; font-weight: bold;">${escapeHtml(dateStr)}</span></td>
-          <td style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%;"><strong>Active Workforce:</strong> <span style="color: #059669; font-weight: 900;">🟢 ${activeSailors.length} Sailors Allocated</span></td>
-          <td style="padding: 6px 8px; border: 1px solid #cbd5e1; width: 25%;"><strong>Zone In-Charge:</strong> <span>${escapeHtml(incName)}</span></td>
-        </tr>
-      </table>
-
-      <div style="margin-bottom: 14px;">
-        <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 6px; text-transform: uppercase; border-left: 3px solid #0f766e; padding-left: 6px;">
-          1. Active Work Orders, Projects & Quick Assignments (${zoneWorkOrders.length})
-        </div>
-        <table style="width: 100%; border-collapse: collapse; font-size: 9px;" class="est-table">
-          <thead>
-            <tr style="background: #e2e8f0; color: #0f172a;">
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 24px; text-align: center;">#</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 55px;">Type</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 75px;">Job / Ref</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px;">Description & Scope of Work</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 140px;">Assigned Workforce</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 60px; text-align: center;">Status</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 65px; text-align: right;">Budget</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${woRows}
-          </tbody>
-        </table>
-      </div>
-
-      <div style="margin-bottom: 14px;">
-        <div style="font-size: 11px; font-weight: 800; color: #0f172a; margin-bottom: 6px; text-transform: uppercase; border-left: 3px solid #0f766e; padding-left: 6px;">
-          2. Allocated Personnel Roster (${activeSailors.length} Sailors)
-        </div>
-        <table style="width: 100%; border-collapse: collapse; font-size: 9px;" class="est-table">
-          <thead>
-            <tr style="background: #e2e8f0; color: #0f172a;">
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 24px; text-align: center;">#</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 45px; text-align: center;">Rank</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 75px; text-align: center;">Official No</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 160px;">Name</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px; width: 50px; text-align: center;">Trade</th>
-              <th style="border: 1px solid #94a3b8; padding: 4px;">Assigned Task / Duty</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${sailorRows}
-          </tbody>
-        </table>
-      </div>
-
-      <div style="margin-top: 24px; padding-top: 10px; border-top: 1px solid #cbd5e1;">
-        <table style="width: 100%; text-align: center; font-size: 9.5px;">
-          <tr>
-            <td style="width: 33%; vertical-align: top;">
-              <div style="min-height: 36px;"></div>
-              <div style="border-top: 1px dashed #64748b; padding-top: 4px; font-weight: bold;">Prepared by: Zone In-Charge</div>
-              <div style="font-size: 8px; color: #64748b;">${escapeHtml(incName)}</div>
-            </td>
-            <td style="width: 33%; vertical-align: top;">
-              <div style="min-height: 36px;"></div>
-              <div style="border-top: 1px dashed #64748b; padding-top: 4px; font-weight: bold;">Supervised by: Artificer</div>
-              <div style="font-size: 8px; color: #64748b;">Project / Zone Artificer</div>
-            </td>
-            <td style="width: 33%; vertical-align: top;">
-              <div style="min-height: 36px;"></div>
-              <div style="border-top: 1px dashed #64748b; padding-top: 4px; font-weight: bold;">Approved by: Civil Engineer</div>
-              <div style="font-size: 8px; color: #64748b;">Staff Civil Engineer / CCEO(E)</div>
+    let zoneRowsHtml = "";
+    wos.forEach((wo) => {
+      const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
+      if (sailors && sailors.length > 0) {
+        const workTitle = (wo.description || wo.title || wo.reference_no || wo.job_no || "Active Work").trim();
+        zoneRowsHtml += `
+          <tr style="background-color: #f1f5f9; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+            <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
+              📋 ${escapeHtml(workTitle.toUpperCase())}
             </td>
           </tr>
-        </table>
+        `;
+        sailors.forEach((s, idx) => {
+          const serNo = String(idx + 1).padStart(2, "0");
+          const parsedOffNo = parseOfficialNumber(
+            s.official_number || s.service_no || s.offNo || s.off_no || ""
+          );
+          zoneRowsHtml += `
+            <tr>
+              <td style="text-align:center;">${serNo}</td>
+              <td>${escapeHtml(s.rank || "AB")}</td>
+              <td>${escapeHtml(s.name || "")}</td>
+              <td style="text-align:center;">${escapeHtml(parsedOffNo.type)}</td>
+              <td>${escapeHtml(parsedOffNo.num)}</td>
+              <td style="text-align:center;">${escapeHtml(s.trade || "—")}</td>
+            </tr>
+          `;
+        });
+      }
+    });
+
+    if (zoneRowsHtml) {
+      const zoneDisplayName = formatZoneDisplayName(z.name || z.id) || (z.name || z.id);
+      rowsHtml += `
+        <tr style="background-color: #0f172a; color: #ffffff; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+          <td colspan="6" style="padding: 8px 12px; font-size: 13px; text-transform: uppercase; color: #ffffff;">
+            🗺️ ZONE: ${escapeHtml(zoneDisplayName.toUpperCase())}
+          </td>
+        </tr>
+        ${zoneRowsHtml}
+      `;
+    }
+  });
+
+  if (!rowsHtml) {
+    rowsHtml = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #64748b;">No allocations found for this selection on this date.</td></tr>`;
+  }
+
+  const scopeLabel = isAll ? "ALL ZONES" : "ZONE: " + (formatZoneDisplayName(selectedZone) || selectedZone).toUpperCase();
+  const logoSrc = "logo.png";
+
+  return `
+    <div class="daily-details-wrapper" style="font-family: 'Segoe UI', Arial, sans-serif; color: #000; margin: 0; padding: 14px; background: #ffffff; max-width: 820px; margin: 0 auto; box-sizing: border-box;">
+      <style>
+        .daily-details-header { display: flex; align-items: center; justify-content: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px; }
+        .daily-details-logo { height: 65px; margin-right: 18px; }
+        .daily-details-title { text-align: left; }
+        .daily-details-title h1 { font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        .daily-details-title h2 { font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .daily-details-meta { display: flex; justify-content: space-between; font-size: 10px; color: #334155; margin-bottom: 15px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .daily-details-meta-left { font-weight: bold; line-height: 1.5; }
+        .daily-details-meta-right { text-align: right; line-height: 1.5; }
+        
+        .daily-details-table { width: 100%; border-collapse: collapse; font-size: 10.5px; margin-top: 10px; }
+        .daily-details-table th, .daily-details-table td { border: 1px solid #94a3b8; padding: 6px 8px; text-align: left; vertical-align: middle; }
+        .daily-details-table th { background: #f1f5f9; color: #1e293b; font-weight: bold; text-transform: uppercase; font-size: 10px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        
+        .daily-details-signatures { margin-top: 50px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
+        .daily-details-sig { text-align: center; width: 220px; }
+        .daily-details-sig p { margin: 2px 0; }
+        
+        .daily-details-footer { margin-top: 35px; font-size: 9px; color: #64748b; text-align: right; border-top: 1px solid #e2e8f0; padding-top: 8px; }
+      </style>
+
+      <div class="daily-details-header">
+        <img class="daily-details-logo" src="${logoSrc}" alt="SLN Crest" onerror="this.src='logo.png'">
+        <div class="daily-details-title">
+          <h1>Sri Lanka Navy</h1>
+          <h2>Captain Civil Engineering Department (E)</h2>
+        </div>
+      </div>
+      
+      <div class="daily-details-meta">
+        <div class="daily-details-meta-left">
+          <div>REPORT: DAILY DETAILS REPORT</div>
+          <div>SCOPE: ${escapeHtml(scopeLabel)}</div>
+        </div>
+        <div class="daily-details-meta-right">
+          <div>DATE: ${escapeHtml(dateVal)}</div>
+          <div>GENERATED BY: NCW OPERATION SYSTEM</div>
+        </div>
       </div>
 
-      <div style="font-size: 8px; color: #94a3b8; text-align: right; margin-top: 10px;">
-        Generated via CMSys Mobile on ${new Date().toLocaleString()}
+      <table class="daily-details-table">
+        <thead>
+          <tr>
+            <th style="width: 10%; text-align:center;">Ser No</th>
+            <th style="width: 15%;">Rank</th>
+            <th style="width: 35%;">Name</th>
+            <th style="width: 15%; text-align:center;">Service Type</th>
+            <th style="width: 15%;">Service No</th>
+            <th style="width: 10%; text-align:center;">Trade</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+      
+      <div class="daily-details-signatures">
+        <div class="daily-details-sig">
+          <p>..................................................</p>
+          <p style="font-weight: bold;">PREPARED BY - LME</p>
+        </div>
+        <div class="daily-details-sig">
+          <p>..................................................</p>
+          <p style="font-weight: bold;">CHECKED BY (S/S INCHARGE)</p>
+        </div>
+        <div class="daily-details-sig">
+          <p>..................................................</p>
+          <p style="font-weight: bold;">CHECKED BY</p>
+        </div>
       </div>
+
+      <div class="daily-details-footer">Generated by NCW Operation System on ${new Date().toLocaleString()}</div>
     </div>
   `;
 }
@@ -2995,14 +3031,20 @@ function openDailyReportPrintMobile() {
     modal.classList.remove("hidden");
   }
 
-  // Trigger native print after slight delay for DOM rendering
+  const prevTitle = document.title;
+  document.title = "Daily Details";
+
   setTimeout(() => {
     try {
       window.print();
     } catch (e) {
       console.warn("Auto print failed, user can tap Print button:", e);
+    } finally {
+      setTimeout(() => {
+        document.title = prevTitle;
+      }, 2500);
     }
-  }, 350);
+  }, 400);
 }
 
 function closeDailyReportPrintMobile() {
@@ -3013,11 +3055,54 @@ function closeDailyReportPrintMobile() {
 }
 
 function triggerNativePrintMobile() {
+  const prevTitle = document.title;
+  document.title = "Daily Details";
   try {
     window.print();
   } catch (e) {
     console.warn("Manual print error:", e);
     showLightToast("Please use browser menu to Print / Save as PDF", "⚠️");
+  } finally {
+    setTimeout(() => {
+      document.title = prevTitle;
+    }, 2500);
+  }
+}
+
+function openDailyReportInNewWindowMobile() {
+  const currentZone = mlStore.currentZone;
+  const targetDate = mlStore.selectedDate || getLocalDateString();
+  const reportHtml = buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate);
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.write(`<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Daily Details</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+      body { margin: 0; padding: 12px; background: #ffffff; }
+      @media print {
+        @page { size: A4 portrait; margin: 10mm; }
+        body { padding: 0 !important; }
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      }
+    </style>
+  </head>
+  <body>
+    ${reportHtml}
+  </body>
+</html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      try {
+        win.print();
+      } catch (e) {}
+    }, 350);
+  } else {
+    triggerNativePrintMobile();
   }
 }
 
