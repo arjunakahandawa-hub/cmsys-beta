@@ -11,6 +11,11 @@
       ],
       "destination": "/mobile-beta",
       "permanent": false
+    },
+    {
+      "source": "/",
+      "destination": "/mobile",
+      "permanent": false
     }
   ]
 }
