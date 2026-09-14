@@ -2980,111 +2980,54 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
   `;
 }
 
-function exportZoneDailyWorkOrdersPDFMobile() {
+function openDailyReportPrintMobile() {
   const currentZone = mlStore.currentZone;
   const targetDate = mlStore.selectedDate || getLocalDateString();
+  const reportHtml = buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate);
 
-  let overlay = document.getElementById("mlPdfLoadingOverlay");
-  if (!overlay) {
-    overlay = document.createElement("div");
-    overlay.id = "mlPdfLoadingOverlay";
-    overlay.className = "fixed inset-0 z-[100000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4";
-    overlay.innerHTML = `
-      <div class="bg-white rounded-2xl p-5 shadow-2xl flex flex-col items-center gap-3 max-w-xs text-center border border-slate-200">
-        <div class="w-9 h-9 border-3 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
-        <p class="font-bold text-slate-800 text-xs sm:text-sm">PDF එක සකස් වෙමින් පවතී...</p>
-        <p class="text-[10px] text-slate-500">Generating Daily PDF report, please wait...</p>
-      </div>`;
-    document.body.appendChild(overlay);
-  } else {
-    overlay.classList.remove("hidden");
+  const container = document.getElementById("mlPrintReportArea");
+  if (container) {
+    container.innerHTML = reportHtml;
   }
 
-  loadHtml2PdfMobile(() => {
-    const tempDiv = document.createElement("div");
-    tempDiv.style.position = "absolute";
-    tempDiv.style.top = "0";
-    tempDiv.style.left = "0";
-    tempDiv.style.zIndex = "99998";
-    tempDiv.style.width = "794px";
-    tempDiv.style.backgroundColor = "#ffffff";
-    tempDiv.innerHTML = `
-      <style>
-        .est-table th { border: 1px solid #94a3b8; padding: 4px; background: #f1f5f9; text-align: left; font-size: 9px; font-weight: bold; color: #0f172a; }
-        .est-table td { border: 1px solid #cbd5e1; padding: 4px; word-wrap: break-word; font-size: 9px; color: #1e293b; }
-      </style>
-      ${buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate)}
-    `;
-    document.body.appendChild(tempDiv);
+  const modal = document.getElementById("mlPrintPreviewModal");
+  if (modal) {
+    modal.classList.remove("hidden");
+  }
 
-    const safeZone = String(currentZone).replace(/[^a-zA-Z0-9]/g, "_");
-    const opt = {
-      margin: [6, 6, 6, 6],
-      filename: `Daily_Work_Orders_${safeZone}_${targetDate}.pdf`,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        windowWidth: 794,
-        width: 794
-      },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
-    };
-
-    html2pdf()
-      .set(opt)
-      .from(tempDiv)
-      .save()
-      .then(() => {
-        if (overlay && document.body.contains(overlay)) overlay.remove();
-        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
-        showLightToast("Daily PDF exported successfully! ✅", "✅");
-      })
-      .catch(err => {
-        console.error("PDF Export Error:", err);
-        if (overlay && document.body.contains(overlay)) overlay.remove();
-        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
-        showLightToast("Direct download failed. Opening Print view...", "⚠️");
-        printZoneDailyWorkOrdersMobile(currentZone, targetDate);
-      });
-  });
+  // Trigger native print after slight delay for DOM rendering
+  setTimeout(() => {
+    try {
+      window.print();
+    } catch (e) {
+      console.warn("Auto print failed, user can tap Print button:", e);
+    }
+  }, 350);
 }
 
-function printZoneDailyWorkOrdersMobile(zoneId, targetDate) {
-  const currentZone = zoneId || mlStore.currentZone;
-  const dateStr = targetDate || mlStore.selectedDate || getLocalDateString();
-  const printWin = window.open("", "_blank");
-  if (!printWin) {
-    window.print();
-    return;
+function closeDailyReportPrintMobile() {
+  const modal = document.getElementById("mlPrintPreviewModal");
+  if (modal) {
+    modal.classList.add("hidden");
   }
-  printWin.document.write(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Daily Work Orders - ${escapeHtml(currentZone)}</title>
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <style>
-        @page { size: A4 portrait; margin: 6mm 6mm; }
-        body { margin: 0; padding: 10px; font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #0f172a; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .est-table th { border: 1px solid #94a3b8; padding: 4px; background: #f1f5f9; text-align: left; font-size: 9px; font-weight: bold; color: #0f172a; }
-        .est-table td { border: 1px solid #cbd5e1; padding: 4px; font-size: 9px; color: #1e293b; }
-      </style>
-    </head>
-    <body>
-      ${buildZoneDailyWorkOrdersHTMLMobile(currentZone, dateStr)}
-      <script>
-        window.onload = function() {
-          setTimeout(function() {
-            window.print();
-          }, 300);
-        };
-      <\/script>
-    </body>
-    </html>
-  `);
-  printWin.document.close();
+}
+
+function triggerNativePrintMobile() {
+  try {
+    window.print();
+  } catch (e) {
+    console.warn("Manual print error:", e);
+    showLightToast("Please use browser menu to Print / Save as PDF", "⚠️");
+  }
+}
+
+// Backward compatibility aliases
+function printZoneDailyWorkOrdersMobile() {
+  openDailyReportPrintMobile();
+}
+
+function exportZoneDailyWorkOrdersPDFMobile() {
+  openDailyReportPrintMobile();
 }
 
 // ── SIGNATORY AUTOCOMPLETE FOR MOBILE (FIND & SEARCH) ──

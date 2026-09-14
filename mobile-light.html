@@ -38,6 +38,39 @@
         input, select, textarea {
             font-size: 16px !important;
         }
+        @media print {
+            @page {
+                size: A4 portrait;
+                margin: 6mm 6mm;
+            }
+            body {
+                background: #ffffff !important;
+                color: #000000 !important;
+                margin: 0 !important;
+                padding: 0 !important;
+            }
+            body * {
+                visibility: hidden !important;
+            }
+            #mlPrintReportArea, #mlPrintReportArea * {
+                visibility: visible !important;
+            }
+            #mlPrintReportArea {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                display: block !important;
+                background: #ffffff !important;
+                border: none !important;
+                box-shadow: none !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col antialiased select-none pb-16">
@@ -112,8 +145,8 @@
                     <span id="mlTaskCount" class="text-[10px] font-bold bg-slate-100 text-teal-800 px-2 py-0.5 rounded-full border border-slate-200">0</span>
                 </h2>
                 <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-[10px] active-scale flex items-center gap-1 shadow-2xs" title="Export Daily Work Orders to PDF">
-                        <span>📄</span> PDF
+                    <button type="button" onclick="openDailyReportPrintMobile()" class="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-[10px] active-scale flex items-center gap-1 shadow-2xs" title="Print Today's Work Orders">
+                        <span>🖨️</span> Print
                     </button>
                     <button type="button" onclick="openNewAssignModal()" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] active-scale flex items-center gap-1 shadow-xs" title="Create New Sailor Assignment">
                         <span>💼</span> New Assign
@@ -1063,6 +1096,34 @@
         </div>
     </div>
 
+    <!-- MODAL: PRINT PREVIEW FOR DAILY REPORT -->
+    <div id="mlPrintPreviewModal" class="hidden fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[94vh] flex flex-col shadow-2xl border border-slate-300 overflow-hidden">
+            <!-- Modal Header (no-print) -->
+            <div class="no-print bg-slate-900 text-white p-3 flex items-center justify-between shrink-0 shadow-md">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">🖨️</span>
+                    <div>
+                        <h3 class="text-xs sm:text-sm font-bold text-white">Daily Report Print Preview</h3>
+                        <p class="text-[10px] text-slate-400">Work Orders & Personnel Allocation Sheet</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="triggerNativePrintMobile()" class="px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
+                        <span>🖨️</span> Print Now
+                    </button>
+                    <button type="button" onclick="closeDailyReportPrintMobile()" class="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold active-scale ml-1">✕</button>
+                </div>
+            </div>
+            <!-- Scrollable Report Area -->
+            <div class="p-2 sm:p-4 overflow-y-auto touch-scroll flex-1 bg-slate-100/60">
+                <div id="mlPrintReportArea" class="bg-white rounded-xl shadow-xs border border-slate-200 p-2 sm:p-4">
+                    <!-- Dynamic Report HTML Injected Here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- TOAST NOTIFICATION -->
     <div id="mlToast" class="hidden fixed left-4 right-4 z-50 p-2.5 rounded-xl bg-slate-900 border border-teal-500/50 text-white text-xs font-bold shadow-2xl flex items-center gap-2 pointer-events-none" style="bottom: 4.5rem; transition: opacity 0.25s ease, transform 0.25s ease; opacity: 0; transform: translateY(8px);">
         <span id="mlToastIcon">✅</span>
@@ -1070,6 +1131,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=2.2.0"></script>
+    <script src="mobile.js?v=2.2.1"></script>
 </body>
 </html>
