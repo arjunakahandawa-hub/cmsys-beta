@@ -30,7 +30,6 @@ function formatCurrency(val) {
 const STANDARD_ZONES = [
   { id: "A-Zone", name: "A-Zone" },
   { id: "B-Zone", name: "B-Zone" },
-  { id: "BC-Zone", name: "BC-Zone" },
   { id: "C-Zone", name: "C-Zone" },
   { id: "D-Zone", name: "D-Zone" },
   { id: "E-Zone", name: "E-Zone" },
@@ -39,17 +38,56 @@ const STANDARD_ZONES = [
   { id: "OTW", name: "OTW" },
   { id: "Supply-School", name: "Supply School" },
   { id: "Pump-House", name: "Pump House" },
-  { id: "Carpentry-Shop", name: "Carpentry & Painter Shop" },
+  { id: "Carpentry-Shop", name: "Carpenter & Paint Workshop" },
   { id: "Welding-Shop", name: "Welding Shop" },
   { id: "Aluminium-Workshop", name: "Aluminium Workshop" }
 ];
 
 function isZoneMatch(z1, z2) {
+  if (!z1 && !z2) return true;
   if (!z1 || !z2) return false;
-  const s1 = String(z1).toLowerCase().replace(/[^a-z0-9]/g, "");
-  const s2 = String(z2).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (z1 === z2) return true;
+  if (isAdminStaffDuties(z1) && isAdminStaffDuties(z2)) return true;
+
+  const s1 = String(z1).trim().toLowerCase().replace(/[-_\s&]+/g, "");
+  const s2 = String(z2).trim().toLowerCase().replace(/[-_\s&]+/g, "");
   if (s1 === s2) return true;
+
+  const isCarpentryOrPaint = (s) =>
+    s.includes("carpenter") ||
+    s.includes("carpentry") ||
+    s.includes("paintworkshop") ||
+    s.includes("paintershop") ||
+    s.includes("paintshop") ||
+    s.includes("carpenterpaint");
+  if (isCarpentryOrPaint(s1) && isCarpentryOrPaint(s2)) return true;
+
+  const letterMap = {
+    a: "azone",
+    b: "bzone",
+    bc: "czone",
+    bczone: "czone",
+    c: "czone",
+    d: "dzone",
+    e: "ezone",
+    g: "gzone",
+    zonea: "azone",
+    zoneb: "bzone",
+    zonec: "czone",
+    zoned: "dzone",
+    zonee: "ezone",
+    zoneg: "gzone",
+    fh: "fhzone",
+    zonefh: "fhzone",
+    fhad: "fhzone",
+    fhadzone: "fhzone",
+  };
+  const norm1 = letterMap[s1] || s1;
+  const norm2 = letterMap[s2] || s2;
+  if (norm1 === norm2) return true;
+
   if (s1.includes(s2) || s2.includes(s1)) return true;
+
   return false;
 }
 
@@ -297,14 +335,16 @@ function verifyZonePassword() {
 
   const targetZone = pendingZoneSwitch;
   const inCharges = mlStore.zoneInCharges || {};
-  let expectedPassword = inCharges[targetZone]?.password;
+  const matchedKeys = Object.keys(inCharges).filter(k => isZoneMatch(k, targetZone));
+  const validPasswords = ["admin123", "civil2025", "navy123"];
+  matchedKeys.forEach(k => {
+    if (inCharges[k]?.password) validPasswords.push(inCharges[k].password);
+  });
+  if (inCharges[targetZone]?.password) validPasswords.push(inCharges[targetZone].password);
 
-  if (!expectedPassword) {
-    const matchedKey = Object.keys(inCharges).find(k => isZoneMatch(k, targetZone));
-    if (matchedKey) expectedPassword = inCharges[matchedKey]?.password;
-  }
+  const isMatched = (validPasswords.length === 3) || validPasswords.includes(enteredPass);
 
-  if (!expectedPassword || expectedPassword === enteredPass || enteredPass === "admin123" || enteredPass === "civil2025" || enteredPass === "navy123") {
+  if (isMatched) {
     sessionStorage.setItem("ncw_mobile_zone_unlocked_" + targetZone, "true");
     const modal = document.getElementById("mlZonePasswordModal");
     if (modal) modal.classList.add("hidden");
