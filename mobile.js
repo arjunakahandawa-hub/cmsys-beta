@@ -3239,7 +3239,40 @@ function openDailyReportPrintMobile() {
 
   const container = document.getElementById("mlPrintReportArea");
   if (container) {
-    container.innerHTML = reportHtml;
+    container.innerHTML = `
+      <!-- In-Report Top Action Bar (Always visible inside preview, excluded from prints) -->
+      <div class="no-print mb-3 p-2 bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs">
+        <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1 active-scale shadow-xs">
+          <span>⬅️</span>
+          <span>Dashboard වෙත ආපසු</span>
+        </button>
+        <div class="flex items-center gap-1.5">
+          <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
+            <span>📥</span>
+            <span>Export PDF</span>
+          </button>
+          <button type="button" onclick="closeDailyReportPrintMobile()" class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs active-scale">
+            ✕ Close
+          </button>
+        </div>
+      </div>
+      ${reportHtml}
+      <!-- In-Report Bottom Action Bar -->
+      <div class="no-print mt-4 p-2.5 bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs">
+        <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 active-scale shadow-xs">
+          <span>⬅️</span>
+          <span>Dashboard වෙත ආපසු</span>
+        </button>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="triggerNativePrintMobile()" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs flex items-center gap-1 active-scale">
+            <span>🖨️</span> Print
+          </button>
+          <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
+            <span>📥</span> Export PDF
+          </button>
+        </div>
+      </div>
+    `;
   }
 
   const printTitle = getDailyDetailsReportTitle(currentZone, targetDate);
@@ -3257,6 +3290,7 @@ function openDailyReportPrintMobile() {
 
   const modal = document.getElementById("mlPrintPreviewModal");
   if (modal) {
+    modal.style.removeProperty("display");
     modal.classList.remove("hidden");
   }
 
@@ -3270,6 +3304,10 @@ function closeDailyReportPrintMobile(triggeredByPopstate = false) {
   const modal = document.getElementById("mlPrintPreviewModal");
   if (modal) {
     modal.classList.add("hidden");
+    modal.style.setProperty("display", "none", "important");
+    setTimeout(() => {
+      modal.style.removeProperty("display");
+    }, 200);
   }
 
   // Cleanly pop history state if closed by button click (not popstate)
@@ -3283,17 +3321,67 @@ function closeDailyReportPrintMobile(triggeredByPopstate = false) {
 function triggerNativePrintMobile() {
   const currentZone = mlStore.currentZone;
   const targetDate = mlStore.selectedDate || getLocalDateString();
+  const printTitle = getDailyDetailsReportTitle(currentZone, targetDate);
+  const reportHtml = buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate);
 
   updateDocumentTitleMobile(currentZone, targetDate);
 
-  setTimeout(() => {
-    try {
-      window.print();
-    } catch (e) {
-      console.warn("Manual print error:", e);
-      showLightToast("Please use browser menu to Print / Save as PDF", "⚠️");
+  // Use isolated hidden iframe for printing to prevent main window from entering @media print and hiding UI
+  let printFrame = document.getElementById("mlPrintHiddenIframe");
+  if (!printFrame) {
+    printFrame = document.createElement("iframe");
+    printFrame.id = "mlPrintHiddenIframe";
+    printFrame.style.position = "fixed";
+    printFrame.style.right = "0";
+    printFrame.style.bottom = "0";
+    printFrame.style.width = "10px";
+    printFrame.style.height = "10px";
+    printFrame.style.border = "0";
+    printFrame.style.opacity = "0.01";
+    printFrame.style.pointerEvents = "none";
+    printFrame.style.zIndex = "-9999";
+    document.body.appendChild(printFrame);
+  }
+
+  try {
+    const doc = printFrame.contentDocument || printFrame.contentWindow.document;
+    doc.open();
+    doc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${escapeHtml(printTitle)}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { margin: 0; padding: 12px; background: #ffffff; color: #000000; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    table { border-collapse: collapse; width: 100%; }
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    @media print {
+      @page { size: A4 portrait; margin: 8mm; }
+      body { padding: 0 !important; margin: 0 !important; }
+      .no-print { display: none !important; }
     }
-  }, 120);
+  </style>
+</head>
+<body>
+  ${reportHtml}
+</body>
+</html>`);
+    doc.close();
+
+    setTimeout(() => {
+      try {
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+      } catch (e) {
+        console.warn("Iframe print error, falling back to window.print():", e);
+        window.print();
+      }
+    }, 250);
+  } catch (err) {
+    console.warn("Iframe setup error, fallback to direct print:", err);
+    window.print();
+  }
 }
 
 function openDailyReportInNewWindowMobile() {
@@ -3311,21 +3399,43 @@ function openDailyReportInNewWindowMobile() {
     <title>${escapeHtml(printTitle)}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-      body { margin: 0; padding: 12px; background: #ffffff; }
+      body { margin: 0; padding: 0; background: #f8fafc; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      .tab-header { position: sticky; top: 0; z-index: 9999; background: #0f172a; color: white; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+      .tab-body { padding: 12px; max-width: 860px; margin: 0 auto; background: #ffffff; }
       @media print {
-        @page { size: A4 portrait; margin: 10mm; }
-        body { padding: 0 !important; }
+        @page { size: A4 portrait; margin: 8mm; }
+        .tab-no-print { display: none !important; }
+        body { background: #ffffff !important; padding: 0 !important; }
+        .tab-body { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       }
     </style>
   </head>
   <body>
-    ${reportHtml}
+    <div class="tab-header tab-no-print">
+      <button onclick="if(window.opener){window.close();}else{window.location.href='mobile-beta.html';}" style="background: #1e293b; color: #f8fafc; border: 1px solid #334155; padding: 7px 14px; border-radius: 10px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+        ⬅️ Dashboard වෙත ආපසු
+      </button>
+      <div style="font-weight: bold; font-size: 11px; color: #38bdf8; text-align: center; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        ${escapeHtml(printTitle)}
+      </div>
+      <div style="display: flex; gap: 6px;">
+        <button onclick="window.print()" style="background: #0d9488; color: white; border: none; padding: 7px 14px; border-radius: 10px; font-weight: bold; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
+          🖨️ Print
+        </button>
+        <button onclick="window.close()" style="background: #e11d48; color: white; border: none; padding: 7px 14px; border-radius: 10px; font-weight: bold; font-size: 12px; cursor: pointer;">
+          ✕ වසන්න
+        </button>
+      </div>
+    </div>
+    <div class="tab-body">
+      ${reportHtml}
+    </div>
     <script>
       window.onload = function() {
         setTimeout(function() {
           try { window.print(); } catch (e) {}
-        }, 350);
+        }, 400);
       };
     <\/script>
   </body>
@@ -4236,6 +4346,18 @@ window.addEventListener("popstate", (event) => {
   }
 });
 
+// PRINT LIFECYCLE RECOVERY HANDLER
+window.addEventListener("afterprint", () => {
+  const modal = document.getElementById("mlPrintPreviewModal");
+  if (modal) {
+    if (modal.classList.contains("hidden")) {
+      modal.style.setProperty("display", "none", "important");
+    } else {
+      modal.style.removeProperty("display");
+      modal.classList.remove("hidden");
+    }
+  }
+});
+
 // Global bootstrap
 window.addEventListener("DOMContentLoaded", initLightApp);
-

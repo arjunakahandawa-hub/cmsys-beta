@@ -53,10 +53,13 @@
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
-            body > *:not(#mlPrintPreviewModal) {
+            #mlPrintPreviewModal.hidden {
                 display: none !important;
             }
-            #mlPrintPreviewModal {
+            body:has(#mlPrintPreviewModal:not(.hidden)) > *:not(#mlPrintPreviewModal) {
+                display: none !important;
+            }
+            #mlPrintPreviewModal:not(.hidden) {
                 position: static !important;
                 display: block !important;
                 background: transparent !important;
@@ -68,7 +71,7 @@
                 height: auto !important;
                 max-height: none !important;
             }
-            #mlPrintPreviewModal > div {
+            #mlPrintPreviewModal:not(.hidden) > div {
                 position: static !important;
                 max-width: 100% !important;
                 width: 100% !important;
@@ -1188,6 +1191,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=2.2.8"></script>
+    <script src="mobile.js?v=2.2.9"></script>
 </body>
 </html>
