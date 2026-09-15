@@ -141,9 +141,35 @@ function findSailor(sid) {
   }) || null;
 }
 
+// Helper: Get persistent mobile zone across page reloads & browser restarts
+function getInitialMobileZone() {
+  try {
+    const qZ = new URLSearchParams(window.location.search).get("zone");
+    if (qZ && STANDARD_ZONES.some(z => z.id === qZ)) return qZ;
+    const mobSaved = localStorage.getItem("ncw_mobile_saved_zone");
+    if (mobSaved && STANDARD_ZONES.some(z => z.id === mobSaved)) return mobSaved;
+    const genSaved = localStorage.getItem("ncw_saved_zone");
+    if (genSaved && STANDARD_ZONES.some(z => z.id === genSaved)) return genSaved;
+  } catch (e) {}
+  return "A-Zone";
+}
+
+// Helper: Check if a zone has been unlocked via PIN / Password
+function isZoneUnlocked(z) {
+  if (!z || z === "A-Zone") return true;
+  try {
+    return (
+      localStorage.getItem("ncw_mobile_zone_unlocked_" + z) === "true" ||
+      sessionStorage.getItem("ncw_mobile_zone_unlocked_" + z) === "true"
+    );
+  } catch (e) {
+    return false;
+  }
+}
+
 // Global Mobile Store
 const mlStore = {
-  currentZone: (new URLSearchParams(window.location.search).get("zone")) || "A-Zone",
+  currentZone: getInitialMobileZone(),
   selectedDate: getLocalDateString(),
   selectedWoType: "ALL",
   workOrders: [],
@@ -235,18 +261,28 @@ function switchLightTab(tabId) {
 // APP INITIALIZATION & ZONE SECURITY
 // ---------------------------------------------
 function initLightApp() {
-  const qZ = new URLSearchParams(window.location.search).get("zone");
-  if (qZ && STANDARD_ZONES.some(z => z.id === qZ)) {
-    mlStore.currentZone = qZ;
-  } else if (!mlStore.currentZone || !STANDARD_ZONES.some(z => z.id === mlStore.currentZone)) {
-    mlStore.currentZone = "A-Zone";
-  }
+  const targetZone = getInitialMobileZone();
+  mlStore.currentZone = targetZone;
+
+  try {
+    localStorage.setItem("ncw_mobile_saved_zone", targetZone);
+  } catch (e) {}
+
+  // Update browser URL query parameter smoothly without reload
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("zone") !== targetZone) {
+      url.searchParams.set("zone", targetZone);
+      window.history.replaceState({ zone: targetZone }, "", url.toString());
+    }
+  } catch (e) {}
 
   const zoneSelect = document.getElementById("mlZoneSelect");
   if (zoneSelect) {
     zoneSelect.innerHTML = STANDARD_ZONES.map(z => 
       `<option value="${z.id}" ${z.id === mlStore.currentZone ? "selected" : ""}>${z.name}</option>`
     ).join("");
+    zoneSelect.value = mlStore.currentZone;
   }
 
   const datePicker = document.getElementById("mlDatePicker");
@@ -256,6 +292,12 @@ function initLightApp() {
 
   updateHistoricalBanner();
   loadLightData();
+
+  // If saved zone is not unlocked, prompt password for it
+  if (mlStore.currentZone !== "A-Zone" && !isZoneUnlocked(mlStore.currentZone)) {
+    pendingZoneSwitch = mlStore.currentZone;
+    openZonePasswordModal(mlStore.currentZone);
+  }
 }
 
 let pendingZoneSwitch = null;
@@ -264,7 +306,7 @@ function changeLightZone(z) {
   if (!z) return;
   if (z === mlStore.currentZone) return;
 
-  if (z === "A-Zone" || sessionStorage.getItem("ncw_mobile_zone_unlocked_" + z) === "true") {
+  if (isZoneUnlocked(z)) {
     applyZoneSwitch(z);
     return;
   }
@@ -275,11 +317,21 @@ function changeLightZone(z) {
 
 function applyZoneSwitch(z) {
   mlStore.currentZone = z;
-  localStorage.setItem("ncw_saved_zone", z);
+  try {
+    localStorage.setItem("ncw_mobile_saved_zone", z);
+    localStorage.setItem("ncw_saved_zone", z);
+  } catch (e) {}
+
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("zone", z);
+    window.history.replaceState({ zone: z }, "", url.toString());
+  } catch (e) {}
+
   const zoneSelect = document.getElementById("mlZoneSelect");
   if (zoneSelect) zoneSelect.value = z;
 
-  showLightToast("Switched to " + z, "📍");
+  showLightToast("Switched to " + formatZoneDisplayName(z), "📍");
   updateZoneSailorCount();
   renderLightTasks();
   if (mlStore.activeTab === "estimate") renderLightEstimates();
@@ -289,7 +341,7 @@ function applyZoneSwitch(z) {
 
 function openZonePasswordModal(zoneId) {
   const modal = document.getElementById("mlZonePasswordModal");
-  const targetLabel = document.getElementById("mlZonePasswordTarget");
+  const targetLabel = document.getElementById("mlZonePasswordTarget") || document.getElementById("mlZonePasswordSubtitle");
   const input = document.getElementById("mlZonePasswordInput");
   const err = document.getElementById("mlZonePasswordError");
 
@@ -298,7 +350,7 @@ function openZonePasswordModal(zoneId) {
     return;
   }
 
-  if (targetLabel) targetLabel.textContent = zoneId;
+  if (targetLabel) targetLabel.textContent = formatZoneDisplayName(zoneId);
   if (input) {
     input.value = "";
     setTimeout(() => input.focus(), 150);
@@ -312,8 +364,12 @@ function cancelZonePassword() {
   const modal = document.getElementById("mlZonePasswordModal");
   if (modal) modal.classList.add("hidden");
 
-  const zoneSelect = document.getElementById("mlZoneSelect");
-  if (zoneSelect) zoneSelect.value = mlStore.currentZone;
+  if (!isZoneUnlocked(mlStore.currentZone)) {
+    applyZoneSwitch("A-Zone");
+  } else {
+    const zoneSelect = document.getElementById("mlZoneSelect");
+    if (zoneSelect) zoneSelect.value = mlStore.currentZone;
+  }
   pendingZoneSwitch = null;
 }
 
@@ -345,14 +401,17 @@ function verifyZonePassword() {
   const isMatched = (validPasswords.length === 3) || validPasswords.includes(enteredPass);
 
   if (isMatched) {
-    sessionStorage.setItem("ncw_mobile_zone_unlocked_" + targetZone, "true");
+    try {
+      localStorage.setItem("ncw_mobile_zone_unlocked_" + targetZone, "true");
+      sessionStorage.setItem("ncw_mobile_zone_unlocked_" + targetZone, "true");
+    } catch (e) {}
     const modal = document.getElementById("mlZonePasswordModal");
     if (modal) modal.classList.add("hidden");
     applyZoneSwitch(targetZone);
     pendingZoneSwitch = null;
   } else {
     if (err) {
-      err.textContent = "Incorrect password for " + targetZone + ". Please check with your supervisor.";
+      err.textContent = "Incorrect password for " + formatZoneDisplayName(targetZone) + ". Please check with your supervisor.";
       err.classList.remove("hidden");
     }
     showLightToast("Access Denied: Incorrect Password", "❌");
