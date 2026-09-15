@@ -290,6 +290,7 @@ function initLightApp() {
     datePicker.value = mlStore.selectedDate;
   }
 
+  updateDocumentTitleMobile(mlStore.currentZone, mlStore.selectedDate);
   updateHistoricalBanner();
   loadLightData();
 
@@ -332,6 +333,7 @@ function applyZoneSwitch(z) {
   if (zoneSelect) zoneSelect.value = z;
 
   showLightToast("Switched to " + formatZoneDisplayName(z), "📍");
+  updateDocumentTitleMobile(z, mlStore.selectedDate);
   updateZoneSailorCount();
   renderLightTasks();
   if (mlStore.activeTab === "estimate") renderLightEstimates();
@@ -726,6 +728,7 @@ function updateZoneSailorCount() {
 function changeLightDate(d) {
   if (!d) return;
   mlStore.selectedDate = d;
+  updateDocumentTitleMobile(mlStore.currentZone, d);
   updateHistoricalBanner();
   updateZoneSailorCount();
   renderLightTasks();
@@ -736,6 +739,7 @@ function resetToTodayMobile() {
   mlStore.selectedDate = today;
   const datePicker = document.getElementById("mlDatePicker");
   if (datePicker) datePicker.value = today;
+  updateDocumentTitleMobile(mlStore.currentZone, today);
   updateHistoricalBanner();
   updateZoneSailorCount();
   renderLightTasks();
@@ -3219,6 +3223,15 @@ function getDailyDetailsReportTitle(zoneId, targetDate) {
   return `${zoneDisplayName} | Daily Details | ${dateVal}`;
 }
 
+function updateDocumentTitleMobile(zoneId, targetDate) {
+  const title = getDailyDetailsReportTitle(zoneId, targetDate);
+  document.title = title;
+  const titleEl = document.querySelector("title");
+  if (titleEl) {
+    titleEl.textContent = title;
+  }
+}
+
 function openDailyReportPrintMobile() {
   const currentZone = mlStore.currentZone;
   const targetDate = mlStore.selectedDate || getLocalDateString();
@@ -3237,13 +3250,10 @@ function openDailyReportPrintMobile() {
   const titleEl = document.getElementById("mlPrintModalTitle");
   if (titleEl) titleEl.textContent = `${zoneDisplayName} - Daily Details`;
   const subEl = document.getElementById("mlPrintModalSubtitle");
-  if (subEl) subEl.textContent = `${targetDate} • Print Preview &bull; A4`;
+  if (subEl) subEl.textContent = `${targetDate} • Print / Export Preview`;
 
-  // Preserve original title and set requested format: "Zone or workshop name | Daily Details | Date"
-  if (!mlStore._originalDocumentTitle) {
-    mlStore._originalDocumentTitle = document.title || "CMSys Mobile | CE Management System — SLN";
-  }
-  document.title = printTitle;
+  // Synchronize document title to requested format: "Zone or workshop name | Daily Details | Date"
+  updateDocumentTitleMobile(currentZone, targetDate);
 
   const modal = document.getElementById("mlPrintPreviewModal");
   if (modal) {
@@ -3254,27 +3264,12 @@ function openDailyReportPrintMobile() {
   try {
     history.pushState({ modal: "dailyPrintPreview" }, "", window.location.href);
   } catch (e) {}
-
-  setTimeout(() => {
-    try {
-      window.print();
-    } catch (e) {
-      console.warn("Auto print failed, user can tap Print button:", e);
-    }
-  }, 400);
 }
 
 function closeDailyReportPrintMobile(triggeredByPopstate = false) {
   const modal = document.getElementById("mlPrintPreviewModal");
   if (modal) {
     modal.classList.add("hidden");
-  }
-
-  // Restore original document title
-  if (mlStore._originalDocumentTitle) {
-    document.title = mlStore._originalDocumentTitle;
-  } else {
-    document.title = "CMSys Mobile | CE Management System — SLN";
   }
 
   // Cleanly pop history state if closed by button click (not popstate)
@@ -3288,19 +3283,17 @@ function closeDailyReportPrintMobile(triggeredByPopstate = false) {
 function triggerNativePrintMobile() {
   const currentZone = mlStore.currentZone;
   const targetDate = mlStore.selectedDate || getLocalDateString();
-  const printTitle = getDailyDetailsReportTitle(currentZone, targetDate);
 
-  if (!mlStore._originalDocumentTitle) {
-    mlStore._originalDocumentTitle = document.title || "CMSys Mobile | CE Management System — SLN";
-  }
-  document.title = printTitle;
+  updateDocumentTitleMobile(currentZone, targetDate);
 
-  try {
-    window.print();
-  } catch (e) {
-    console.warn("Manual print error:", e);
-    showLightToast("Please use browser menu to Print / Save as PDF", "⚠️");
-  }
+  setTimeout(() => {
+    try {
+      window.print();
+    } catch (e) {
+      console.warn("Manual print error:", e);
+      showLightToast("Please use browser menu to Print / Save as PDF", "⚠️");
+    }
+  }, 120);
 }
 
 function openDailyReportInNewWindowMobile() {
@@ -3349,8 +3342,86 @@ function printZoneDailyWorkOrdersMobile() {
   openDailyReportPrintMobile();
 }
 
+// ── ON-DEMAND DIRECT DAILY DETAILS PDF EXPORT WITH EXACT FILENAME ──
 function exportZoneDailyWorkOrdersPDFMobile() {
-  openDailyReportPrintMobile();
+  const currentZone = mlStore.currentZone;
+  const targetDate = mlStore.selectedDate || getLocalDateString();
+  const printTitle = getDailyDetailsReportTitle(currentZone, targetDate);
+
+  updateDocumentTitleMobile(currentZone, targetDate);
+
+  // Show sleek overlay spinner
+  let overlay = document.getElementById("mlPdfLoadingOverlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "mlPdfLoadingOverlay";
+    overlay.className = "fixed inset-0 z-[100000] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4";
+    overlay.innerHTML = `
+      <div class="bg-white rounded-2xl p-5 shadow-2xl flex flex-col items-center gap-3 max-w-xs text-center border border-slate-200">
+        <div class="w-9 h-9 border-3 border-teal-600 border-t-transparent rounded-full animate-spin"></div>
+        <p class="font-bold text-slate-800 text-xs sm:text-sm">Daily Details PDF එක සකස් වෙමින් පවතී...</p>
+        <p class="text-[10px] text-slate-500">Generating PDF, please wait...</p>
+      </div>`;
+    document.body.appendChild(overlay);
+  } else {
+    overlay.classList.remove("hidden");
+  }
+
+  loadHtml2PdfMobile(() => {
+    const reportHtml = buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate);
+    const tempDiv = document.createElement("div");
+    tempDiv.style.position = "absolute";
+    tempDiv.style.top = "0";
+    tempDiv.style.left = "0";
+    tempDiv.style.zIndex = "99998";
+    tempDiv.style.width = "794px";
+    tempDiv.style.backgroundColor = "#ffffff";
+    tempDiv.innerHTML = `
+      <style>
+        body { margin: 0; padding: 12px; background: #ffffff; }
+        table { border-collapse: collapse; width: 100%; }
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      </style>
+      ${reportHtml}
+    `;
+    document.body.appendChild(tempDiv);
+
+    // Format requested: "[Zone or workshop name] | Daily Details | [Date].pdf"
+    const safeZone = String(formatZoneDisplayName(currentZone) || currentZone).replace(/[/\\:*?"<>]/g, "");
+    const safeDate = String(targetDate).replace(/[/\\:*?"<>]/g, "-");
+    const rawFileName = `${safeZone} | Daily Details | ${safeDate}.pdf`;
+
+    const opt = {
+      margin: [6, 8, 6, 8],
+      filename: rawFileName,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: 794,
+        width: 794
+      },
+      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+    };
+
+    html2pdf()
+      .set(opt)
+      .from(tempDiv)
+      .save()
+      .then(() => {
+        if (overlay && document.body.contains(overlay)) overlay.remove();
+        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
+        showLightToast("PDF Exported: " + rawFileName, "✅");
+      })
+      .catch(err => {
+        console.error("Daily Report PDF Export Error:", err);
+        if (overlay && document.body.contains(overlay)) overlay.remove();
+        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
+        showLightToast("Direct download failed. Opening Print preview...", "⚠️");
+        openDailyReportPrintMobile();
+      });
+  });
 }
 
 // ── SIGNATORY AUTOCOMPLETE FOR MOBILE (FIND & SEARCH) ──

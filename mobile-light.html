@@ -178,8 +178,8 @@
                     <span id="mlTaskCount" class="text-[10px] font-bold bg-slate-100 text-teal-800 px-2 py-0.5 rounded-full border border-slate-200">0</span>
                 </h2>
                 <div class="flex items-center gap-1.5">
-                    <button type="button" onclick="openDailyReportPrintMobile()" class="px-2.5 py-1 rounded-lg bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 font-bold text-[10px] active-scale flex items-center gap-1 shadow-2xs" title="Print Today's Work Orders">
-                        <span>🖨️</span> Print
+                    <button type="button" onclick="openDailyReportPrintMobile()" class="px-2.5 py-1 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 font-bold text-[10px] active-scale flex items-center gap-1 shadow-2xs" title="Export & Print Daily Details">
+                        <span>📑</span> Export / Print
                     </button>
                     <button type="button" onclick="openNewAssignModal()" class="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-[10px] active-scale flex items-center gap-1 shadow-xs" title="Create New Sailor Assignment">
                         <span>💼</span> New Assign
@@ -1140,12 +1140,15 @@
                 </button>
                 <div class="text-center flex-1 px-1 min-w-0">
                     <h3 class="text-xs sm:text-sm font-bold text-white truncate" id="mlPrintModalTitle">Daily Details</h3>
-                    <p class="text-[9px] sm:text-[10px] text-teal-300 font-medium truncate" id="mlPrintModalSubtitle">Print Preview &bull; A4</p>
+                    <p class="text-[9px] sm:text-[10px] text-teal-300 font-medium truncate" id="mlPrintModalSubtitle">Print / Export Preview &bull; A4</p>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <button type="button" onclick="triggerNativePrintMobile()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-md active-scale">
+                    <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-md active-scale" title="Download PDF file">
+                        <span>📥</span>
+                        <span>Export PDF</span>
+                    </button>
+                    <button type="button" onclick="triggerNativePrintMobile()" class="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs flex items-center justify-center border border-slate-700 active-scale" title="Print dialog">
                         <span>🖨️</span>
-                        <span>Print</span>
                     </button>
                     <button type="button" onclick="closeDailyReportPrintMobile()" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold active-scale ml-0.5" title="Close">✕</button>
                 </div>
@@ -1157,8 +1160,8 @@
                 </div>
             </div>
             <!-- Sticky Bottom Action Bar (no-print) -->
-            <div class="no-print bg-slate-900 border-t border-slate-800 p-2.5 px-3 sm:px-4 flex items-center justify-between shrink-0 shadow-lg">
-                <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 active-scale border border-slate-700 shadow-sm">
+            <div class="no-print bg-slate-900 border-t border-slate-800 p-2.5 px-3 sm:px-4 flex items-center justify-between shrink-0 shadow-lg gap-2">
+                <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 active-scale border border-slate-700 shadow-sm shrink-0">
                     <span class="text-sm">⬅️</span>
                     <span>Dashboard වෙත ආපසු</span>
                 </button>
@@ -1166,9 +1169,12 @@
                     <button type="button" onclick="openDailyReportInNewWindowMobile()" class="px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale" title="Open in new window / tab">
                         <span>↗️</span> Tab
                     </button>
-                    <button type="button" onclick="triggerNativePrintMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md active-scale">
-                        <span>🖨️</span>
-                        <span>Print / Save PDF</span>
+                    <button type="button" onclick="triggerNativePrintMobile()" class="px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale" title="Print Dialog">
+                        <span>🖨️</span> Print
+                    </button>
+                    <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs flex items-center gap-1.5 shadow-md active-scale" title="Direct PDF Download">
+                        <span>📥</span>
+                        <span>Export PDF</span>
                     </button>
                 </div>
             </div>
@@ -1182,6 +1188,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile-light.js?v=2.2.7"></script>
+    <script src="mobile-light.js?v=2.2.8"></script>
 </body>
 </html>
