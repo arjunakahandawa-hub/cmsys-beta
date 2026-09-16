@@ -22528,6 +22528,40 @@ function exportLmdCSV(scope, selectedZone) {
   document.body.removeChild(link);
   showToast("CSV downloaded successfully!");
 }
+// ── SAILOR CLASSIFICATION FOR ZONE DAILY DETAILS SUMMARY TABLE ──
+function classifySailorForSummary(s, isInCharge) {
+  if (!s) return "MA";
+  const r = (s.rank || "").toUpperCase().trim();
+  const t = (s.trade || "").toUpperCase().trim();
+
+  // 1. PO: Petty Officer / Chief Petty Officer / Fleet Chief / Master Chief Artificer / Chief Artificer
+  if (r.includes("PO") || r.includes("CHIEF") || r.includes("MCA") || r.includes("CA (CE)")) {
+    return "PO";
+  }
+
+  // 2. LME: If rank is LME and (is actual In-Charge of the zone, OR trade is empty / N/A / CE / LME)
+  if (r.includes("LME")) {
+    if (isInCharge || !t || t === "CE" || t === "LME" || t === "N/A" || t === "—" || t === "-") {
+      return "LME";
+    }
+  }
+
+  // 3. Trade Columns (Pic - 03: MA, PA, CA, AL, SW, PL, WE, BB, WR)
+  if (t === "MA" || t === "MASON") return "MA";
+  if (t === "PA" || t === "PAINTER") return "PA";
+  if (t === "CA" || t === "CARPENTER") return "CA";
+  if (t === "AL" || t.includes("ALUM")) return "AL";
+  if (t === "SW" || t.includes("SIGN")) return "SW";
+  if (t === "PL" || t === "PLUMBER") return "PL";
+  if (t === "WE" || t === "WEL" || t === "WL" || t === "WELDER") return "WE";
+  if (t === "BB" || t.includes("BEND")) return "BB";
+  if (t === "WR" || t === "RW" || t.includes("WIRE")) return "WR";
+
+  // 4. Fallback: If rank is LME, classify as LME, else default to MA
+  if (r.includes("LME")) return "LME";
+  return "MA";
+}
+
 function printLmdDetails(scope, selectedZone) {
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
@@ -22546,6 +22580,13 @@ function printLmdDetails(scope, selectedZone) {
       zones.push({ id: targetZone, name: formatZoneDisplayName(targetZone) || targetZone });
     }
   }
+
+  // Summary counts for all unique sailors in the report
+  const seenReportSailorKeys = new Set();
+  const reportSailorCounts = {
+    PO: 0, LME: 0, MA: 0, PA: 0, CA: 0, AL: 0, SW: 0, PL: 0, WE: 0, BB: 0, WR: 0
+  };
+  let totalReportStrength = 0;
 
   let rowsHtml = "";
   zones.forEach((z) => {
@@ -22578,6 +22619,7 @@ function printLmdDetails(scope, selectedZone) {
     wos.forEach((wo) => {
       const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
       if (sailors && sailors.length > 0) {
+        const isActualInCharge = (wo.description || "").toLowerCase().trim() === "in charge" || wo.assign_type === "In Charge" || (wo.title || "").toLowerCase().trim() === "in charge";
         const workTitle = (wo.description || wo.title || wo.reference_no || wo.job_no || "Active Work").trim();
         zoneRowsHtml += `
           <tr style="background-color: #f1f5f9; font-weight: bold;">
@@ -22601,6 +22643,19 @@ function printLmdDetails(scope, selectedZone) {
               <td style="text-align:center;">${escapeHtml(s.trade || "—")}</td>
             </tr>
           `;
+
+          // Tally unique sailors for the strength summary table
+          const sKey = String(s.id || s._fbKey || s.official_number || s.service_no || s.name || "");
+          if (sKey && !seenReportSailorKeys.has(sKey)) {
+            seenReportSailorKeys.add(sKey);
+            const col = classifySailorForSummary(s, isActualInCharge);
+            if (reportSailorCounts[col] !== undefined) {
+              reportSailorCounts[col]++;
+            } else {
+              reportSailorCounts.MA++;
+            }
+            totalReportStrength++;
+          }
         });
       }
     });
@@ -22620,15 +22675,45 @@ function printLmdDetails(scope, selectedZone) {
   if (!rowsHtml) {
     rowsHtml = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #64748b;">No allocations found for this selection on this date.</td></tr>`;
   }
-  const formattedDate = new Date(dateVal).toLocaleDateString("en-GB", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
+
+  // Build dynamic summary table showing ONLY relevant categories for this zone/date
+  let summaryHtml = "";
+  const STANDARD_SUMMARY_COLS = ["PO", "LME", "MA", "PA", "CA", "AL", "SW", "PL", "WE", "BB", "WR"];
+  const activeCols = STANDARD_SUMMARY_COLS.filter(col => (reportSailorCounts[col] || 0) > 0);
+  Object.keys(reportSailorCounts).forEach(k => {
+    if (reportSailorCounts[k] > 0 && !activeCols.includes(k)) {
+      activeCols.push(k);
+    }
   });
+
+  if (activeCols.length > 0) {
+    const colWidth = (100 / (activeCols.length + 1)).toFixed(2);
+    const ths = activeCols.map(col => `<th style="width: ${colWidth}%;">${escapeHtml(col)}</th>`).join("") + `<th style="width: ${colWidth}%;" class="summary-total">TOTAL</th>`;
+    const tds = activeCols.map(col => `<td>${String(reportSailorCounts[col] || 0).padStart(2, "0")}</td>`).join("") + `<td class="summary-total">${String(totalReportStrength || 0).padStart(2, "0")}</td>`;
+
+    summaryHtml = `
+      <!-- ZONE STRENGTH SUMMARY TABLE (DYNAMIC ACTIVE CATEGORIES ONLY) -->
+      <div class="daily-details-summary">
+        <table>
+          <thead>
+            <tr>${ths}</tr>
+          </thead>
+          <tbody>
+            <tr>${tds}</tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  const isAll = scope === "all";
+  const targetZone = selectedZone || store.currentZone;
+  const displayZoneName = isAll ? "ALL ZONES" : (formatZoneDisplayName(targetZone) || targetZone || "");
+  const printDocTitle = `${displayZoneName} | Daily Details | ${dateVal}`;
+
   const win = window.open("", "_blank");
   win.document.write(`
-        <html><head><title>Daily Details</title>
+        <html><head><title>${escapeHtml(printDocTitle)}</title>
         <style>
             body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; margin:0; padding:20px; }
             .header-container { display: flex; align-items: center; justify-content: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px; }
@@ -22645,7 +22730,14 @@ function printLmdDetails(scope, selectedZone) {
             th, td { border:1px solid #94a3b8; padding:7px 9px; text-align: left; vertical-align: middle; }
             th { background:#f1f5f9; color: #1e293b; font-weight: bold; text-transform: uppercase; font-size: 10px; }
             
-            .signature-section { margin-top: 60px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
+            .daily-details-summary { margin-top: 18px; margin-bottom: 22px; page-break-inside: avoid; }
+            .daily-details-summary table { width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; border: 1.5px solid #0f172a; table-layout: fixed; }
+            .daily-details-summary th, .daily-details-summary td { border: 1px solid #0f172a; padding: 6px 4px; text-align: center; vertical-align: middle; }
+            .daily-details-summary th { background-color: #f8fafc; color: #0f172a; font-weight: 700; font-size: 10.5px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .daily-details-summary td { font-weight: 700; font-size: 11px; color: #0f172a; }
+            .daily-details-summary .summary-total { background-color: #f1f5f9; font-weight: 800; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+            .signature-section { margin-top: 25px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid; }
             .sig-block { text-align: center; width: 220px; }
             .sig-block p { margin: 2px 0; }
             
@@ -22654,6 +22746,7 @@ function printLmdDetails(scope, selectedZone) {
                 @page { size:A4; margin:12mm; } 
                 body { padding:0; }
                 .meta-section { background: none; border-color: #94a3b8; }
+                .daily-details-summary th, .daily-details-summary td, .daily-details-summary .summary-total { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             }
         </style></head>
         <body>
@@ -22668,10 +22761,10 @@ function printLmdDetails(scope, selectedZone) {
             <div class="meta-section">
                 <div class="meta-left">
                     <div>REPORT: DAILY DETAILS REPORT</div>
-                    <div>SCOPE: ${scope === "all" ? "ALL ZONES" : "ZONE: " + selectedZone.toUpperCase()}</div>
+                    <div>SCOPE: ${isAll ? "ALL ZONES" : "ZONE: " + escapeHtml(displayZoneName.toUpperCase())}</div>
                 </div>
                 <div class="meta-right">
-                    <div>DATE: ${dateVal}</div>
+                    <div>DATE: ${escapeHtml(dateVal)}</div>
                     <div>GENERATED BY: NCW OPERATION SYSTEM</div>
                 </div>
             </div>
@@ -22692,6 +22785,8 @@ function printLmdDetails(scope, selectedZone) {
                 </tbody>
             </table>
             
+            ${summaryHtml}
+
             <div class="signature-section">
                 <div class="sig-block">
                     <p>..................................................</p>
@@ -25355,6 +25450,13 @@ function generateWorkOrdersPdfBlob(dateVal) {
     zones.push({ id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" });
   }
 
+  // Summary counts for all unique sailors in the report
+  const seenReportSailorKeys = new Set();
+  const reportSailorCounts = {
+    PO: 0, LME: 0, MA: 0, PA: 0, CA: 0, AL: 0, SW: 0, PL: 0, WE: 0, BB: 0, WR: 0
+  };
+  let totalReportStrength = 0;
+
   zones.forEach((z) => {
     const allWorks = [
       ...(store.workOrders || []).filter(
@@ -25385,6 +25487,7 @@ function generateWorkOrdersPdfBlob(dateVal) {
     wos.forEach((wo) => {
       const { sailors } = getWorkOrderAssignedSailors(wo, targetDate);
       if (sailors && sailors.length > 0) {
+        const isActualInCharge = (wo.description || "").toLowerCase().trim() === "in charge" || wo.assign_type === "In Charge" || (wo.title || "").toLowerCase().trim() === "in charge";
         const workTitle = (wo.description || wo.title || wo.reference_no || wo.job_no || "Active Work").trim();
         zoneRowsHtml += `
           <tr style="background-color: #f1f5f9; font-weight: bold;">
@@ -25408,6 +25511,19 @@ function generateWorkOrdersPdfBlob(dateVal) {
               <td style="text-align:center;">${escapeHtml(s.trade || "—")}</td>
             </tr>
           `;
+
+          // Tally unique sailors for the strength summary table
+          const sKey = String(s.id || s._fbKey || s.official_number || s.service_no || s.name || "");
+          if (sKey && !seenReportSailorKeys.has(sKey)) {
+            seenReportSailorKeys.add(sKey);
+            const col = classifySailorForSummary(s, isActualInCharge);
+            if (reportSailorCounts[col] !== undefined) {
+              reportSailorCounts[col]++;
+            } else {
+              reportSailorCounts.MA++;
+            }
+            totalReportStrength++;
+          }
         });
       }
     });
@@ -25428,6 +25544,37 @@ function generateWorkOrdersPdfBlob(dateVal) {
   if (!rowsHtml) {
     rowsHtml = `<tr><td colspan="6" style="text-align:center; padding: 20px; color: #64748b;">No allocations found for this selection on this date.</td></tr>`;
   }
+
+  // Build dynamic summary table showing ONLY relevant categories for this report
+  let summaryHtml = "";
+  const STANDARD_SUMMARY_COLS = ["PO", "LME", "MA", "PA", "CA", "AL", "SW", "PL", "WE", "BB", "WR"];
+  const activeCols = STANDARD_SUMMARY_COLS.filter(col => (reportSailorCounts[col] || 0) > 0);
+  Object.keys(reportSailorCounts).forEach(k => {
+    if (reportSailorCounts[k] > 0 && !activeCols.includes(k)) {
+      activeCols.push(k);
+    }
+  });
+
+  if (activeCols.length > 0) {
+    const colWidth = (100 / (activeCols.length + 1)).toFixed(2);
+    const ths = activeCols.map(col => `<th style="border: 1px solid #0f172a; padding: 6px 4px; text-align: center; background-color: #f8fafc; color: #0f172a; font-weight: 700; font-size: 10.5px; width: ${colWidth}%;">${escapeHtml(col)}</th>`).join("") + `<th style="border: 1px solid #0f172a; padding: 6px 4px; text-align: center; background-color: #f1f5f9; color: #0f172a; font-weight: 800; font-size: 10.5px; width: ${colWidth}%;">TOTAL</th>`;
+    const tds = activeCols.map(col => `<td style="border: 1px solid #0f172a; padding: 6px 4px; text-align: center; font-weight: 700; font-size: 11px; color: #0f172a;">${String(reportSailorCounts[col] || 0).padStart(2, "0")}</td>`).join("") + `<td style="border: 1px solid #0f172a; padding: 6px 4px; text-align: center; background-color: #f1f5f9; font-weight: 800; font-size: 11px; color: #0f172a;">${String(totalReportStrength || 0).padStart(2, "0")}</td>`;
+
+    summaryHtml = `
+      <!-- ZONE STRENGTH SUMMARY TABLE (DYNAMIC ACTIVE CATEGORIES ONLY) -->
+      <div style="margin-top: 18px; margin-bottom: 22px; page-break-inside: avoid;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 11px; text-align: center; border: 1.5px solid #0f172a; table-layout: fixed;">
+          <thead>
+            <tr>${ths}</tr>
+          </thead>
+          <tbody>
+            <tr>${tds}</tr>
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
   const formattedDate = new Date(targetDate).toLocaleDateString("en-GB", {
     weekday: "long",
     year: "numeric",
@@ -25473,7 +25620,9 @@ function generateWorkOrdersPdfBlob(dateVal) {
                 </tbody>
             </table>
 
-            <div style="margin-top: 60px; display: flex; justify-content: space-between; font-size: 11px;">
+            ${summaryHtml}
+
+            <div style="margin-top: 25px; display: flex; justify-content: space-between; font-size: 11px; page-break-inside: avoid;">
                 <div style="text-align: center; width: 180px;">
                     <p>..................................................</p>
                     <p style="font-weight: bold;">PREPARED BY - LME</p>
@@ -25498,7 +25647,7 @@ function downloadWorkOrdersPdfBackup() {
   const element = generateWorkOrdersPdfBlob(dateVal);
   const opt = {
     margin: 10,
-    filename: `ncw_ps_backup_${dateVal}.pdf`,
+    filename: `All Zones | Daily Details | ${dateVal}.pdf`,
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
