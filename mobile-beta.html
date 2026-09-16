@@ -1146,19 +1146,22 @@
                     <p class="text-[9px] sm:text-[10px] text-teal-300 font-medium truncate" id="mlPrintModalSubtitle">Print / Export Preview &bull; A4</p>
                 </div>
                 <div class="flex items-center gap-1.5 shrink-0">
-                    <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-md active-scale" title="Download PDF file">
+                    <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-2 sm:px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-md active-scale" title="Download PDF file">
                         <span>📥</span>
-                        <span>Export PDF</span>
+                        <span class="hidden xs:inline">Export</span>
                     </button>
                     <button type="button" onclick="triggerNativePrintMobile()" class="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs flex items-center justify-center border border-slate-700 active-scale" title="Print dialog">
                         <span>🖨️</span>
                     </button>
-                    <button type="button" onclick="closeDailyReportPrintMobile()" class="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center text-xs font-bold active-scale ml-0.5" title="Close">✕</button>
+                    <button type="button" onclick="closeDailyReportPrintMobile()" class="px-2.5 sm:px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center text-xs font-black active-scale shadow-md gap-1 ml-0.5" title="Close">
+                        <span class="text-sm">✕</span>
+                        <span>Close</span>
+                    </button>
                 </div>
             </div>
             <!-- Scrollable Report Area -->
-            <div class="p-2 sm:p-4 overflow-y-auto touch-scroll flex-1 bg-slate-100/60">
-                <div id="mlPrintReportArea" class="bg-white rounded-xl shadow-xs border border-slate-200 p-2 sm:p-4">
+            <div class="p-2 sm:p-4 overflow-y-auto touch-scroll flex-1 bg-slate-100/60 max-w-full">
+                <div id="mlPrintReportArea" class="bg-white rounded-xl shadow-xs border border-slate-200 p-2 sm:p-4 max-w-full overflow-hidden">
                     <!-- Dynamic Report HTML Injected Here -->
                 </div>
             </div>
@@ -1166,18 +1169,23 @@
             <div class="no-print bg-slate-900 border-t border-slate-800 p-2.5 px-3 sm:px-4 flex items-center justify-between shrink-0 shadow-lg gap-2">
                 <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 active-scale border border-slate-700 shadow-sm shrink-0">
                     <span class="text-sm">⬅️</span>
-                    <span>Dashboard වෙත ආපසු</span>
+                    <span class="hidden xs:inline">Dashboard වෙත ආපසු</span>
+                    <span class="xs:hidden">Dashboard</span>
                 </button>
-                <div class="flex items-center gap-2">
-                    <button type="button" onclick="openDailyReportInNewWindowMobile()" class="px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale" title="Open in new window / tab">
+                <div class="flex items-center gap-1.5 sm:gap-2">
+                    <button type="button" onclick="openDailyReportInNewWindowMobile()" class="px-2 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale" title="Open in new window / tab">
                         <span>↗️</span> Tab
                     </button>
-                    <button type="button" onclick="triggerNativePrintMobile()" class="px-2.5 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale" title="Print Dialog">
+                    <button type="button" onclick="triggerNativePrintMobile()" class="px-2 sm:px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale" title="Print Dialog">
                         <span>🖨️</span> Print
                     </button>
-                    <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs flex items-center gap-1.5 shadow-md active-scale" title="Direct PDF Download">
+                    <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-2.5 sm:px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs flex items-center gap-1.5 shadow-md active-scale" title="Direct PDF Download">
                         <span>📥</span>
-                        <span>Export PDF</span>
+                        <span>Export</span>
+                    </button>
+                    <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 sm:px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-black text-xs flex items-center gap-1 shadow-md active-scale shrink-0" title="Close Report">
+                        <span class="text-sm">✕</span>
+                        <span>Close</span>
                     </button>
                 </div>
             </div>
@@ -1191,6 +1199,6 @@
     </div>
 
     <!-- SCRIPT INCLUSION -->
-    <script src="mobile.js?v=2.2.9"></script>
+    <script src="mobile.js?v=2.3.0"></script>
 </body>
 </html>

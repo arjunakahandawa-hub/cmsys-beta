@@ -3240,35 +3240,42 @@ function openDailyReportPrintMobile() {
   const container = document.getElementById("mlPrintReportArea");
   if (container) {
     container.innerHTML = `
-      <!-- In-Report Top Action Bar (Always visible inside preview, excluded from prints) -->
-      <div class="no-print mb-3 p-2 bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs">
-        <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1 active-scale shadow-xs">
+      <!-- In-Report Top Action Bar (Always visible on mobile screen, never pushed off-screen) -->
+      <div class="no-print sticky top-0 z-20 mb-3 p-2 bg-slate-900 text-white rounded-xl border border-slate-700 shadow-md flex items-center justify-between gap-2 max-w-full" style="box-sizing: border-box;">
+        <button type="button" onclick="closeDailyReportPrintMobile()" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1 active-scale border border-slate-700 shadow-xs shrink-0">
           <span>⬅️</span>
-          <span>Dashboard වෙත ආපසු</span>
+          <span class="hidden xs:inline">Dashboard</span>
         </button>
-        <div class="flex items-center gap-1.5">
-          <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-2.5 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
+        <div class="flex items-center gap-1.5 shrink-0 ml-auto">
+          <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
             <span>📥</span>
-            <span>Export PDF</span>
+            <span>PDF</span>
           </button>
-          <button type="button" onclick="closeDailyReportPrintMobile()" class="px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-xs active-scale">
-            ✕ Close
+          <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-black text-xs flex items-center gap-1 shadow-md active-scale" title="Close Report">
+            <span class="text-sm">✕</span>
+            <span>Close</span>
           </button>
         </div>
       </div>
-      ${reportHtml}
+      <!-- Scrollable Report Table Wrapper (Allows table to scroll horizontally without breaking screen layout) -->
+      <div class="report-table-scroll-wrapper" style="width: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;">
+        ${reportHtml}
+      </div>
       <!-- In-Report Bottom Action Bar -->
-      <div class="no-print mt-4 p-2.5 bg-slate-100 rounded-xl border border-slate-200 flex items-center justify-between gap-2 shadow-2xs">
-        <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 active-scale shadow-xs">
+      <div class="no-print mt-4 p-2.5 bg-slate-900 text-white rounded-xl border border-slate-700 shadow-md flex items-center justify-between gap-2 max-w-full" style="box-sizing: border-box;">
+        <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1.5 active-scale border border-slate-700 shadow-xs shrink-0">
           <span>⬅️</span>
-          <span>Dashboard වෙත ආපසු</span>
+          <span>Dashboard</span>
         </button>
-        <div class="flex items-center gap-2">
-          <button type="button" onclick="triggerNativePrintMobile()" class="px-3 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs flex items-center gap-1 active-scale">
+        <div class="flex items-center gap-2 shrink-0 ml-auto">
+          <button type="button" onclick="triggerNativePrintMobile()" class="px-2.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 font-bold text-xs flex items-center gap-1 active-scale">
             <span>🖨️</span> Print
           </button>
-          <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-3.5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
+          <button type="button" onclick="exportZoneDailyWorkOrdersPDFMobile()" class="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
             <span>📥</span> Export PDF
+          </button>
+          <button type="button" onclick="closeDailyReportPrintMobile()" class="px-3.5 py-2 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-black text-xs flex items-center gap-1 shadow-md active-scale" title="Close Report">
+            <span class="text-sm">✕</span> Close
           </button>
         </div>
       </div>
