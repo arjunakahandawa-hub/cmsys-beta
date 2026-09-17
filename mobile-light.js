@@ -184,7 +184,12 @@ const mlStore = {
   activeTab: "home",
   selectedAssignKey: "",
   selectedEstKey: null,
-  selectedWoKey: null
+  selectedWoKey: null,
+  inventory: [],
+  inventoryPage: 1,
+  inventoryPageSize: 25,
+  selectedInventoryCategory: "ALL",
+  inventoryStoreScope: "zone"
 };
 
 // Selection sets for creation modals
@@ -232,11 +237,11 @@ try {
 // ---------------------------------------------
 function switchLightTab(tabId) {
   mlStore.activeTab = tabId;
-  const tabs = ["home", "estimate", "lmd", "sailors"];
+  const tabs = ["home", "estimate", "lmd", "inventory"];
   
   tabs.forEach(t => {
-    const view = document.getElementById(t === "home" ? "viewHome" : t === "estimate" ? "viewEstimate" : t === "lmd" ? "viewLmd" : "viewSailors");
-    const btn = document.getElementById(t === "home" ? "tabBtnHome" : t === "estimate" ? "tabBtnEstimate" : t === "lmd" ? "tabBtnLmd" : "tabBtnSailors");
+    const view = document.getElementById(t === "home" ? "viewHome" : t === "estimate" ? "viewEstimate" : t === "lmd" ? "viewLmd" : "viewInventory");
+    const btn = document.getElementById(t === "home" ? "tabBtnHome" : t === "estimate" ? "tabBtnEstimate" : t === "lmd" ? "tabBtnLmd" : "tabBtnInventory");
     
     if (view) {
       if (t === tabId) view.classList.remove("hidden");
@@ -254,7 +259,7 @@ function switchLightTab(tabId) {
   if (tabId === "home") renderLightTasks();
   else if (tabId === "estimate") renderLightEstimates();
   else if (tabId === "lmd") loadLightLmdRecords();
-  else if (tabId === "sailors") renderLightSailorList();
+  else if (tabId === "inventory") renderLightInventory();
 }
 
 // ---------------------------------------------
@@ -338,6 +343,9 @@ function applyZoneSwitch(z) {
   renderLightTasks();
   if (mlStore.activeTab === "estimate") renderLightEstimates();
   if (mlStore.activeTab === "lmd") loadLightLmdRecords();
+  mlStore.inventoryPage = 1;
+  updateInventoryCategoryCounters();
+  if (mlStore.activeTab === "inventory") renderLightInventory();
   populateLocationDatalistMobile();
 }
 
@@ -870,6 +878,34 @@ function loadLightData() {
         });
       }
       populateLocationDatalistMobile();
+    });
+
+    opsDB.ref("inventory").on("value", snap => {
+      const val = snap.val();
+      mlStore.inventory = [];
+      if (val) {
+        Object.keys(val).forEach(k => {
+          const item = val[k];
+          if (item) {
+            mlStore.inventory.push({
+              _fbKey: k,
+              id: item.id || k,
+              category: String(item.category || "General").trim(),
+              description: String(item.description || "Unnamed Material").trim(),
+              deno: String(item.deno || "Nos").trim(),
+              quantity: typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0,
+              cost_per_unit: parseFloat(item.cost_per_unit) || 0,
+              location: String(item.location || "Zone Store").trim(),
+              zone_id: String(item.zone_id || item.zone || "").trim(),
+              book_no: String(item.book_no || item.book || item.book_number || "").trim()
+            });
+          }
+        });
+      }
+      updateInventoryCategoryCounters();
+      if (mlStore.activeTab === "inventory") {
+        renderLightInventory();
+      }
     });
   }
 }
@@ -2616,22 +2652,44 @@ function editCurrentEstimateMobile() {
   if (key) openNewEstimateModalMobile(key);
 }
 
-// ── ESTIMATE PDF EXPORT & PRINT FOR MOBILE (ON-DEMAND / ZERO-LAG) ──
-function loadHtml2PdfMobile(callback) {
+// ── ESTIMATE & REPORT PDF EXPORT & PRINT FOR MOBILE (ON-DEMAND / ZERO-LAG) ──
+function loadHtml2PdfMobile(callback, onError) {
   if (typeof html2pdf !== "undefined") {
     return callback();
   }
   showLightToast("Loading PDF engine...", "⏳");
-  const script = document.createElement("script");
-  script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
-  script.onload = () => {
-    callback();
+  
+  // Try loading local bundle first (100% offline support)
+  const localScript = document.createElement("script");
+  localScript.src = "html2pdf.bundle.min.js";
+  localScript.onload = () => {
+    if (typeof html2pdf !== "undefined") {
+      callback();
+    } else {
+      loadCdnFallback();
+    }
   };
-  script.onerror = () => {
-    showLightToast("Failed to load PDF library. Opening Print view...", "⚠️");
-    printCurrentEstimateMobile();
+  localScript.onerror = () => {
+    loadCdnFallback();
   };
-  document.head.appendChild(script);
+
+  const loadCdnFallback = () => {
+    const cdnScript = document.createElement("script");
+    cdnScript.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+    cdnScript.onload = () => {
+      callback();
+    };
+    cdnScript.onerror = (e) => {
+      console.warn("Failed to load html2pdf library from local and CDN:", e);
+      showLightToast("PDF library load failed. Switching to Print...", "⚠️");
+      if (typeof onError === "function") {
+        onError();
+      }
+    };
+    document.head.appendChild(cdnScript);
+  };
+
+  document.head.appendChild(localScript);
 }
 
 function buildEstimatePrintHTMLMobile(est) {
@@ -2845,54 +2903,90 @@ function exportCurrentEstimatePDFMobile(specificKey) {
     overlay.classList.remove("hidden");
   }
 
+  let tempDiv = null;
+  let watchdogTimer = null;
+  let isCleanedUp = false;
+
+  const cleanup = () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
+    if (watchdogTimer) {
+      clearTimeout(watchdogTimer);
+      watchdogTimer = null;
+    }
+    if (overlay && document.body.contains(overlay)) {
+      overlay.remove();
+    }
+    if (tempDiv && document.body.contains(tempDiv)) {
+      tempDiv.remove();
+    }
+  };
+
+  watchdogTimer = setTimeout(() => {
+    cleanup();
+    showLightToast("PDF generation timed out. Opening Print view...", "⚠️");
+    printCurrentEstimateMobile(estKey);
+  }, 15000);
+
   loadHtml2PdfMobile(() => {
-    const tempDiv = document.createElement("div");
-    tempDiv.style.position = "absolute";
-    tempDiv.style.top = "0";
-    tempDiv.style.left = "0";
-    tempDiv.style.zIndex = "99998";
-    tempDiv.style.width = "794px";
-    tempDiv.style.backgroundColor = "#ffffff";
-    tempDiv.innerHTML = `
-      <style>
-        .est-table th { border: 1px solid #94a3b8; padding: 4px 6px; background: #f1f5f9; text-align: left; font-size: 10px; font-weight: bold; color: #0f172a; }
-        .est-table td { border: 1px solid #cbd5e1; padding: 4px 6px; word-wrap: break-word; font-size: 10px; color: #1e293b; }
-      </style>
-      ${buildEstimatePrintHTMLMobile(est)}
-    `;
-    document.body.appendChild(tempDiv);
+    try {
+      tempDiv = document.createElement("div");
+      // Place offscreen to prevent UI trapping
+      tempDiv.style.position = "fixed";
+      tempDiv.style.left = "-9999px";
+      tempDiv.style.top = "0";
+      tempDiv.style.width = "794px";
+      tempDiv.style.zIndex = "-9999";
+      tempDiv.style.backgroundColor = "#ffffff";
+      tempDiv.innerHTML = `
+        <style>
+          .est-table th { border: 1px solid #94a3b8; padding: 4px 6px; background: #f1f5f9; text-align: left; font-size: 10px; font-weight: bold; color: #0f172a; }
+          .est-table td { border: 1px solid #cbd5e1; padding: 4px 6px; word-wrap: break-word; font-size: 10px; color: #1e293b; }
+        </style>
+        ${buildEstimatePrintHTMLMobile(est)}
+      `;
+      document.body.appendChild(tempDiv);
 
-    const safeNumber = (est.estimate_number || "EST").replace(/[^a-zA-Z0-9]/g, "_");
-    const opt = {
-      margin: [8, 10, 8, 10],
-      filename: `Estimate_${safeNumber}.pdf`,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        windowWidth: 794,
-        width: 794
-      },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
-    };
+      const safeNumber = (est.estimate_number || "EST").replace(/[^a-zA-Z0-9]/g, "_");
+      const opt = {
+        margin: [8, 10, 8, 10],
+        filename: `Estimate_${safeNumber}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: {
+          scale: 1.5,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          windowWidth: 794,
+          width: 794,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+      };
 
-    html2pdf()
-      .set(opt)
-      .from(tempDiv)
-      .save()
-      .then(() => {
-        if (overlay && document.body.contains(overlay)) overlay.remove();
-        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
-        showLightToast("PDF exported successfully! ✅", "✅");
-      })
-      .catch(err => {
-        console.error("PDF Export Error:", err);
-        if (overlay && document.body.contains(overlay)) overlay.remove();
-        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
-        showLightToast("Direct download failed. Opening Print view...", "⚠️");
-        printCurrentEstimateMobile(estKey);
-      });
+      html2pdf()
+        .set(opt)
+        .from(tempDiv)
+        .save()
+        .then(() => {
+          cleanup();
+          showLightToast("PDF exported successfully! ✅", "✅");
+        })
+        .catch(err => {
+          console.error("PDF Export Error:", err);
+          cleanup();
+          showLightToast("Direct download failed. Opening Print view...", "⚠️");
+          printCurrentEstimateMobile(estKey);
+        });
+    } catch (renderErr) {
+      console.error("Error setting up Estimate PDF:", renderErr);
+      cleanup();
+      printCurrentEstimateMobile(estKey);
+    }
+  }, () => {
+    cleanup();
+    printCurrentEstimateMobile(estKey);
   });
 }
 
@@ -3484,60 +3578,100 @@ function exportZoneDailyWorkOrdersPDFMobile() {
     overlay.classList.remove("hidden");
   }
 
+  let tempDiv = null;
+  let watchdogTimer = null;
+  let isCleanedUp = false;
+
+  const cleanup = () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
+    if (watchdogTimer) {
+      clearTimeout(watchdogTimer);
+      watchdogTimer = null;
+    }
+    if (overlay && document.body.contains(overlay)) {
+      overlay.remove();
+    }
+    if (tempDiv && document.body.contains(tempDiv)) {
+      tempDiv.remove();
+    }
+  };
+
+  // 15-second watchdog timer in case html2pdf / html2canvas hangs
+  watchdogTimer = setTimeout(() => {
+    console.warn("Daily Details PDF generation timed out after 15s. Switching to native print.");
+    cleanup();
+    showLightToast("PDF generation timed out. Opening Print dialog...", "⚠️");
+    triggerNativePrintMobile();
+  }, 15000);
+
   loadHtml2PdfMobile(() => {
-    const reportHtml = buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate);
-    const tempDiv = document.createElement("div");
-    tempDiv.style.position = "absolute";
-    tempDiv.style.top = "0";
-    tempDiv.style.left = "0";
-    tempDiv.style.zIndex = "99998";
-    tempDiv.style.width = "794px";
-    tempDiv.style.backgroundColor = "#ffffff";
-    tempDiv.innerHTML = `
-      <style>
-        body { margin: 0; padding: 12px; background: #ffffff; }
-        table { border-collapse: collapse; width: 100%; }
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-      </style>
-      ${reportHtml}
-    `;
-    document.body.appendChild(tempDiv);
+    try {
+      const reportHtml = buildZoneDailyWorkOrdersHTMLMobile(currentZone, targetDate);
+      tempDiv = document.createElement("div");
+      // Place completely offscreen so it NEVER blocks or covers the mobile UI
+      tempDiv.style.position = "fixed";
+      tempDiv.style.left = "-9999px";
+      tempDiv.style.top = "0";
+      tempDiv.style.width = "794px";
+      tempDiv.style.zIndex = "-9999";
+      tempDiv.style.backgroundColor = "#ffffff";
+      tempDiv.innerHTML = `
+        <style>
+          body { margin: 0; padding: 12px; background: #ffffff; }
+          table { border-collapse: collapse; width: 100%; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        </style>
+        ${reportHtml}
+      `;
+      document.body.appendChild(tempDiv);
 
-    // Format requested: "[Zone or workshop name] | Daily Details | [Date].pdf"
-    const safeZone = String(formatZoneDisplayName(currentZone) || currentZone).replace(/[/\\:*?"<>]/g, "");
-    const safeDate = String(targetDate).replace(/[/\\:*?"<>]/g, "-");
-    const rawFileName = `${safeZone} | Daily Details | ${safeDate}.pdf`;
+      // Format requested: "[Zone or workshop name] | Daily Details | [Date].pdf"
+      const safeZone = String(formatZoneDisplayName(currentZone) || currentZone).replace(/[/\\:*?"<>]/g, "");
+      const safeDate = String(targetDate).replace(/[/\\:*?"<>]/g, "-");
+      const rawFileName = `${safeZone} | Daily Details | ${safeDate}.pdf`;
 
-    const opt = {
-      margin: [6, 8, 6, 8],
-      filename: rawFileName,
-      image: { type: "jpeg", quality: 0.98 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        windowWidth: 794,
-        width: 794
-      },
-      jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
-    };
+      const opt = {
+        margin: [6, 8, 6, 8],
+        filename: rawFileName,
+        image: { type: "jpeg", quality: 0.95 },
+        html2canvas: {
+          scale: 1.5,
+          useCORS: true,
+          allowTaint: true,
+          logging: false,
+          windowWidth: 794,
+          width: 794,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+      };
 
-    html2pdf()
-      .set(opt)
-      .from(tempDiv)
-      .save()
-      .then(() => {
-        if (overlay && document.body.contains(overlay)) overlay.remove();
-        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
-        showLightToast("PDF Exported: " + rawFileName, "✅");
-      })
-      .catch(err => {
-        console.error("Daily Report PDF Export Error:", err);
-        if (overlay && document.body.contains(overlay)) overlay.remove();
-        if (document.body.contains(tempDiv)) document.body.removeChild(tempDiv);
-        showLightToast("Direct download failed. Opening Print preview...", "⚠️");
-        openDailyReportPrintMobile();
-      });
+      html2pdf()
+        .set(opt)
+        .from(tempDiv)
+        .save()
+        .then(() => {
+          cleanup();
+          showLightToast("PDF Exported: " + rawFileName, "✅");
+        })
+        .catch(err => {
+          console.error("Daily Report PDF Export Error:", err);
+          cleanup();
+          showLightToast("Direct download failed. Opening Print dialog...", "⚠️");
+          triggerNativePrintMobile();
+        });
+    } catch (renderErr) {
+      console.error("Error setting up Daily Report PDF:", renderErr);
+      cleanup();
+      showLightToast("PDF error. Opening Print dialog...", "⚠️");
+      triggerNativePrintMobile();
+    }
+  }, () => {
+    // onError handler from loadHtml2PdfMobile
+    cleanup();
+    triggerNativePrintMobile();
   });
 }
 
@@ -4177,56 +4311,226 @@ function markLightLmdToday(assetId) {
 }
 
 // ---------------------------------------------
-// TAB 4: SAILORS DIRECTORY
+// TAB 4: ZONE INVENTORY (ZERO-LAG ARCHITECTURE)
 // ---------------------------------------------
-function renderLightSailorList() {
-  const container = document.getElementById("mlSailorList");
-  const countEl = document.getElementById("mlSailorCount");
-  if (!container) return;
+function getNormalizedCategoryGroup(cat) {
+  const c = String(cat || "").toUpperCase().trim();
+  if (c === "BMS") return "BMS";
+  if (c.includes("PAINT") || c === "PAI" || c === "PAT") return "PAINT";
+  if (c.includes("PLUMB") || c === "PVC") return "PLUMBING";
+  if (c.includes("METAL")) return "METAL";
+  if (c.includes("TIMBER")) return "TIMBER";
+  if (c.includes("ALU")) return "ALU";
+  if (c.includes("ENG") || c.includes("ELEC")) return "ENG";
+  return "GENERAL";
+}
 
-  const q = (document.getElementById("mlSailorSearch")?.value || "").toLowerCase().trim();
-  const sailors = mlStore.sailors || [];
+function toggleInventoryStoreScope() {
+  mlStore.inventoryStoreScope = mlStore.inventoryStoreScope === "zone" ? "all" : "zone";
+  mlStore.inventoryPage = 1;
+  const btnText = document.getElementById("lblScopeText");
+  if (btnText) {
+    btnText.textContent = mlStore.inventoryStoreScope === "zone" ? "Zone Store" : "All Stores";
+  }
+  updateInventoryCategoryCounters();
+  renderLightInventory();
+}
 
-  const filtered = sailors.filter(s => {
-    if (!q) return true;
-    const off = (s.off_no || s.official_number || "").toLowerCase();
-    const name = (s.name || "").toLowerCase();
-    const trade = (s.trade || s.branch || "").toLowerCase();
-    return off.includes(q) || name.includes(q) || trade.includes(q);
+function filterInventoryCategory(cat) {
+  mlStore.selectedInventoryCategory = cat;
+  mlStore.inventoryPage = 1;
+
+  document.querySelectorAll(".ml-inv-filter-btn").forEach(btn => {
+    btn.className = "ml-inv-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 shrink-0 transition-all";
+  });
+  const activeBtn = document.getElementById(`btnInvCat_${cat}`);
+  if (activeBtn) {
+    activeBtn.className = "ml-inv-filter-btn px-2.5 py-1 rounded-lg font-bold text-[10px] bg-teal-700 text-white shadow-xs shrink-0 transition-all";
+  }
+
+  renderLightInventory();
+}
+
+function filterLightInventory() {
+  mlStore.inventoryPage = 1;
+  renderLightInventory();
+}
+
+function loadMoreInventoryChunk() {
+  mlStore.inventoryPage = (mlStore.inventoryPage || 1) + 1;
+  renderLightInventory(true);
+}
+
+function getZoneFilteredInventory() {
+  const allItems = mlStore.inventory || [];
+  const currentZone = mlStore.currentZone || "A-Zone";
+  const scope = mlStore.inventoryStoreScope || "zone";
+
+  if (scope === "all") {
+    return allItems;
+  }
+
+  return allItems.filter(item => {
+    const itemZone = item.zone_id || item.zone || "";
+    const itemLoc = item.location || "";
+    return isZoneMatch(itemZone, currentZone) || isZoneMatch(itemLoc, currentZone);
+  });
+}
+
+function updateInventoryCategoryCounters() {
+  const zoneItems = getZoneFilteredInventory();
+  const counts = {
+    ALL: zoneItems.length,
+    BMS: 0,
+    PAINT: 0,
+    PLUMBING: 0,
+    METAL: 0,
+    TIMBER: 0,
+    ALU: 0,
+    ENG: 0,
+    GENERAL: 0
+  };
+
+  zoneItems.forEach(item => {
+    const grp = getNormalizedCategoryGroup(item.category);
+    if (counts[grp] !== undefined) counts[grp]++;
+    else counts.GENERAL++;
   });
 
-  if (countEl) countEl.textContent = filtered.length;
+  Object.keys(counts).forEach(k => {
+    const el = document.getElementById(`invCount_${k}`);
+    if (el) el.textContent = counts[k];
+  });
+}
+
+function renderLightInventory(isAppending = false) {
+  const container = document.getElementById("mlInventoryList");
+  const countEl = document.getElementById("mlInventoryCount");
+  const zoneBadgeEl = document.getElementById("mlInventoryZoneBadge");
+  const paginationContainer = document.getElementById("mlInventoryPagination");
+  if (!container) return;
+
+  const currentZone = mlStore.currentZone || "A-Zone";
+  const scope = mlStore.inventoryStoreScope || "zone";
+
+  if (zoneBadgeEl) {
+    zoneBadgeEl.textContent = scope === "zone" ? `${formatZoneDisplayName(currentZone)} Store` : "All Base Stores";
+  }
+
+  const zoneItems = getZoneFilteredInventory();
+  const q = (document.getElementById("mlInventorySearch")?.value || "").toLowerCase().trim();
+  const cat = mlStore.selectedInventoryCategory || "ALL";
+
+  const filtered = zoneItems.filter(item => {
+    if (cat !== "ALL") {
+      const grp = getNormalizedCategoryGroup(item.category);
+      if (grp !== cat) return false;
+    }
+    if (q) {
+      const desc = (item.description || "").toLowerCase();
+      const bNo = (item.book_no || "").toLowerCase();
+      const loc = (item.location || "").toLowerCase();
+      const itemCat = (item.category || "").toLowerCase();
+      if (!desc.includes(q) && !bNo.includes(q) && !loc.includes(q) && !itemCat.includes(q)) {
+        return false;
+      }
+    }
+    return true;
+  });
+
+  if (countEl) countEl.textContent = `${filtered.length} Items`;
 
   if (filtered.length === 0) {
-    container.innerHTML = `<div class="p-4 text-center text-slate-400 text-xs">No sailors found.</div>`;
+    container.innerHTML = `
+      <div class="p-6 text-center text-slate-500 bg-white rounded-2xl border border-slate-200 shadow-2xs space-y-2">
+        <span class="text-2xl">📦</span>
+        <h4 class="text-xs font-bold text-slate-800">No inventory items found</h4>
+        <p class="text-[10px] text-slate-400">
+          ${scope === 'zone' ? `No inventory records registered under ${formatZoneDisplayName(currentZone)}.` : 'No items match your search filter.'}
+        </p>
+        ${scope === 'zone' ? `
+          <button type="button" onclick="toggleInventoryStoreScope()" class="mt-2 px-3 py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs shadow-xs active-scale">
+            🌐 View All Base Stores (${mlStore.inventory.length})
+          </button>
+        ` : ''}
+      </div>
+    `;
+    if (paginationContainer) paginationContainer.innerHTML = "";
     return;
   }
 
-  container.innerHTML = filtered.slice(0, 80).map(s => {
-    const off = s.off_no || s.official_number || "—";
-    const rank = s.rank || "AB";
-    const name = s.name || "Sailor";
-    const trade = s.trade || s.branch || "General";
+  const pageSize = mlStore.inventoryPageSize || 25;
+  const currentPage = mlStore.inventoryPage || 1;
+  const itemsToShow = filtered.slice(0, currentPage * pageSize);
+
+  const html = itemsToShow.map(item => {
+    const qty = typeof item.quantity === 'number' ? item.quantity : parseFloat(item.quantity) || 0;
+    const deno = item.deno || "Nos";
+    
+    let stockBadgeCls = "bg-emerald-50 text-emerald-700 border border-emerald-200";
+    let stockIcon = "🟢";
+    let stockLabel = "In Stock";
+
+    if (qty <= 0) {
+      stockBadgeCls = "bg-rose-50 text-rose-700 border border-rose-200";
+      stockIcon = "🔴";
+      stockLabel = "Out of Stock";
+    } else if (qty <= 5) {
+      stockBadgeCls = "bg-amber-50 text-amber-800 border border-amber-300";
+      stockIcon = "🟡";
+      stockLabel = "Low Stock";
+    }
+
+    const costStr = item.cost_per_unit > 0 ? `Rs. ${formatCurrency(item.cost_per_unit)} / ${deno}` : "";
 
     return `
-      <div class="bg-white rounded-xl border border-slate-200 p-2.5 flex items-center justify-between shadow-xs">
-        <div class="flex items-center gap-2">
-          <div class="w-8 h-8 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 flex items-center justify-center text-xs font-black">
-            ${rank}
+      <div class="bg-white rounded-2xl border border-slate-200 p-3 shadow-xs space-y-2 transition-all hover:border-teal-300">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1">
+            <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(item.description)}</h4>
+            <div class="flex items-center gap-1.5 flex-wrap mt-1">
+              <span class="text-[9px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">${escapeHtml(item.category || 'General')}</span>
+              ${item.book_no ? `<span class="text-[9px] text-slate-500 font-mono">📖 ${escapeHtml(item.book_no)}</span>` : ''}
+            </div>
           </div>
-          <div>
-            <h4 class="text-xs font-bold text-slate-900 leading-tight">${escapeHtml(name)}</h4>
-            <span class="text-[10px] text-slate-500 font-mono">${escapeHtml(off)} • ${escapeHtml(trade)}</span>
+          <div class="text-right shrink-0">
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold ${stockBadgeCls}">
+              <span>${stockIcon}</span>
+              <span>${qty.toLocaleString()} ${escapeHtml(deno)}</span>
+            </span>
           </div>
         </div>
-        <span class="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[9px] font-bold">Available</span>
+        <div class="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-1.5 mt-0.5">
+          <span class="flex items-center gap-1">
+            <span>📍</span>
+            <span class="font-medium text-slate-700">${escapeHtml(item.location || 'Zone Store')}</span>
+          </span>
+          ${costStr ? `<span class="text-[9px] font-mono text-slate-500">${costStr}</span>` : `<span class="text-[9px] text-slate-400 font-medium">${stockLabel}</span>`}
+        </div>
       </div>
     `;
   }).join("");
-}
 
-function filterLightSailors() {
-  renderLightSailorList();
+  container.innerHTML = html;
+
+  if (paginationContainer) {
+    if (itemsToShow.length < filtered.length) {
+      const remaining = filtered.length - itemsToShow.length;
+      const nextBatch = Math.min(remaining, pageSize);
+      paginationContainer.innerHTML = `
+        <button type="button" onclick="loadMoreInventoryChunk()" class="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-200 shadow-2xs active-scale flex items-center justify-center gap-1.5">
+          <span>📥</span>
+          <span>Load More (තවත් ${nextBatch} ක් පෙන්වන්න — ඉතිරි ${remaining})</span>
+        </button>
+      `;
+    } else {
+      paginationContainer.innerHTML = `
+        <div class="text-center text-[10px] text-slate-400 py-1.5 font-medium">
+          ✅ Showing all ${filtered.length} items for ${scope === 'zone' ? formatZoneDisplayName(currentZone) : 'all stores'}
+        </div>
+      `;
+    }
+  }
 }
 
 // ---------------------------------------------

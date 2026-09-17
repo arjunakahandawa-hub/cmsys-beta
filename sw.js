@@ -1,17 +1,21 @@
-const CACHE_NAME = 'ncw-ps-cache-v5.25.19';
+const CACHE_NAME = 'ncw-ps-cache-v5.25.20';
 const ASSETS = [
   './',
   './index.html',
-  './app.js?v=5.25.19',
+  './app.js?v=5.25.20',
   './mobile.html',
-  './mobile.js?v=1.1.1',
+  './mobile-beta.html',
+  './mobile.js?v=2.4.1',
+  './mobile-light.html',
+  './mobile-light.js?v=2.4.1',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
   './icon-maskable-192.png',
   './icon-maskable-512.png',
   './logo.png',
-  './tailwind-static.css'
+  './tailwind-static.css',
+  './html2pdf.bundle.min.js'
 ];
 
 self.addEventListener('install', e => {
