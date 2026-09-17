@@ -128,18 +128,22 @@ function parseOfficialNumber(offNo) {
 function findSailor(sid) {
   if (!sid) return null;
   const sidStr = String(sid).trim().toLowerCase();
+  const sidDigits = sidStr.replace(/\D/g, "");
   return (mlStore.sailors || []).find(s => {
     if (!s) return false;
-    return (
-      String(s.id).toLowerCase() === sidStr ||
-      String(s._fbKey).toLowerCase() === sidStr ||
-      String(s.official_number || "").toLowerCase() === sidStr ||
-      String(s.off_no || "").toLowerCase() === sidStr ||
-      String(s.service_no || "").toLowerCase() === sidStr ||
-      String(s.name || "").toLowerCase() === sidStr
-    );
+    if (String(s.id).toLowerCase() === sidStr) return true;
+    if (String(s._fbKey).toLowerCase() === sidStr) return true;
+    if (String(s._rawIndex) === sidStr) return true;
+    if (String(s._zeroIndex) === sidStr) return true;
+    const off = String(s.official_number || s.off_no || "").toLowerCase();
+    if (off === sidStr) return true;
+    if (String(s.service_no || "").toLowerCase() === sidStr) return true;
+    if (String(s.name || "").toLowerCase() === sidStr) return true;
+    if (sidDigits && sidDigits.length >= 4 && off.replace(/\D/g, "") === sidDigits) return true;
+    return false;
   }) || null;
 }
+
 
 // Helper: Get persistent mobile zone across page reloads & browser restarts
 function getInitialMobileZone() {
@@ -448,6 +452,8 @@ function normalizeSailor(s, idx) {
     ...s,
     id: String(s.id || s._fbKey || idx + 1),
     _fbKey: s._fbKey || String(s.id || idx + 1),
+    _rawIndex: idx + 1,
+    _zeroIndex: idx,
     official_number: offNo,
     off_no: offNo,
     name: fullName,
@@ -472,10 +478,17 @@ function isLeaveCode(val) {
   return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
 }
 
-function isWorkOrderActiveOnDate(wo, dateStr) {
+function isWorkOrderActiveOnDate(wo, targetDate) {
   if (!wo) return false;
+
+  // 1. Filter out deleted work orders permanently
+  if (wo.deleted || wo.status === "Deleted" || wo.status === "deleted" || wo.isDeleted || wo._deleted) {
+    return false;
+  }
+
   const today = getLocalDateString();
-  if (!dateStr) dateStr = today;
+  if (!targetDate) targetDate = today;
+  const isToday = (targetDate === today);
 
   const woIdStr = String(wo.id || "");
   const woFbKeyStr = String(wo._fbKey || "");
@@ -483,50 +496,61 @@ function isWorkOrderActiveOnDate(wo, dateStr) {
   const woJobNoStr = String(wo.job_no || "");
   const woDescStr = String(wo.description || "").trim().toLowerCase();
 
-  const hasAllocations = (mlStore.dailyAllocations || []).some((a) => {
-    if (!a || a.date !== dateStr || a.status === "Cancelled") return false;
+  // Check if daily allocations exist on this target date
+  const hasAllocationsOnDate = (mlStore.dailyAllocations || []).some(a => {
+    if (!a || a.date !== targetDate || a.status === "Cancelled") return false;
     const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
     const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    const aRef = String(a.reference_no || "");
     return (
       (woIdStr && aWoId === woIdStr) ||
       (woFbKeyStr && aWoId === woFbKeyStr) ||
-      (woRefStr && aWoId === woRefStr) ||
+      (woRefStr && (aRef === woRefStr || aWoId === woRefStr)) ||
       (woJobNoStr && aWoId === woJobNoStr) ||
       (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)))
     );
   });
-  if (hasAllocations) return true;
 
-  if (wo.type === "TASK" && !wo.assign_type) {
-    if (wo.created_at) {
+  if (hasAllocationsOnDate) return true;
+
+  // 2. TODAY'S VIEW:
+  if (isToday) {
+    if (wo.status === "Completed" || wo.status === "Hold" || wo.status === "Cancelled") {
+      return false;
+    }
+    // Check 1-day lifecycle for one-off tasks without allocations
+    if ((wo.type === "TASK" || !wo.type) && !wo.assign_type && wo.created_at) {
       try {
-        const cd = new Date(wo.created_at);
-        if (!isNaN(cd.getTime())) {
-          const createdDate = cd.toISOString().split("T")[0];
-          if (createdDate < dateStr && !hasAllocations) return false;
-        }
+        const cd = new Date(wo.created_at).toISOString().split("T")[0];
+        if (cd < today && !hasAllocationsOnDate) return false;
       } catch (e) {}
     }
+    return true;
   }
 
-  if (wo.created_at) {
-    try {
-      const d = new Date(wo.created_at);
-      if (!isNaN(d.getTime())) {
-        const createdDate = d.toISOString().split("T")[0];
-        if (createdDate <= dateStr) {
-          if (wo.status === "Completed") return false;
-          return true;
-        }
-      }
-    } catch (e) {}
+  // 3. BACK-DATE VIEW:
+  if (targetDate < today) {
+    if (wo.created_at) {
+      try {
+        const cd = new Date(wo.created_at).toISOString().split("T")[0];
+        if (cd > targetDate) return false;
+      } catch (e) {}
+    }
+    if (wo.status === "Completed") {
+      const compDate = wo.completed_date || wo.last_commit_date || today;
+      if (compDate < targetDate) return false;
+    }
+    if ((wo.type === "TASK" || !wo.type) && !hasAllocationsOnDate) {
+      return false;
+    }
+    return true;
   }
 
-  return wo.status === "Active" || wo.status === "In Progress" || wo.status === "Pending" || !wo.status;
+  return false;
 }
 
 function getWorkOrderAssignedSailors(wo, dateStr) {
-  if (!wo) return { sailors: [] };
+  if (!wo) return { sailors: [], isCommitted: false };
   const today = getLocalDateString();
   if (!dateStr) dateStr = today;
 
@@ -554,6 +578,8 @@ function getWorkOrderAssignedSailors(wo, dateStr) {
           if (v.id) keys.push(String(v.id));
           if (v._fbKey) keys.push(String(v._fbKey));
           if (v.sailor_id) keys.push(String(v.sailor_id));
+          if (v.official_number) keys.push(String(v.official_number));
+          if (v.service_no) keys.push(String(v.service_no));
         } else if (typeof v === "string" || typeof v === "number") {
           keys.push(String(v).trim());
         }
@@ -563,38 +589,48 @@ function getWorkOrderAssignedSailors(wo, dateStr) {
   };
 
   const assignedKeys = new Set();
-  if (wo.status === "Active" || wo.status === "Pending" || !wo.status || wo.status === "In Progress") {
-    extractKeys(wo.assigned).forEach(k => assignedKeys.add(k));
-  }
-
   const woIdStr = String(wo.id || "");
   const woFbKeyStr = String(wo._fbKey || "");
   const woRefStr = String(wo.reference_no || "");
   const woJobNoStr = String(wo.job_no || "");
   const woDescStr = String(wo.description || "").trim().toLowerCase();
 
+  let hasDailyRecordForDate = false;
   (mlStore.dailyAllocations || []).forEach(a => {
     if (!a || a.date !== dateStr || a.status === "Cancelled") return;
     const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
     const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+    const aRef = String(a.reference_no || "");
     const isWoMatch =
       (woIdStr && aWoId === woIdStr) ||
       (woFbKeyStr && aWoId === woFbKeyStr) ||
-      (woRefStr && aWoId === woRefStr) ||
+      (woRefStr && (aRef === woRefStr || aWoId === woRefStr)) ||
       (woJobNoStr && aWoId === woJobNoStr) ||
       (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)));
     if (isWoMatch) {
+      hasDailyRecordForDate = true;
       const sid = a.sailor_id || a.sailorId || a.official_number || a.offNo || "";
       if (sid) assignedKeys.add(String(sid).trim());
     }
   });
+
+  // Fallback: If no daily allocations on this date, include planned crew from wo.assigned, then wo.last_assigned
+  if (!hasDailyRecordForDate || assignedKeys.size === 0) {
+    const rawAssigned = extractKeys(wo.assigned);
+    if (rawAssigned.length > 0) {
+      rawAssigned.forEach(k => assignedKeys.add(k));
+    } else {
+      const rawLast = extractKeys(wo.last_assigned);
+      rawLast.forEach(k => assignedKeys.add(k));
+    }
+  }
 
   const resultSailors = [];
   assignedKeys.forEach(k => {
     const s = findSailor(k);
     if (s) resultSailors.push(s);
   });
-  return { sailors: resultSailors };
+  return { sailors: resultSailors, isCommitted: hasDailyRecordForDate };
 }
 
 function getZoneActiveSailors(zoneId, dateVal) {
@@ -939,76 +975,6 @@ function getWorkOrderCategory(wo) {
   return "TASK";
 }
 
-function isWorkOrderActiveOnDate(wo, targetDate) {
-  if (!wo) return false;
-
-  // 1. Filter out deleted work orders permanently
-  if (wo.deleted || wo.status === "Deleted" || wo.status === "deleted" || wo.isDeleted || wo._deleted) {
-    return false;
-  }
-
-  const today = getLocalDateString();
-  const isToday = (targetDate === today);
-
-  const woIdStr = String(wo.id || "");
-  const woFbKeyStr = String(wo._fbKey || "");
-  const woRefStr = String(wo.reference_no || "");
-  const woJobNoStr = String(wo.job_no || "");
-  const woDescStr = String(wo.description || "").trim().toLowerCase();
-
-  // Check if daily allocations exist on this target date
-  const dateAllocations = (mlStore.dailyAllocations || []).filter(a => {
-    if (!a || a.date !== targetDate || a.status === "Cancelled") return false;
-    const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
-    const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
-    return (
-      (woIdStr && aWoId === woIdStr) ||
-      (woFbKeyStr && aWoId === woFbKeyStr) ||
-      (woRefStr && aWoId === woRefStr) ||
-      (woJobNoStr && aWoId === woJobNoStr) ||
-      (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)))
-    );
-  });
-
-  const hasAllocationsOnDate = dateAllocations.length > 0;
-  if (hasAllocationsOnDate) return true;
-
-  // 2. TODAY'S VIEW:
-  if (isToday) {
-    if (wo.status === "Completed" || wo.status === "Hold" || wo.status === "Cancelled") {
-      return false;
-    }
-    // Check 1-day lifecycle for one-off tasks without allocations
-    if ((wo.type === "TASK" || !wo.type) && !wo.assign_type && wo.created_at) {
-      try {
-        const cd = new Date(wo.created_at).toISOString().split("T")[0];
-        if (cd < today && !hasAllocationsOnDate) return false;
-      } catch (e) {}
-    }
-    return true;
-  }
-
-  // 3. BACK-DATE VIEW:
-  if (targetDate < today) {
-    if (wo.created_at) {
-      try {
-        const cd = new Date(wo.created_at).toISOString().split("T")[0];
-        if (cd > targetDate) return false;
-      } catch (e) {}
-    }
-    if (wo.status === "Completed") {
-      const compDate = wo.completed_date || wo.last_commit_date || today;
-      if (compDate < targetDate) return false;
-    }
-    if ((wo.type === "TASK" || !wo.type) && !hasAllocationsOnDate) {
-      return false;
-    }
-    return true;
-  }
-
-  return false;
-}
-
 // ---------------------------------------------
 // TAB 1: HOME WORK ORDERS & CATEGORY FILTERING
 // ---------------------------------------------
@@ -1104,10 +1070,22 @@ function renderLightTasks() {
     // Allocations check for targetDate
     const woIdStr = String(wo.id || "");
     const woFbKeyStr = String(wo._fbKey || "");
+    const woRefStr = String(wo.reference_no || "");
+    const woJobNoStr = String(wo.job_no || "");
+    const woDescStr = String(wo.description || "").trim().toLowerCase();
+
     const targetAllocs = (mlStore.dailyAllocations || []).filter(a => {
       if (!a || a.date !== targetDate || a.status === "Cancelled") return false;
       const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
-      return (woIdStr && aWoId === woIdStr) || (woFbKeyStr && aWoId === woFbKeyStr);
+      const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+      const aRef = String(a.reference_no || "");
+      return (
+        (woIdStr && aWoId === woIdStr) ||
+        (woFbKeyStr && aWoId === woFbKeyStr) ||
+        (woRefStr && (aRef === woRefStr || aWoId === woRefStr)) ||
+        (woJobNoStr && aWoId === woJobNoStr) ||
+        (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)))
+      );
     });
 
     const isCommittedOnTargetDate = targetAllocs.length > 0;
@@ -1115,8 +1093,17 @@ function renderLightTasks() {
     let assignedIds = [];
     if (isCommittedOnTargetDate) {
       assignedIds = targetAllocs.map(a => String(a.sailor_id || a.sailorId || (a.sailor && (a.sailor.id || a.sailor._fbKey))));
-    } else if (isToday) {
-      assignedIds = Array.isArray(wo.assigned) ? wo.assigned.map(String) : (wo.assigned ? Object.values(wo.assigned).map(String) : []);
+    } else {
+      const rawAssigned = (Array.isArray(wo.assigned) && wo.assigned.length > 0)
+        ? wo.assigned
+        : ((Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0)
+            ? wo.last_assigned
+            : (wo.assigned && typeof wo.assigned === "object" ? Object.values(wo.assigned) : []));
+      assignedIds = rawAssigned.map(item => {
+        if (!item) return "";
+        if (typeof item === "object") return String(item.id || item._fbKey || item.sailor_id || item.official_number || item.off_no || "");
+        return String(item).trim();
+      }).filter(Boolean);
     }
 
     const crewCount = assignedIds.length;
@@ -1804,9 +1791,11 @@ function openWorkOrderDetailMobile(woKey) {
     }
   }
 
-  const rawAssigned = Array.isArray(wo.assigned) 
+  const rawAssigned = (Array.isArray(wo.assigned) && wo.assigned.length > 0)
     ? wo.assigned 
-    : (wo.assigned && typeof wo.assigned === "object" ? Object.values(wo.assigned) : []);
+    : ((Array.isArray(wo.last_assigned) && wo.last_assigned.length > 0)
+        ? wo.last_assigned
+        : (wo.assigned && typeof wo.assigned === "object" ? Object.values(wo.assigned) : []));
 
   const assignedSet = new Set();
   const effectiveAllocs = targetDateAllocs.length > 0 ? targetDateAllocs : recentAllocs;
@@ -3118,6 +3107,30 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
       )
     ];
 
+    // Guarantee that any work orders/job cards that have daily allocations on dateVal for this zone are included
+    (mlStore.dailyAllocations || []).forEach(a => {
+      if (!a || a.date !== dateVal || a.status === "Cancelled") return;
+      const aZone = a.zone_id || a.zone || a.zone_name || a.location;
+      const isZoneAlloc = isZoneMatchLocal(aZone);
+      const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+      const aDesc = String(a.description || a.task_name || a.work_order_name || "").trim().toLowerCase();
+
+      if (aWoId) {
+        const foundWo = (mlStore.workOrders || []).find(w => String(w.id) === aWoId || String(w._fbKey) === aWoId);
+        if (foundWo && (isZoneAlloc || isZoneMatchLocal(foundWo.zone_id || foundWo.zone))) {
+          allWorks.push(foundWo);
+        }
+        const foundJc = (mlStore.jobCards || []).find(j => String(j.id) === aWoId || String(j._fbKey) === aWoId);
+        if (foundJc && (isZoneAlloc || isZoneMatchLocal(foundJc.zone_id || foundJc.zone))) {
+          allWorks.push(foundJc);
+        }
+      }
+      if (isZoneAlloc && aDesc) {
+        const foundByDesc = (mlStore.workOrders || []).find(w => String(w.description || "").trim().toLowerCase() === aDesc);
+        if (foundByDesc) allWorks.push(foundByDesc);
+      }
+    });
+
     const seenWorkIds = new Set();
     const wos = allWorks.filter((w) => {
       const wid = String(w.id || w._fbKey || "");
@@ -3178,6 +3191,76 @@ function buildZoneDailyWorkOrdersHTMLMobile(zoneId, targetDate) {
         });
       }
     });
+
+    // Check for standalone zone allocations that don't have a matched work order
+    const standaloneAllocs = (mlStore.dailyAllocations || []).filter(a => {
+      if (!a || a.date !== dateVal || a.status === "Cancelled") return false;
+      const aZone = a.zone_id || a.zone || a.zone_name || a.location;
+      if (!isZoneMatchLocal(aZone)) return false;
+      const aWoId = String(a.work_order_id || a.workOrderId || a.work_order || a.wo_id || "");
+      const matched = wos.some(w => String(w.id) === aWoId || String(w._fbKey) === aWoId);
+      return !matched;
+    });
+
+    if (standaloneAllocs.length > 0) {
+      const standaloneGroups = {};
+      standaloneAllocs.forEach(a => {
+        const desc = a.description || a.task_name || "General Duties";
+        if (!standaloneGroups[desc]) standaloneGroups[desc] = [];
+        standaloneGroups[desc].push(a);
+      });
+
+      Object.entries(standaloneGroups).forEach(([desc, grpAllocs]) => {
+        const grpSailors = [];
+        grpAllocs.forEach(a => {
+          const sid = a.sailor_id || a.sailorId || a.official_number || a.offNo || "";
+          if (sid) {
+            const s = findSailor(sid);
+            if (s && !grpSailors.some(gs => String(gs.id || gs._fbKey) === String(s.id || s._fbKey))) {
+              grpSailors.push(s);
+            }
+          }
+        });
+
+        if (grpSailors.length > 0) {
+          zoneRowsHtml += `
+            <tr style="background-color: #f1f5f9; font-weight: bold; -webkit-print-color-adjust: exact; print-color-adjust: exact;">
+              <td colspan="6" style="text-align: center; text-decoration: underline; text-transform: uppercase; font-size: 11px; padding: 6px; letter-spacing: 0.5px; color: #334155;">
+                📋 ${escapeHtml(desc.toUpperCase())}
+              </td>
+            </tr>
+          `;
+          grpSailors.forEach((s, idx) => {
+            const serNo = String(idx + 1).padStart(2, "0");
+            const parsedOffNo = parseOfficialNumber(
+              s.official_number || s.service_no || s.offNo || s.off_no || ""
+            );
+            zoneRowsHtml += `
+              <tr>
+                <td style="text-align:center;">${serNo}</td>
+                <td>${escapeHtml(s.rank || "AB")}</td>
+                <td>${escapeHtml(s.name || "")}</td>
+                <td style="text-align:center;">${escapeHtml(parsedOffNo.type)}</td>
+                <td>${escapeHtml(parsedOffNo.num)}</td>
+                <td style="text-align:center;">${escapeHtml(s.trade || "—")}</td>
+              </tr>
+            `;
+
+            const sKey = String(s.id || s._fbKey || s.official_number || s.service_no || s.name || "");
+            if (sKey && !seenReportSailorKeys.has(sKey)) {
+              seenReportSailorKeys.add(sKey);
+              const col = classifySailorForSummary(s, false);
+              if (reportSailorCounts[col] !== undefined) {
+                reportSailorCounts[col]++;
+              } else {
+                reportSailorCounts.MA++;
+              }
+              totalReportStrength++;
+            }
+          });
+        }
+      });
+    }
 
     if (zoneRowsHtml) {
       const zoneDisplayName = formatZoneDisplayName(z.name || z.id) || (z.name || z.id);

@@ -1,13 +1,13 @@
-const CACHE_NAME = 'ncw-ps-cache-v5.25.20';
+const CACHE_NAME = 'ncw-ps-cache-v5.25.21';
 const ASSETS = [
   './',
   './index.html',
   './app.js?v=5.25.20',
   './mobile.html',
   './mobile-beta.html',
-  './mobile.js?v=2.4.1',
+  './mobile.js?v=2.5.0',
   './mobile-light.html',
-  './mobile-light.js?v=2.4.1',
+  './mobile-light.js?v=2.5.0',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
