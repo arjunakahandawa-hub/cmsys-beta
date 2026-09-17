@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="theme-color" content="#0a1628">
-    <title>CMSys Mobile Light | Fast Field Entry</title>
+    <title>CMSys Mobile | CE Management System — SLN</title>
 
     <link rel="preconnect" href="https://ncw-ps-operations-default-rtdb.asia-southeast1.firebasedatabase.app">
     <link rel="preconnect" href="https://ce-admin-panel2025-default-rtdb.firebaseio.com">
@@ -120,9 +120,9 @@
                 <div>
                     <div class="flex items-center gap-1.5">
                         <h1 class="text-xs font-black tracking-tight text-white">CMSys</h1>
-                        <span class="text-[9px] font-black bg-teal-500/20 text-teal-300 border border-teal-500/40 px-1.5 py-0.2 rounded uppercase">LIGHT</span>
+                        <span class="text-[9px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.2 rounded uppercase">LIVE</span>
                     </div>
-                    <p class="text-[9px] text-slate-400 font-medium">Fast Field Portal</p>
+                    <p class="text-[9px] text-slate-400 font-medium">Field Operations Portal</p>
                 </div>
             </div>
 
@@ -272,6 +272,9 @@
                     <p class="text-[10px] text-slate-500">Materials & stock for <span id="mlInventoryZoneBadge" class="font-bold text-teal-700">Zone Store</span></p>
                 </div>
                 <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="openAddInventoryModalMobile()" class="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] active-scale flex items-center gap-1 shadow-xs" title="Add New Material">
+                        <span>➕</span> Add
+                    </button>
                     <button type="button" onclick="toggleInventoryStoreScope()" id="btnScopeToggle" class="px-2 py-1 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 font-bold text-[9px] active-scale" title="Toggle between Zone Store only and All Stores">
                         📍 <span id="lblScopeText">Zone Store</span>
                     </button>
@@ -1230,6 +1233,250 @@
                         <span class="text-sm">✕</span>
                         <span>Close</span>
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 1: INVENTORY ITEM DETAILS (PIC 1) -->
+    <div id="mlInventoryDetailModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-md sm:max-w-lg max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <!-- Header: Solid Blue Banner -->
+            <div class="bg-blue-600 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">📦</span>
+                    <h3 class="text-xs sm:text-sm font-black text-white">Item Details</h3>
+                </div>
+                <button type="button" onclick="closeInventoryDetailMobile()" class="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-xs font-bold border border-white/30 active-scale" title="Close">✕</button>
+            </div>
+
+            <!-- Scrollable Content -->
+            <div id="mlInventoryDetailContent" class="p-3.5 space-y-3.5 overflow-y-auto touch-scroll flex-1 text-xs">
+                <!-- Injected item detail content -->
+            </div>
+
+            <!-- Sticky Bottom Actions -->
+            <div class="p-3 bg-slate-50 border-t border-slate-200 flex items-center gap-2 shrink-0">
+                <button type="button" onclick="closeInventoryDetailMobile()" class="flex-1 py-2.5 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs active-scale">
+                    Close
+                </button>
+                <button type="button" id="mlBtnEditInventoryItem" class="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs active-scale flex items-center justify-center gap-1.5 shadow-sm">
+                    <span>✏️</span>
+                    <span>Edit Item</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 2: OFF-CHARGE TO BASE / ZONE (NAV 254) -->
+    <div id="mlOffChargeModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm sm:max-w-md max-h-[92vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="bg-gradient-to-r from-rose-600 to-red-600 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-base">📇</span>
+                    <h3 class="text-xs sm:text-sm font-black text-white">Off-Charge Material (NAV 254)</h3>
+                </div>
+                <button type="button" onclick="closeOffChargeModalMobile()" class="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-xs font-bold border border-white/30 active-scale" title="Close">✕</button>
+            </div>
+
+            <form onsubmit="submitOffChargeMobile(event)" class="p-3.5 space-y-3 overflow-y-auto touch-scroll flex-1 text-xs">
+                <input type="hidden" id="mlOcItemId">
+
+                <!-- Selected Item Preview -->
+                <div class="p-2.5 bg-rose-50 border border-rose-200 rounded-xl space-y-1">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] uppercase font-bold text-rose-800">Material:</span>
+                        <span id="mlOcItemAvailBadge" class="text-[10px] font-black bg-rose-200/80 text-rose-900 px-2 py-0.5 rounded-full">Available: 0</span>
+                    </div>
+                    <p id="mlOcItemName" class="font-black text-slate-900 text-xs truncate"></p>
+                </div>
+
+                <!-- Quantity -->
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">Quantity to Off-Charge *</label>
+                    <div class="flex items-center gap-2">
+                        <input type="number" step="any" min="0.01" id="mlOcQty" required placeholder="0" class="flex-1 bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 font-bold focus:bg-white focus:outline-none focus:border-rose-500">
+                        <span id="mlOcDenoUnit" class="text-xs font-extrabold text-slate-600 bg-slate-100 border border-slate-200 px-3 py-2.5 rounded-xl">Nos</span>
+                    </div>
+                </div>
+
+                <!-- Ref -->
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">NAV 254 Ref No *</label>
+                    <input type="text" id="mlOcRef" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-rose-500">
+                </div>
+
+                <!-- Destination -->
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">Destination Base / Workshop / Unit *</label>
+                    <select id="mlOcDest" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-rose-500">
+                    </select>
+                </div>
+
+                <!-- Date -->
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">Date *</label>
+                    <input type="date" id="mlOcDate" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-rose-500">
+                </div>
+
+                <!-- Remarks -->
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-600 uppercase mb-1">Remarks / Purpose</label>
+                    <input type="text" id="mlOcRemarks" placeholder="e.g. Issue for emergency repairs at Pier..." class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs text-slate-900 focus:bg-white focus:outline-none focus:border-rose-500">
+                </div>
+
+                <div class="flex gap-2 pt-2 border-t border-slate-200">
+                    <button type="button" onclick="closeOffChargeModalMobile()" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 active-scale">Cancel</button>
+                    <button type="submit" class="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white font-black text-xs shadow-md active-scale">Confirm Off-Charge</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 3: ADD / EDIT INVENTORY ITEM (PIC 2) -->
+    <div id="mlInventoryModal" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+        <div class="bg-white rounded-2xl w-full max-w-sm sm:max-w-md max-h-[95vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden">
+            <div class="bg-emerald-600 text-white p-3.5 flex items-center justify-between shrink-0 shadow-sm">
+                <div class="flex items-center gap-1.5">
+                    <span class="text-base">📦</span>
+                    <h3 id="mlInvModalTitle" class="text-xs sm:text-sm font-black text-white">Add Inventory Item</h3>
+                </div>
+                <button type="button" onclick="closeInventoryModalMobile()" class="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center text-xs font-bold border border-white/30 active-scale" title="Close">✕</button>
+            </div>
+
+            <form onsubmit="saveInventoryItemMobile(event)" class="p-3.5 space-y-3 overflow-y-auto touch-scroll flex-1 text-xs">
+                <input type="hidden" id="mlInvId">
+
+                <!-- Category * & Date Added -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Category *</label>
+                        <select id="mlInvCategory" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                            <option value="BMS">BMS</option>
+                            <option value="Paint">Paint</option>
+                            <option value="Plumbing">Plumbing</option>
+                            <option value="Metal">Metal</option>
+                            <option value="Timber">Timber</option>
+                            <option value="Aluminium">Aluminium</option>
+                            <option value="Electrical">Electrical</option>
+                            <option value="Tools">Tools</option>
+                            <option value="General">General</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Date Added</label>
+                        <input type="date" id="mlInvDate" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <!-- Description * -->
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-600 mb-1">Description *</label>
+                    <input type="text" id="mlInvDescription" required placeholder="e.g. 100 D 10 Aluminium Bar" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2.5 text-xs text-slate-900 font-semibold focus:bg-white focus:outline-none focus:border-emerald-500">
+                </div>
+
+                <!-- Deno (Unit), Quantity *, Cost (Rs VAT) -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Deno (Unit)</label>
+                        <select id="mlInvDeno" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                            <option value="Nos">Nos</option>
+                            <option value="Mtr">Mtr</option>
+                            <option value="Ft">Ft</option>
+                            <option value="Kg">Kg</option>
+                            <option value="Ltr">Ltr</option>
+                            <option value="Pkts">Pkts</option>
+                            <option value="Sets">Sets</option>
+                            <option value="Rolls">Rolls</option>
+                            <option value="Sheets">Sheets</option>
+                            <option value="Bags">Bags</option>
+                            <option value="Pcs">Pcs</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Quantity *</label>
+                        <input type="number" step="any" id="mlInvQuantity" required min="0" value="1" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-black text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Cost (Rs VAT)</label>
+                        <input type="number" step="any" id="mlInvCost" min="0" value="0" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-black text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <!-- Requirement (Project) & Or Type Requirement -->
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Requirement (Project)</label>
+                        <select id="mlInvRequirementSelect" onchange="if(this.value) document.getElementById('mlInvRequirementText').value=this.value;" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                            <option value="">-- Choose project --</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Or Type Requirement</label>
+                        <input type="text" id="mlInvRequirementText" placeholder="e.g., Wardroom Reno" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <!-- Book No (Stock Book), Location, On Charge Ref -->
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Book No (Stock)</label>
+                        <input type="text" id="mlInvBookNo" placeholder="Stock book V/46" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">Location</label>
+                        <input type="text" id="mlInvLocation" list="mlLocDatalist" placeholder="Zone Store" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-semibold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                    <div>
+                        <label class="block text-[10px] font-bold text-slate-600 mb-1">On Charge Ref</label>
+                        <input type="text" id="mlInvOnCharge" placeholder="CCED/BALANCING" class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-mono text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                    </div>
+                </div>
+
+                <!-- Zone * -->
+                <div>
+                    <label class="block text-[10px] font-bold text-slate-600 mb-1">Zone *</label>
+                    <select id="mlInvZone" required class="w-full bg-slate-50 border border-slate-300 rounded-xl p-2 text-xs font-bold text-slate-900 focus:bg-white focus:outline-none focus:border-emerald-500">
+                    </select>
+                    <p class="text-[9.5px] text-slate-400 italic mt-0.5">Item will be visible only to the selected zone</p>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex gap-2 pt-2 border-t border-slate-200">
+                    <button type="button" onclick="closeInventoryModalMobile()" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs border border-slate-200 active-scale">Cancel</button>
+                    <button type="submit" class="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs shadow-md active-scale">Save Item</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL 4: NAV 254 DEMAND & SUPPLY SLIP VIEWER & PRINT -->
+    <div id="mlNav254Modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4" onclick="if(event.target===this)closeNav254ModalMobile()">
+        <div class="bg-white rounded-2xl w-full max-w-2xl max-h-[96vh] flex flex-col shadow-2xl border border-slate-300 overflow-hidden" style="box-sizing: border-box;">
+            <!-- Top Action Bar -->
+            <div class="no-print bg-slate-900 text-white p-3 sm:p-3.5 flex items-center justify-between shrink-0 shadow-md">
+                <div class="flex items-center gap-2">
+                    <span class="text-base">📇</span>
+                    <div>
+                        <h3 class="text-xs sm:text-sm font-black text-white">NAV 254 Demand & Supply Slip</h3>
+                        <p id="mlNav254RefHeader" class="text-[10px] text-slate-300 font-mono">Serial No. —</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <button type="button" onclick="triggerNav254PrintMobile()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs flex items-center gap-1 border border-slate-700 active-scale">
+                        <span>🖨️</span> Print
+                    </button>
+                    <button type="button" onclick="exportNav254PDFMobile()" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-xs active-scale">
+                        <span>📥</span> PDF
+                    </button>
+                    <button type="button" onclick="closeNav254ModalMobile()" class="w-7 h-7 rounded-full bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center text-xs font-bold active-scale">✕</button>
+                </div>
+            </div>
+
+            <!-- Printable & Preview Body -->
+            <div class="p-2 sm:p-4 touch-scroll flex-1 bg-slate-100/60 overflow-auto">
+                <div id="mlNav254PrintArea" class="bg-white rounded-xl shadow-xs border border-slate-200 p-2 sm:p-4 max-w-full">
+                    <!-- Rendered NAV 254 Slip -->
                 </div>
             </div>
         </div>

@@ -888,16 +888,24 @@ function loadLightData() {
           const item = val[k];
           if (item) {
             mlStore.inventory.push({
+              ...item,
               _fbKey: k,
               id: item.id || k,
               category: String(item.category || "General").trim(),
               description: String(item.description || "Unnamed Material").trim(),
               deno: String(item.deno || "Nos").trim(),
               quantity: typeof item.quantity === "number" ? item.quantity : parseFloat(item.quantity) || 0,
-              cost_per_unit: parseFloat(item.cost_per_unit) || 0,
+              cost_per_unit: parseFloat(item.cost_per_unit != null ? item.cost_per_unit : (item.cost || 0)) || 0,
+              cost: parseFloat(item.cost != null ? item.cost : (item.cost_per_unit || 0)) || 0,
               location: String(item.location || "Zone Store").trim(),
               zone_id: String(item.zone_id || item.zone || "").trim(),
-              book_no: String(item.book_no || item.book || item.book_number || "").trim()
+              book_no: String(item.book_no || item.book || item.book_number || "").trim(),
+              requirement: String(item.requirement || item.project || "").trim(),
+              date_added: String(item.date_added || "").trim(),
+              on_charge_ref: String(item.on_charge_ref || "").trim(),
+              on_charge_records: Array.isArray(item.on_charge_records) ? item.on_charge_records : [],
+              off_charge_ref: String(item.off_charge_ref || "").trim(),
+              off_charge_records: Array.isArray(item.off_charge_records) ? item.off_charge_records : []
             });
           }
         });
@@ -4358,7 +4366,13 @@ function filterLightInventory() {
 
 function loadMoreInventoryChunk() {
   mlStore.inventoryPage = (mlStore.inventoryPage || 1) + 1;
-  renderLightInventory(true);
+  renderLightInventory();
+}
+
+function loadAllInventoryItems() {
+  const zoneItems = getZoneFilteredInventory();
+  mlStore.inventoryPage = Math.ceil(zoneItems.length / (mlStore.inventoryPageSize || 50)) + 2;
+  renderLightInventory();
 }
 
 function getZoneFilteredInventory() {
@@ -4373,7 +4387,7 @@ function getZoneFilteredInventory() {
   return allItems.filter(item => {
     const itemZone = item.zone_id || item.zone || "";
     const itemLoc = item.location || "";
-    return isZoneMatch(itemZone, currentZone) || isZoneMatch(itemLoc, currentZone);
+    return !itemZone || isZoneMatch(itemZone, currentZone) || isZoneMatch(itemLoc, currentZone);
   });
 }
 
@@ -4431,14 +4445,24 @@ function renderLightInventory(isAppending = false) {
       const bNo = (item.book_no || "").toLowerCase();
       const loc = (item.location || "").toLowerCase();
       const itemCat = (item.category || "").toLowerCase();
-      if (!desc.includes(q) && !bNo.includes(q) && !loc.includes(q) && !itemCat.includes(q)) {
+      const req = (item.requirement || "").toLowerCase();
+      if (!desc.includes(q) && !bNo.includes(q) && !loc.includes(q) && !itemCat.includes(q) && !req.includes(q)) {
         return false;
       }
     }
     return true;
   });
 
-  if (countEl) countEl.textContent = `${filtered.length} Items`;
+  const pageSize = mlStore.inventoryPageSize || 50;
+  const currentPage = mlStore.inventoryPage || 1;
+  const totalToShow = currentPage * pageSize;
+  const itemsToShow = filtered.slice(0, totalToShow);
+
+  if (countEl) {
+    countEl.textContent = filtered.length > itemsToShow.length 
+      ? `${itemsToShow.length} / ${filtered.length} Items`
+      : `${filtered.length} Items`;
+  }
 
   if (filtered.length === 0) {
     container.innerHTML = `
@@ -4459,13 +4483,10 @@ function renderLightInventory(isAppending = false) {
     return;
   }
 
-  const pageSize = mlStore.inventoryPageSize || 25;
-  const currentPage = mlStore.inventoryPage || 1;
-  const itemsToShow = filtered.slice(0, currentPage * pageSize);
-
   const html = itemsToShow.map(item => {
     const qty = typeof item.quantity === 'number' ? item.quantity : parseFloat(item.quantity) || 0;
     const deno = item.deno || "Nos";
+    const rowId = item._fbKey || item.id || "";
     
     let stockBadgeCls = "bg-emerald-50 text-emerald-700 border border-emerald-200";
     let stockIcon = "🟢";
@@ -4481,16 +4502,20 @@ function renderLightInventory(isAppending = false) {
       stockLabel = "Low Stock";
     }
 
-    const costStr = item.cost_per_unit > 0 ? `Rs. ${formatCurrency(item.cost_per_unit)} / ${deno}` : "";
+    const unitCost = item.cost_per_unit || item.cost || 0;
+    const costStr = unitCost > 0 ? `Rs. ${formatCurrency(unitCost)} / ${deno}` : "";
+    const offCount = (item.off_charge_records && item.off_charge_records.length) ? item.off_charge_records.length : 0;
 
     return `
-      <div class="bg-white rounded-2xl border border-slate-200 p-3 shadow-xs space-y-2 transition-all hover:border-teal-300">
+      <div onclick="openInventoryDetailMobile('${rowId}')" class="bg-white rounded-2xl border border-slate-200 p-3 shadow-xs space-y-2 transition-all hover:border-teal-500 hover:shadow-md cursor-pointer active-scale">
         <div class="flex items-start justify-between gap-2">
-          <div class="flex-1">
-            <h4 class="text-xs font-bold text-slate-900 leading-snug">${escapeHtml(item.description)}</h4>
+          <div class="flex-1 min-w-0 pr-1">
+            <h4 class="text-xs font-bold text-slate-900 leading-snug hover:text-teal-700 transition-colors">${escapeHtml(item.description)}</h4>
             <div class="flex items-center gap-1.5 flex-wrap mt-1">
-              <span class="text-[9px] font-bold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded border border-slate-200">${escapeHtml(item.category || 'General')}</span>
-              ${item.book_no ? `<span class="text-[9px] text-slate-500 font-mono">📖 ${escapeHtml(item.book_no)}</span>` : ''}
+              <span class="text-[9px] font-bold bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded border border-slate-200">${escapeHtml(item.category || 'General')}</span>
+              ${item.book_no ? `<span class="text-[9px] font-bold text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-mono">📖 ${escapeHtml(item.book_no)}</span>` : ''}
+              ${item.requirement && item.requirement !== "General" ? `<span class="text-[9px] text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 truncate max-w-[130px]">🎯 ${escapeHtml(item.requirement)}</span>` : ''}
+              ${offCount > 0 ? `<span class="text-[9px] font-bold text-rose-700 bg-rose-50 px-1.5 py-0.5 rounded border border-rose-200">📤 ${offCount} Off-Charged</span>` : ''}
             </div>
           </div>
           <div class="text-right shrink-0">
@@ -4501,11 +4526,14 @@ function renderLightInventory(isAppending = false) {
           </div>
         </div>
         <div class="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-1.5 mt-0.5">
-          <span class="flex items-center gap-1">
+          <span class="flex items-center gap-1 truncate max-w-[170px]">
             <span>📍</span>
-            <span class="font-medium text-slate-700">${escapeHtml(item.location || 'Zone Store')}</span>
+            <span class="font-medium text-slate-700 truncate">${escapeHtml(item.location || 'Zone Store')}</span>
           </span>
-          ${costStr ? `<span class="text-[9px] font-mono text-slate-500">${costStr}</span>` : `<span class="text-[9px] text-slate-400 font-medium">${stockLabel}</span>`}
+          <div class="flex items-center gap-1.5">
+            ${costStr ? `<span class="text-[9px] font-mono font-bold text-slate-600">${costStr}</span>` : `<span class="text-[9px] text-slate-400 font-medium">${stockLabel}</span>`}
+            <span class="text-teal-600 font-black text-xs">›</span>
+          </div>
         </div>
       </div>
     `;
@@ -4518,10 +4546,21 @@ function renderLightInventory(isAppending = false) {
       const remaining = filtered.length - itemsToShow.length;
       const nextBatch = Math.min(remaining, pageSize);
       paginationContainer.innerHTML = `
-        <button type="button" onclick="loadMoreInventoryChunk()" class="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-200 shadow-2xs active-scale flex items-center justify-center gap-1.5">
-          <span>📥</span>
-          <span>Load More (තවත් ${nextBatch} ක් පෙන්වන්න — ඉතිරි ${remaining})</span>
-        </button>
+        <div class="space-y-1.5">
+          <div class="flex gap-2">
+            <button type="button" onclick="loadMoreInventoryChunk()" class="flex-1 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs border border-slate-300 shadow-2xs active-scale flex items-center justify-center gap-1.5">
+              <span>📥</span>
+              <span>Load More (+${nextBatch} ක්)</span>
+            </button>
+            <button type="button" onclick="loadAllInventoryItems()" class="flex-1 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-black text-xs shadow-xs active-scale flex items-center justify-center gap-1.5">
+              <span>🌐</span>
+              <span>Load All (ඉතිරි ${remaining} ම)</span>
+            </button>
+          </div>
+          <div class="text-center text-[10px] text-slate-400 font-medium">
+            Showing ${itemsToShow.length} of ${filtered.length} items (සම්පූර්ණ ${filtered.length} න් ${itemsToShow.length} ක් පෙන්වයි)
+          </div>
+        </div>
       `;
     } else {
       paginationContainer.innerHTML = `
@@ -4531,6 +4570,840 @@ function renderLightInventory(isAppending = false) {
       `;
     }
   }
+}
+
+// ---------------------------------------------
+// MOBILE INVENTORY DETAILS & OFF-CHARGE MODALS
+// ---------------------------------------------
+function openInventoryDetailMobile(itemId) {
+  const item = (mlStore.inventory || []).find(
+    i => String(i._fbKey) === String(itemId) || String(i.id) === String(itemId)
+  );
+  if (!item) {
+    showLightToast("Item not found", "⚠️");
+    return;
+  }
+
+  const modal = document.getElementById("mlInventoryDetailModal");
+  const content = document.getElementById("mlInventoryDetailContent");
+  if (!modal || !content) return;
+
+  const qty = typeof item.quantity === 'number' ? item.quantity : parseFloat(item.quantity) || 0;
+  const unitCost = parseFloat(item.cost_per_unit || item.cost || 0);
+  const totalVal = qty * unitCost;
+
+  // On-Charge records rendering
+  let onChargeHtml = "";
+  if (Array.isArray(item.on_charge_records) && item.on_charge_records.length > 0) {
+    onChargeHtml = item.on_charge_records.map(r => `
+      <div class="flex items-center justify-between p-2 bg-emerald-50/80 rounded-xl border border-emerald-100 text-xs">
+        <span class="font-mono font-bold text-emerald-800">${escapeHtml(r.ref || 'On-Charge')}</span>
+        <span class="font-black text-emerald-700">+${r.qty || 0} ${escapeHtml(item.deno || 'Nos')}</span>
+        <span class="text-[10px] text-slate-500">${escapeHtml(r.date || '—')}</span>
+      </div>
+    `).join("");
+  } else if (item.on_charge_ref) {
+    onChargeHtml = `
+      <div class="p-2 bg-emerald-50/80 rounded-xl border border-emerald-100 flex items-center justify-between text-xs">
+        <span class="font-mono font-bold text-emerald-800">${escapeHtml(item.on_charge_ref)}</span>
+        <span class="text-[10px] text-slate-500">Initial On-Charge Ref</span>
+      </div>
+    `;
+  } else {
+    onChargeHtml = `<p class="text-xs text-slate-400 italic p-2 bg-slate-50 rounded-xl">No on-charge records found</p>`;
+  }
+
+  // Off-Charge records rendering
+  let offChargeHtml = "";
+  if (Array.isArray(item.off_charge_records) && item.off_charge_records.length > 0) {
+    offChargeHtml = item.off_charge_records.map((r, idx) => `
+      <div class="p-2.5 bg-rose-50/80 rounded-xl border border-rose-100 space-y-1.5">
+        <div class="flex items-center justify-between gap-1">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="font-mono font-bold text-rose-800 text-[11px]">${escapeHtml(r.ref || 'NAV 254 Slip')}</span>
+            ${r.dest ? `<span class="text-[10px] font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-rose-200">→ ${escapeHtml(r.dest)}</span>` : ''}
+          </div>
+          <span class="font-black text-xs text-rose-600">−${r.qty || 0} ${escapeHtml(item.deno || 'Nos')}</span>
+        </div>
+        ${r.remarks ? `<p class="text-[10.5px] text-slate-600 italic">"${escapeHtml(r.remarks)}"</p>` : ''}
+        <div class="flex items-center justify-between pt-1 border-t border-rose-100/60 text-[10px]">
+          <span class="text-slate-400 font-mono">${escapeHtml(r.date || '—')}</span>
+          <button type="button" onclick="printOffChargeNav254Mobile('${item._fbKey || item.id}', ${idx})" class="px-2 py-1 bg-white hover:bg-rose-600 text-rose-700 hover:text-white rounded-lg border border-rose-300 font-bold active-scale flex items-center gap-1">
+            <span>🖨️</span>
+            <span>Print NAV 254</span>
+          </button>
+        </div>
+      </div>
+    `).join("");
+  } else {
+    offChargeHtml = `<p class="text-xs text-slate-400 italic p-2 bg-slate-50 rounded-xl">No off-charge records yet</p>`;
+  }
+
+  content.innerHTML = `
+    <div class="space-y-3">
+      <!-- Description & Category (Pic 1) -->
+      <div class="grid grid-cols-2 gap-3 pb-2 border-b border-slate-100">
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Description</p>
+          <p class="text-sm font-black text-slate-900 leading-snug">${escapeHtml(item.description)}</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Category</p>
+          <span class="inline-block mt-0.5 text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-800 border border-slate-200">${escapeHtml(item.category || 'General')}</span>
+        </div>
+      </div>
+
+      <!-- Quantity, Unit Cost, Total Value (Pic 1) -->
+      <div class="grid grid-cols-3 gap-2 p-2.5 bg-slate-50 rounded-xl border border-slate-200/80 text-center">
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Quantity</p>
+          <p class="text-sm sm:text-base font-black ${qty < 10 ? 'text-rose-600' : 'text-emerald-600'}">${qty.toLocaleString()} ${escapeHtml(item.deno || 'Nos')}</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Unit Cost</p>
+          <p class="text-xs sm:text-sm font-bold text-slate-800">Rs. ${formatCurrency(unitCost)}</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Total Value</p>
+          <p class="text-xs sm:text-sm font-black text-amber-600">Rs. ${formatCurrency(totalVal)}</p>
+        </div>
+      </div>
+
+      <!-- Book No, Location, Requirement (Pic 1) -->
+      <div class="grid grid-cols-3 gap-2">
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Book No (Stock Book)</p>
+          <p class="mt-0.5"><span class="font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 text-[11px] inline-block font-mono">${escapeHtml(item.book_no || '—')}</span></p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Location</p>
+          <p class="font-semibold text-slate-800 text-xs mt-0.5">${escapeHtml(item.location || 'Zone Store')}</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Requirement</p>
+          <p class="font-semibold text-slate-800 text-xs mt-0.5">${escapeHtml(item.requirement || 'General')}</p>
+        </div>
+      </div>
+
+      <!-- Date Added & Zone -->
+      <div class="grid grid-cols-2 gap-2 text-xs">
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Date Added</p>
+          <p class="font-medium text-slate-700">${escapeHtml(item.date_added || '—')}</p>
+        </div>
+        <div>
+          <p class="text-[10px] uppercase font-bold text-slate-400">Zone Store</p>
+          <p class="font-medium text-slate-700">${escapeHtml(item.zone_id || item.zone || mlStore.currentZone || 'A-Zone')}</p>
+        </div>
+      </div>
+
+      <!-- On-Charge Records (Pic 1) -->
+      <div class="border-t border-slate-200 pt-3">
+        <h4 class="font-bold text-slate-700 text-xs mb-1.5 flex items-center gap-1.5">
+          <span>📥</span>
+          <span>On-Charge Records</span>
+        </h4>
+        <div class="space-y-1.5">
+          ${onChargeHtml}
+        </div>
+      </div>
+
+      <!-- Off-Charge Records (Pic 1) -->
+      <div class="border-t border-slate-200 pt-3">
+        <div class="flex items-center justify-between mb-1.5">
+          <h4 class="font-bold text-slate-700 text-xs flex items-center gap-1.5">
+            <span>📤</span>
+            <span>Off-Charge Records</span>
+          </h4>
+          <span class="text-[10px] text-slate-400 font-normal">NAV 254 Demand/Supply Slip</span>
+        </div>
+        <div class="space-y-1.5">
+          ${offChargeHtml}
+        </div>
+      </div>
+
+      <!-- Off-Charge action button (Red Button matching Pic 1) -->
+      <div class="border-t border-slate-200 pt-3">
+        <button type="button" onclick="openOffChargeModalMobile('${item._fbKey || item.id}')" class="w-full bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-700 hover:to-rose-700 text-white px-4 py-3 rounded-xl font-black text-xs active-scale shadow-md flex items-center justify-center gap-2">
+          <span>📇</span>
+          <span>Off-Charge to Base / Zone (Nav 254)</span>
+        </button>
+      </div>
+    </div>
+  `;
+
+  const btnEdit = document.getElementById("mlBtnEditInventoryItem");
+  if (btnEdit) {
+    btnEdit.onclick = () => {
+      closeInventoryDetailMobile();
+      openEditInventoryModalMobile(item._fbKey || item.id);
+    };
+  }
+
+  modal.classList.remove("hidden");
+}
+
+function closeInventoryDetailMobile() {
+  const modal = document.getElementById("mlInventoryDetailModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function openOffChargeModalMobile(itemId) {
+  const item = (mlStore.inventory || []).find(
+    i => String(i._fbKey) === String(itemId) || String(i.id) === String(itemId)
+  );
+  if (!item) {
+    showLightToast("Inventory item not found", "⚠️");
+    return;
+  }
+
+  closeInventoryDetailMobile();
+
+  const modal = document.getElementById("mlOffChargeModal");
+  if (!modal) return;
+
+  document.getElementById("mlOcItemId").value = item._fbKey || item.id || "";
+  document.getElementById("mlOcItemName").textContent = item.description;
+  const qty = typeof item.quantity === 'number' ? item.quantity : parseFloat(item.quantity) || 0;
+  const deno = item.deno || "Nos";
+  document.getElementById("mlOcItemAvailBadge").textContent = `Available: ${qty} ${deno}`;
+  document.getElementById("mlOcDenoUnit").textContent = deno;
+
+  const ocQtyInput = document.getElementById("mlOcQty");
+  ocQtyInput.value = "";
+  ocQtyInput.max = qty;
+
+  const year = new Date().getFullYear();
+  const randNum = String(Math.floor(10 + Math.random() * 90)).padStart(2, "0");
+  document.getElementById("mlOcRef").value = `CCED/CE/FD/OUT/${randNum}/${year}`;
+  document.getElementById("mlOcRemarks").value = "";
+  document.getElementById("mlOcDate").value = getLocalDateString();
+
+  const dests = [
+    "BC-Zone", "A-Zone", "B-Zone", "C-Zone", "D-Zone", "E-Zone", "G-Zone", "FH-Zone", "OTW",
+    "Carpentry-Shop", "Painter-Shop", "Main-Store", "SLNS TISSA", "SLNS DAKSHINA",
+    "SLNS VIJAYA", "Base Store", "Civil Engineering Dept"
+  ];
+  const destSelect = document.getElementById("mlOcDest");
+  if (destSelect) {
+    destSelect.innerHTML = '<option value="">Select destination base / workshop...</option>' +
+      dests.map(d => `<option value="${d}">${d}</option>`).join("");
+  }
+
+  modal.classList.remove("hidden");
+}
+
+function closeOffChargeModalMobile() {
+  const modal = document.getElementById("mlOffChargeModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function submitOffChargeMobile(event) {
+  if (event && event.preventDefault) event.preventDefault();
+
+  const ocId = document.getElementById("mlOcItemId").value;
+  const item = (mlStore.inventory || []).find(
+    i => String(i._fbKey) === String(ocId) || String(i.id) === String(ocId)
+  );
+  if (!item) {
+    showLightToast("Inventory item not found", "⚠️");
+    return;
+  }
+
+  const qtyToOff = parseFloat(document.getElementById("mlOcQty").value);
+  const currentQty = typeof item.quantity === 'number' ? item.quantity : parseFloat(item.quantity) || 0;
+  const ref = document.getElementById("mlOcRef").value.trim() || `CCED/CE/FD/OUT/${new Date().getFullYear()}`;
+  const dest = document.getElementById("mlOcDest").value;
+  const date = document.getElementById("mlOcDate").value || getLocalDateString();
+  const remarks = document.getElementById("mlOcRemarks").value.trim();
+
+  if (isNaN(qtyToOff) || qtyToOff <= 0 || qtyToOff > currentQty) {
+    alert(`Invalid quantity! Quantity must be between 0.01 and ${currentQty}`);
+    return;
+  }
+  if (!dest) {
+    alert("Please select a destination Base / Workshop");
+    return;
+  }
+
+  const targetKey = item._fbKey || item.id;
+  const newQty = currentQty - qtyToOff;
+
+  if (!Array.isArray(item.off_charge_records)) item.off_charge_records = [];
+  const offRecord = { ref, qty: qtyToOff, date, dest, remarks };
+  item.off_charge_records.push(offRecord);
+  item.off_charge_ref = ref;
+  item.quantity = newQty;
+
+  const unitCost = parseFloat(item.cost_per_unit || item.cost || 0);
+
+  // Cloud NAV 254 record
+  try {
+    const nav254CloudData = {
+      voucher_no: ref.startsWith("NAV") ? ref : `NAV254/${new Date().getFullYear()}/${String(Date.now()).slice(-4)}`,
+      ref_no: ref,
+      date: date,
+      issuing_unit: `${item.zone_id || mlStore.currentZone || "CE Dept"} Store`,
+      receiving_unit: dest,
+      authority: ref,
+      issued_by: mlStore.activeProfileName || "Store Keeper",
+      received_by: dest,
+      items: [
+        {
+          inventory_id: targetKey,
+          description: item.description,
+          deno: item.deno || "Nos",
+          quantity_demanded: qtyToOff,
+          quantity_issued: qtyToOff,
+          unit_cost: unitCost,
+          total_value: unitCost * qtyToOff
+        }
+      ],
+      remarks: remarks,
+      source: "Mobile Store Off-Charge",
+      created_at: Date.now()
+    };
+    opsDB.ref("nav254_vouchers").push(nav254CloudData);
+  } catch (err) {
+    console.warn("Could not save to nav254_vouchers:", err);
+  }
+
+  // Update item in Firebase RTDB
+  const cleanItem = { ...item };
+  delete cleanItem._fbKey;
+
+  opsDB.ref(`inventory/${targetKey}`).set(cleanItem).then(() => {
+    closeOffChargeModalMobile();
+    renderLightInventory();
+    showLightToast(`Off-charged ${qtyToOff} ${item.deno} → ${dest}`, "✅");
+
+    const printIdx = item.off_charge_records.length - 1;
+    if (confirm(`Material successfully off-charged to ${dest}!\n\nDo you want to view / print the authentic NAV 254 Demand/Supply Note now?`)) {
+      printOffChargeNav254Mobile(targetKey, printIdx);
+    }
+  }).catch(err => {
+    console.error("Firebase update failed:", err);
+    alert("Failed to update inventory in database: " + err.message);
+  });
+}
+
+// ---------------------------------------------
+// ADD / EDIT INVENTORY ITEM MODAL (PIC 2)
+// ---------------------------------------------
+function openAddInventoryModalMobile() {
+  const modal = document.getElementById("mlInventoryModal");
+  if (!modal) return;
+
+  document.getElementById("mlInvModalTitle").textContent = "Add Inventory Item";
+  document.getElementById("mlInvId").value = "";
+  document.getElementById("mlInvCategory").value = "General";
+  document.getElementById("mlInvDate").value = getLocalDateString();
+  document.getElementById("mlInvDescription").value = "";
+  document.getElementById("mlInvDeno").value = "Nos";
+  document.getElementById("mlInvQuantity").value = "1";
+  document.getElementById("mlInvCost").value = "0";
+  document.getElementById("mlInvRequirementText").value = "";
+  document.getElementById("mlInvBookNo").value = "";
+  document.getElementById("mlInvLocation").value = `${formatZoneDisplayName(mlStore.currentZone || 'A-Zone')} Store`;
+  document.getElementById("mlInvOnCharge").value = "";
+
+  populateInventoryModalDropdowns(mlStore.currentZone || "A-Zone");
+  modal.classList.remove("hidden");
+}
+
+function openEditInventoryModalMobile(itemId) {
+  const item = (mlStore.inventory || []).find(
+    i => String(i._fbKey) === String(itemId) || String(i.id) === String(itemId)
+  );
+  if (!item) {
+    showLightToast("Item not found", "⚠️");
+    return;
+  }
+
+  const modal = document.getElementById("mlInventoryModal");
+  if (!modal) return;
+
+  document.getElementById("mlInvModalTitle").textContent = "Edit Inventory Item";
+  document.getElementById("mlInvId").value = item._fbKey || item.id || "";
+  document.getElementById("mlInvCategory").value = item.category || "General";
+  document.getElementById("mlInvDate").value = item.date_added || getLocalDateString();
+  document.getElementById("mlInvDescription").value = item.description || "";
+  document.getElementById("mlInvDeno").value = item.deno || "Nos";
+  document.getElementById("mlInvQuantity").value = item.quantity != null ? item.quantity : 0;
+  document.getElementById("mlInvCost").value = item.cost_per_unit || item.cost || 0;
+  document.getElementById("mlInvRequirementText").value = item.requirement || "";
+  document.getElementById("mlInvBookNo").value = item.book_no || "";
+  document.getElementById("mlInvLocation").value = item.location || "Zone Store";
+  document.getElementById("mlInvOnCharge").value = item.on_charge_ref || "";
+
+  populateInventoryModalDropdowns(item.zone_id || item.zone || mlStore.currentZone || "A-Zone");
+  modal.classList.remove("hidden");
+}
+
+function populateInventoryModalDropdowns(selectedZone) {
+  const zoneSelect = document.getElementById("mlInvZone");
+  if (zoneSelect) {
+    zoneSelect.innerHTML = STANDARD_ZONES.map(z => 
+      `<option value="${z.id}" ${z.id === selectedZone ? 'selected' : ''}>${z.name}</option>`
+    ).join("");
+  }
+
+  const reqSelect = document.getElementById("mlInvRequirementSelect");
+  if (reqSelect) {
+    const projects = (mlStore.workOrders || [])
+      .filter(w => (w.type === 'PROJECT' || w.category === 'PROJECT') && w.title)
+      .slice(0, 40);
+    reqSelect.innerHTML = '<option value="">-- Choose existing project --</option>' +
+      projects.map(p => `<option value="${escapeHtml(p.title)}">${escapeHtml(p.title)}</option>`).join("");
+  }
+}
+
+function closeInventoryModalMobile() {
+  const modal = document.getElementById("mlInventoryModal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function saveInventoryItemMobile(event) {
+  if (event && event.preventDefault) event.preventDefault();
+
+  const id = document.getElementById("mlInvId").value;
+  const desc = document.getElementById("mlInvDescription").value.trim();
+  if (!desc) {
+    alert("Please enter a description for the material");
+    return;
+  }
+
+  const category = document.getElementById("mlInvCategory").value || "General";
+  const dateAdded = document.getElementById("mlInvDate").value || getLocalDateString();
+  const deno = document.getElementById("mlInvDeno").value || "Nos";
+  const quantity = parseFloat(document.getElementById("mlInvQuantity").value) || 0;
+  const cost = parseFloat(document.getElementById("mlInvCost").value) || 0;
+  const reqSelect = document.getElementById("mlInvRequirementSelect").value;
+  const reqText = document.getElementById("mlInvRequirementText").value.trim();
+  const requirement = reqText || reqSelect || "General";
+  const bookNo = document.getElementById("mlInvBookNo").value.trim();
+  const location = document.getElementById("mlInvLocation").value.trim() || "Zone Store";
+  const onChargeRef = document.getElementById("mlInvOnCharge").value.trim();
+  const zone = document.getElementById("mlInvZone").value || mlStore.currentZone || "A-Zone";
+
+  let existingItem = null;
+  if (id) {
+    existingItem = (mlStore.inventory || []).find(
+      i => String(i._fbKey) === String(id) || String(i.id) === String(id)
+    );
+  }
+
+  const itemData = {
+    ...(existingItem || {}),
+    description: desc,
+    category: category,
+    deno: deno,
+    quantity: quantity,
+    cost_per_unit: cost,
+    cost: cost,
+    requirement: requirement,
+    book_no: bookNo,
+    location: location,
+    on_charge_ref: onChargeRef,
+    zone_id: zone,
+    zone: zone,
+    date_added: dateAdded,
+    updated_at: Date.now()
+  };
+  delete itemData._fbKey;
+
+  let promise;
+  if (id) {
+    promise = opsDB.ref(`inventory/${id}`).update(itemData);
+  } else {
+    itemData.created_at = Date.now();
+    if (onChargeRef) {
+      itemData.on_charge_records = [{ ref: onChargeRef, qty: quantity, date: dateAdded }];
+    }
+    promise = opsDB.ref("inventory").push(itemData);
+  }
+
+  promise.then(() => {
+    closeInventoryModalMobile();
+    showLightToast(`Material ${id ? 'updated' : 'added'} successfully!`, "✅");
+    renderLightInventory();
+  }).catch(err => {
+    console.error("Save inventory item failed:", err);
+    alert("Error saving item: " + err.message);
+  });
+}
+
+// ---------------------------------------------
+// AUTHENTIC NAV 254 DEMAND/SUPPLY SLIP PRINTING
+// ---------------------------------------------
+function resolveSailorRealRank(nameOrOffNo, fallbackTrade = "") {
+  const str = String(nameOrOffNo || "").trim();
+  if (Array.isArray(mlStore.sailors) && mlStore.sailors.length > 0) {
+    const found = mlStore.sailors.find(s => {
+      const offNo = String(s.official_number || s.off_no || "").trim();
+      const sName = String(s.name || "").toLowerCase().trim();
+      const fullStr = str.toLowerCase();
+      return (offNo && fullStr.includes(offNo)) || (sName && fullStr.includes(sName));
+    });
+    if (found && found.rank && found.rank.trim()) {
+      return found.rank.trim();
+    }
+  }
+
+  const rankMatch = str.match(/(?:CPO|PO|LS|AB|ORD|WO|MCPO|SCPO|CWO|LCDR|LT|SLT|MID|CDR|CAPT|CMDE|RADM)\s*(?:\([A-Za-z0-9/& -]+\))?|(?:Chief Petty Officer|Petty Officer|Leading Seaman|Able Seaman|Ordinary Seaman)/i);
+  if (rankMatch) return rankMatch[0].trim();
+  return fallbackTrade || "—";
+}
+
+function generateOfficialNav254Html(data) {
+  const refNo = data.ref_no || data.voucher_no || "CCED/CE/FD/OUT/254/01/2026";
+  const suppliedBy = data.supplied_by || `Civil Engineering Department (${data.origin_zone || mlStore.currentZone || "CE Dept"})`;
+  const receivedBy = data.received_by || data.target_destination || data.receiving_unit || data.zone_id || "FH Zone";
+  const issueDate = data.date || getLocalDateString();
+  const recipientName = data.issued_to || data.recipient_name || "EC 50091 PO(CE) SBSS JAYAWARDANA";
+  const recipientRank = resolveSailorRealRank(recipientName, data.recipient_rank || data.trade || "");
+  const issuedBy = data.issued_by || "Storekeeper (CE Dept)";
+  const purpose = data.purpose || "Civil Engineering Works / Maintenance";
+  const expectedReturn = data.expected_return_date || "—";
+  const operator = mlStore.activeProfileName || "Admin Desk";
+  const printTimestamp = new Date().toLocaleString("en-GB");
+
+  const items = (data.items && data.items.length > 0) ? data.items : [
+    {
+      description: data.item_name || data.description || "Material Issue",
+      deno: data.deno || "Nos",
+      qty_supplied: data.qty || data.quantity_issued || 1,
+      qty_received: data.quantity_received || data.qty || data.quantity_issued || 1,
+      total_value: parseFloat(data.total_value) || ((parseFloat(data.unit_cost) || 0) * (parseFloat(data.qty) || 1))
+    }
+  ];
+
+  const totalRowCount = Math.max(4, items.length);
+  let rowsHtml = "";
+
+  for (let idx = 0; idx < totalRowCount; idx++) {
+    const it = items[idx];
+    if (it) {
+      const val = parseFloat(it.total_value || 0);
+      const valRs = val > 0 ? Math.floor(val).toLocaleString("en-LK") : "—";
+      const valCents = val > 0 ? String(Math.round((val % 1) * 100)).padStart(2, "0") : "";
+
+      rowsHtml += `
+        <tr style="height: 32px;">
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px; font-weight: bold;">${idx + 1}</td>
+          <td style="border: 1px solid #000; padding: 4px 8px; font-size: 11.5px; font-weight: 600; text-align: left;">${it.description}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">${it.deno || 'Nos'}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11.5px; font-weight: bold;">${it.qty_supplied || it.qty || ''}</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11.5px; font-weight: bold;">${it.qty_received || it.qty || ''}</td>
+          <td style="border: 1px solid #000; padding: 0; font-size: 11px;">
+            <div style="display: flex; height: 100%; align-items: center;">
+              <span style="flex: 1; text-align: right; padding-right: 4px; border-right: 1px solid #000; font-weight: bold;">${valRs}</span>
+              <span style="width: 25px; text-align: center; font-size: 10px;">${valCents}</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    } else {
+      rowsHtml += `
+        <tr style="height: 32px;">
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 4px 8px; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 4px 6px; text-align: center; font-size: 11px;">&nbsp;</td>
+          <td style="border: 1px solid #000; padding: 0; font-size: 11px;">
+            <div style="display: flex; height: 100%;">
+              <span style="flex: 1; border-right: 1px solid #000;">&nbsp;</span>
+              <span style="width: 25px;">&nbsp;</span>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  return `
+    <div style="font-family: 'Noto Sans Sinhala', 'Iskoola Pota', 'Abhaya Libre', 'Times New Roman', serif; color: #000; max-width: 820px; margin: 0 auto; background: #fff; padding: 18px 22px; border: 1.5px solid #000;">
+      <!-- Top Form Number & Header Details (Pic 3) -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div style="border: 1.5px solid #000; padding: 4px 10px; font-size: 12px; font-weight: bold; display: inline-flex; align-items: center; gap: 8px;">
+          <div style="line-height: 1.2; text-align: center;">නැවි<br>NAV</div>
+          <div style="font-size: 26px; font-weight: 900; line-height: 1;">} 254</div>
+        </div>
+
+        <div style="text-align: right; font-size: 10px; line-height: 1.35;">
+          <div style="display: flex; align-items: flex-start; justify-content: flex-end; gap: 14px;">
+            <div style="text-align: right;">
+              <div style="font-weight: bold; font-family: monospace; font-size: 9.5px; color: #000;">H 029858 — 1500 (2007/12) P</div>
+              <div>ශ්‍රී ලං. නා. හ. 64</div>
+              <div>(Bond Quintuplicate 7 ½” x 10”)</div>
+              <div>සිං/ඉං 5/67</div>
+            </div>
+            <div style="width: 0; height: 0; border-top: 28px solid #475569; border-left: 28px solid transparent;"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Center Document Title -->
+      <div style="text-align: center; margin-top: 6px; margin-bottom: 6px;">
+        <h2 style="font-size: 13.5px; font-weight: bold; margin: 0; letter-spacing: 0.5px;">ඇණවුම් සැපයුම් හෝ ලැබූ පත්‍රය</h2>
+        <h3 style="font-size: 11.5px; font-weight: bold; margin: 0; text-transform: uppercase;">Demand Supply Or Receipt Note</h3>
+      </div>
+
+      <!-- Top Right Serial No -->
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+        <div style="border: 1.5px solid #000; display: inline-flex; font-size: 11px;">
+          <div style="padding: 4px 10px; border-right: 1.5px solid #000; font-weight: bold; line-height: 1.2; text-align: center;">
+            අනුක්‍රමික අංකය<br>Serial No.
+          </div>
+          <div style="padding: 4px 14px; font-weight: 900; font-family: monospace; font-size: 12px; display: flex; align-items: center; color: #000;">
+            ${refNo}
+          </div>
+        </div>
+      </div>
+
+      <!-- Supplied By & Received By -->
+      <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-top: 4px; padding-bottom: 6px;">
+        <div style="width: 48%;">
+          <div style="font-weight: bold;">සපයන ලද්දේ / SUPPLIED BY</div>
+          <div style="font-weight: bold; font-size: 12px; padding: 2px 0; min-height: 22px; color: #000;">
+            ${suppliedBy}
+          </div>
+          <div style="margin-top: 4px;">
+            <strong>දිනය / Date:</strong> ${issueDate}
+          </div>
+        </div>
+
+        <div style="width: 48%;">
+          <div style="font-weight: bold;">ලබා ගත්තේ / RECEIVED BY</div>
+          <div style="font-weight: bold; font-size: 12px; padding: 2px 0; min-height: 22px; color: #000;">
+            ${receivedBy}
+          </div>
+          <div style="margin-top: 4px;">
+            <strong>දිනය / Date:</strong> ${issueDate}
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Items Table -->
+      <table style="width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-top: 8px; margin-bottom: 12px;">
+        <thead>
+          <tr style="background: #f8fafc;">
+            <th style="border: 1px solid #000; padding: 6px 4px; width: 5%; font-size: 11px;">#</th>
+            <th style="border: 1px solid #000; padding: 6px 8px; width: 44%; font-size: 11px; text-align: center;">
+              විස්තරය<br><span style="font-weight: normal; font-size: 10px;">description</span>
+            </th>
+            <th style="border: 1px solid #000; padding: 6px 6px; width: 12%; font-size: 11px; text-align: center;">
+              වර්ගය<br><span style="font-weight: normal; font-size: 10px;">Denomination</span>
+            </th>
+            <th style="border: 1px solid #000; padding: 6px 6px; width: 13%; font-size: 11px; text-align: center;">
+              සැපයූ ප්‍රමාණය<br><span style="font-weight: normal; font-size: 10px;">Quantity Supplied</span>
+            </th>
+            <th style="border: 1px solid #000; padding: 6px 6px; width: 13%; font-size: 11px; text-align: center;">
+              ලැබූ ප්‍රමාණය<br><span style="font-weight: normal; font-size: 10px;">Quantity Received</span>
+            </th>
+            <th style="border: 1px solid #000; padding: 4px; width: 13%; font-size: 11px; text-align: center;">
+              වටිනාකම<br><span style="font-weight: normal; font-size: 10px;">Value</span>
+              <div style="display: flex; border-top: 1px solid #000; margin-top: 2px; padding-top: 2px;">
+                <span style="flex: 1; text-align: center; border-right: 1px solid #000; font-size: 9.5px; font-weight: bold;">රු. Rs.</span>
+                <span style="width: 25px; text-align: center; font-size: 9.5px; font-weight: bold;">ශ. c.</span>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+
+      <!-- Authorizing Officer Box -->
+      <div style="border: 1.5px solid #000; padding: 6px 12px; font-size: 11px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="font-weight: bold; width: 25%; line-height: 1.3;">
+          බලය දෙන නිලධාරී<br><span style="font-size: 10px;">Officer Authorizing</span>
+        </div>
+        <div style="width: 72%;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+            <span>ඇණවුම Demand } ____________________________</span>
+            <span>නිලය Rank } ______________</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <span>සැපයුම Supply } ____________________________</span>
+            <span>නිලය Rank } ______________</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Received Stores & Rank Area -->
+      <div style="margin-top: 14px; display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px;">
+        <div style="width: 58%;">
+          <div style="font-weight: bold; line-height: 1.2;">
+            ඉහත සඳහන් ගබඩා බඩු ලබා ගන්නා ලදී. }<br>
+            <span style="font-size: 10px;">RECEIVED THE ABOVE STORES</span>
+          </div>
+          <div style="border-bottom: 1px solid #000; padding: 4px 0; font-weight: bold; font-size: 11.5px; min-height: 22px; margin-top: 4px;">
+            ${recipientName}
+          </div>
+        </div>
+        <div style="width: 38%;">
+          <div style="font-weight: bold; line-height: 1.2;">
+            නිලය/තරාතිරම }<br>
+            <span style="font-size: 10px;">RANK / RATE</span>
+          </div>
+          <div style="border-bottom: 1px solid #000; padding: 4px 0; font-weight: bold; font-size: 11.5px; min-height: 22px; margin-top: 4px;">
+            ${recipientRank}
+          </div>
+        </div>
+      </div>
+
+      <!-- Gray Area: Issued By / Purpose / Expected Return -->
+      <div style="margin-top: 10px; font-size: 10px; color: #1e293b; display: flex; justify-content: space-between; border-top: 1px dashed #94a3b8; padding-top: 4px;">
+        <div><strong>සැපයූ නාවිකයා / Issued By:</strong> ${issuedBy}</div>
+        <div><strong>කාර්යය / Purpose:</strong> ${purpose}</div>
+        <div><strong>නැවත භාරදිය යුතු දිනය:</strong> ${expectedReturn}</div>
+      </div>
+
+      <!-- System Reference & Tracking Details -->
+      <div style="margin-top: 4px; font-size: 8.5px; color: #78350f; display: flex; justify-content: space-between; font-family: monospace; border-top: 1px solid #fed7aa; padding-top: 2px;">
+        <span>⚙️ SYSTEM TRACKING REF: ${refNo} · SRI LANKA NAVY CE DEPT</span>
+        <span>GENERATED: ${printTimestamp} · OPERATOR: ${operator}</span>
+      </div>
+    </div>
+  `;
+}
+
+function printOffChargeNav254Mobile(itemId, recordIndex) {
+  const item = (mlStore.inventory || []).find(
+    i => String(i._fbKey) === String(itemId) || String(i.id) === String(itemId)
+  );
+  if (!item) {
+    showLightToast("Item not found", "⚠️");
+    return;
+  }
+
+  const rec = (item.off_charge_records || [])[recordIndex] || {
+    ref: item.off_charge_ref || `CCED/CE/FD/OUT/${new Date().getFullYear()}`,
+    qty: item.quantity || 1,
+    dest: "Base / Zone",
+    date: getLocalDateString(),
+    remarks: "Off-Charge Material Issue"
+  };
+
+  const unitCost = parseFloat(item.cost_per_unit || item.cost || 0);
+  const qty = parseFloat(rec.qty || 0);
+  const totalVal = unitCost * qty;
+
+  const nav254Html = generateOfficialNav254Html({
+    ref_no: rec.ref || `CCED/CE/FD/OUT/${new Date().getFullYear()}`,
+    supplied_by: `Civil Engineering Department (${item.zone_id || mlStore.currentZone || "CE Dept"})`,
+    received_by: rec.dest || "Respective Unit / Base",
+    date: rec.date || getLocalDateString(),
+    items: [
+      {
+        description: item.description,
+        deno: item.deno || "Nos",
+        qty_supplied: qty,
+        qty_received: qty,
+        total_value: totalVal
+      }
+    ],
+    issued_to: rec.dest || "Receiving Officer / Base In-Charge",
+    trade: "CE Section",
+    issued_by: mlStore.activeProfileName || "Store In-Charge (CE Dept)",
+    purpose: rec.remarks || "Off-Charge Transfer to Base / Zone",
+    expected_return_date: "—"
+  });
+
+  const modal = document.getElementById("mlNav254Modal");
+  const area = document.getElementById("mlNav254PrintArea");
+  const refHdr = document.getElementById("mlNav254RefHeader");
+  if (refHdr) refHdr.textContent = `Serial No: ${rec.ref || '—'}`;
+  if (area) area.innerHTML = nav254Html;
+  if (modal) modal.classList.remove("hidden");
+}
+
+function closeNav254ModalMobile() {
+  const modal = document.getElementById("mlNav254Modal");
+  if (modal) modal.classList.add("hidden");
+}
+
+function triggerNav254PrintMobile() {
+  const area = document.getElementById("mlNav254PrintArea");
+  if (!area) return;
+  const content = area.innerHTML;
+
+  let iframe = document.getElementById("mlNav254PrintIframe");
+  if (!iframe) {
+    iframe = document.createElement("iframe");
+    iframe.id = "mlNav254PrintIframe";
+    iframe.style.position = "fixed";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.width = "0";
+    iframe.style.height = "0";
+    iframe.style.border = "0";
+    iframe.style.opacity = "0";
+    document.body.appendChild(iframe);
+  }
+
+  const doc = iframe.contentWindow.document;
+  doc.open();
+  doc.write(`
+    <!DOCTYPE html>
+    <html lang="si">
+      <head>
+        <title>NAV 254 Slip</title>
+        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Sinhala:wght@400;600;700;900&family=Abhaya+Libre:wght@400;600;700;800&display=swap" rel="stylesheet">
+        <style>
+          @page { size: auto; margin: 8mm; }
+          @media print {
+            html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+            .no-print { display: none !important; }
+          }
+          body { font-family: 'Noto Sans Sinhala', 'Segoe UI', Arial, sans-serif; margin: 0; padding: 10px; background: #fff; color: #000; }
+        </style>
+      </head>
+      <body>
+        ${content}
+      </body>
+    </html>
+  `);
+  doc.close();
+
+  setTimeout(() => {
+    try {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+    } catch (e) {
+      console.warn("Iframe print error, fallback to window.print:", e);
+      window.print();
+    }
+  }, 350);
+}
+
+function exportNav254PDFMobile() {
+  const area = document.getElementById("mlNav254PrintArea");
+  if (!area) return;
+
+  if (typeof html2pdf === "undefined") {
+    alert("PDF library loading. Please try Native Print if offline.");
+    return;
+  }
+
+  showLightToast("Generating NAV 254 PDF...", "⏳");
+  const opt = {
+    margin: [6, 6, 6, 6],
+    filename: `NAV254_Slip_${getLocalDateString()}.pdf`,
+    image: { type: 'jpeg', quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  };
+
+  html2pdf().set(opt).from(area).save().then(() => {
+    showLightToast("NAV 254 PDF Downloaded!", "✅");
+  }).catch(err => {
+    console.error("PDF generation failed:", err);
+    showLightToast("PDF export failed. Use Print button.", "⚠️");
+  });
 }
 
 // ---------------------------------------------
@@ -4655,6 +5528,34 @@ window.addEventListener("popstate", (event) => {
       return;
     }
   }
+
+  // 6. Inventory NAV 254 Slip Modal
+  const nav254Modal = document.getElementById("mlNav254Modal");
+  if (nav254Modal && !nav254Modal.classList.contains("hidden")) {
+    closeNav254ModalMobile();
+    return;
+  }
+
+  // 7. Inventory Off-Charge Modal
+  const ocModal = document.getElementById("mlOffChargeModal");
+  if (ocModal && !ocModal.classList.contains("hidden")) {
+    closeOffChargeModalMobile();
+    return;
+  }
+
+  // 8. Inventory Add/Edit Modal
+  const invModal = document.getElementById("mlInventoryModal");
+  if (invModal && !invModal.classList.contains("hidden")) {
+    closeInventoryModalMobile();
+    return;
+  }
+
+  // 9. Inventory Detail Modal
+  const invDetailModal = document.getElementById("mlInventoryDetailModal");
+  if (invDetailModal && !invDetailModal.classList.contains("hidden")) {
+    closeInventoryDetailMobile();
+    return;
+  }
 });
 
 // PRINT LIFECYCLE RECOVERY HANDLER
@@ -4667,6 +5568,11 @@ window.addEventListener("afterprint", () => {
       modal.style.removeProperty("display");
       modal.classList.remove("hidden");
     }
+  }
+  const navModal = document.getElementById("mlNav254Modal");
+  if (navModal && !navModal.classList.contains("hidden")) {
+    navModal.style.removeProperty("display");
+    navModal.classList.remove("hidden");
   }
 });
 
