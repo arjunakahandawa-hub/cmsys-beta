@@ -225,6 +225,66 @@ function parseOfficialNumber(offNo) {
     return { type: "•", num: clean };
   }
   return { type: "•", num: clean };
+}
+
+// Universal extractor for sailor identifiers (IDs, Firebase keys, official numbers, service numbers)
+function extractSailorKeys(val) {
+  const keys = [];
+  if (!val) return keys;
+  if (Array.isArray(val)) {
+    val.forEach((item) => {
+      if (!item) return;
+      if (typeof item === "object") {
+        if (item.id !== undefined && item.id !== null) keys.push(String(item.id).trim());
+        if (item._fbKey) keys.push(String(item._fbKey).trim());
+        if (item.sailor_id) keys.push(String(item.sailor_id).trim());
+        if (item.official_number) keys.push(String(item.official_number).trim());
+        if (item.service_no) keys.push(String(item.service_no).trim());
+        if (item.offNo) keys.push(String(item.offNo).trim());
+      } else {
+        keys.push(String(item).trim());
+      }
+    });
+  } else if (typeof val === "object") {
+    Object.keys(val).forEach((k) => keys.push(String(k).trim()));
+    Object.values(val).forEach((v) => {
+      if (!v) return;
+      if (typeof v === "object") {
+        if (v.id !== undefined && v.id !== null) keys.push(String(v.id).trim());
+        if (v._fbKey) keys.push(String(v._fbKey).trim());
+        if (v.sailor_id) keys.push(String(v.sailor_id).trim());
+        if (v.official_number) keys.push(String(v.official_number).trim());
+        if (v.service_no) keys.push(String(v.service_no).trim());
+        if (v.offNo) keys.push(String(v.offNo).trim());
+      } else if (typeof v === "string" || typeof v === "number") {
+        keys.push(String(v).trim());
+      }
+    });
+  } else if (typeof val === "string" || typeof val === "number") {
+    keys.push(String(val).trim());
+  }
+  return keys;
+}
+
+// Universal matcher for a sailor object against an ID / key / official number (supports numeric digits like 60242 matching VAS 60242)
+function isSailorMatchingKeys(s, keysSetOrArray) {
+  if (!s || !keysSetOrArray) return false;
+  const sid = (s.id !== undefined && s.id !== null) ? String(s.id).trim() : null;
+  const sfb = s._fbKey ? String(s._fbKey).trim() : null;
+  const soff = (s.official_number || s.service_no || s.off_no) ? String(s.official_number || s.service_no || s.off_no).trim() : null;
+  const sDigits = soff ? soff.replace(/\D/g, "") : null;
+
+  for (const k of keysSetOrArray) {
+    if (!k) continue;
+    const kStr = String(k).trim();
+    if (!kStr) continue;
+    if (sid && sid === kStr) return true;
+    if (sfb && sfb === kStr) return true;
+    if (soff && soff.toLowerCase() === kStr.toLowerCase()) return true;
+    const kDigits = kStr.replace(/\D/g, "");
+    if (kDigits.length >= 3 && sDigits && sDigits.length >= 3 && kDigits === sDigits) return true;
+  }
+  return false;
 } // =============================================
 // DATA STORE
 // NOTE: Arrays start empty — Firebase listeners populate them
@@ -1254,21 +1314,34 @@ function safeFbAssignSailor(woKey, sailorId, dateStr) {
     if (!arr.includes(sailorId)) arr.push(sailorId);
     return arr;
   });
-  if (dateStr) woRef.update({ last_assigned_date: dateStr });
+  const jcRef = opsDB.ref('job_cards/' + woKey);
+  jcRef.child('assigned').transaction((curr) => {
+    let arr = Array.isArray(curr) ? curr : (curr ? Object.values(curr) : []);
+    if (!arr.includes(sailorId)) arr.push(sailorId);
+    return arr;
+  });
+  if (dateStr) {
+    woRef.update({ last_assigned_date: dateStr });
+    jcRef.update({ last_assigned_date: dateStr });
+  }
 }
 
 function safeFbRemoveSailor(woKey, sailorId, dateStr) {
   if (!woKey || !sailorId) return;
 
   const sailor = (store.sailors || []).find(
-    (s) => String(s.id) === String(sailorId) || String(s._fbKey) === String(sailorId) || String(s.official_number) === String(sailorId)
+    (s) => isSailorMatchingKeys(s, [sailorId])
   );
 
   const idsToRemove = new Set([String(sailorId)]);
   if (sailor) {
-    if (sailor.id) idsToRemove.add(String(sailor.id));
+    if (sailor.id !== undefined && sailor.id !== null) idsToRemove.add(String(sailor.id));
     if (sailor._fbKey) idsToRemove.add(String(sailor._fbKey));
-    if (sailor.official_number) idsToRemove.add(String(sailor.official_number));
+    if (sailor.official_number) {
+      idsToRemove.add(String(sailor.official_number));
+      const d = String(sailor.official_number).replace(/\D/g, "");
+      if (d) idsToRemove.add(d);
+    }
   }
 
   // 1. Transaction for work_orders
@@ -1724,15 +1797,26 @@ function findSailorById(sailorId) {
 
   if (directMatch) return directMatch;
 
-  // 2. Numeric index fallback (if sid is a pure number like "285", "426")
+  // 2. Match by official number digits (e.g. "60242" matching "VAS 60242")
+  const sidDigits = sid.replace(/\D/g, "");
+  if (sidDigits && sidDigits.length >= 3) {
+    const numMatch = (store.sailors || []).find((s) => {
+      if (!s) return false;
+      const offDigits = String(s.official_number || s.off_no || s.service_no || "").replace(/\D/g, "");
+      return offDigits && offDigits === sidDigits;
+    });
+    if (numMatch) return numMatch;
+  }
+
+  // 3. Numeric index fallback (only within valid array bounds)
   if (/^\d+$/.test(sid)) {
     const numIdx = parseInt(sid, 10);
     // 0-based array index
-    if (store.sailors && store.sailors[numIdx]) {
+    if (numIdx >= 0 && numIdx < (store.sailors || []).length && store.sailors[numIdx]) {
       return store.sailors[numIdx];
     }
     // 1-based array index
-    if (numIdx > 0 && store.sailors && store.sailors[numIdx - 1]) {
+    if (numIdx > 0 && numIdx <= (store.sailors || []).length && store.sailors[numIdx - 1]) {
       return store.sailors[numIdx - 1];
     }
   }
@@ -2318,10 +2402,68 @@ function refreshDailyCommitmentCache(dateVal) {
   const committedWoSet = new Set();
   const sailorAssignmentMap = new Map();
 
+  const addToMap = (sailorRef, info) => {
+    if (!sailorRef || !info) return;
+    const refStr = String(sailorRef).trim();
+    if (!refStr) return;
+    sailorAssignmentMap.set(refStr, info);
+    const refDigits = refStr.replace(/\D/g, "");
+    if (refDigits.length >= 3) sailorAssignmentMap.set(refDigits, info);
+
+    const s = typeof findSailorById === "function" ? findSailorById(sailorRef) : null;
+    if (s) {
+      if (s.id !== undefined && s.id !== null) sailorAssignmentMap.set(String(s.id).trim(), info);
+      if (s._fbKey) sailorAssignmentMap.set(String(s._fbKey).trim(), info);
+      if (s.official_number) {
+        const offStr = String(s.official_number).trim();
+        sailorAssignmentMap.set(offStr, info);
+        const digits = offStr.replace(/\D/g, "");
+        if (digits.length >= 3) sailorAssignmentMap.set(digits, info);
+      }
+      if (s.service_no) {
+        const srvStr = String(s.service_no).trim();
+        sailorAssignmentMap.set(srvStr, info);
+        const digits = srvStr.replace(/\D/g, "");
+        if (digits.length >= 3) sailorAssignmentMap.set(digits, info);
+      }
+    }
+  };
+
   // 1. Index daily allocations for dateVal
   (store.dailyAllocations || []).forEach((a) => {
-    if (a.date === dateVal && a.status !== "Cancelled" && a.work_order_id) {
-      committedWoSet.add(String(a.work_order_id));
+    if (a.date === dateVal && a.status !== "Cancelled") {
+      if (a.work_order_id) committedWoSet.add(String(a.work_order_id));
+      if (a.job_card_no) committedWoSet.add(String(a.job_card_no));
+      if (a.wo_reference) committedWoSet.add(String(a.wo_reference));
+
+      // Direct assignment info from daily allocation
+      const woOrJc = (store.workOrders || []).find(
+        (w) =>
+          String(w.id) === String(a.work_order_id) ||
+          String(w._fbKey) === String(a.work_order_id) ||
+          (w.reference_no && String(w.reference_no) === String(a.work_order_id)) ||
+          (w.job_card_no && String(w.job_card_no) === String(a.work_order_id))
+      ) || (store.jobCards || []).find(
+        (j) =>
+          String(j.id) === String(a.work_order_id) ||
+          String(j._fbKey) === String(a.work_order_id) ||
+          (j.job_card_no && String(j.job_card_no) === String(a.work_order_id))
+      );
+
+      const cleanZone = woOrJc
+        ? String(woOrJc.zone_id || woOrJc.zone || "Active Job").replace(/-/g, " ").trim()
+        : "Active Job";
+      const info = {
+        ref: woOrJc ? (woOrJc.reference_no || woOrJc.job_card_no || "Active Job") : (a.work_order_id || "Active Job"),
+        title: woOrJc ? (woOrJc.description || woOrJc.title || "") : (a.task_description || a.role_today || ""),
+        zone: cleanZone,
+        type: woOrJc ? (woOrJc.type || "WO") : "Allocation",
+      };
+
+      if (a.sailor_id) addToMap(a.sailor_id, info);
+      if (a.official_number) addToMap(a.official_number, info);
+      if (a.sailorId) addToMap(a.sailorId, info);
+      if (a.offNo) addToMap(a.offNo, info);
     }
   });
 
@@ -2335,10 +2477,12 @@ function refreshDailyCommitmentCache(dateVal) {
 
   // 3. Pre-map sailor assignments in O(N)
   (store.workOrders || []).forEach((wo) => {
-    const isCommitted = committedWoSet.has(String(wo.id)) || committedWoSet.has(String(wo._fbKey));
+    const isCommitted =
+      committedWoSet.has(String(wo.id)) ||
+      committedWoSet.has(String(wo._fbKey)) ||
+      (wo.reference_no && committedWoSet.has(String(wo.reference_no)));
     if (isToday) {
       if (wo.status !== "Active" && wo.status !== "Pending") return;
-      if (!isCommitted) return;
     } else {
       if (typeof isWorkOrderActiveOnDate === "function" && !isWorkOrderActiveOnDate(wo, dateVal)) return;
       if (!isCommitted) return;
@@ -2350,15 +2494,20 @@ function refreshDailyCommitmentCache(dateVal) {
       zone: cleanZone,
       type: wo.type || "WO",
     };
-    (wo.assigned || []).forEach((id) => {
-      sailorAssignmentMap.set(String(id), info);
-    });
+    extractSailorKeys(wo.assigned).forEach((id) => addToMap(id, info));
+    if (wo.incharge) addToMap(wo.incharge, info);
+    if (wo.supervisor) addToMap(wo.supervisor, info);
+    if (wo.project_artificer) addToMap(wo.project_artificer, info);
   });
 
   (store.jobCards || []).forEach((jc) => {
-    const isCommitted = committedWoSet.has(String(jc.id)) || committedWoSet.has(String(jc._fbKey));
+    const isCommitted =
+      committedWoSet.has(String(jc.id)) ||
+      committedWoSet.has(String(jc._fbKey)) ||
+      (jc.job_card_no && committedWoSet.has(String(jc.job_card_no)));
     if (isToday) {
       if (jc.status !== "Active" && jc.status !== "Pending") return;
+    } else {
       if (!isCommitted) return;
     }
     const cleanZone = String(jc.zone_id || "Job Card").replace(/-/g, " ").trim();
@@ -2368,9 +2517,10 @@ function refreshDailyCommitmentCache(dateVal) {
       zone: cleanZone,
       type: "JC",
     };
-    (jc.assigned || []).forEach((id) => {
-      sailorAssignmentMap.set(String(id), info);
-    });
+    extractSailorKeys(jc.assigned).forEach((id) => addToMap(id, info));
+    if (jc.incharge) addToMap(jc.incharge, info);
+    if (jc.supervisor) addToMap(jc.supervisor, info);
+    if (jc.project_artificer) addToMap(jc.project_artificer, info);
   });
 
   // 4. Index Long-Term Project Deployments (Housing Projects, Out Projects, Other Bases)
@@ -2386,9 +2536,9 @@ function refreshDailyCommitmentCache(dateVal) {
           type: "LongTerm",
         };
         const s = item.sailor;
-        if (s.id) sailorAssignmentMap.set(String(s.id), info);
-        if (s._fbKey) sailorAssignmentMap.set(String(s._fbKey), info);
-        if (s.official_number) sailorAssignmentMap.set(String(s.official_number), info);
+        if (s.id !== undefined && s.id !== null) addToMap(s.id, info);
+        if (s._fbKey) addToMap(s._fbKey, info);
+        if (s.official_number) addToMap(s.official_number, info);
       });
     };
     addLongTermToMap(longTerm.housing, "Housing Project");
@@ -2409,7 +2559,29 @@ function getSailorAssignmentOnDate(sailorId, dateVal) {
   if (_dailyCommitmentCache.date !== dateVal) {
     refreshDailyCommitmentCache(dateVal);
   }
-  return _dailyCommitmentCache.sailorAssignmentMap.get(String(sailorId)) || null;
+  const map = _dailyCommitmentCache.sailorAssignmentMap;
+  if (!map) return null;
+  const sidStr = String(sailorId).trim();
+  const direct = map.get(sidStr);
+  if (direct) return direct;
+
+  const sidDigits = sidStr.replace(/\D/g, "");
+  if (sidDigits.length >= 3 && map.has(sidDigits)) {
+    return map.get(sidDigits);
+  }
+
+  const s = typeof findSailorById === "function" ? findSailorById(sailorId) : null;
+  if (s) {
+    if (s.id !== undefined && s.id !== null && map.has(String(s.id).trim())) return map.get(String(s.id).trim());
+    if (s._fbKey && map.has(String(s._fbKey).trim())) return map.get(String(s._fbKey).trim());
+    if (s.official_number) {
+      const offStr = String(s.official_number).trim();
+      if (map.has(offStr)) return map.get(offStr);
+      const offDigits = offStr.replace(/\D/g, "");
+      if (offDigits.length >= 3 && map.has(offDigits)) return map.get(offDigits);
+    }
+  }
+  return null;
 }
 
 function getSailorCurrentAssignment(sailorId) {
@@ -2518,19 +2690,33 @@ function renderAvailableSailors() {
     refreshDailyCommitmentCache(dateVal);
   }
 
-  const assignedIds = new Set();
+  const assignedKeys = new Set();
 
   (store.dailyAllocations || []).forEach((alloc) => {
     if (alloc.date === dateVal && alloc.status !== "Cancelled") {
-      assignedIds.add(String(alloc.sailor_id));
+      if (alloc.sailor_id) assignedKeys.add(String(alloc.sailor_id).trim());
+      if (alloc.sailorId) assignedKeys.add(String(alloc.sailorId).trim());
+      if (alloc.official_number) assignedKeys.add(String(alloc.official_number).trim());
+      if (alloc.offNo) assignedKeys.add(String(alloc.offNo).trim());
     }
   });
 
   if (isToday) {
     (store.workOrders || []).forEach((wo) => {
-      if ((wo.status === "Active" || wo.status === "Pending") && isWorkOrderCommittedToday(wo, today) && wo.assigned) {
-        wo.assigned.forEach((id) => assignedIds.add(String(id)));
+      if (wo && (wo.status === "Active" || wo.status === "Pending") && wo.assigned) {
+        extractSailorKeys(wo.assigned).forEach((id) => assignedKeys.add(String(id).trim()));
       }
+      if (wo && wo.incharge) assignedKeys.add(String(wo.incharge).trim());
+      if (wo && wo.supervisor) assignedKeys.add(String(wo.supervisor).trim());
+      if (wo && wo.project_artificer) assignedKeys.add(String(wo.project_artificer).trim());
+    });
+    (store.jobCards || []).forEach((jc) => {
+      if (jc && (jc.status === "Active" || jc.status === "Pending") && jc.assigned) {
+        extractSailorKeys(jc.assigned).forEach((id) => assignedKeys.add(String(id).trim()));
+      }
+      if (jc && jc.incharge) assignedKeys.add(String(jc.incharge).trim());
+      if (jc && jc.supervisor) assignedKeys.add(String(jc.supervisor).trim());
+      if (jc && jc.project_artificer) assignedKeys.add(String(jc.project_artificer).trim());
     });
   }
   
@@ -2538,19 +2724,19 @@ function renderAvailableSailors() {
   const longTerm = typeof getLongTermAllocations === "function" ? getLongTermAllocations() : { housing: [], outProject: [], otherBase: [] };
   [...longTerm.housing, ...longTerm.outProject, ...longTerm.otherBase].forEach(a => {
     if (a && a.sailor) {
-      if (a.sailor.id) assignedIds.add(String(a.sailor.id));
-      if (a.sailor._fbKey) assignedIds.add(String(a.sailor._fbKey));
-      if (a.sailor.official_number) assignedIds.add(String(a.sailor.official_number));
-      if (a.sailor.official_no) assignedIds.add(String(a.sailor.official_no));
+      if (a.sailor.id !== undefined && a.sailor.id !== null) assignedKeys.add(String(a.sailor.id).trim());
+      if (a.sailor._fbKey) assignedKeys.add(String(a.sailor._fbKey).trim());
+      if (a.sailor.official_number) assignedKeys.add(String(a.sailor.official_number).trim());
+      if (a.sailor.official_no) assignedKeys.add(String(a.sailor.official_no).trim());
     }
   });
 
-  // Also guarantee any raw IDs/keys under long term projects are in assignedIds
+  // Also guarantee any raw IDs/keys under long term projects are in assignedKeys
   [store.outProjects, store.housingProjects, store.otherBases].forEach((projObj) => {
     if (projObj) {
       Object.values(projObj).forEach((p) => {
         if (p && p.assigned_sailors) {
-          Object.keys(p.assigned_sailors).forEach((k) => assignedIds.add(String(k)));
+          Object.keys(p.assigned_sailors).forEach((k) => assignedKeys.add(String(k).trim()));
         }
       });
     }
@@ -2561,14 +2747,7 @@ function renderAvailableSailors() {
 
   const allSailors = store.sailors || [];
 
-  const isSailorAssigned = (s) => {
-    return (
-      assignedIds.has(String(s.id)) ||
-      assignedIds.has(String(s._fbKey)) ||
-      (s.official_number && assignedIds.has(String(s.official_number))) ||
-      (s.official_no && assignedIds.has(String(s.official_no)))
-    );
-  };
+  const isSailorAssigned = (s) => isSailorMatchingKeys(s, assignedKeys);
 
   // Filter out Not Available / Leave / Sick sailors completely from available counts and available tabs
   const availablePool = allSailors.filter(s => {
@@ -3062,6 +3241,7 @@ function isWorkOrderCommittedToday(wo, dateVal) {
   const woFbKeyStr = String(wo._fbKey || "");
   const woRefStr = String(wo.reference_no || "");
   const woJobNoStr = String(wo.job_no || "");
+  const woJcNum = String(wo.job_card_no || wo.job_number || wo.jc_number || "");
   const woDescStr = String(wo.description || "").trim().toLowerCase();
 
   return (store.dailyAllocations || []).some((a) => {
@@ -3073,6 +3253,7 @@ function isWorkOrderCommittedToday(wo, dateVal) {
       (woFbKeyStr && aWoId === woFbKeyStr) ||
       (woRefStr && aWoId === woRefStr) ||
       (woJobNoStr && aWoId === woJobNoStr) ||
+      (woJcNum && aWoId === woJcNum) ||
       (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)))
     );
   });
@@ -3085,40 +3266,6 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
   const isToday = dateVal === today;
   const isCommitted = isWorkOrderCommittedToday(wo, dateVal);
 
-  const extractKeys = (val) => {
-    const keys = [];
-    if (!val) return keys;
-    if (Array.isArray(val)) {
-      val.forEach((item) => {
-        if (!item) return;
-        if (typeof item === "object") {
-          if (item.id) keys.push(String(item.id));
-          if (item._fbKey) keys.push(String(item._fbKey));
-          if (item.sailor_id) keys.push(String(item.sailor_id));
-          if (item.official_number) keys.push(String(item.official_number));
-          if (item.service_no) keys.push(String(item.service_no));
-        } else {
-          keys.push(String(item).trim());
-        }
-      });
-    } else if (typeof val === "object") {
-      Object.keys(val).forEach((k) => keys.push(String(k).trim()));
-      Object.values(val).forEach((v) => {
-        if (!v) return;
-        if (typeof v === "object") {
-          if (v.id) keys.push(String(v.id));
-          if (v._fbKey) keys.push(String(v._fbKey));
-          if (v.sailor_id) keys.push(String(v.sailor_id));
-          if (v.official_number) keys.push(String(v.official_number));
-          if (v.service_no) keys.push(String(v.service_no));
-        } else if (typeof v === "string" || typeof v === "number") {
-          keys.push(String(v).trim());
-        }
-      });
-    }
-    return keys;
-  };
-
   // Find daily allocations for the target date
   const dailyRecordKeys = new Set();
   const targetDate = dateVal || today;
@@ -3126,6 +3273,7 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
   const woFbKeyStr = String(wo._fbKey || "");
   const woRefStr = String(wo.reference_no || "");
   const woJobNoStr = String(wo.job_no || "");
+  const woJcNum = String(wo.job_card_no || wo.job_number || wo.jc_number || "");
   const woDescStr = String(wo.description || "").trim().toLowerCase();
 
   let hasDailyRecordForDate = false;
@@ -3140,31 +3288,40 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
       (woFbKeyStr && aWoId === woFbKeyStr) ||
       (woRefStr && aWoId === woRefStr) ||
       (woJobNoStr && aWoId === woJobNoStr) ||
+      (woJcNum && aWoId === woJcNum) ||
       (woDescStr && aDesc && (aDesc === woDescStr || aDesc.includes(woDescStr) || woDescStr.includes(aDesc)));
 
     if (isWoMatch) {
       hasDailyRecordForDate = true;
-      if (a.sailor_id) dailyRecordKeys.add(String(a.sailor_id));
-      if (a.sailorId) dailyRecordKeys.add(String(a.sailorId));
-      if (a.official_number) dailyRecordKeys.add(String(a.official_number));
-      if (a.offNo) dailyRecordKeys.add(String(a.offNo));
+      if (a.sailor_id) dailyRecordKeys.add(String(a.sailor_id).trim());
+      if (a.sailorId) dailyRecordKeys.add(String(a.sailorId).trim());
+      if (a.official_number) dailyRecordKeys.add(String(a.official_number).trim());
+      if (a.offNo) dailyRecordKeys.add(String(a.offNo).trim());
     }
   });
 
   const assignedKeys = new Set();
   if (hasDailyRecordForDate) {
     dailyRecordKeys.forEach((k) => assignedKeys.add(k));
+    // On today, ALWAYS include planned wo.assigned crew as well so newly assigned or pending sailors are not hidden
+    if (isToday) {
+      extractSailorKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
+    }
   } else if (isToday || wo.status === "Active" || wo.status === "Pending") {
     // If not committed yet for this date, fall back to planned wo.assigned crew
-    extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
+    extractSailorKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
   }
 
-  const sailors = (store.sailors || []).filter((s) => {
-    if (!s) return false;
-    const sid = s.id ? String(s.id) : null;
-    const sfb = s._fbKey ? String(s._fbKey) : null;
-    const soff = (s.official_number || s.service_no) ? String(s.official_number || s.service_no) : null;
-    return (sid && assignedKeys.has(sid)) || (sfb && assignedKeys.has(sfb)) || (soff && assignedKeys.has(soff));
+  const sailors = (store.sailors || []).filter((s) => isSailorMatchingKeys(s, assignedKeys));
+
+  // Map evaluated status for targetDate
+  sailors.forEach((s) => {
+    const alloc = (store.dailyAllocations || []).find(
+      (a) => a && a.date === targetDate && a.status !== "Cancelled" && isSailorMatchingKeys(s, [a.sailor_id, a.official_number, a.sailorId, a.offNo])
+    );
+    if (alloc) {
+      s.evaluated = alloc.evaluated === true;
+    }
   });
 
   return {
@@ -3226,7 +3383,7 @@ function commitDailyLabourForWorkOrder(event, woKey) {
       status: "Active"
     };
     store.dailyAllocations = store.dailyAllocations.filter(
-      (a) => !(a.date === dateVal && (String(a.sailor_id) === String(s.id) || String(a.sailor_id) === String(s._fbKey)))
+      (a) => !(a.date === dateVal && isSailorMatchingKeys(s, [a.sailor_id, a.official_number]))
     );
     store.dailyAllocations.push(alloc);
     opsDB.ref(`daily_allocations/${dateVal}_${sanitizeFbKey(sid)}`).set(alloc);
@@ -3248,6 +3405,7 @@ function commitDailyLabourForWorkOrder(event, woKey) {
   showToast(`⚡ Daily Labour committed for ${activeSailorsToCommit.length} sailor(s)!`, "success");
   refreshDailyCommitmentCache(dateVal);
   renderDashboard();
+  renderZoneSelectors();
   if (typeof renderSummaryView === "function") {
     renderSummaryView();
   }
@@ -3256,9 +3414,10 @@ function commitDailyLabourForWorkOrder(event, woKey) {
 function commitAllZoneWorkOrders() {
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
+  const isCurrentZoneMatch = (z) => z && (z === store.currentZone || isZoneMatch(z, store.currentZone));
   const uncommittedWos = (store.workOrders || []).filter(
     (wo) =>
-      wo.zone_id === store.currentZone &&
+      isCurrentZoneMatch(wo.zone_id || wo.zone) &&
       wo.status === "Active" &&
       isWorkOrderActiveOnDate(wo, dateVal) &&
       !isWorkOrderCommittedToday(wo, dateVal) &&
@@ -3279,6 +3438,7 @@ function commitAllZoneWorkOrders() {
     commitDailyLabourForWorkOrder(null, wo._fbKey || wo.id);
   });
 
+  renderZoneSelectors();
   showToast(`✓ Committed all ${uncommittedWos.length} work orders in ${store.currentZone}!`, "success");
 }
 
@@ -3971,14 +4131,13 @@ function handleDropOnCard(event, workOrderId) {
     .forEach((el) => el.classList.remove("drag-over"));
   if (!draggedSailorId) return;
   const assignment = getSailorCurrentAssignment(draggedSailorId);
-  const sailor = store.sailors.find(
-    (s) =>
-      String(s.id) === String(draggedSailorId) ||
-      String(s._fbKey) === String(draggedSailorId) ||
-      (s.official_number && String(s.official_number) === String(draggedSailorId)),
+  const sailor = typeof findSailorById === "function" ? findSailorById(draggedSailorId) : (store.sailors || []).find(
+    (s) => isSailorMatchingKeys(s, [draggedSailorId]),
   );
-  const workOrder = store.workOrders.find(
+  const workOrder = (store.workOrders || []).find(
     (wo) => String(wo.id) === String(workOrderId) || String(wo._fbKey) === String(workOrderId),
+  ) || (store.jobCards || []).find(
+    (jc) => String(jc.id) === String(workOrderId) || String(jc._fbKey) === String(workOrderId),
   );
   if (!sailor || !workOrder) {
     draggedSailorId = null;
@@ -3986,14 +4145,21 @@ function handleDropOnCard(event, workOrderId) {
   }
 
   const today = getLocalDateString();
-  const prevWo = store.workOrders.find((w) => {
+  let prevWo = (store.workOrders || []).find((w) => {
     if (w.status !== "Active" && w.status !== "Pending") return false;
     const assignedIds = (w.assigned || []).map(String);
-    return assignedIds.includes(String(draggedSailorId));
+    return assignedIds.some(id => isSailorMatchingKeys(sailor, [id]));
   });
+  if (!prevWo) {
+    prevWo = (store.jobCards || []).find((j) => {
+      if (j.status !== "Active" && j.status !== "Pending") return false;
+      const assignedIds = (j.assigned || []).map(String);
+      return assignedIds.some(id => isSailorMatchingKeys(sailor, [id]));
+    });
+  }
 
   const allocSnapshot = (store.dailyAllocations || []).find(
-    (a) => a.date === today && String(a.sailor_id) === String(draggedSailorId)
+    (a) => a.date === today && isSailorMatchingKeys(sailor, [a.sailor_id, a.official_number])
   );
 
   _lastActionUndo = {
@@ -4008,26 +4174,26 @@ function handleDropOnCard(event, workOrderId) {
     dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
   };
 
+  const sidToStore = sailor.id || sailor._fbKey || draggedSailorId;
+
   if (prevWo) {
     prevWo.assigned = (prevWo.assigned || []).filter(
-      (id) => String(id) !== String(draggedSailorId),
+      (id) => !isSailorMatchingKeys(sailor, [id]),
     );
     if (window.safeFbRemoveSailor) {
-      safeFbRemoveSailor(prevWo._fbKey || prevWo.id, draggedSailorId, today);
+      safeFbRemoveSailor(prevWo._fbKey || prevWo.id, sidToStore, today);
     }
+    opsDB
+      .ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`)
+      .remove();
     opsDB
       .ref(`daily_allocations/${today}_${sanitizeFbKey(draggedSailorId)}`)
       .remove();
   }
   if (!workOrder.assigned) workOrder.assigned = [];
-  const matchId = (id) =>
-    String(id) === String(sailor.id) ||
-    String(id) === String(sailor._fbKey) ||
-    (sailor.official_number && String(id) === String(sailor.official_number));
 
-  const alreadyAssigned = workOrder.assigned.some(matchId);
+  const alreadyAssigned = workOrder.assigned.some(id => isSailorMatchingKeys(sailor, [id]));
   if (!alreadyAssigned) {
-    const sidToStore = sailor.id || sailor._fbKey || draggedSailorId;
     workOrder.assigned.push(sidToStore);
     sailor.status = "Assigned";
     sailor.evaluated = false;
@@ -4038,6 +4204,7 @@ function handleDropOnCard(event, workOrderId) {
       id: Date.now(),
       date: today,
       sailor_id: sidToStore,
+      official_number: sailor.official_number || sailor.service_no || "",
       work_order_id: workOrder.id || workOrder._fbKey,
       role_today: "Worker",
       assigned_by: store.currentUser && store.currentUser.name ? store.currentUser.name : "Officer",
@@ -4045,7 +4212,7 @@ function handleDropOnCard(event, workOrderId) {
     };
     if (!store.dailyAllocations) store.dailyAllocations = [];
     store.dailyAllocations = store.dailyAllocations.filter(
-      (a) => !(a.date === today && (String(a.sailor_id) === String(sailor.id) || String(a.sailor_id) === String(sailor._fbKey)))
+      (a) => !(a.date === today && isSailorMatchingKeys(sailor, [a.sailor_id, a.official_number]))
     );
     store.dailyAllocations.push(alloc);
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`).set(alloc);
@@ -4064,16 +4231,17 @@ function handleDropOnCard(event, workOrderId) {
   draggedSailorId = null;
 }
 function removeSailorFromOrder(sailorId, workOrderId) {
-  const sailor = store.sailors.find(
-    (s) =>
-      String(s.id) === String(sailorId) ||
-      String(s._fbKey) === String(sailorId) ||
-      (s.official_number && String(s.official_number) === String(sailorId)),
+  const sailor = typeof findSailorById === "function" ? findSailorById(sailorId) : (store.sailors || []).find(
+    (s) => isSailorMatchingKeys(s, [sailorId])
   );
-  const workOrder = store.workOrders.find(
+  const workOrder = (store.workOrders || []).find(
     (wo) =>
       String(wo.id) === String(workOrderId) ||
       String(wo._fbKey) === String(workOrderId),
+  ) || (store.jobCards || []).find(
+    (jc) =>
+      String(jc.id) === String(workOrderId) ||
+      String(jc._fbKey) === String(workOrderId),
   );
   const today = getLocalDateString();
   const isToday = !store.dashboardDate || store.dashboardDate === today;
@@ -4084,10 +4252,12 @@ function removeSailorFromOrder(sailorId, workOrderId) {
   if (workOrder) {
     const idsToRemove = new Set([
       String(sailorId),
-      sailor ? String(sailor.id || "") : "",
+      sailor ? String(sailor.id !== undefined && sailor.id !== null ? sailor.id : "") : "",
       sailor ? String(sailor._fbKey || "") : "",
       sailor ? String(sailor.official_number || "") : "",
       sailor ? String(sailor.service_no || "") : "",
+      sailor && (sailor.official_number || sailor.service_no) ? String(sailor.official_number || sailor.service_no).replace(/\D/g, "") : "",
+      String(sailorId).replace(/\D/g, "")
     ].filter(Boolean));
 
     workOrder.assigned = (workOrder.assigned || []).filter(
@@ -4119,11 +4289,12 @@ function removeSailorFromOrder(sailorId, workOrderId) {
     });
 
     if (workOrder._fbKey) {
-      opsDB.ref(`work_orders/${workOrder._fbKey}/assigned`).set(
+      const node = (store.workOrders || []).some(w => w._fbKey === workOrder._fbKey) ? "work_orders" : "job_cards";
+      opsDB.ref(`${node}/${workOrder._fbKey}/assigned`).set(
         workOrder.assigned.length > 0 ? workOrder.assigned : null,
       );
       if (workOrder.last_assigned) {
-        opsDB.ref(`work_orders/${workOrder._fbKey}/last_assigned`).set(
+        opsDB.ref(`${node}/${workOrder._fbKey}/last_assigned`).set(
           workOrder.last_assigned.length > 0 ? workOrder.last_assigned : null,
         );
       }
@@ -7071,11 +7242,11 @@ function renderDetailSailorChips(filter = "") {
   const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, today);
   const assignedIds = new Set();
   assignedSailors.forEach((s) => {
-    if (s.id) assignedIds.add(String(s.id));
+    if (s.id !== undefined && s.id !== null) assignedIds.add(String(s.id));
     if (s._fbKey) assignedIds.add(String(s._fbKey));
     if (s.official_number) assignedIds.add(String(s.official_number));
   });
-  (wo.assigned || []).forEach((id) => assignedIds.add(String(id)));
+  extractSailorKeys(wo.assigned).forEach((id) => assignedIds.add(String(id)));
 
   if (!filter && document.getElementById("detailSailorSearch")) {
     filter = document.getElementById("detailSailorSearch").value;
@@ -7085,23 +7256,23 @@ function renderDetailSailorChips(filter = "") {
   let sailors;
   if (filter && filter.trim()) {
     const q = filter.toLowerCase().trim();
+    const qDigits = q.replace(/\D/g, "");
     sailors = store.sailors.filter(
       (s) =>
-        !assignedIds.has(String(s.id)) &&
-        !assignedIds.has(String(s._fbKey)) &&
-        (!s.official_number || !assignedIds.has(String(s.official_number))) &&
+        !isSailorMatchingKeys(s, assignedIds) &&
         ((s._searchIndex || "").toLowerCase().includes(q) ||
           (s.name || "").toLowerCase().includes(q) ||
           String(s.official_number || "").toLowerCase().includes(q) ||
+          String(s.service_no || "").toLowerCase().includes(q) ||
+          String(s.off_no || "").toLowerCase().includes(q) ||
           String(s.rank || "").toLowerCase().includes(q) ||
-          String(s.trade || "").toLowerCase().includes(q)),
+          String(s.trade || "").toLowerCase().includes(q) ||
+          (qDigits && (s.official_number || s.service_no || "").replace(/\D/g, "").includes(qDigits))),
     );
   } else {
     sailors = store.sailors.filter(
       (s) =>
-        !assignedIds.has(String(s.id)) &&
-        !assignedIds.has(String(s._fbKey)) &&
-        (!s.official_number || !assignedIds.has(String(s.official_number))) &&
+        !isSailorMatchingKeys(s, assignedIds) &&
         s.status !== "Sick" &&
         s.status !== "Leave" &&
         (_detailCurrentTrade === "ALL" || s.trade === _detailCurrentTrade),
@@ -7194,28 +7365,39 @@ function renderDetailSailorChips(filter = "") {
 }
 function assignSingleLabor(sailorId) {
   const assignment = getSailorCurrentAssignment(sailorId);
-  const wo = store.workOrders.find(
+  let wo = (store.workOrders || []).find(
     (w) =>
       String(w.id) === String(store.selectedWorkOrder) ||
       String(w._fbKey) === String(store.selectedWorkOrder),
   );
-  const sailor = store.sailors.find(
-    (s) =>
-      String(s.id) === String(sailorId) ||
-      String(s._fbKey) === String(sailorId) ||
-      (s.official_number && String(s.official_number) === String(sailorId)),
+  if (!wo) {
+    wo = (store.jobCards || []).find(
+      (j) =>
+        String(j.id) === String(store.selectedWorkOrder) ||
+        String(j._fbKey) === String(store.selectedWorkOrder),
+    );
+  }
+  const sailor = typeof findSailorById === "function" ? findSailorById(sailorId) : (store.sailors || []).find(
+    (s) => isSailorMatchingKeys(s, [sailorId]),
   );
   if (!wo || !sailor) return;
 
   const today = getLocalDateString();
-  const prevWo = store.workOrders.find((w) => {
+  let prevWo = (store.workOrders || []).find((w) => {
     if (w.status !== "Active" && w.status !== "Pending") return false;
     const assignedIds = (w.assigned || []).map(String);
-    return assignedIds.includes(String(sailorId));
+    return assignedIds.some(id => isSailorMatchingKeys(sailor, [id]));
   });
+  if (!prevWo) {
+    prevWo = (store.jobCards || []).find((j) => {
+      if (j.status !== "Active" && j.status !== "Pending") return false;
+      const assignedIds = (j.assigned || []).map(String);
+      return assignedIds.some(id => isSailorMatchingKeys(sailor, [id]));
+    });
+  }
 
   const allocSnapshot = (store.dailyAllocations || []).find(
-    (a) => a.date === today && String(a.sailor_id) === String(sailorId)
+    (a) => a.date === today && isSailorMatchingKeys(sailor, [a.sailor_id, a.official_number])
   );
 
   _lastActionUndo = {
@@ -7230,24 +7412,24 @@ function assignSingleLabor(sailorId) {
     dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
   };
 
+  const sidToStore = sailor.id || sailor._fbKey || sailorId;
+
   if (prevWo) {
     prevWo.assigned = (prevWo.assigned || []).filter(
-      (id) => String(id) !== String(sailorId),
+      (id) => !isSailorMatchingKeys(sailor, [id]),
     );
     if (window.safeFbRemoveSailor) {
-      safeFbRemoveSailor(prevWo._fbKey || prevWo.id, sailorId, today);
+      safeFbRemoveSailor(prevWo._fbKey || prevWo.id, sidToStore, today);
     }
+    opsDB
+      .ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`)
+      .remove();
     opsDB
       .ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`)
       .remove();
   }
   if (!wo.assigned) wo.assigned = [];
-  const matchId = (id) =>
-    String(id) === String(sailor.id) ||
-    String(id) === String(sailor._fbKey) ||
-    (sailor.official_number && String(id) === String(sailor.official_number));
-
-  const alreadyAssigned = wo.assigned.some(matchId);
+  const alreadyAssigned = wo.assigned.some(id => isSailorMatchingKeys(sailor, [id]));
   if (!alreadyAssigned) {
     const sidToStore = sailor.id || sailor._fbKey || sailorId;
     wo.assigned.push(sidToStore);
@@ -7259,6 +7441,7 @@ function assignSingleLabor(sailorId) {
     }
     const alloc = {
       sailor_id: sidToStore,
+      official_number: sailor.official_number || sailor.service_no || "",
       work_order_id: wo._fbKey || wo.id,
       date: today,
       zone_id: store.currentZone,
@@ -7268,7 +7451,7 @@ function assignSingleLabor(sailorId) {
     };
     if (!store.dailyAllocations) store.dailyAllocations = [];
     store.dailyAllocations = store.dailyAllocations.filter(
-      (a) => !(a.date === today && (String(a.sailor_id) === String(sailor.id) || String(a.sailor_id) === String(sailor._fbKey)))
+      (a) => !(a.date === today && isSailorMatchingKeys(sailor, [a.sailor_id, a.official_number]))
     );
     store.dailyAllocations.push(alloc);
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`).set(alloc);
@@ -7967,7 +8150,7 @@ function proceedWorkOrder() {
   // Mark all resolved sailors as Assigned in store memory
   if (store.sailors && wo.assigned.length > 0) {
     wo.assigned.forEach((sid) => {
-      const s = store.sailors.find(
+      const s = typeof findSailorById === "function" ? findSailorById(sid) : store.sailors.find(
         (x) => String(x.id) === String(sid) || String(x._fbKey) === String(sid),
       );
       if (s) {
@@ -8016,18 +8199,20 @@ function proceedWorkOrder() {
   // Update daily allocations in memory and Firebase if sailors are assigned
   if (hasAssigned) {
     wo.assigned.forEach((sid) => {
-      const sailor = store.sailors.find(
+      const sailor = typeof findSailorById === "function" ? findSailorById(sid) : store.sailors.find(
         (s) => String(s.id) === String(sid) || String(s._fbKey) === String(sid),
       );
       // remove existing same-day allocation for this sailor (one job per day)
       store.dailyAllocations = (store.dailyAllocations || []).filter(
-        (a) => !(a.date === today && a.sailor_id === sid),
+        (a) => !(a.date === today && (sailor ? isSailorMatchingKeys(sailor, [a.sailor_id, a.official_number]) : String(a.sailor_id) === String(sid))),
       );
+      const sidToStore = sailor ? (sailor.id || sailor._fbKey || sid) : sid;
       const alloc = {
         id: (store.dailyAllocations || []).length + 1,
         date: today,
-        sailor_id: sid,
-        work_order_id: wo.id,
+        sailor_id: sidToStore,
+        official_number: sailor ? (sailor.official_number || sailor.service_no || "") : "",
+        work_order_id: wo.id || wo._fbKey,
         role_today:
           sailor && sailor.id == wo.supervisor
             ? "Supervisor"
@@ -8045,7 +8230,9 @@ function proceedWorkOrder() {
         sailor.status = "Assigned";
         sailor.evaluated = false;
       }
-      opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sid)}`).set(alloc);
+      opsDB
+        .ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`)
+        .set(alloc);
     });
   }
 
@@ -14749,8 +14936,8 @@ function renderZoneSelectors() {
       (store.workOrders || []).forEach((wo) => {
         if (!wo || wo.status === "Cancelled" || wo.status === "Completed") return;
         const zoneField = wo.zone_id || wo.zone || wo.zoneId || wo.zone_name || wo.location_zone || wo.location;
-        if (isZoneMatchLocal(zoneField)) {
-          const isActive = isWorkOrderActiveOnDate(wo, dateVal);
+        if (isZoneMatchLocal(zoneField) || (wo.assign_type && isZoneMatchLocal(wo.description))) {
+          const isActive = isWorkOrderActiveOnDate(wo, dateVal) && isWorkOrderCommittedToday(wo, dateVal);
           if (isActive) {
             const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
             sailors.forEach(addSailor);
@@ -14763,7 +14950,7 @@ function renderZoneSelectors() {
         if (!jc || jc.status === "Cancelled" || jc.status === "Completed") return;
         const zoneField = jc.zone_id || jc.zone || jc.zoneId || jc.zone_name || jc.location_zone || jc.location;
         if (isZoneMatchLocal(zoneField)) {
-          if (isWorkOrderActiveOnDate(jc, dateVal)) {
+          if (isWorkOrderActiveOnDate(jc, dateVal) && isWorkOrderCommittedToday(jc, dateVal)) {
             const { sailors } = getWorkOrderAssignedSailors(jc, dateVal);
             sailors.forEach(addSailor);
           }
