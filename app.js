@@ -2124,7 +2124,8 @@ function updateDashboardButtons() {
     newWorkOrderBtn.classList.toggle("hidden", !isToday);
   }
   if (btnContinueYesterday) {
-    btnContinueYesterday.classList.toggle("hidden", !isToday);
+    btnContinueYesterday.classList.add("hidden");
+    btnContinueYesterday.style.display = "none";
   }
 }
 function navigateSummaryDate(offsetDays) {
@@ -2302,6 +2303,29 @@ function refreshDailyCommitmentCache(dateVal) {
     });
   });
 
+  // 4. Index Long-Term Project Deployments (Housing Projects, Out Projects, Other Bases)
+  const longTerm = typeof getLongTermAllocations === "function" ? getLongTermAllocations() : null;
+  if (longTerm) {
+    const addLongTermToMap = (list, typeLabel) => {
+      (list || []).forEach((item) => {
+        if (!item || !item.sailor) return;
+        const info = {
+          ref: item.projectName || typeLabel,
+          title: item.projectName || "",
+          zone: typeLabel,
+          type: "LongTerm",
+        };
+        const s = item.sailor;
+        if (s.id) sailorAssignmentMap.set(String(s.id), info);
+        if (s._fbKey) sailorAssignmentMap.set(String(s._fbKey), info);
+        if (s.official_number) sailorAssignmentMap.set(String(s.official_number), info);
+      });
+    };
+    addLongTermToMap(longTerm.housing, "Housing Project");
+    addLongTermToMap(longTerm.outProject, "Out Project");
+    addLongTermToMap(longTerm.otherBase, "Other Base");
+  }
+
   _dailyCommitmentCache = {
     date: dateVal,
     committedWoSet,
@@ -2388,7 +2412,7 @@ function isSailorAvailableForWork(sailor, dateVal) {
   const sStatus = String(sailor.status || "").trim();
   const sAtt = String(sailor.attendance || "").trim();
 
-  const naRegex = /^(Leave|Sick|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R|Not Available|Absent|Off-Charge|Hospital|Pass)$/i;
+  const naRegex = /^(Leave|Sick|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R|Not Available|Absent|Off-Charge|Hospital|Pass|LongTermDeployed)$/i;
   if (naRegex.test(sStatus) || naRegex.test(sAtt)) {
     return false;
   }
@@ -2435,9 +2459,25 @@ function renderAvailableSailors() {
   }
   
   // Add long term project assignments so they are marked as assigned
-  const longTerm = getLongTermAllocations();
+  const longTerm = typeof getLongTermAllocations === "function" ? getLongTermAllocations() : { housing: [], outProject: [], otherBase: [] };
   [...longTerm.housing, ...longTerm.outProject, ...longTerm.otherBase].forEach(a => {
-      assignedIds.add(String(a.sailor.id || a.sailor._fbKey));
+    if (a && a.sailor) {
+      if (a.sailor.id) assignedIds.add(String(a.sailor.id));
+      if (a.sailor._fbKey) assignedIds.add(String(a.sailor._fbKey));
+      if (a.sailor.official_number) assignedIds.add(String(a.sailor.official_number));
+      if (a.sailor.official_no) assignedIds.add(String(a.sailor.official_no));
+    }
+  });
+
+  // Also guarantee any raw IDs/keys under long term projects are in assignedIds
+  [store.outProjects, store.housingProjects, store.otherBases].forEach((projObj) => {
+    if (projObj) {
+      Object.values(projObj).forEach((p) => {
+        if (p && p.assigned_sailors) {
+          Object.keys(p.assigned_sailors).forEach((k) => assignedIds.add(String(k)));
+        }
+      });
+    }
   });
 
   // Default filter to "available" if not set
@@ -2445,10 +2485,19 @@ function renderAvailableSailors() {
 
   const allSailors = store.sailors || [];
 
+  const isSailorAssigned = (s) => {
+    return (
+      assignedIds.has(String(s.id)) ||
+      assignedIds.has(String(s._fbKey)) ||
+      (s.official_number && assignedIds.has(String(s.official_number))) ||
+      (s.official_no && assignedIds.has(String(s.official_no)))
+    );
+  };
+
   // Filter out Not Available / Leave / Sick sailors completely from available counts and available tabs
   const availablePool = allSailors.filter(s => {
     const isAvail = isSailorAvailableForWork(s, dateVal);
-    const isAssigned = assignedIds.has(String(s.id)) || assignedIds.has(String(s._fbKey));
+    const isAssigned = isSailorAssigned(s);
     return isAvail && !isAssigned;
   });
 
@@ -2547,10 +2596,8 @@ function renderAvailableSailors() {
 
   // Sort unassigned first, then by score
   sailors.sort((a, b) => {
-    const aAssigned =
-      assignedIds.has(String(a.id)) || assignedIds.has(String(a._fbKey));
-    const bAssigned =
-      assignedIds.has(String(b.id)) || assignedIds.has(String(b._fbKey));
+    const aAssigned = isSailorAssigned(a);
+    const bAssigned = isSailorAssigned(b);
     if (aAssigned !== bAssigned) {
       return aAssigned ? 1 : -1;
     }
@@ -3596,24 +3643,27 @@ function toggleZoneTeam(sailorId, addToTeam) {
 function getLongTermAllocations() {
   let allocs = { housing: [], outProject: [], otherBase: [] };
 
-  const processProjects = (projectsObj, allocArray, defaultName) => {
+  const processProjects = (projectsObj, allocArray, defaultType) => {
     if (projectsObj) {
       Object.keys(projectsObj).forEach((pid) => {
         const proj = projectsObj[pid];
-        const name = (proj.name || defaultName).trim();
+        const name = (proj.name || defaultType).trim();
         if (proj.assigned_sailors) {
           Object.keys(proj.assigned_sailors).forEach((sailorFbKey) => {
-            const sailor = store.sailors.find(
+            const sailor = (store.sailors || []).find(
               (s) =>
                 String(s._fbKey) === String(sailorFbKey) ||
-                String(s.id) === String(sailorFbKey),
+                String(s.id) === String(sailorFbKey) ||
+                (s.official_number && String(s.official_number) === String(sailorFbKey)) ||
+                (s.official_no && String(s.official_no) === String(sailorFbKey)),
             );
             if (sailor) {
               allocArray.push({
                 sailor,
                 projectName: name,
+                projectType: defaultType,
                 projectId: pid,
-                date: proj.assigned_sailors[sailorFbKey].assigned_date || Date.now(),
+                date: (proj.assigned_sailors[sailorFbKey] && proj.assigned_sailors[sailorFbKey].assigned_date) || Date.now(),
               });
             }
           });
@@ -3622,11 +3672,9 @@ function getLongTermAllocations() {
     }
   };
 
-  processProjects(store.outProjects, allocs.outProject, "Unknown Out Project");
-  processProjects(store.housingProjects, allocs.housing, "Unknown Housing Project");
-  processProjects(store.otherBases, allocs.otherBase, "Unknown Base");
-  
-
+  processProjects(store.outProjects, allocs.outProject, "Out Project");
+  processProjects(store.housingProjects, allocs.housing, "Housing Project");
+  processProjects(store.otherBases, allocs.otherBase, "Other Base");
 
   return allocs;
 }
@@ -3701,20 +3749,27 @@ function updateCounters() {
           }
       });
   });
-  const longTerm = getLongTermAllocations();
+  const longTerm = typeof getLongTermAllocations === "function" ? getLongTermAllocations() : { housing: [], outProject: [], otherBase: [] };
   const longTermIds = new Set();
   [...longTerm.housing, ...longTerm.outProject, ...longTerm.otherBase].forEach(
     (a) => {
-      var _a$sailor$id;
-      longTermIds.add(
-        String(
-          (_a$sailor$id = a.sailor.id) !== null && _a$sailor$id !== void 0
-            ? _a$sailor$id
-            : a.sailor._fbKey,
-        ),
-      );
+      if (a && a.sailor) {
+        if (a.sailor.id) longTermIds.add(String(a.sailor.id));
+        if (a.sailor._fbKey) longTermIds.add(String(a.sailor._fbKey));
+        if (a.sailor.official_number) longTermIds.add(String(a.sailor.official_number));
+        if (a.sailor.official_no) longTermIds.add(String(a.sailor.official_no));
+      }
     },
   );
+  [store.outProjects, store.housingProjects, store.otherBases].forEach((projObj) => {
+    if (projObj) {
+      Object.values(projObj).forEach((p) => {
+        if (p && p.assigned_sailors) {
+          Object.keys(p.assigned_sailors).forEach((k) => longTermIds.add(String(k)));
+        }
+      });
+    }
+  });
   const housingCount = document.getElementById("housingProjectCount");
   if (housingCount) housingCount.textContent = longTerm.housing.length;
   const outProjCount = document.getElementById("outProjectCount");
@@ -3736,7 +3791,9 @@ function updateCounters() {
           s.status = "NA";
         } else if (
           longTermIds.has(String(s.id)) ||
-          longTermIds.has(String(s._fbKey))
+          longTermIds.has(String(s._fbKey)) ||
+          (s.official_number && longTermIds.has(String(s.official_number))) ||
+          (s.official_no && longTermIds.has(String(s.official_no)))
         ) {
           s.status = "LongTermDeployed";
         } else if (
@@ -21425,7 +21482,7 @@ function toggleViewsBasedOnZone() {
     "tab-inventory": !isSpecialZone,
     "tab-estimates": !isSpecialZone,
     "tab-documents": true,
-    "tab-sbs-book": isSpecialZone && sbsActive,
+    "tab-sbs-book": false,
     "tab-sailors": true,
     "tab-maintenance": !isSpecialZone,
     "tab-reports": !isSpecialZone,
@@ -21442,14 +21499,32 @@ function toggleViewsBasedOnZone() {
 
   // Allowed Views check and auto-fallback
   const allowedViews = isSpecialZone
-    ? ["dashboard", "dailydetails", "summary", "documents", sbsActive ? "sbs-book" : null, "sailors", "projects", "settings"].filter(Boolean)
+    ? ["dashboard", "dailydetails", "summary", "documents", "sailors", "projects", "settings"]
     : ["dashboard", "dailydetails", "summary", "jobcards", "inventory", "estimates", "documents", "sailors", "maintenance", "reports", "settings"];
 
-  if (store.currentView === "settings" || store.currentView === "documents") {
+  const currentView = store.currentView || "dashboard";
+
+  if (currentView === "settings" || currentView === "documents" || currentView === "reports") {
     return;
   }
 
-  if (!allowedViews.includes(store.currentView)) {
+  if (
+    isSpecialZone &&
+    ["jobcards", "inventory", "estimates", "maintenance"].includes(
+      currentView,
+    )
+  ) {
+    switchView("dashboard");
+    return;
+  }
+
+  if (!isSpecialZone && currentView === "projects") {
+    switchView("dashboard");
+    return;
+  }
+
+  // Auto-redirect if current view is not permitted in the newly selected zone
+  if (currentView && !allowedViews.includes(currentView)) {
     switchView("dashboard");
   } // Revert sidebar, sidebar toggle, mainPanel and boardGrid display changes (always use normal layout)
   const leftSidebar = document.getElementById("leftSidebarContainer");
@@ -21481,33 +21556,13 @@ function toggleViewsBasedOnZone() {
   const ongoingSummary = document.getElementById("ongoingTasksSummaryWrapper");
   if (ongoingSummary) {
     ongoingSummary.style.display = "";
-  } // Keep dashboard-level export/print buttons visible
+  } // Keep dashboard-level print button visible
   [
-    "dashboardExportCsvBtn",
     "dashboardPrintBtn",
-    "dashboardShareWhatsappBtn",
   ].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.style.display = "";
   });
-
-  // If currently on an administrative/global view (settings, documents, reports), never redirect away
-  const currentView = store.currentView || "dashboard";
-  if (currentView === "settings" || currentView === "documents" || currentView === "reports") {
-    return;
-  }
-
-  if (
-    isSpecialZone &&
-    ["jobcards", "inventory", "estimates", "maintenance"].includes(
-      currentView,
-    )
-  ) {
-    switchView("dashboard");
-  }
-  if (!isSpecialZone && currentView === "projects") {
-    switchView("dashboard");
-  }
 }
 function renderDailyDetailsSpecialView() {
   const today = getLocalDateString();
