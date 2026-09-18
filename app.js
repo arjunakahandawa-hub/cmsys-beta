@@ -188,10 +188,27 @@ function formatZoneDisplayName(zoneId) {
   if (!zoneId) return "";
   if (isAdminStaffDuties(zoneId)) return "Admin & Staff Duties";
   const zObj = (store.zones || []).find(
-    (z) => z.id === zoneId || z.name === zoneId,
+    (z) => z.id === zoneId || z.name === zoneId || isZoneMatch(z.id, zoneId) || isZoneMatch(z.name, zoneId),
   );
   if (zObj && zObj.name) return zObj.name;
-  return zoneId;
+  return String(zoneId).replace(/[-_]+/g, " ").trim();
+}
+
+function getDailyDetailsReportTitle(zoneId, targetDate) {
+  const selectedZone = zoneId || store.currentZone || "A-Zone";
+  const dateVal = targetDate || store.dashboardDate || getLocalDateString();
+  const isAll = String(selectedZone).toUpperCase() === "ALL";
+  const zoneDisplayName = isAll ? "ALL ZONES" : (formatZoneDisplayName(selectedZone) || selectedZone);
+  return `${zoneDisplayName} | Daily Details | ${dateVal}`;
+}
+
+function updateDocumentTitleDesktop(zoneId, targetDate) {
+  const title = getDailyDetailsReportTitle(zoneId, targetDate);
+  document.title = title;
+  const titleEl = document.querySelector("title");
+  if (titleEl) {
+    titleEl.textContent = title;
+  }
 }
 function parseOfficialNumber(offNo) {
   if (!offNo) return { type: "•", num: "-" };
@@ -221,6 +238,42 @@ function getLocalDateString() {
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
+
+// Helper to get day of week (0=Sun, 1=Mon, ..., 5=Fri, 6=Sat) for any YYYY-MM-DD string
+function getDayOfWeekFromDate(dateVal) {
+  const target = dateVal || (typeof store !== "undefined" && store && store.dashboardDate) || getLocalDateString();
+  if (typeof target === "string" && target.includes("-")) {
+    const parts = target.split("-").map(Number);
+    if (parts.length === 3 && !isNaN(parts[0]) && !isNaN(parts[1]) && !isNaN(parts[2])) {
+      return new Date(parts[0], parts[1] - 1, parts[2]).getDay();
+    }
+  }
+  return new Date().getDay();
+}
+
+// Unified, date-aware checker for sailor leave / sick / absence.
+// Naval & Sri Lanka Navy Business Rule:
+// 1. "WE" (Weekend): Absence ONLY on Saturday (6) and Sunday (0).
+//    On Friday (5) and Monday-Thursday, personnel are ON DUTY during working hours!
+//    Therefore, on Friday, "WE" / "Weekend" returns FALSE (not absent, never removed from duties).
+// 2. "R/D" (Report Date): Sailor reports back to base. On Friday (and when planned on duty),
+//    they are reported and available for work.
+// 3. Genuine leave/absence (L, DL, Sick, SIQ, ADM, AWOL, etc.) returns TRUE.
+function isSailorOnLeaveOnDate(statusVal, dateVal) {
+  if (!statusVal) return false;
+  const s = typeof statusVal === "string" ? statusVal.trim() : String(statusVal).trim();
+  if (!s) return false;
+
+  const dayOfWeek = getDayOfWeekFromDate(dateVal);
+
+  // Weekend (WE / Weekend): ONLY absent on Saturday (6) and Sunday (0)
+  if (/^(WE|Weekend|WEEKEND)$/i.test(s)) {
+    return dayOfWeek === 0 || dayOfWeek === 6;
+  }
+
+  return /^(Leave|Days Leave|Half Day|Sick|Sick Report|Sick Leave|SIQ|Medical|MED|M\/C|NGH|Admit|ADM|Run|AWOL|NA|N\/A|L|DL|HD|T\/D|TD|Traveling Date|Travel Date|Travel Day|Temporary Duty|M\/D|SL|R|Off|Holiday|Absent|R\/D|RD|Report Date|Reporting Date|Report Day|නිවාඩු|ගිලන්)$/i.test(s);
+}
+
 
 function getInitialAppZone() {
   try {
@@ -721,22 +774,38 @@ function initAvailabilityListener() {
 function initLongTermDeploymentsListeners() {
   opsDB.ref("out_projects").on("value", (snapshot) => {
     store.outProjects = snapshot.val() || {};
+    updateCounters();
     renderDashboard();
     renderProjectsList();
+    if (typeof renderSummaryView === "function") {
+      renderSummaryView();
+    }
   });
   opsDB.ref("housing_projects").on("value", (snapshot) => {
     store.housingProjects = snapshot.val() || {};
+    updateCounters();
     renderDashboard();
     renderProjectsList();
+    if (typeof renderSummaryView === "function") {
+      renderSummaryView();
+    }
   });
   opsDB.ref("other_bases").on("value", (snapshot) => {
     store.otherBases = snapshot.val() || {};
+    updateCounters();
     renderDashboard();
     renderProjectsList();
+    if (typeof renderSummaryView === "function") {
+      renderSummaryView();
+    }
   });
   sailorsDB.ref("temp_drafts").on("value", (snapshot) => {
     store.tempDrafts = snapshot.val() || {};
+    updateCounters();
     renderDashboard();
+    if (typeof renderSummaryView === "function") {
+      renderSummaryView();
+    }
   });
 } // ─────────────────────────────────────────────
 // DB #2 LISTENERS — CE Management System Operations (READ + WRITE)
@@ -1825,6 +1894,7 @@ function changeZone() {
   applySettings();
   toggleViewsBasedOnZone();
   refreshCurrentView();
+  updateDocumentTitleDesktop(store.currentZone, store.dashboardDate);
   showToast(`Switched to ${store.currentZone}`);
 } // Helper to calculate automated N/A duration using exact sailors_details.php grouping algorithm
 function calculateSailorNADuration(sailor) {
@@ -1961,11 +2031,9 @@ function renderNastatusView() {
   const tbody = document.getElementById("nastatusTableBody");
   if (!tbody) return;
 
-  const isLeaveState = (val) => {
-    if (!val) return false;
-    const s = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Days Leave|Weekend|Half Day|Sick|Sick Report|Sick Leave|SIQ|Medical|MED|M\/C|NGH|Admit|ADM|Run|AWOL|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SL|R|Off|Holiday|Absent|නිවාඩු|ගිලන්)$/i.test(s);
-  };
+  const today = getLocalDateString();
+  const dateVal = (store && store.dashboardDate) || today;
+  const isLeaveState = (val) => isSailorOnLeaveOnDate(val, dateVal);
 
   const naSailors = store.sailors.filter(s => isLeaveState(s.status) || isLeaveState(s.attendance));
   
@@ -2019,6 +2087,7 @@ function renderDashboard() {
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
   const isToday = dateVal === today;
+  updateDocumentTitleDesktop(store.currentZone, dateVal);
   refreshDailyCommitmentCache(dateVal);
   toggleViewsBasedOnZone();
   const summaryTitle = document.getElementById("summaryTitle");
@@ -2148,6 +2217,7 @@ function changeDashboardDate(val) {
     const el = document.getElementById(id);
     if (el && el.value !== val) el.value = val;
   });
+  updateDocumentTitleDesktop(store.currentZone, store.dashboardDate);
   renderDashboard();
   renderZoneSelectors(); // Re-render dropdown to update zone progress percentages
   if (typeof renderSummaryView === "function") {
@@ -2409,21 +2479,27 @@ function getSailorLastAssignedTask(sailor) {
 
 function isSailorAvailableForWork(sailor, dateVal) {
   if (!sailor) return false;
+  const today = getLocalDateString();
+  if (!dateVal) dateVal = (typeof store !== "undefined" && store && store.dashboardDate) || today;
   const sStatus = String(sailor.status || "").trim();
   const sAtt = String(sailor.attendance || "").trim();
 
-  const naRegex = /^(Leave|Sick|NA|N\/A|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R|Not Available|Absent|Off-Charge|Hospital|Pass|LongTermDeployed)$/i;
-  if (naRegex.test(sStatus) || naRegex.test(sAtt)) {
+  // LongTermDeployed / Off-Charge non-leave deployments
+  if (/^(LongTermDeployed|Off-Charge)$/i.test(sStatus) || /^(LongTermDeployed|Off-Charge)$/i.test(sAtt)) {
     return false;
   }
 
-  if (sAtt && sAtt.toLowerCase() !== "present") {
+  if (isSailorOnLeaveOnDate(sStatus, dateVal) || isSailorOnLeaveOnDate(sAtt, dateVal)) {
+    return false;
+  }
+
+  if (sAtt && sAtt.toLowerCase() !== "present" && isSailorOnLeaveOnDate(sAtt, dateVal)) {
     return false;
   }
 
   if (typeof getSailorDailyAttendanceStatus === "function") {
     const fbStatus = getSailorDailyAttendanceStatus(sailor, dateVal);
-    if (fbStatus && naRegex.test(String(fbStatus).trim())) {
+    if (fbStatus && isSailorOnLeaveOnDate(fbStatus, dateVal)) {
       return false;
     }
   }
@@ -3043,14 +3119,8 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
     return keys;
   };
 
-  const assignedKeys = new Set();
-
-  // If today OR active/pending work order, include planned wo.assigned crew
-  if (isToday || wo.status === "Active" || wo.status === "Pending") {
-    extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
-  }
-
   // Find daily allocations for the target date
+  const dailyRecordKeys = new Set();
   const targetDate = dateVal || today;
   const woIdStr = String(wo.id || "");
   const woFbKeyStr = String(wo._fbKey || "");
@@ -3074,25 +3144,27 @@ function getWorkOrderAssignedSailors(wo, dateVal) {
 
     if (isWoMatch) {
       hasDailyRecordForDate = true;
-      if (a.sailor_id) assignedKeys.add(String(a.sailor_id));
-      if (a.sailorId) assignedKeys.add(String(a.sailorId));
-      if (a.official_number) assignedKeys.add(String(a.official_number));
-      if (a.offNo) assignedKeys.add(String(a.offNo));
+      if (a.sailor_id) dailyRecordKeys.add(String(a.sailor_id));
+      if (a.sailorId) dailyRecordKeys.add(String(a.sailorId));
+      if (a.official_number) dailyRecordKeys.add(String(a.official_number));
+      if (a.offNo) dailyRecordKeys.add(String(a.offNo));
     }
   });
 
-  // Fallback if assignedKeys is still empty for active/pending work order
-  if (assignedKeys.size === 0 && (wo.status === "Active" || wo.status === "Pending")) {
+  const assignedKeys = new Set();
+  if (hasDailyRecordForDate) {
+    dailyRecordKeys.forEach((k) => assignedKeys.add(k));
+  } else if (isToday || wo.status === "Active" || wo.status === "Pending") {
+    // If not committed yet for this date, fall back to planned wo.assigned crew
     extractKeys(wo.assigned).forEach((k) => assignedKeys.add(k));
   }
 
-
   const sailors = (store.sailors || []).filter((s) => {
     if (!s) return false;
-    const sid = String(s.id);
-    const sfb = String(s._fbKey || "");
-    const soff = String(s.official_number || s.service_no || "");
-    return assignedKeys.has(sid) || (sfb && assignedKeys.has(sfb)) || (soff && assignedKeys.has(soff));
+    const sid = s.id ? String(s.id) : null;
+    const sfb = s._fbKey ? String(s._fbKey) : null;
+    const soff = (s.official_number || s.service_no) ? String(s.official_number || s.service_no) : null;
+    return (sid && assignedKeys.has(sid)) || (sfb && assignedKeys.has(sfb)) || (soff && assignedKeys.has(soff));
   });
 
   return {
@@ -3107,9 +3179,14 @@ function commitDailyLabourForWorkOrder(event, woKey) {
     event.preventDefault();
     event.stopPropagation();
   }
-  const wo = store.workOrders.find(
+  let wo = (store.workOrders || []).find(
     (w) => String(w.id) === String(woKey) || String(w._fbKey) === String(woKey)
   );
+  if (!wo) {
+    wo = (store.jobCards || []).find(
+      (j) => String(j.id) === String(woKey) || String(j._fbKey) === String(woKey)
+    );
+  }
   if (!wo) return;
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
@@ -3122,11 +3199,7 @@ function commitDailyLabourForWorkOrder(event, woKey) {
   const [yyyy, mm, dd] = dateVal.split("-");
   const monthKey = `${yyyy}-${mm}`;
   const dayKey = parseInt(dd, 10).toString();
-  const isLeaveCode = (val) => {
-    if (!val) return false;
-    const str = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
-  };
+  const isLeaveCode = (val) => isSailorOnLeaveOnDate(val, dateVal);
 
   const activeSailorsToCommit = assignedSailors.filter((s) => {
     const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][s._fbKey] : null;
@@ -3165,7 +3238,8 @@ function commitDailyLabourForWorkOrder(event, woKey) {
 
   wo.last_committed_date = dateVal;
   if (wo._fbKey) {
-    opsDB.ref(`work_orders/${wo._fbKey}`).update({
+    const tableNode = (store.workOrders || []).some(w => w._fbKey === wo._fbKey) ? "work_orders" : "job_cards";
+    opsDB.ref(`${tableNode}/${wo._fbKey}`).update({
       last_committed_date: dateVal,
       last_assigned_date: dateVal
     });
@@ -3243,11 +3317,7 @@ function renderWorkOrderCard(wo) {
   const [yyyy, mm, dd] = dateVal.split("-");
   const monthKey = `${yyyy}-${mm}`;
   const dayKey = parseInt(dd, 10).toString();
-  const isLeaveCode = (val) => {
-    if (!val) return false;
-    const str = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
-  };
+  const isLeaveCode = (val) => isSailorOnLeaveOnDate(val, dateVal);
   const getSailorLeave = (s) => {
     if (!s) return null;
     const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][s._fbKey] : null;
@@ -3267,6 +3337,14 @@ function renderWorkOrderCard(wo) {
       activeWorkingSailors.push(s);
     }
   });
+
+  const weAbsentCount = assignedSailors.filter((s) => {
+    const l = getSailorLeave(s);
+    return l && /^(WE|Weekend)$/i.test(String(l).trim());
+  }).length;
+  const leaveBadgeText = weAbsentCount === leaveAbsentCount 
+    ? `(${leaveAbsentCount} on weekend)` 
+    : (weAbsentCount > 0 ? `(${leaveAbsentCount} on leave/WE)` : `(${leaveAbsentCount} on leave)`);
 
   const tradeCounts = {};
   (isCommitted ? activeWorkingSailors : assignedSailors).forEach((s) => {
@@ -3371,7 +3449,7 @@ function renderWorkOrderCard(wo) {
                     <span class="text-[11px] text-slate-500 flex items-center flex-wrap gap-1">👷 ${
                       isCommitted
                         ? (leaveAbsentCount > 0 
-                            ? `<span class="font-bold text-slate-700">${activeWorkingSailors.length} active</span> <span class="text-amber-600 text-[10px] font-semibold">(${leaveAbsentCount} on leave/WE)</span>` 
+                            ? `<span class="font-bold text-slate-700">${activeWorkingSailors.length} active</span> <span class="text-amber-600 text-[10px] font-semibold">${leaveBadgeText}</span>` 
                             : `<span class="font-bold text-slate-700">${assignedSailors.length} active</span>`)
                         : (leaveAbsentCount > 0
                             ? `<span class="font-medium text-slate-600">${assignedSailors.length} planned</span> <span class="text-amber-600 text-[10px]">(${activeWorkingSailors.length} available)</span>`
@@ -3686,11 +3764,7 @@ function updateCounters() {
   const isToday = dateVal === today;
   const assignedIds = new Set();
   const naIds = new Set();
-  const isLeaveState = (val) => {
-    if (!val) return false;
-    const s = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
-  };
+  const isLeaveState = (val) => isSailorOnLeaveOnDate(val, dateVal);
   const isNA = (text) => {
     if (!text) return false;
     const s = typeof text === "string" ? text : String(text);
@@ -3783,7 +3857,7 @@ function updateCounters() {
   if (store.sailors) {
     store.sailors.forEach((s) => {
       // Check Firebase daily attendance first
-      const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? store.availability[monthKey][dayKey][s._fbKey] : null;
+      const fbStatus = store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey] ? (store.availability[monthKey][dayKey][s._fbKey] || (s.id ? store.availability[monthKey][dayKey][s.id] : null)) : null;
       const isLeave = isLeaveState(s.status) || isLeaveState(s.attendance) || isLeaveState(fbStatus);
         
       if (!isLeave) {
@@ -3843,7 +3917,9 @@ function updateCounters() {
   document.getElementById("netForce").textContent = store.sailors
     ? store.sailors.length
     : 0;
-  document.getElementById("assignedCount").textContent = assigned + longTermCount;
+  document.getElementById("assignedCount").textContent = assigned;
+  const deployedEl = document.getElementById("deployedCount");
+  if (deployedEl) deployedEl.textContent = longTermCount;
   document.getElementById("availableCount").textContent = available;
   const todayNaEl = document.getElementById("todayNaCount");
   if (todayNaEl) todayNaEl.textContent = naCount;
@@ -14601,11 +14677,7 @@ function renderZoneSelectors() {
   const [yyyy, mm, dd] = dateVal.split("-");
   const monthKey = `${yyyy}-${mm}`;
   const dayKey = parseInt(dd, 10).toString();
-  const isLeaveCode = (val) => {
-    if (!val) return false;
-    const str = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(str);
-  };
+  const isLeaveCode = (val) => isSailorOnLeaveOnDate(val, dateVal);
   let zonesToRender = [...visibleZones];
   if (hasAllZoneAccess) {
     const hasAdminZone = visibleZones.some((z) => isAdminStaffDuties(z.id));
@@ -14979,11 +15051,7 @@ function renderDailyReport() {
   if (userFeedbackEl) userFeedbackEl.textContent = avgFeedback.toFixed(1);
 
   // Daily State Board Matrix
-  const isLeaveState = (val) => {
-    if (!val) return false;
-    const s = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
-  };
+  const isLeaveState = (val) => isSailorOnLeaveOnDate(val, dateVal);
 
   const trades = ["MA", "CA", "PA", "PL", "WE", "RW", "AL", "SW", "BB"];
   let totStrength = 0, totPresent = 0, totLeave = 0, totSick = 0, totDeployed = 0;
@@ -15135,11 +15203,7 @@ function exportDailyStateBoardPdf() {
   const dayKey = parseInt(dd, 10).toString();
   const dayAvail = (store.availability && store.availability[monthKey] && store.availability[monthKey][dayKey]) || {};
 
-  const isLeaveState = (val) => {
-    if (!val) return false;
-    const s = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Sick|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SIQ|S\/R|SL|ADM|R)$/i.test(s);
-  };
+  const isLeaveState = (val) => isSailorOnLeaveOnDate(val, dateVal);
 
   const targetSailors = store.sailors || [];
   const trades = ["MA", "CA", "PA", "PL", "WE", "RW", "AL", "SW", "BB"];
@@ -20398,6 +20462,7 @@ document.addEventListener("DOMContentLoaded", () => {
   renderZoneSelectors(); // Initialize dashboardDate to today
   const today = getLocalDateString();
   store.dashboardDate = today;
+  updateDocumentTitleDesktop(store.currentZone, today);
   const datePicker = document.getElementById("dashboardDatePicker");
   if (datePicker) {
     datePicker.value = today;
@@ -21595,7 +21660,8 @@ function renderDailyDetailsSpecialView() {
         wo.status !== "Cancelled" &&
         (isZoneMatchLocal(wo.zone_id || wo.zone) ||
           (wo.assign_type && isZoneMatchLocal(wo.description))) &&
-        isWorkOrderActiveOnDate(wo, dateVal)
+        isWorkOrderActiveOnDate(wo, dateVal) &&
+        isWorkOrderCommittedToday(wo, dateVal)
     );
     wos.sort((a, b) => {
       const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
@@ -21610,7 +21676,8 @@ function renderDailyDetailsSpecialView() {
         jc &&
         jc.status !== "Cancelled" &&
         isZoneMatchLocal(jc.zone_id || jc.zone) &&
-        isWorkOrderActiveOnDate(jc, dateVal)
+        isWorkOrderActiveOnDate(jc, dateVal) &&
+        isWorkOrderCommittedToday(jc, dateVal)
     );
 
     const allZoneTasks = [...wos, ...jcs];
@@ -21811,7 +21878,7 @@ function renderDailyDetailsSpecialView() {
                 <button onclick="openLmdExportModal('print')" class="bg-teal-600 hover:bg-teal-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
                      Print / PDF
                 </button>
-                <button onclick="downloadWorkOrdersPdfBackup()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all" title="Download PDF Backup">
+                <button onclick="openLmdExportModal('pdf')" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all" title="Download PDF Backup">
                      💾 Download PDF
                 </button>
                 <button onclick="uploadWorkOrdersPdfToDrive()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-xl text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all" title="Upload PDF to Google Drive">
@@ -22026,27 +22093,26 @@ function renderSummaryView() {
   store._summaryAllocatedSailorIds = allAllocatedSailorIds;
   const isSailorAllocated = (sailor) => {
     if (!sailor) return true;
-    const sid = String(sailor.id);
+    const sid = sailor.id ? String(sailor.id) : null;
     const sfb = sailor._fbKey ? String(sailor._fbKey) : null;
-    return allAllocatedSailorIds.has(sid) || (sfb && allAllocatedSailorIds.has(sfb));
+    const soff = (sailor.official_number || sailor.service_no) ? String(sailor.official_number || sailor.service_no) : null;
+    return (sid && allAllocatedSailorIds.has(sid)) || 
+           (sfb && allAllocatedSailorIds.has(sfb)) ||
+           (soff && allAllocatedSailorIds.has(soff));
   };
   const markSailorAllocated = (sailor) => {
     if (!sailor) return;
-    allAllocatedSailorIds.add(String(sailor.id));
+    if (sailor.id) allAllocatedSailorIds.add(String(sailor.id));
     if (sailor._fbKey) allAllocatedSailorIds.add(String(sailor._fbKey));
+    if (sailor.official_number) allAllocatedSailorIds.add(String(sailor.official_number));
+    if (sailor.service_no) allAllocatedSailorIds.add(String(sailor.service_no));
   };
 
   const [yyyy, mm, dd] = dateVal.split("-");
   const monthKey = `${yyyy}-${mm}`;
   const dayKey = parseInt(dd, 10).toString();
 
-  const isLeaveCodeDetailed = (val) => {
-    if (!val) return false;
-    const s = typeof val === "string" ? val.trim() : String(val).trim();
-    return /^(Leave|Days Leave|Weekend|Half Day|Sick|Sick Report|Sick Leave|SIQ|Medical|MED|M\/C|NGH|Admit|ADM|Run|AWOL|NA|N\/A|L|DL|WE|HD|T\/D|TD|Traveling Date|Travel Date|Travel Day|Temporary Duty|M\/D|R\/D|RD|Report Date|Reporting Date|Report Day|Rest Day|SL|R|Off|Holiday|Absent|නිවාඩු|ගිලන්)$/i.test(
-      s,
-    );
-  };
+  const isLeaveCodeDetailed = (val) => isSailorOnLeaveOnDate(val, dateVal);
 
   const getSailorLeaveStatus = (sailor) => {
     if (!sailor) return null;
@@ -22060,7 +22126,7 @@ function renderSummaryView() {
     return null;
   };
 
-  // 1. Active tasks on dateVal
+  // 1. Active tasks committed for dateVal
   const allWorkOrders = store.workOrders || [];
   const allJobCards = store.jobCards || [];
   const seenTaskKeys = new Set();
@@ -22075,7 +22141,13 @@ function renderSummaryView() {
     if (k && seenTaskKeys.has(k)) return;
     rawTasks.push(jc);
   });
-  const allTasks = rawTasks.filter((t) => isWorkOrderActiveOnDate(t, dateVal));
+  const allTasks = rawTasks.filter(
+    (t) =>
+      t &&
+      t.status !== "Cancelled" &&
+      isWorkOrderActiveOnDate(t, dateVal) &&
+      isWorkOrderCommittedToday(t, dateVal)
+  );
 
   allTasks.forEach((wo) => {
     const { sailors: assignedSailors } = getWorkOrderAssignedSailors(wo, dateVal);
@@ -22562,9 +22634,13 @@ function openLmdExportModal(action) {
   _lmdExportAction = action;
   let title = "Print / PDF Options";
   if (action === "csv") title = "Export CSV Options";
+  else if (action === "pdf") title = "Download PDF Options";
   else if (action === "whatsapp") title = "WhatsApp Share Options";
   document.getElementById("lmdExportModalTitle").textContent = title;
-  const zones = store.zones; // included Admin & Staff Duties
+  const zones = [...(store.zones || [])];
+  if (!zones.some((z) => isAdminStaffDuties(z.id || z.name))) {
+    zones.push({ id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" });
+  }
   document.getElementById("exportZoneSelect").innerHTML = zones
     .map((z) => `<option value="${z.id}">${z.name}</option>`)
     .join("");
@@ -22593,6 +22669,9 @@ function executeLmdExport() {
     // Share first to keep user gesture activation, then close modal
     shareLmdWhatsApp(scope, selectedZone);
     closeModal("lmdExportModal");
+  } else if (_lmdExportAction === "pdf") {
+    downloadWorkOrdersPdfBackup(scope === "all" ? "all" : selectedZone);
+    closeModal("lmdExportModal");
   } else {
     printLmdDetails(scope, selectedZone);
     closeModal("lmdExportModal");
@@ -22603,94 +22682,102 @@ function exportLmdCSV(scope, selectedZone) {
   const dateVal = store.dashboardDate || today;
   let zones = [];
   if (scope === "all") {
-    zones = store.zones;
+    zones = [...(store.zones || [])];
+    if (!zones.some((z) => isAdminStaffDuties(z.id || z.name))) {
+      zones.push({ id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" });
+    }
   } else {
-    const z = store.zones.find((x) => x.id === selectedZone);
-    if (z) zones.push(z);
+    const targetZone = selectedZone || store.currentZone;
+    const z = (store.zones || []).find((x) => isZoneMatch(x.id, targetZone) || isZoneMatch(x.name, targetZone));
+    if (z) {
+      zones.push(z);
+    } else if (targetZone) {
+      zones.push({ id: targetZone, name: formatZoneDisplayName(targetZone) || targetZone });
+    }
   }
+
+  const isAll = scope === "all";
+  const targetZone = selectedZone || store.currentZone;
+  const displayZoneName = isAll ? "ALL ZONES" : (formatZoneDisplayName(targetZone) || targetZone || "Zone");
+  const safeZone = String(displayZoneName).replace(/[/\\:*?"<>|]/g, "").trim();
+  const safeDate = String(dateVal).replace(/[/\\:*?"<>|]/g, "-").trim();
+  const csvFileName = `${safeZone} | Daily Details | ${safeDate}.csv`;
+
   let csvContent = "Ser No,Rank,Name,Service Type,Service No,Trade\n";
   zones.forEach((z) => {
-    const wos = store.workOrders.filter(
-      (wo) => wo.zone_id === z.id && isWorkOrderActiveOnDate(wo, dateVal),
-    );
+    const allWorks = [
+      ...(store.workOrders || []).filter(
+        (wo) => isZoneMatch(wo.zone_id, z.id) && isWorkOrderActiveOnDate(wo, dateVal)
+      ),
+      ...(store.jobCards || []).filter(
+        (jc) => isZoneMatch(jc.zone_id, z.id) && isWorkOrderActiveOnDate(jc, dateVal)
+      )
+    ];
+
+    const seenWorkIds = new Set();
+    const wos = allWorks.filter((w) => {
+      const wid = String(w.id || w._fbKey || "");
+      if (!wid || seenWorkIds.has(wid)) return false;
+      seenWorkIds.add(wid);
+      return true;
+    });
+
     wos.sort((a, b) => {
-      const aInCharge = (a.description || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
-      const bInCharge = (b.description || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
+      const aInCharge = (a.description || a.title || "").toLowerCase().includes("in charge") || a.assign_type === "In Charge";
+      const bInCharge = (b.description || b.title || "").toLowerCase().includes("in charge") || b.assign_type === "In Charge";
       if (aInCharge && !bInCharge) return -1;
       if (!aInCharge && bInCharge) return 1;
       return 0;
-    }); // Check if zone has active allocations
-    let zoneHasAllocations = false;
-    wos.forEach((wo) => {
-      let assignedCount = 0;
-      if (dateVal === today) {
-        assignedCount = (wo.assigned || []).length;
-      } else {
-        assignedCount = (store.dailyAllocations || []).filter(
-          (a) =>
-            a.date === dateVal && String(a.work_order_id) === String(wo.id),
-        ).length;
-      }
-      if (assignedCount > 0) zoneHasAllocations = true;
     });
+
+    let zoneHasAllocations = false;
+    let zoneRows = "";
+
+    wos.forEach((wo) => {
+      const { sailors } = getWorkOrderAssignedSailors(wo, dateVal);
+      if (sailors && sailors.length > 0) {
+        zoneHasAllocations = true;
+        const workTitle = (wo.description || wo.title || wo.reference_no || wo.job_no || "Active Work").trim();
+        zoneRows += `,,● ${workTitle.toUpperCase()},,,\n`;
+        sailors.forEach((s, idx) => {
+          const serNo = String(idx + 1).padStart(2, "0");
+          const parsedOffNo = parseOfficialNumber(
+            s.official_number || s.service_no || s.offNo || ""
+          );
+          const row = [
+            serNo,
+            s.rank || "AB",
+            s.name || "",
+            parsedOffNo.type,
+            parsedOffNo.num,
+            s.trade || "—",
+          ]
+            .map((val) => `"${String(val).replace(/"/g, '""')}"`)
+            .join(",");
+          zoneRows += row + "\n";
+        });
+      }
+    });
+
     if (zoneHasAllocations) {
-      // Add Zone Section header row in CSV
-      csvContent += `,,=== ZONE: ${z.name.toUpperCase()} ===,,,\n`;
-      wos.forEach((wo) => {
-        let assignedSailors = [];
-        if (dateVal === today) {
-          const assignedIds = (wo.assigned || []).map(String);
-          assignedSailors = store.sailors.filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)),
-          );
-        } else {
-          const assignedIds = (store.dailyAllocations || [])
-            .filter(
-              (a) =>
-                a.date === dateVal && String(a.work_order_id) === String(wo.id),
-            )
-            .map((a) => String(a.sailor_id));
-          assignedSailors = store.sailors.filter(
-            (s) =>
-              assignedIds.includes(String(s.id)) ||
-              assignedIds.includes(String(s._fbKey)),
-          );
-        }
-        if (assignedSailors.length > 0) {
-          // Add header row for the work order/duty
-          csvContent += `,,● ${wo.description.toUpperCase()},,,\n`;
-          assignedSailors.forEach((s, idx) => {
-            const serNo = String(idx + 1).padStart(2, "0");
-            const parsedOffNo = parseOfficialNumber(
-              s.official_number || s.service_no,
-            );
-            const row = [
-              serNo,
-              s.rank || "AB",
-              s.name,
-              parsedOffNo.type,
-              parsedOffNo.num,
-              s.trade || "",
-            ]
-              .map((val) => `"${String(val).replace(/"/g, '""')}"`)
-              .join(",");
-            csvContent += row + "\n";
-          });
-        }
-      });
+      const zoneDisplayName = formatZoneDisplayName(z.name || z.id) || (z.name || z.id);
+      csvContent += `,,=== ZONE: ${zoneDisplayName.toUpperCase()} ===,,,\n`;
+      csvContent += zoneRows;
     }
   });
-  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+
+  const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
   link.setAttribute("href", url);
-  link.setAttribute("download", `LMD_Report_${dateVal}_${scope}.csv`);
+  link.setAttribute("download", csvFileName);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  showToast("CSV downloaded successfully!");
+  try {
+    URL.revokeObjectURL(url);
+  } catch (e) {}
+  showToast(`CSV downloaded: ${csvFileName}`);
 }
 // ── SAILOR CLASSIFICATION FOR ZONE DAILY DETAILS SUMMARY TABLE ──
 function classifySailorForSummary(s, isInCharge) {
@@ -22875,9 +22962,11 @@ function printLmdDetails(scope, selectedZone) {
   const displayZoneName = isAll ? "ALL ZONES" : (formatZoneDisplayName(targetZone) || targetZone || "");
   const printDocTitle = `${displayZoneName} | Daily Details | ${dateVal}`;
 
-  const win = window.open("", "_blank");
-  win.document.write(`
-        <html><head><title>${escapeHtml(printDocTitle)}</title>
+  // Keep parent window document.title synchronized for browser print/PDF export
+  updateDocumentTitleDesktop(isAll ? "ALL" : targetZone, dateVal);
+
+  const fullPrintHtml = `<!DOCTYPE html>
+        <html><head><meta charset="UTF-8"><title>${escapeHtml(printDocTitle)}</title>
         <style>
             body { font-family: 'Segoe UI', Arial, sans-serif; color:#000; margin:0; padding:20px; }
             .header-container { display: flex; align-items: center; justify-content: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px; }
@@ -22967,12 +23056,59 @@ function printLmdDetails(scope, selectedZone) {
             </div>
 
             <div class="footer">Generated by NCW Operation System on ${new Date().toLocaleString()}</div>
-        </body></html>`);
-  win.document.close();
-  win.focus();
-  setTimeout(() => {
-    win.print();
-  }, 300);
+        </body></html>`;
+
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.write(fullPrintHtml);
+    win.document.close();
+    win.focus();
+    setTimeout(() => {
+      try {
+        win.print();
+      } catch (e) {
+        console.warn("Popup print failed, fallback to direct print:", e);
+        triggerDesktopHiddenPrint(printDocTitle, fullPrintHtml);
+      }
+    }, 350);
+  } else {
+    triggerDesktopHiddenPrint(printDocTitle, fullPrintHtml);
+  }
+}
+
+function triggerDesktopHiddenPrint(title, fullHtml) {
+  let printFrame = document.getElementById("desktopPrintHiddenIframe");
+  if (!printFrame) {
+    printFrame = document.createElement("iframe");
+    printFrame.id = "desktopPrintHiddenIframe";
+    printFrame.style.position = "fixed";
+    printFrame.style.right = "0";
+    printFrame.style.bottom = "0";
+    printFrame.style.width = "10px";
+    printFrame.style.height = "10px";
+    printFrame.style.border = "0";
+    printFrame.style.opacity = "0.01";
+    printFrame.style.pointerEvents = "none";
+    printFrame.style.zIndex = "-9999";
+    document.body.appendChild(printFrame);
+  }
+
+  try {
+    const doc = printFrame.contentDocument || printFrame.contentWindow.document;
+    doc.open();
+    doc.write(fullHtml);
+    doc.close();
+    setTimeout(() => {
+      try {
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+      } catch (e) {
+        window.print();
+      }
+    }, 250);
+  } catch (err) {
+    window.print();
+  }
 }
 function openEvalDetailsModal(mode) {
   const today = getLocalDateString();
@@ -23872,7 +24008,7 @@ function getSailorLiveDailyStatus(sailor, dateVal) {
   const statusStr = String(rawStatus).trim();
 
   const isSickCode = /^(Sick|SIQ|S\/R|Hospital|ADM|Admit)$/i.test(statusStr);
-  const isLeaveCode = /^(Leave|NA|L|DL|WE|HD|T\/D|M\/D|R\/D|SL|R|Off|Holiday|Absent|AWOL|නිවාඩු|ගිලන්)$/i.test(statusStr);
+  const isLeaveCode = isSailorOnLeaveOnDate(statusStr, dateVal);
 
   if (isSickCode) {
     return {
@@ -25605,14 +25741,29 @@ window.addEventListener("click", function (e) {
 }); // =============================================
 // PDF BACKUP & GOOGLE DRIVE BACKUP SYSTEM
 // =============================================
-function generateWorkOrdersPdfBlob(dateVal) {
+function generateWorkOrdersPdfBlob(dateVal, targetZoneId) {
   const today = getLocalDateString();
   const targetDate = dateVal || store.dashboardDate || today;
   let rowsHtml = "";
-  const zones = [...(store.zones || [])];
-  if (!zones.some((z) => isAdminStaffDuties(z.id || z.name))) {
-    zones.push({ id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" });
+  let zones = [];
+  const isAll = !targetZoneId || String(targetZoneId).toLowerCase() === "all";
+
+  if (isAll) {
+    zones = [...(store.zones || [])];
+    if (!zones.some((z) => isAdminStaffDuties(z.id || z.name))) {
+      zones.push({ id: "Admin-&-Staff-Duties", name: "Admin & Staff Duties" });
+    }
+  } else {
+    const z = (store.zones || []).find((x) => isZoneMatch(x.id, targetZoneId) || isZoneMatch(x.name, targetZoneId));
+    if (z) {
+      zones.push(z);
+    } else if (targetZoneId) {
+      zones.push({ id: targetZoneId, name: formatZoneDisplayName(targetZoneId) || targetZoneId });
+    }
   }
+
+  const displayZoneName = isAll ? "ALL ZONES" : (formatZoneDisplayName(targetZoneId) || targetZoneId || "");
+  const reportDocTitle = `${displayZoneName} | Daily Details | ${targetDate}`;
 
   // Summary counts for all unique sailors in the report
   const seenReportSailorKeys = new Set();
@@ -25744,27 +25895,27 @@ function generateWorkOrdersPdfBlob(dateVal) {
     year: "numeric",
     month: "long",
     day: "numeric",
-  }); // Create container element for html2pdf
+  });
   const element = document.createElement("div");
   element.style.padding = "20px";
-  element.style.background = "#white";
+  element.style.background = "#ffffff";
   element.innerHTML = `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; color:#000;">
             <div style="display: flex; align-items: center; border-bottom: 2.5px solid #0f172a; padding-bottom: 12px; margin-bottom: 15px;">
                 <div style="text-align: left;">
-                    <h1 style="font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">CMSys Daily Details Report</h1>
-                    <h2 style="font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">CE Management System • Trincomalee</h2>
+                    <h1 style="font-size: 19px; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; letter-spacing: 0.5px;">${escapeHtml(reportDocTitle)}</h1>
+                    <h2 style="font-size: 11px; font-weight: 700; color: #475569; margin: 3px 0 0 0; text-transform: uppercase; letter-spacing: 0.5px;">Sri Lanka Navy • Captain Civil Engineering Department (E)</h2>
                 </div>
             </div>
             
             <div style="display: flex; justify-content: space-between; font-size: 10px; color: #334155; margin-bottom: 15px; background: #f8fafc; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 6px;">
                 <div>
-                    <strong>Date:</strong> ${targetDate}<br>
-                    <strong>Scope:</strong> All Zones Combined
+                    <strong>Date:</strong> ${escapeHtml(targetDate)}<br>
+                    <strong>Scope:</strong> ${isAll ? "All Zones Combined" : escapeHtml(displayZoneName.toUpperCase())}
                 </div>
                 <div style="text-align: right;">
                     <strong>Generated At:</strong> ${new Date().toLocaleString()}<br>
-                    <strong>Authorized By:</strong> CMSys System
+                    <strong>System:</strong> NCW OPERATION SYSTEM
                 </div>
             </div>
             
@@ -25804,14 +25955,21 @@ function generateWorkOrdersPdfBlob(dateVal) {
     `;
   return element;
 }
-function downloadWorkOrdersPdfBackup() {
+function downloadWorkOrdersPdfBackup(targetZoneId) {
   showToast("Preparing PDF backup...", "info");
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
-  const element = generateWorkOrdersPdfBlob(dateVal);
+  const zoneScope = targetZoneId || store.currentZone || "all";
+  const isAll = String(zoneScope).toLowerCase() === "all";
+  const displayZoneName = isAll ? "ALL ZONES" : (formatZoneDisplayName(zoneScope) || zoneScope);
+  const safeZone = String(displayZoneName).replace(/[/\\:*?"<>|]/g, "").trim();
+  const safeDate = String(dateVal).replace(/[/\\:*?"<>|]/g, "-").trim();
+  const pdfFileName = `${safeZone} | Daily Details | ${safeDate}.pdf`;
+
+  const element = generateWorkOrdersPdfBlob(dateVal, zoneScope);
   const opt = {
     margin: 10,
-    filename: `All Zones | Daily Details | ${dateVal}.pdf`,
+    filename: pdfFileName,
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
@@ -25821,7 +25979,7 @@ function downloadWorkOrdersPdfBackup() {
     .from(element)
     .save()
     .then(() => {
-      showToast("PDF backup downloaded successfully!");
+      showToast(`PDF downloaded: ${pdfFileName}`);
     })
     .catch((err) => {
       console.error(err);
@@ -25854,10 +26012,17 @@ function performGoogleDriveUpload(accessToken) {
   showToast("Generating PDF & Uploading...", "info");
   const today = getLocalDateString();
   const dateVal = store.dashboardDate || today;
-  const element = generateWorkOrdersPdfBlob(dateVal);
+  const zoneScope = store.currentZone || "all";
+  const isAll = String(zoneScope).toLowerCase() === "all";
+  const displayZoneName = isAll ? "ALL ZONES" : (formatZoneDisplayName(zoneScope) || zoneScope);
+  const safeZone = String(displayZoneName).replace(/[/\\:*?"<>|]/g, "").trim();
+  const safeDate = String(dateVal).replace(/[/\\:*?"<>|]/g, "-").trim();
+  const pdfFileName = `${safeZone} | Daily Details | ${safeDate}.pdf`;
+
+  const element = generateWorkOrdersPdfBlob(dateVal, zoneScope);
   const opt = {
     margin: 10,
-    filename: `ncw_ps_backup_${dateVal}.pdf`,
+    filename: pdfFileName,
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
@@ -25868,7 +26033,7 @@ function performGoogleDriveUpload(accessToken) {
     .output("blob")
     .then((pdfBlob) => {
       const metadata = {
-        name: `ncw_ps_backup_${dateVal}.pdf`,
+        name: pdfFileName,
         mimeType: "application/pdf",
       };
       const form = new FormData();
@@ -26054,13 +26219,22 @@ window.deleteProject = function(event, type, id) {
     }
     
     let node = "";
-    if(type === "Out Project") node = "out_projects";
-    else if(type === "Housing Project") node = "housing_projects";
-    else if(type === "Other Base") node = "other_bases";
+    let storeKey = "";
+    if(type === "Out Project") { node = "out_projects"; storeKey = "outProjects"; }
+    else if(type === "Housing Project") { node = "housing_projects"; storeKey = "housingProjects"; }
+    else if(type === "Other Base") { node = "other_bases"; storeKey = "otherBases"; }
+    
+    if (storeKey && store[storeKey] && store[storeKey][id]) {
+        delete store[storeKey][id];
+        updateCounters();
+        if (typeof renderSummaryView === "function") renderSummaryView();
+    }
     
     if(node) {
         opsDB.ref(`${node}/${id}`).remove().then(() => {
             if(typeof showToast === 'function') showToast(`${type} deleted successfully`);
+            updateCounters();
+            if (typeof renderSummaryView === "function") renderSummaryView();
         }).catch(err => {
             if(typeof showToast === 'function') showToast("Error deleting project", "error");
             console.error(err);
@@ -26152,13 +26326,26 @@ function renderPtmLists(filter = "") {
 function addPtmSailor(sailorId) {
     if(!currentPtmType || !currentPtmProjectId) return;
     let node = "";
-    if(currentPtmType === "Out Project") node = "out_projects";
-    else if(currentPtmType === "Housing Project") node = "housing_projects";
-    else if(currentPtmType === "Other Base") node = "other_bases";
+    let storeKey = "";
+    if(currentPtmType === "Out Project") { node = "out_projects"; storeKey = "outProjects"; }
+    else if(currentPtmType === "Housing Project") { node = "housing_projects"; storeKey = "housingProjects"; }
+    else if(currentPtmType === "Other Base") { node = "other_bases"; storeKey = "otherBases"; }
+    
+    if (storeKey && store[storeKey] && store[storeKey][currentPtmProjectId]) {
+        if (!store[storeKey][currentPtmProjectId].assigned_sailors) {
+            store[storeKey][currentPtmProjectId].assigned_sailors = {};
+        }
+        store[storeKey][currentPtmProjectId].assigned_sailors[sailorId] = { assigned_date: Date.now() };
+        renderPtmLists(document.getElementById("ptmSearch") ? document.getElementById("ptmSearch").value : "");
+        updateCounters();
+        if (typeof renderSummaryView === "function") renderSummaryView();
+    }
     
     opsDB.ref(`${node}/${currentPtmProjectId}/assigned_sailors/${sailorId}`).set(true)
         .then(() => {
-            renderPtmLists(document.getElementById("ptmSearch").value);
+            renderPtmLists(document.getElementById("ptmSearch") ? document.getElementById("ptmSearch").value : "");
+            updateCounters();
+            if (typeof renderSummaryView === "function") renderSummaryView();
         })
         .catch(err => console.error(err));
 }
@@ -26166,13 +26353,23 @@ function addPtmSailor(sailorId) {
 function removePtmSailor(sailorId) {
     if(!currentPtmType || !currentPtmProjectId) return;
     let node = "";
-    if(currentPtmType === "Out Project") node = "out_projects";
-    else if(currentPtmType === "Housing Project") node = "housing_projects";
-    else if(currentPtmType === "Other Base") node = "other_bases";
+    let storeKey = "";
+    if(currentPtmType === "Out Project") { node = "out_projects"; storeKey = "outProjects"; }
+    else if(currentPtmType === "Housing Project") { node = "housing_projects"; storeKey = "housingProjects"; }
+    else if(currentPtmType === "Other Base") { node = "other_bases"; storeKey = "otherBases"; }
+    
+    if (storeKey && store[storeKey] && store[storeKey][currentPtmProjectId] && store[storeKey][currentPtmProjectId].assigned_sailors) {
+        delete store[storeKey][currentPtmProjectId].assigned_sailors[sailorId];
+        renderPtmLists(document.getElementById("ptmSearch") ? document.getElementById("ptmSearch").value : "");
+        updateCounters();
+        if (typeof renderSummaryView === "function") renderSummaryView();
+    }
     
     opsDB.ref(`${node}/${currentPtmProjectId}/assigned_sailors/${sailorId}`).remove()
         .then(() => {
-            renderPtmLists(document.getElementById("ptmSearch").value);
+            renderPtmLists(document.getElementById("ptmSearch") ? document.getElementById("ptmSearch").value : "");
+            updateCounters();
+            if (typeof renderSummaryView === "function") renderSummaryView();
         })
         .catch(err => console.error(err));
 }

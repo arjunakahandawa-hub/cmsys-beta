@@ -1030,7 +1030,10 @@
                 <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.35)">
                     🔨 TASK: <span id="assignedCount">18</span>
                 </span>
-                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.35)">
+                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick="switchView('projects')" title="Out Projects, Other Bases & Housing Projects" style="background:rgba(147,51,234,0.2);color:#c084fc;border:1px solid rgba(147,51,234,0.35)">
+                    🏛️ DEPLOY: <span id="deployedCount">0</span>
+                </span>
+                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick="switchView('nastatus')" title="N/A Sailors Status" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.35)">
                     ⚠️ N/A: <span id="todayNaCount">0</span>
                 </span>
                 <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(59,130,246,0.2);color:#93c5fd;border:1px solid rgba(59,130,246,0.35)">
@@ -7824,7 +7827,7 @@
     })();
     </script>
 
-    <script src="app.js?v=5.25.21"></script>
+    <script src="app.js?v=5.25.26"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
