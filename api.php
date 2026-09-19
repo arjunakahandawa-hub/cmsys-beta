@@ -719,6 +719,121 @@ switch ($action) {
                 jsonResponse(['success' => true, 'data' => $stmt->fetchAll()]);
                 break;
         }
+    // ==================== SAILOR LEAVE MANAGEMENT ====================
+    case 'save_sailor_leave':
+        if ($method === 'POST') {
+            $sailorId = $input['sailor_id'] ?? null;
+            $leaveType = $input['leave_type'] ?? '';
+            $victualingStatus = $input['victualing_status'] ?? 'V/In';
+            $leaveFrom = $input['leave_from'] ?? '';
+            $noOfDays = (float)($input['no_of_days'] ?? 0);
+            $travellingDate = $input['travelling_date'] ?? '';
+            $reportingDate = $input['reporting_date'] ?? '';
+            $oldLeaveFrom = $input['old_leave_from'] ?? '';
+            $oldNoOfDays = (float)($input['old_no_of_days'] ?? 0);
+
+            if (!$sailorId || !$leaveType || !$leaveFrom || $noOfDays <= 0) {
+                jsonResponse(['error' => 'Missing required fields'], 400);
+            }
+
+            try {
+                $dbConnPath = dirname(dirname(__DIR__)) . '/includes/db_connection.php';
+                if (file_exists($dbConnPath)) {
+                    require_once $dbConnPath;
+                    $updates = [];
+
+                    // 1. Delete Old Range if editing
+                    if (!empty($oldLeaveFrom) && $oldNoOfDays > 0) {
+                        $oldStart = new DateTime($oldLeaveFrom);
+                        $oldLoop = ($oldNoOfDays < 1) ? 1 : (int)ceil($oldNoOfDays);
+                        for ($i = 0; $i < $oldLoop; $i++) {
+                            $curr = (clone $oldStart)->modify("+$i days");
+                            $updates["availability/" . $curr->format('Y-m') . "/" . $curr->format('j') . "/$sailorId"] = null;
+                        }
+                        $oldTd = (clone $oldStart)->modify('-1 day');
+                        $updates["availability/" . $oldTd->format('Y-m') . "/" . $oldTd->format('j') . "/$sailorId"] = null;
+                        $oldRd = (clone $oldStart)->modify("+$oldLoop days");
+                        $updates["availability/" . $oldRd->format('Y-m') . "/" . $oldRd->format('j') . "/$sailorId"] = null;
+                    }
+
+                    // 2. Add New Range
+                    $startDate = new DateTime($leaveFrom);
+                    $loopDays = ($leaveType === 'HD') ? 1 : (int)ceil($noOfDays);
+                    for ($i = 0; $i < $loopDays; $i++) {
+                        $currentDate = (clone $startDate)->modify("+$i days");
+                        $monthKey = $currentDate->format('Y-m');
+                        $dayKey = $currentDate->format('j');
+                        $updates["availability/$monthKey/$dayKey/$sailorId"] = ($leaveType === 'X') ? null : $leaveType;
+                    }
+
+                    $excludedTypes = ['SIQ', 'SICK', 'S/R', 'MED', 'M/C', 'NGH', 'SL', 'ADM', 'HD', 'WE', 'R', 'X'];
+                    if ($victualingStatus === 'V/In' && !in_array($leaveType, $excludedTypes)) {
+                        if (!empty($travellingDate)) {
+                            $tDate = new DateTime($travellingDate);
+                            $updates["availability/" . $tDate->format('Y-m') . "/" . $tDate->format('j') . "/$sailorId"] = 'T/D';
+                        }
+                        if (!empty($reportingDate)) {
+                            $rDate = new DateTime($reportingDate);
+                            $updates["availability/" . $rDate->format('Y-m') . "/" . $rDate->format('j') . "/$sailorId"] = 'R/D';
+                        }
+                    }
+
+                    if (!empty($victualingStatus)) {
+                        $updates["sailors/$sailorId/victualing_type"] = $victualingStatus;
+                    }
+
+                    $database->getReference()->update($updates);
+
+                    $cacheFile = dirname(dirname(__DIR__)) . '/includes/cache/firebase_data.json';
+                    if (file_exists($cacheFile)) { @unlink($cacheFile); }
+
+                    jsonResponse(['success' => true, 'message' => 'Record saved successfully']);
+                } else {
+                    jsonResponse(['error' => 'Database connection not available'], 500);
+                }
+            } catch (Exception $e) {
+                jsonResponse(['error' => $e->getMessage()], 500);
+            }
+        }
+        break;
+
+    case 'delete_sailor_leave':
+        if ($method === 'POST') {
+            $sailorId = $input['sailor_id'] ?? null;
+            $rangeStart = $input['range_start'] ?? null;
+            $rangeEnd = $input['range_end'] ?? null;
+
+            if (!$sailorId || !$rangeStart || !$rangeEnd) {
+                jsonResponse(['error' => 'Missing parameters for delete'], 400);
+            }
+
+            try {
+                $dbConnPath = dirname(dirname(__DIR__)) . '/includes/db_connection.php';
+                if (file_exists($dbConnPath)) {
+                    require_once $dbConnPath;
+                    $start = new DateTime($rangeStart);
+                    $end = new DateTime($rangeEnd);
+                    $updates = [];
+                    $curr = clone $start;
+                    while ($curr <= $end) {
+                        $updates["availability/" . $curr->format('Y-m') . "/" . $curr->format('j') . "/$sailorId"] = null;
+                        $curr->modify('+1 day');
+                    }
+
+                    $prevDay = (clone $start)->modify('-1 day');
+                    $updates["availability/" . $prevDay->format('Y-m') . "/" . $prevDay->format('j') . "/$sailorId"] = null;
+                    $nextDay = (clone $end)->modify('+1 day');
+                    $updates["availability/" . $nextDay->format('Y-m') . "/" . $nextDay->format('j') . "/$sailorId"] = null;
+
+                    $database->getReference()->update($updates);
+                    jsonResponse(['success' => true, 'message' => 'Record deleted successfully']);
+                } else {
+                    jsonResponse(['error' => 'Database connection not available'], 500);
+                }
+            } catch (Exception $e) {
+                jsonResponse(['error' => $e->getMessage()], 500);
+            }
+        }
         break;
 
     default:

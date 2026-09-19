@@ -155,10 +155,14 @@ function isZoneMatch(z1, z2) {
   const isCarpentryOrPaint = (s) =>
     s.includes("carpenter") ||
     s.includes("carpentry") ||
+    s.includes("carpentary") ||
     s.includes("paintworkshop") ||
     s.includes("paintershop") ||
     s.includes("paintshop") ||
-    s.includes("carpenterpaint");
+    s.includes("paint") ||
+    s.includes("carpenterpaint") ||
+    s.includes("carpentarypaint") ||
+    s.includes("carpentrypaint");
   if (isCarpentryOrPaint(s1) && isCarpentryOrPaint(s2)) return true;
 
   const letterMap = {
@@ -427,7 +431,7 @@ const store = {
     { id: "Supply-School", name: "Supply School", status: "Active", active: true },
     { id: "Pump-House", name: "Pump House", status: "Active", active: true },
     { id: "Main-Store", name: "Main Store", status: "Active", active: true },
-    { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop", status: "Active", active: true },
+    { id: "Carpentry-Shop", name: "Carpentary & Paint", status: "Active", active: true },
     { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
     { id: "Aluminium-Workshop", name: "Aluminium Workshop", status: "Active", active: true }
   ],
@@ -1404,74 +1408,152 @@ function isMainAdminLoggedIn() {
   return false;
 }
 
-// Helper to force clean all stuck/orphaned Firebase assignments for a sailor by any ID variation (Restricted to NRC 3576)
+// Helper to force clean all stuck/orphaned Firebase assignments for a sailor by any ID variation
 window.forceCleanSailorAssignments = function(officialNoOrId) {
-  if (!isMainAdminLoggedIn()) {
-    if (typeof showToast === "function") {
-      showToast("Access Denied: Only LCDR KMAU KAHANDAWA (NRC 3576) is authorized to release sailors!", "error");
-    }
-    return;
-  }
-
   if (!officialNoOrId) return;
 
-  const sailors = (store.sailors || []).filter(s => 
-    String(s.official_number) === String(officialNoOrId) ||
-    String(s.id) === String(officialNoOrId) ||
-    String(s._fbKey) === String(officialNoOrId)
-  );
+  const sailor = typeof findSailorById === "function" ? findSailorById(officialNoOrId) : null;
+  const ids = new Set([String(officialNoOrId).trim()]);
+  const rawDigits = String(officialNoOrId).replace(/\D/g, "");
+  if (rawDigits.length >= 3) ids.add(rawDigits);
 
-  const ids = new Set([String(officialNoOrId)]);
-  sailors.forEach(s => {
-    if (s.id) ids.add(String(s.id));
-    if (s._fbKey) ids.add(String(s._fbKey));
-    if (s.official_number) ids.add(String(s.official_number));
-  });
+  if (sailor) {
+    if (sailor.id !== undefined && sailor.id !== null) ids.add(String(sailor.id).trim());
+    if (sailor._fbKey) ids.add(String(sailor._fbKey).trim());
+    if (sailor.official_number) {
+      const offStr = String(sailor.official_number).trim();
+      ids.add(offStr);
+      const d = offStr.replace(/\D/g, "");
+      if (d.length >= 3) ids.add(d);
+    }
+    if (sailor.service_no) {
+      const srvStr = String(sailor.service_no).trim();
+      ids.add(srvStr);
+      const d = srvStr.replace(/\D/g, "");
+      if (d.length >= 3) ids.add(d);
+    }
+  }
 
   const today = typeof getLocalDateString === "function" ? getLocalDateString() : new Date().toISOString().split("T")[0];
 
-  // 1. Remove from all work_orders assigned in Firebase & Memory
-  (store.workOrders || []).forEach(wo => {
+  // 1. Remove from all work_orders (assigned, supervisor, incharge, artificer) in Firebase & Memory
+  (store.workOrders || []).forEach((wo) => {
+    let changed = false;
     if (wo.assigned && Array.isArray(wo.assigned)) {
-      const hasMatch = wo.assigned.some(id => ids.has(String(id)));
-      if (hasMatch) {
-        wo.assigned = wo.assigned.filter(id => !ids.has(String(id)));
-        opsDB.ref(`work_orders/${wo._fbKey || wo.id}/assigned`).set(wo.assigned.length > 0 ? wo.assigned : null);
-      }
+      const prevLen = wo.assigned.length;
+      wo.assigned = wo.assigned.filter((id) => !isSailorMatchingKeys(sailor || { id }, ids));
+      if (wo.assigned.length !== prevLen) changed = true;
+    }
+    if (wo.supervisor && isSailorMatchingKeys(sailor || { id: wo.supervisor }, ids)) {
+      wo.supervisor = null;
+      changed = true;
+    }
+    if (wo.incharge && isSailorMatchingKeys(sailor || { id: wo.incharge }, ids)) {
+      wo.incharge = null;
+      changed = true;
+    }
+    if (wo.project_artificer && isSailorMatchingKeys(sailor || { id: wo.project_artificer }, ids)) {
+      wo.project_artificer = null;
+      changed = true;
+    }
+    if (changed) {
+      const key = wo._fbKey || wo.id;
+      opsDB.ref(`work_orders/${key}`).update({
+        assigned: wo.assigned && wo.assigned.length > 0 ? wo.assigned : null,
+        supervisor: wo.supervisor || null,
+        incharge: wo.incharge || null,
+        project_artificer: wo.project_artificer || null,
+      });
     }
   });
 
-  // 2. Remove from all job_cards assigned in Firebase & Memory
-  (store.jobCards || []).forEach(jc => {
+  // 2. Remove from all job_cards (assigned, supervisor, incharge, artificer) in Firebase & Memory
+  (store.jobCards || []).forEach((jc) => {
+    let changed = false;
     if (jc.assigned && Array.isArray(jc.assigned)) {
-      const hasMatch = jc.assigned.some(id => ids.has(String(id)));
-      if (hasMatch) {
-        jc.assigned = jc.assigned.filter(id => !ids.has(String(id)));
-        opsDB.ref(`job_cards/${jc._fbKey || jc.id}/assigned`).set(jc.assigned.length > 0 ? jc.assigned : null);
-      }
+      const prevLen = jc.assigned.length;
+      jc.assigned = jc.assigned.filter((id) => !isSailorMatchingKeys(sailor || { id }, ids));
+      if (jc.assigned.length !== prevLen) changed = true;
+    }
+    if (jc.supervisor && isSailorMatchingKeys(sailor || { id: jc.supervisor }, ids)) {
+      jc.supervisor = null;
+      changed = true;
+    }
+    if (jc.incharge && isSailorMatchingKeys(sailor || { id: jc.incharge }, ids)) {
+      jc.incharge = null;
+      changed = true;
+    }
+    if (jc.project_artificer && isSailorMatchingKeys(sailor || { id: jc.project_artificer }, ids)) {
+      jc.project_artificer = null;
+      changed = true;
+    }
+    if (changed) {
+      const key = jc._fbKey || jc.id;
+      opsDB.ref(`job_cards/${key}`).update({
+        assigned: jc.assigned && jc.assigned.length > 0 ? jc.assigned : null,
+        supervisor: jc.supervisor || null,
+        incharge: jc.incharge || null,
+        project_artificer: jc.project_artificer || null,
+      });
     }
   });
 
   // 3. Remove all daily_allocations in Firebase for all ID variants
-  ids.forEach(id => {
+  ids.forEach((id) => {
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(id)}`).remove();
-    (store.dailyAllocations || []).forEach(a => {
-      if (ids.has(String(a.sailor_id))) {
-        opsDB.ref(`daily_allocations/${a.date}_${sanitizeFbKey(id)}`).remove();
-        if (a._fbKey) opsDB.ref(`daily_allocations/${a._fbKey}`).remove();
-      }
-    });
+  });
+  (store.dailyAllocations || []).forEach((a) => {
+    if (isSailorMatchingKeys(sailor || { id: a.sailor_id, official_number: a.official_number }, ids)) {
+      if (a._fbKey) opsDB.ref(`daily_allocations/${a._fbKey}`).remove();
+      if (a.date && a.sailor_id) opsDB.ref(`daily_allocations/${a.date}_${sanitizeFbKey(a.sailor_id)}`).remove();
+      if (a.date && a.official_number) opsDB.ref(`daily_allocations/${a.date}_${sanitizeFbKey(a.official_number)}`).remove();
+    }
   });
 
-  // 4. Update in-memory store
+  // 4. Update in-memory store for daily allocations
   if (store.dailyAllocations) {
-    store.dailyAllocations = store.dailyAllocations.filter(a => !ids.has(String(a.sailor_id)));
+    store.dailyAllocations = store.dailyAllocations.filter(
+      (a) => !isSailorMatchingKeys(sailor || { id: a.sailor_id, official_number: a.official_number }, ids)
+    );
   }
 
-  sailors.forEach(s => s.status = "Available");
+  // 5. Remove from Long-Term Projects (Housing Projects, Out Projects, Other Bases)
+  ["out_projects", "housing_projects", "other_bases"].forEach((node) => {
+    const storeNode = node === "out_projects" ? store.outProjects : node === "housing_projects" ? store.housingProjects : store.otherBases;
+    if (storeNode) {
+      Object.entries(storeNode).forEach(([pKey, pVal]) => {
+        if (pVal && pVal.assigned_sailors) {
+          Object.keys(pVal.assigned_sailors).forEach((sKey) => {
+            if (ids.has(String(sKey)) || (sailor && isSailorMatchingKeys(sailor, [sKey]))) {
+              delete pVal.assigned_sailors[sKey];
+              opsDB.ref(`${node}/${pKey}/assigned_sailors/${sKey}`).remove();
+            }
+          });
+        }
+      });
+    }
+  });
 
+  if (sailor) {
+    sailor.status = "Available";
+    sailor.evaluated = false;
+  }
+
+  if (typeof refreshDailyCommitmentCache === "function") refreshDailyCommitmentCache(today);
   if (typeof renderDashboard === "function") renderDashboard();
-  if (typeof showToast === "function") showToast(`Released sailor ${officialNoOrId} from assignment`, "success");
+  if (typeof renderZoneSelectors === "function") renderZoneSelectors();
+  if (typeof renderAvailableSailors === "function") renderAvailableSailors();
+
+  const sailorName = sailor ? `${sailor.rank || ''} ${sailor.name}`.trim() : officialNoOrId;
+  if (typeof showToast === "function") showToast(`✅ Released ${sailorName} from all assignments`, "success");
+};
+
+window.confirmReleaseSailor = function(sailorKey, officialNo) {
+  const sailor = typeof findSailorById === "function" ? findSailorById(sailorKey || officialNo) : null;
+  const name = sailor ? `${sailor.rank || ''} ${sailor.name}`.trim() : officialNo;
+  if (confirm(`Are you sure you want to release ${name} (${officialNo || ''}) from all current assignments?`)) {
+    forceCleanSailorAssignments(officialNo || sailorKey);
+  }
 };
 
 // Save / update a job card
@@ -2480,9 +2562,13 @@ function refreshDailyCommitmentCache(dateVal) {
     const isCommitted =
       committedWoSet.has(String(wo.id)) ||
       committedWoSet.has(String(wo._fbKey)) ||
-      (wo.reference_no && committedWoSet.has(String(wo.reference_no)));
+      (wo.reference_no && committedWoSet.has(String(wo.reference_no))) ||
+      (typeof isWorkOrderCommittedToday === "function" && isWorkOrderCommittedToday(wo, dateVal));
+    const isAssignedToday = isToday && wo.last_assigned_date === dateVal;
+
     if (isToday) {
       if (wo.status !== "Active" && wo.status !== "Pending") return;
+      if (!isCommitted && !isAssignedToday) return;
     } else {
       if (typeof isWorkOrderActiveOnDate === "function" && !isWorkOrderActiveOnDate(wo, dateVal)) return;
       if (!isCommitted) return;
@@ -2504,9 +2590,13 @@ function refreshDailyCommitmentCache(dateVal) {
     const isCommitted =
       committedWoSet.has(String(jc.id)) ||
       committedWoSet.has(String(jc._fbKey)) ||
-      (jc.job_card_no && committedWoSet.has(String(jc.job_card_no)));
+      (jc.job_card_no && committedWoSet.has(String(jc.job_card_no))) ||
+      (typeof isWorkOrderCommittedToday === "function" && isWorkOrderCommittedToday(jc, dateVal));
+    const isAssignedToday = isToday && jc.last_assigned_date === dateVal;
+
     if (isToday) {
       if (jc.status !== "Active" && jc.status !== "Pending") return;
+      if (!isCommitted && !isAssignedToday) return;
     } else {
       if (!isCommitted) return;
     }
@@ -2703,20 +2793,28 @@ function renderAvailableSailors() {
 
   if (isToday) {
     (store.workOrders || []).forEach((wo) => {
-      if (wo && (wo.status === "Active" || wo.status === "Pending") && wo.assigned) {
-        extractSailorKeys(wo.assigned).forEach((id) => assignedKeys.add(String(id).trim()));
+      if (wo && (wo.status === "Active" || wo.status === "Pending")) {
+        const isCommitted = typeof isWorkOrderCommittedToday === "function" && isWorkOrderCommittedToday(wo, dateVal);
+        const isAssignedToday = wo.last_assigned_date === dateVal;
+        if (isCommitted || isAssignedToday) {
+          if (wo.assigned) extractSailorKeys(wo.assigned).forEach((id) => assignedKeys.add(String(id).trim()));
+          if (wo.incharge) assignedKeys.add(String(wo.incharge).trim());
+          if (wo.supervisor) assignedKeys.add(String(wo.supervisor).trim());
+          if (wo.project_artificer) assignedKeys.add(String(wo.project_artificer).trim());
+        }
       }
-      if (wo && wo.incharge) assignedKeys.add(String(wo.incharge).trim());
-      if (wo && wo.supervisor) assignedKeys.add(String(wo.supervisor).trim());
-      if (wo && wo.project_artificer) assignedKeys.add(String(wo.project_artificer).trim());
     });
     (store.jobCards || []).forEach((jc) => {
-      if (jc && (jc.status === "Active" || jc.status === "Pending") && jc.assigned) {
-        extractSailorKeys(jc.assigned).forEach((id) => assignedKeys.add(String(id).trim()));
+      if (jc && (jc.status === "Active" || jc.status === "Pending")) {
+        const isCommitted = typeof isWorkOrderCommittedToday === "function" && isWorkOrderCommittedToday(jc, dateVal);
+        const isAssignedToday = jc.last_assigned_date === dateVal;
+        if (isCommitted || isAssignedToday) {
+          if (jc.assigned) extractSailorKeys(jc.assigned).forEach((id) => assignedKeys.add(String(id).trim()));
+          if (jc.incharge) assignedKeys.add(String(jc.incharge).trim());
+          if (jc.supervisor) assignedKeys.add(String(jc.supervisor).trim());
+          if (jc.project_artificer) assignedKeys.add(String(jc.project_artificer).trim());
+        }
       }
-      if (jc && jc.incharge) assignedKeys.add(String(jc.incharge).trim());
-      if (jc && jc.supervisor) assignedKeys.add(String(jc.supervisor).trim());
-      if (jc && jc.project_artificer) assignedKeys.add(String(jc.project_artificer).trim());
     });
   }
   
@@ -2923,13 +3021,11 @@ function renderAvailableSailors() {
                         <div class="flex items-center gap-1.5 mt-1 flex-wrap">
                             <span class="text-[11px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">⚠️ Busy: ${assignment.zone}</span>
                             <span class="text-[10px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium border border-slate-200" title="Assigned Zone / Location">📍 ${sailorLoc}</span>
-                            ${isMainAdminLoggedIn() ? `
-                            <button onclick="event.stopPropagation(); forceCleanSailorAssignments('${sailor.official_number || sailor.id}')" 
+                            <button onclick="event.stopPropagation(); confirmReleaseSailor('${sailor._fbKey || sailor.id}', '${cleanNo || sailor.official_number || ''}')" 
                                     class="text-[10px] bg-rose-600 hover:bg-rose-700 text-white font-bold px-2 py-0.5 rounded shadow transition-all cursor-pointer"
-                                    title="Force release sailor (Authorized: LCDR KMAU KAHANDAWA Only)">
+                                    title="Release sailor from current assignment">
                                 🔓 Release
                             </button>
-                            ` : ''}
                         </div>
                         <div class="text-[11px] text-slate-500 mt-0.5 truncate">${assignment.ref}${assignment.title ? ' · ' + assignment.title : ''}</div>
                     </div>
@@ -4145,17 +4241,21 @@ function handleDropOnCard(event, workOrderId) {
   }
 
   const today = getLocalDateString();
+  let isPrevJc = false;
   let prevWo = (store.workOrders || []).find((w) => {
     if (w.status !== "Active" && w.status !== "Pending") return false;
-    const assignedIds = (w.assigned || []).map(String);
-    return assignedIds.some(id => isSailorMatchingKeys(sailor, [id]));
+    const inAssigned = (w.assigned || []).some(id => isSailorMatchingKeys(sailor, [id]));
+    const inLeader = isSailorMatchingKeys(sailor, [w.supervisor, w.incharge, w.project_artificer]);
+    return inAssigned || inLeader;
   });
   if (!prevWo) {
     prevWo = (store.jobCards || []).find((j) => {
       if (j.status !== "Active" && j.status !== "Pending") return false;
-      const assignedIds = (j.assigned || []).map(String);
-      return assignedIds.some(id => isSailorMatchingKeys(sailor, [id]));
+      const inAssigned = (j.assigned || []).some(id => isSailorMatchingKeys(sailor, [id]));
+      const inLeader = isSailorMatchingKeys(sailor, [j.supervisor, j.incharge, j.project_artificer]);
+      return inAssigned || inLeader;
     });
+    if (prevWo) isPrevJc = true;
   }
 
   const allocSnapshot = (store.dailyAllocations || []).find(
@@ -4177,9 +4277,24 @@ function handleDropOnCard(event, workOrderId) {
   const sidToStore = sailor.id || sailor._fbKey || draggedSailorId;
 
   if (prevWo) {
-    prevWo.assigned = (prevWo.assigned || []).filter(
-      (id) => !isSailorMatchingKeys(sailor, [id]),
-    );
+    let changed = false;
+    if (prevWo.assigned && Array.isArray(prevWo.assigned)) {
+      const pLen = prevWo.assigned.length;
+      prevWo.assigned = prevWo.assigned.filter((id) => !isSailorMatchingKeys(sailor, [id]));
+      if (prevWo.assigned.length !== pLen) changed = true;
+    }
+    if (prevWo.supervisor && isSailorMatchingKeys(sailor, [prevWo.supervisor])) { prevWo.supervisor = null; changed = true; }
+    if (prevWo.incharge && isSailorMatchingKeys(sailor, [prevWo.incharge])) { prevWo.incharge = null; changed = true; }
+    if (prevWo.project_artificer && isSailorMatchingKeys(sailor, [prevWo.project_artificer])) { prevWo.project_artificer = null; changed = true; }
+    if (changed) {
+      const table = isPrevJc ? "job_cards" : "work_orders";
+      opsDB.ref(`${table}/${prevWo._fbKey || prevWo.id}`).update({
+        assigned: (prevWo.assigned && prevWo.assigned.length > 0) ? prevWo.assigned : null,
+        supervisor: prevWo.supervisor || null,
+        incharge: prevWo.incharge || null,
+        project_artificer: prevWo.project_artificer || null,
+      });
+    }
     if (window.safeFbRemoveSailor) {
       safeFbRemoveSailor(prevWo._fbKey || prevWo.id, sidToStore, today);
     }
@@ -4268,6 +4383,19 @@ function removeSailorFromOrder(sailorId, workOrderId) {
         (id) => !idsToRemove.has(String(id)),
       );
     }
+    let leaderChanged = false;
+    if (workOrder.supervisor && isSailorMatchingKeys(sailor || { id: workOrder.supervisor }, idsToRemove)) {
+      workOrder.supervisor = null;
+      leaderChanged = true;
+    }
+    if (workOrder.incharge && isSailorMatchingKeys(sailor || { id: workOrder.incharge }, idsToRemove)) {
+      workOrder.incharge = null;
+      leaderChanged = true;
+    }
+    if (workOrder.project_artificer && isSailorMatchingKeys(sailor || { id: workOrder.project_artificer }, idsToRemove)) {
+      workOrder.project_artificer = null;
+      leaderChanged = true;
+    }
     if (sailor) {
       sailor.status = "Available";
     }
@@ -4290,14 +4418,18 @@ function removeSailorFromOrder(sailorId, workOrderId) {
 
     if (workOrder._fbKey) {
       const node = (store.workOrders || []).some(w => w._fbKey === workOrder._fbKey) ? "work_orders" : "job_cards";
-      opsDB.ref(`${node}/${workOrder._fbKey}/assigned`).set(
-        workOrder.assigned.length > 0 ? workOrder.assigned : null,
-      );
+      const updatePayload = {
+        assigned: workOrder.assigned.length > 0 ? workOrder.assigned : null,
+      };
       if (workOrder.last_assigned) {
-        opsDB.ref(`${node}/${workOrder._fbKey}/last_assigned`).set(
-          workOrder.last_assigned.length > 0 ? workOrder.last_assigned : null,
-        );
+        updatePayload.last_assigned = workOrder.last_assigned.length > 0 ? workOrder.last_assigned : null;
       }
+      if (leaderChanged) {
+        updatePayload.supervisor = workOrder.supervisor || null;
+        updatePayload.incharge = workOrder.incharge || null;
+        updatePayload.project_artificer = workOrder.project_artificer || null;
+      }
+      opsDB.ref(`${node}/${workOrder._fbKey}`).update(updatePayload);
     }
 
     if (window.safeFbRemoveSailor) {
@@ -7295,44 +7427,44 @@ function renderDetailSailorChips(filter = "") {
         (_s$id26 = s.id) !== null && _s$id26 !== void 0 ? _s$id26 : s._fbKey,
       );
       if (assignment) {
-        // ── LOCKED CHIP: නාවිකයා වෙනත් Zone/WO එකක assign වෙලා ──
-        // Click කරන්නේ block. Zone + WO info tooltip හා badge ලෙස පෙන්වයි.
+        // ── REASSIGNABLE / TRANSFER CHIP: Click to transfer to this task ──
         const zoneDisplay = assignment.zone || "Unknown Zone";
         const woRefDisplay = assignment.ref || "";
         const woTitleDisplay = assignment.title
           ? assignment.title.substring(0, 40) + (assignment.title.length > 40 ? "…" : "")
           : "";
-        const tooltipText = `🔒 මෙම නාවිකයා දැනටමත් ${zoneDisplay} හි ${woRefDisplay} රාජකාරිය සඳහා Assign කරලා ඉන්නවා. වෙනත් Zone In-Charge සම්බන්ධ කරගෙන ඉවත් කරගන්න.`;
+        const tooltipText = `⚠️ මෙම නාවිකයා දැනටමත් ${zoneDisplay} හි ${woRefDisplay} රාජකාරිය සඳහා Assign කරලා ඉන්නවා. මෙම කාර්යයට මාරු (Transfer) කිරීමට ක්ලික් කරන්න.`;
         return `
-            <div
+            <button type="button"
+                onclick="assignSingleLabor('${(_s$id26 = s.id) !== null && _s$id26 !== void 0 ? _s$id26 : s._fbKey}')"
                 title="${tooltipText}"
+                class="sailor-chip-card group hover:border-amber-400"
                 style="
                     display:flex; align-items:center; gap:8px;
                     padding:7px 10px; border-radius:10px;
-                    cursor:not-allowed;
-                    border:2px solid #cbd5e1;
-                    background:#f1f5f9;
-                    opacity:0.72;
+                    cursor:pointer;
+                    border:2px dashed #f59e0b;
+                    background:#fffbeb;
                     min-width:140px; position:relative;
                     text-align:left;
-                    user-select:none;
+                    transition:all 0.15s ease;
                 ">
-                <!-- Trade badge – greyed out -->
-                <div style="background:#94a3b8; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:0.5px; flex-shrink:0;">
+                <!-- Trade badge – amber outline -->
+                <div style="background:${tradeBg}; width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; color:#fff; font-size:10.5px; font-weight:800; letter-spacing:0.5px; flex-shrink:0;">
                     ${s.trade}
                 </div>
                 <div style="flex:1; overflow:hidden;">
-                    <div style="font-size:11px; font-weight:700; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:145px;">
+                    <div style="font-size:11px; font-weight:700; color:#92400e; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:145px;">
                         ${rank} ${fullName}
                     </div>
                     <!-- Zone + WO info badge -->
                     <div style="display:flex; align-items:center; gap:4px; margin-top:2px; flex-wrap:wrap;">
-                        <span style="font-size:8px; background:#e2e8f0; color:#475569; border-radius:4px; padding:1px 5px; font-weight:700; white-space:nowrap;">🔒 ${zoneDisplay}</span>
+                        <span style="font-size:8px; background:#fef3c7; color:#b45309; border:1px solid #fde68a; border-radius:4px; padding:1px 5px; font-weight:700; white-space:nowrap;">🔄 ${zoneDisplay}</span>
                         ${woRefDisplay ? `<span style="font-size:8px; background:#e0f2fe; color:#0369a1; border-radius:4px; padding:1px 5px; font-weight:700; white-space:nowrap;">${woRefDisplay}</span>` : ""}
                     </div>
-                    ${woTitleDisplay ? `<div style="font-size:8px; color:#94a3b8; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:145px;">${woTitleDisplay}</div>` : ""}
+                    <div style="font-size:8px; color:#d97706; font-weight:600; margin-top:2px;">Click to Transfer ⚡</div>
                 </div>
-            </div>
+            </button>
             `;
       }
       return `
@@ -7382,56 +7514,111 @@ function assignSingleLabor(sailorId) {
   );
   if (!wo || !sailor) return;
 
-  const today = getLocalDateString();
-  let prevWo = (store.workOrders || []).find((w) => {
-    if (w.status !== "Active" && w.status !== "Pending") return false;
-    const assignedIds = (w.assigned || []).map(String);
-    return assignedIds.some(id => isSailorMatchingKeys(sailor, [id]));
-  });
-  if (!prevWo) {
-    prevWo = (store.jobCards || []).find((j) => {
-      if (j.status !== "Active" && j.status !== "Pending") return false;
-      const assignedIds = (j.assigned || []).map(String);
-      return assignedIds.some(id => isSailorMatchingKeys(sailor, [id]));
-    });
+  if (assignment) {
+    const fromDesc = (assignment.zone ? "[" + assignment.zone + "] " : "") + (assignment.ref || "") + (assignment.title ? " - " + assignment.title : "");
+    const toDesc = (wo.zone_id ? "[" + wo.zone_id + "] " : "") + (wo.reference_no || wo.job_card_no || wo.description || "This Task");
+    const confirmTransfer = confirm(
+      `⚠️ නාවිකයා (${sailor.rank || ''} ${sailor.name} - ${sailor.official_number || ''}) දැනටමත්:\n${fromDesc}\nහි යොදවා ඇත.\n\nමෙම නව කාර්යයට (${toDesc}) මාරු (Transfer) කිරීමට අවශ්‍යද?`
+    );
+    if (!confirmTransfer) return;
   }
+
+  const today = getLocalDateString();
+  const sidToStore = sailor.id || sailor._fbKey || sailorId;
+
+  // Find any previous work orders holding this sailor (as worker, supervisor, incharge, artificer)
+  const prevWorkOrders = (store.workOrders || []).filter((w) => {
+    if (w.status !== "Active" && w.status !== "Pending") return false;
+    const inAssigned = (w.assigned || []).some((id) => isSailorMatchingKeys(sailor, [id]));
+    const inLeader = isSailorMatchingKeys(sailor, [w.supervisor, w.incharge, w.project_artificer]);
+    return inAssigned || inLeader;
+  });
+
+  // Find any previous job cards holding this sailor (as worker, supervisor, incharge, artificer)
+  const prevJobCards = (store.jobCards || []).filter((j) => {
+    if (j.status !== "Active" && j.status !== "Pending") return false;
+    const inAssigned = (j.assigned || []).some((id) => isSailorMatchingKeys(sailor, [id]));
+    const inLeader = isSailorMatchingKeys(sailor, [j.supervisor, j.incharge, j.project_artificer]);
+    return inAssigned || inLeader;
+  });
 
   const allocSnapshot = (store.dailyAllocations || []).find(
     (a) => a.date === today && isSailorMatchingKeys(sailor, [a.sailor_id, a.official_number])
   );
 
+  const primaryPrev = prevWorkOrders[0] || prevJobCards[0];
   _lastActionUndo = {
     type: "ASSIGN_SAILOR",
     sailorId: sailorId,
     targetWoId: wo.id || wo._fbKey,
     targetWoPrevAssigned: [...(wo.assigned || [])],
-    prevWoId: prevWo ? (prevWo.id || prevWo._fbKey) : null,
-    prevWoAssigned: prevWo ? [...(prevWo.assigned || [])] : null,
+    prevWoId: primaryPrev ? (primaryPrev.id || primaryPrev._fbKey) : null,
+    prevWoAssigned: primaryPrev ? [...(primaryPrev.assigned || [])] : null,
     sailorPrevStatus: sailor.status,
     sailorPrevZone: sailor.zone_id || store.currentZone,
     dailyAllocSnapshot: allocSnapshot ? JSON.parse(JSON.stringify(allocSnapshot)) : null
   };
 
-  const sidToStore = sailor.id || sailor._fbKey || sailorId;
-
-  if (prevWo) {
-    prevWo.assigned = (prevWo.assigned || []).filter(
-      (id) => !isSailorMatchingKeys(sailor, [id]),
-    );
-    if (window.safeFbRemoveSailor) {
-      safeFbRemoveSailor(prevWo._fbKey || prevWo.id, sidToStore, today);
+  // Cleanly release from all previous work orders
+  prevWorkOrders.forEach((pw) => {
+    let changed = false;
+    if (pw.assigned && Array.isArray(pw.assigned)) {
+      const pLen = pw.assigned.length;
+      pw.assigned = pw.assigned.filter((id) => !isSailorMatchingKeys(sailor, [id]));
+      if (pw.assigned.length !== pLen) changed = true;
     }
-    opsDB
-      .ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`)
-      .remove();
-    opsDB
-      .ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`)
-      .remove();
+    if (pw.supervisor && isSailorMatchingKeys(sailor, [pw.supervisor])) { pw.supervisor = null; changed = true; }
+    if (pw.incharge && isSailorMatchingKeys(sailor, [pw.incharge])) { pw.incharge = null; changed = true; }
+    if (pw.project_artificer && isSailorMatchingKeys(sailor, [pw.project_artificer])) { pw.project_artificer = null; changed = true; }
+    if (changed) {
+      const key = pw._fbKey || pw.id;
+      opsDB.ref(`work_orders/${key}`).update({
+        assigned: (pw.assigned && pw.assigned.length > 0) ? pw.assigned : null,
+        supervisor: pw.supervisor || null,
+        incharge: pw.incharge || null,
+        project_artificer: pw.project_artificer || null,
+      });
+    }
+    if (window.safeFbRemoveSailor) {
+      safeFbRemoveSailor(pw._fbKey || pw.id, sidToStore, today);
+    }
+  });
+
+  // Cleanly release from all previous job cards
+  prevJobCards.forEach((pj) => {
+    let changed = false;
+    if (pj.assigned && Array.isArray(pj.assigned)) {
+      const pLen = pj.assigned.length;
+      pj.assigned = pj.assigned.filter((id) => !isSailorMatchingKeys(sailor, [id]));
+      if (pj.assigned.length !== pLen) changed = true;
+    }
+    if (pj.supervisor && isSailorMatchingKeys(sailor, [pj.supervisor])) { pj.supervisor = null; changed = true; }
+    if (pj.incharge && isSailorMatchingKeys(sailor, [pj.incharge])) { pj.incharge = null; changed = true; }
+    if (pj.project_artificer && isSailorMatchingKeys(sailor, [pj.project_artificer])) { pj.project_artificer = null; changed = true; }
+    if (changed) {
+      const key = pj._fbKey || pj.id;
+      opsDB.ref(`job_cards/${key}`).update({
+        assigned: (pj.assigned && pj.assigned.length > 0) ? pj.assigned : null,
+        supervisor: pj.supervisor || null,
+        incharge: pj.incharge || null,
+        project_artificer: pj.project_artificer || null,
+      });
+    }
+    if (window.safeFbRemoveSailor) {
+      safeFbRemoveSailor(pj._fbKey || pj.id, sidToStore, today);
+    }
+  });
+
+  // Remove previous daily allocations for today
+  opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`).remove();
+  opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailorId)}`).remove();
+  if (sailor.official_number) {
+    opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sailor.official_number)}`).remove();
   }
+
   if (!wo.assigned) wo.assigned = [];
   const alreadyAssigned = wo.assigned.some(id => isSailorMatchingKeys(sailor, [id]));
   if (!alreadyAssigned) {
-    const sidToStore = sailor.id || sailor._fbKey || sailorId;
     wo.assigned.push(sidToStore);
     sailor.status = "Assigned";
     sailor.evaluated = false;
@@ -7444,7 +7631,7 @@ function assignSingleLabor(sailorId) {
       official_number: sailor.official_number || sailor.service_no || "",
       work_order_id: wo._fbKey || wo.id,
       date: today,
-      zone_id: store.currentZone,
+      zone_id: wo.zone_id || store.currentZone,
       role_today: "Worker",
       assigned_by: store.currentUser && store.currentUser.name ? store.currentUser.name : "Officer",
       status: "Active"
@@ -7457,11 +7644,12 @@ function assignSingleLabor(sailorId) {
     opsDB.ref(`daily_allocations/${today}_${sanitizeFbKey(sidToStore)}`).set(alloc);
     showToast(
       assignment
-        ? `Reassigned ${sailor.name} from ${assignment.zone}! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`
-        : `${sailor.name} assigned! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
+        ? `⚡ Reassigned ${sailor.name} from ${assignment.zone}! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`
+        : `✅ ${sailor.name} assigned! <button onclick="executeGlobalUndo()" class="ml-2 font-bold underline bg-amber-300 text-slate-900 px-2 py-0.5 rounded text-xs hover:bg-amber-400">↩️ Undo</button>`,
       "success",
       6000
     );
+    if (typeof refreshDailyCommitmentCache === "function") refreshDailyCommitmentCache(today);
     openWorkOrderDetail(wo._fbKey || wo.id);
   }
 }
@@ -15009,11 +15197,15 @@ function renderZoneSelectors() {
 
       pendingEvalCount = Math.max(0, activeCount - evalCount);
 
-      let displayStr = z.name;
+      let zoneDisplayName = z.name || z.id;
+      if (z.id === "Carpentry-Shop" || isZoneMatch(z.id, "Carpentry-Shop") || isZoneMatch(zoneDisplayName, "Carpentry Shop")) {
+        zoneDisplayName = "Carpentary & Paint";
+      }
+      let displayStr = zoneDisplayName;
       if (activeCount > 0) {
-        displayStr = `${z.name} (🟢 ${activeCount} | 🔴 ${pendingEvalCount})`;
+        displayStr = `${zoneDisplayName} (🟢 ${activeCount} | 🔴 ${pendingEvalCount})`;
       } else {
-        displayStr = `${z.name} (🟢 0 | 🔴 0)`;
+        displayStr = `${zoneDisplayName} (🟢 0 | 🔴 0)`;
       }
       return `<option value="${z.id}">${displayStr}</option>`;
     })
@@ -16633,7 +16825,7 @@ function ensureAllStandardZones(existingZones = []) {
     { id: "Supply-School", name: "Supply School", status: "Active", active: true },
     { id: "Pump-House", name: "Pump House", status: "Active", active: true },
     { id: "Main-Store", name: "Main Store", status: "Active", active: true },
-    { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop", status: "Active", active: true },
+    { id: "Carpentry-Shop", name: "Carpentary & Paint", status: "Active", active: true },
     { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
     { id: "Aluminium-Workshop", name: "Aluminium Workshop", status: "Active", active: true }
   ];
@@ -16647,8 +16839,8 @@ function ensureAllStandardZones(existingZones = []) {
     .map((z) => {
       const zid = z.id || z.name;
       let zname = z.name || z.id;
-      if (isZoneMatch(zid, "Carpentry-Shop") || isZoneMatch(zname, "Carpentry Shop")) {
-        zname = "Carpentry Shop & Painter Shop";
+      if (isZoneMatch(zid, "Carpentry-Shop") || isZoneMatch(zname, "Carpentry Shop") || isZoneMatch(zname, "Carpentary & Paint") || isZoneMatch(zname, "Carpentry Shop & Painter Shop")) {
+        zname = "Carpentary & Paint";
       }
       const isInactive = z.status === "Inactive" || z.active === false;
       return {
@@ -16694,7 +16886,7 @@ const defaultSettings = {
     { id: "Supply-School", name: "Supply School", status: "Active", active: true },
     { id: "Pump-House", name: "Pump House", status: "Active", active: true },
     { id: "Main-Store", name: "Main Store", status: "Active", active: true },
-    { id: "Carpentry-Shop", name: "Carpentry Shop & Painter Shop", status: "Active", active: true },
+    { id: "Carpentry-Shop", name: "Carpentary & Paint", status: "Active", active: true },
     { id: "Welding-Shop", name: "Welding Shop", status: "Active", active: true },
     { id: "Aluminium-Workshop", name: "Aluminium Workshop", status: "Active", active: true }
   ],
@@ -23191,7 +23383,7 @@ function printLmdDetails(scope, selectedZone) {
         </style></head>
         <body>
             <div class="header-container">
-                <img class="logo-img" src="${window.location.href.split("?")[0].split("#")[0].replace("index.html", "")}logo.png" alt="SLN Crest">
+                <img class="logo-img" src="${window.location.href.split("?")[0].split("#")[0].replace("index.html", "")}logo-crest.png" alt="SLN Crest">
                 <div class="header-text">
                     <h1>Sri Lanka Navy</h1>
                     <h2>Captain Civil Engineering Department (E)</h2>
@@ -23759,34 +23951,993 @@ store.sailorTableSortField = store.sailorTableSortField || "perf";
 store.sailorTableSortAsc = false;
 store.sailorSection = store.sailorSection || "details";
 
+const LEAVE_STATUS_CHIPS = [
+  { val: "L", lbl: "Leave (L)", border: "border-indigo-500", bg: "bg-indigo-500/10", text: "text-indigo-600 dark:text-indigo-400" },
+  { val: "DL", lbl: "Days Leave", border: "border-indigo-500", bg: "bg-indigo-500/10", text: "text-indigo-600 dark:text-indigo-400" },
+  { val: "WE", lbl: "Weekend", border: "border-teal-500", bg: "bg-teal-500/10", text: "text-teal-600 dark:text-teal-400" },
+  { val: "HD", lbl: "Half Day", border: "border-sky-500", bg: "bg-sky-500/10", text: "text-sky-600 dark:text-sky-400" },
+  { val: "SICK", lbl: "Sick", border: "border-rose-500", bg: "bg-rose-500/10", text: "text-rose-600 dark:text-rose-400" },
+  { val: "S/R", lbl: "Sick Report", border: "border-rose-500", bg: "bg-rose-500/10", text: "text-rose-600 dark:text-rose-400" },
+  { val: "SL", lbl: "Sick Leave", border: "border-purple-500", bg: "bg-purple-500/10", text: "text-purple-600 dark:text-purple-400" },
+  { val: "SIQ", lbl: "SIQ", border: "border-purple-500", bg: "bg-purple-500/10", text: "text-purple-600 dark:text-purple-400" },
+  { val: "MED", lbl: "Medical", border: "border-rose-500", bg: "bg-rose-500/10", text: "text-rose-600 dark:text-rose-400" },
+  { val: "NGH", lbl: "NGH", border: "border-pink-500", bg: "bg-pink-500/10", text: "text-pink-600 dark:text-pink-400" },
+  { val: "ADM", lbl: "Admit", border: "border-red-600", bg: "bg-red-600/10", text: "text-red-600 dark:text-red-400" },
+  { val: "R", lbl: "Run (R)", border: "border-red-600", bg: "bg-red-600/10", text: "text-red-600 dark:text-red-400" },
+  { val: "X", lbl: "Reset/Clear", border: "border-slate-400", bg: "bg-slate-500/10", text: "text-slate-600 dark:text-slate-400" }
+];
+
 function switchSailorSection(sec) {
   store.sailorSection = sec;
   const secDetails = document.getElementById("sailorsSectionDetails");
   const secPerf = document.getElementById("sailorsSectionPerf");
+  const secLeave = document.getElementById("sailorsSectionLeave");
   const btnDetails = document.getElementById("btnSailorsSecDetails");
   const btnPerf = document.getElementById("btnSailorsSecPerf");
+  const btnLeave = document.getElementById("btnSailorsSecLeave");
 
-  if (sec === "performance") {
+  const activeBtnCls = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-teal-600 text-slate-800 dark:text-white shadow-sm border border-slate-200/70 dark:border-teal-500/40 transition-all";
+  const inactiveBtnCls = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-all";
+
+  if (sec === "leave") {
+    if (secDetails) secDetails.classList.add("hidden");
+    if (secPerf) secPerf.classList.add("hidden");
+    if (secLeave) secLeave.classList.remove("hidden");
+    if (btnDetails) btnDetails.className = inactiveBtnCls;
+    if (btnPerf) btnPerf.className = inactiveBtnCls;
+    if (btnLeave) btnLeave.className = activeBtnCls;
+    initSailorLeaveSection();
+  } else if (sec === "performance") {
     if (secDetails) secDetails.classList.add("hidden");
     if (secPerf) secPerf.classList.remove("hidden");
-    if (btnDetails) {
-      btnDetails.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-800 transition-all";
-    }
-    if (btnPerf) {
-      btnPerf.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 shadow-sm border border-slate-200/70 transition-all";
-    }
+    if (secLeave) secLeave.classList.add("hidden");
+    if (btnDetails) btnDetails.className = inactiveBtnCls;
+    if (btnPerf) btnPerf.className = activeBtnCls;
+    if (btnLeave) btnLeave.className = inactiveBtnCls;
     renderSailorPerformanceSection();
   } else {
     if (secPerf) secPerf.classList.add("hidden");
+    if (secLeave) secLeave.classList.add("hidden");
     if (secDetails) secDetails.classList.remove("hidden");
-    if (btnPerf) {
-      btnPerf.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-800 transition-all";
-    }
-    if (btnDetails) {
-      btnDetails.className = "flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 shadow-sm border border-slate-200/70 transition-all";
-    }
+    if (btnPerf) btnPerf.className = inactiveBtnCls;
+    if (btnDetails) btnDetails.className = activeBtnCls;
+    if (btnLeave) btnLeave.className = inactiveBtnCls;
     renderSailorsView();
   }
+}
+
+// =========================================================================
+// SECTION 3: SAILOR LEAVE & SICK MANAGEMENT CONTROLLER
+// =========================================================================
+
+store.selectedLeaveType = store.selectedLeaveType || "L";
+store.selectedLeaveSailorId = store.selectedLeaveSailorId || null;
+store.leaveCalCurrentDate = store.leaveCalCurrentDate || new Date();
+
+function renderLeaveTypeGrid() {
+  const container = document.getElementById("leaveTypeGrid");
+  if (!container) return;
+  const current = store.selectedLeaveType || "L";
+
+  container.innerHTML = LEAVE_STATUS_CHIPS.map(t => {
+    const isSelected = (t.val === current);
+    const borderCls = isSelected
+      ? `border-2 ${t.border} ${t.bg} ${t.text} font-bold shadow-xs ring-2 ring-teal-500/25`
+      : "border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#060e1a] text-slate-700 dark:text-slate-300 hover:border-slate-400 dark:hover:border-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800/60";
+
+    return `
+      <button type="button" onclick="setLeaveType('${t.val}')" class="py-2.5 px-3 rounded-xl text-center transition-all cursor-pointer ${borderCls} flex items-center justify-center gap-1.5 shadow-2xs select-none">
+        ${isSelected ? '<span class="text-[10px] leading-none">●</span>' : ''}
+        <span class="truncate whitespace-nowrap text-xs font-semibold">${t.lbl}</span>
+      </button>
+    `;
+  }).join("");
+}
+
+function setLeaveType(val) {
+  store.selectedLeaveType = val;
+  renderLeaveTypeGrid();
+  checkLeaveDisableLogic();
+}
+
+function initSailorLeaveSection() {
+  renderLeaveTypeGrid();
+
+  const rdDateInput = document.getElementById("rdReportDateInput");
+  if (rdDateInput && !rdDateInput.value) {
+    rdDateInput.value = new Date().toISOString().split("T")[0];
+  }
+
+  const fromInput = document.getElementById("leaveFromDate");
+  if (fromInput && !fromInput.value) {
+    fromInput.value = new Date().toISOString().split("T")[0];
+  }
+
+  // Preselect a sailor if none is selected yet
+  if (!store.selectedLeaveSailorId && store.sailors && store.sailors.length > 0) {
+    const firstSailor = store.sailors[0];
+    selectSailorForLeave(firstSailor.id || firstSailor._fbKey);
+  } else if (store.selectedLeaveSailorId) {
+    selectSailorForLeave(store.selectedLeaveSailorId);
+  }
+
+  checkLeaveDisableLogic();
+}
+
+function handleLeaveSailorSearchKey(e) {
+  const query = e.target.value.trim();
+  const dropdown = document.getElementById("leaveSailorDropdown");
+  if (!dropdown) return;
+
+  if (e.key === "Enter") {
+    executeLeaveSailorSearch();
+    return;
+  }
+
+  if (query.length < 1) {
+    dropdown.classList.add("hidden");
+    return;
+  }
+
+  const q = query.toLowerCase();
+  const matches = (store.sailors || []).filter(s => {
+    const off = (s.offNo || s.off_no || "").toString().toLowerCase();
+    const name = (s.name || "").toLowerCase();
+    return off.includes(q) || name.includes(q);
+  }).slice(0, 10);
+
+  if (matches.length === 0) {
+    dropdown.innerHTML = `<div class="p-3 text-xs text-slate-400 italic">No sailors match "${escapeHtml(query)}"</div>`;
+    dropdown.classList.remove("hidden");
+    return;
+  }
+
+  dropdown.innerHTML = matches.map(s => {
+    const sId = s.id || s._fbKey;
+    return `
+      <div onclick="selectSailorForLeave('${escapeHtml(sId)}')" class="p-2.5 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer flex items-center justify-between text-xs">
+        <div>
+          <span class="font-bold text-slate-800 dark:text-white">${escapeHtml(s.rank || '')} ${escapeHtml(s.name || '')}</span>
+          <span class="text-teal-600 dark:text-teal-400 font-mono ml-1.5 font-bold">#${escapeHtml(s.offNo || s.off_no || '')}</span>
+        </div>
+        <span class="text-[10px] px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">${escapeHtml(s.trade || 'N/A')}</span>
+      </div>
+    `;
+  }).join("");
+
+  dropdown.classList.remove("hidden");
+}
+
+function executeLeaveSailorSearch() {
+  const input = document.getElementById("leaveSailorSearchInput");
+  if (!input) return;
+  const q = input.value.trim().toLowerCase();
+  const dropdown = document.getElementById("leaveSailorDropdown");
+  if (dropdown) dropdown.classList.add("hidden");
+
+  if (!q) {
+    showToast("Please enter an Off No or Name to search", "warning");
+    return;
+  }
+
+  const matches = (store.sailors || []).filter(s => {
+    const off = (s.offNo || s.off_no || "").toString().toLowerCase();
+    const name = (s.name || "").toLowerCase();
+    return off.includes(q) || name.includes(q);
+  });
+
+  if (matches.length === 1) {
+    selectSailorForLeave(matches[0].id || matches[0]._fbKey);
+  } else if (matches.length > 1) {
+    // Exact Off No match priority
+    const exact = matches.find(s => (s.offNo || s.off_no || "").toString().toLowerCase() === q);
+    if (exact) {
+      selectSailorForLeave(exact.id || exact._fbKey);
+    } else {
+      if (dropdown) {
+        dropdown.classList.remove("hidden");
+      }
+    }
+  } else {
+    showToast("No sailor found matching '" + input.value + "'", "error");
+  }
+}
+
+function clearLeaveSailorSearch() {
+  const input = document.getElementById("leaveSailorSearchInput");
+  if (input) input.value = "";
+  const dropdown = document.getElementById("leaveSailorDropdown");
+  if (dropdown) dropdown.classList.add("hidden");
+}
+
+function selectSailorForLeave(sailorId) {
+  const dropdown = document.getElementById("leaveSailorDropdown");
+  if (dropdown) dropdown.classList.add("hidden");
+
+  const sailor = (store.sailors || []).find(s => (s.id === sailorId || s._fbKey === sailorId));
+  if (!sailor) return;
+
+  store.selectedLeaveSailorId = sailorId;
+
+  // Fill hidden inputs
+  const hidId = document.getElementById("leaveSailorId");
+  if (hidId) hidId.value = sailorId;
+
+  // Update header and title
+  const searchInput = document.getElementById("leaveSailorSearchInput");
+  if (searchInput) searchInput.value = sailor.offNo || sailor.off_no || "";
+
+  const titleSpan = document.getElementById("leaveSailorTitleSpan");
+  if (titleSpan) titleSpan.textContent = `${sailor.rank || ''} ${sailor.name || ''} (${sailor.offNo || sailor.off_no || ''})`;
+
+  const badge = document.getElementById("leaveSailorBadge");
+  const bRank = document.getElementById("leaveSailorBadgeRank");
+  const bName = document.getElementById("leaveSailorBadgeName");
+  if (badge && bRank && bName) {
+    bRank.textContent = sailor.rank || "";
+    bName.textContent = sailor.name || "";
+    badge.classList.remove("hidden");
+    badge.classList.add("flex");
+  }
+
+  // Set victualing status radio
+  const vType = sailor.victualing_type || "V/In";
+  const radios = document.querySelectorAll('input[name="victualing_status"]');
+  radios.forEach(r => {
+    r.checked = (r.value === vType);
+  });
+
+  // Calculate Days in Base
+  const calc = calculateDaysInBase(sailorId, sailor);
+  renderDaysInBaseBanner(calc);
+
+  // Compile and render recent history
+  renderSailorLeaveHistory(sailorId);
+
+  // Render monthly calendar
+  renderSailorLeaveCalendar();
+
+  // Recheck disable rules
+  checkLeaveDisableLogic();
+}
+
+function calculateDaysInBase(sailorId, sailorData) {
+  const availability = store.availability || {};
+  const allRecords = {};
+  const shortLeaves = ['DL', 'WE', 'HD', 'SIQ', 'SICK', 'S/R', 'MED', 'M/C', 'NGH', 'ADM', 'SL'];
+
+  Object.keys(availability).forEach(month => {
+    const days = availability[month];
+    if (!days || typeof days !== 'object') return;
+    Object.keys(days).forEach(day => {
+      const statuses = days[day];
+      if (statuses && statuses[sailorId]) {
+        const dateStr = `${month}-${String(day).padStart(2, '0')}`;
+        const dt = new Date(dateStr + "T00:00:00");
+        const ts = dt.getTime();
+        allRecords[ts] = { status: statuses[sailorId], dateStr };
+      }
+    });
+  });
+
+  const timestamps = Object.keys(allRecords).map(Number).sort((a,b) => a - b);
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  const todayTs = now.getTime();
+
+  let isOnLeave = false;
+  let lastValidRdTs = null;
+  let lastLeaveTs = null;
+
+  for (const ts of timestamps) {
+    if (ts > todayTs) break;
+    const { status } = allRecords[ts];
+    if (status === 'R/D') {
+      isOnLeave = false;
+      const prevDayTs = ts - 86400000;
+      const prevStatus = allRecords[prevDayTs]?.status;
+      if (!shortLeaves.includes(prevStatus)) {
+        lastValidRdTs = ts;
+        lastLeaveTs = null;
+      }
+    } else if (status === 'T/D') {
+      isOnLeave = true;
+    } else {
+      if (ts === todayTs) {
+        isOnLeave = true;
+      }
+      if (!shortLeaves.includes(status)) {
+        lastLeaveTs = ts;
+        lastValidRdTs = null;
+      }
+    }
+  }
+
+  if (isOnLeave && !allRecords[todayTs]) {
+    isOnLeave = false;
+  }
+
+  const todayMonth = now.toISOString().slice(0, 7);
+  const todayDay = now.getDate();
+  const todayStatus = availability[todayMonth]?.[todayDay]?.[sailorId];
+
+  if (isOnLeave) {
+    return {
+      status: "ON_LEAVE",
+      leaveStatus: todayStatus || "Leave / Out",
+      isMedical: ['SIQ', 'ADM', 'SL', 'R', 'S/R', 'SICK', 'MED'].includes(todayStatus),
+      daysInBase: 0
+    };
+  }
+
+  if (lastValidRdTs) {
+    const diffDays = Math.floor((todayTs - lastValidRdTs) / 86400000) + 1;
+    const anchorDate = new Date(lastValidRdTs).toISOString().split('T')[0];
+    return {
+      status: "IN_BASE",
+      daysInBase: Math.max(0, diffDays),
+      anchorType: "R/D",
+      anchorDate
+    };
+  }
+
+  if (lastLeaveTs) {
+    const diffDays = Math.floor((todayTs - lastLeaveTs) / 86400000);
+    const anchorDate = new Date(lastLeaveTs).toISOString().split('T')[0];
+    return {
+      status: "IN_BASE",
+      daysInBase: Math.max(0, diffDays),
+      anchorType: "Last Leave End",
+      anchorDate
+    };
+  }
+
+  if (sailorData && sailorData.join_date) {
+    const joinTs = new Date(sailorData.join_date + "T00:00:00").getTime();
+    if (!isNaN(joinTs) && joinTs <= todayTs) {
+      const diffDays = Math.floor((todayTs - joinTs) / 86400000) + 1;
+      return {
+        status: "IN_BASE",
+        daysInBase: Math.max(0, diffDays),
+        anchorType: "Join Date",
+        anchorDate: sailorData.join_date
+      };
+    }
+  }
+
+  return { status: "NO_DATA", daysInBase: 0 };
+}
+
+function renderDaysInBaseBanner(calc) {
+  const container = document.getElementById("leaveStatusDynamicContent");
+  if (!container) return;
+
+  if (calc.status === "ON_LEAVE") {
+    const colorCls = calc.isMedical ? "text-rose-500 dark:text-rose-400" : "text-cyan-600 dark:text-cyan-400";
+    container.innerHTML = `
+      <div>
+        <span class="text-xl sm:text-2xl font-black ${colorCls}">Currently on ${escapeHtml(calc.leaveStatus)}</span>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">Status as of Today</p>
+      </div>
+    `;
+  } else if (calc.status === "IN_BASE") {
+    container.innerHTML = `
+      <div class="flex items-baseline gap-2">
+        <span class="text-3xl sm:text-4xl font-black text-emerald-600 dark:text-emerald-400 font-mono">${calc.daysInBase}</span>
+        <span class="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Days in Base</span>
+        <span class="text-[11px] text-slate-400 ml-2">Since ${escapeHtml(calc.anchorType)}: <strong>${escapeHtml(calc.anchorDate)}</strong></span>
+      </div>
+    `;
+  } else {
+    container.innerHTML = `<span class="text-xs text-slate-400 italic">No historical leave anchors found to calculate days in base.</span>`;
+  }
+}
+
+function checkLeaveDisableLogic() {
+  const vStatus = document.querySelector('input[name="victualing_status"]:checked')?.value || "V/In";
+  const lType = store.selectedLeaveType || "L";
+  const shouldDisable = (vStatus === "V/Out") || ["SIQ", "SICK", "S/R", "MED", "NGH", "WE", "HD", "SL", "ADM", "R", "X"].includes(lType);
+
+  const tdInput = document.getElementById("leaveTravellingDate");
+  const rdInput = document.getElementById("leaveReportingDate");
+  const tdMsg = document.getElementById("tdMsg");
+  const rdMsg = document.getElementById("rdMsg");
+
+  if (shouldDisable) {
+    if (tdInput) { tdInput.value = ""; tdInput.disabled = true; tdInput.classList.add("opacity-40", "cursor-not-allowed"); }
+    if (rdInput) { rdInput.value = ""; rdInput.disabled = true; rdInput.classList.add("opacity-40", "cursor-not-allowed"); }
+    if (tdMsg) tdMsg.classList.remove("hidden");
+    if (rdMsg) rdMsg.classList.remove("hidden");
+  } else {
+    if (tdInput) { tdInput.disabled = false; tdInput.classList.remove("opacity-40", "cursor-not-allowed"); }
+    if (rdInput) { rdInput.disabled = false; rdInput.classList.remove("opacity-40", "cursor-not-allowed"); }
+    if (tdMsg) tdMsg.classList.add("hidden");
+    if (rdMsg) rdMsg.classList.add("hidden");
+    calculateLeaveDates();
+  }
+}
+
+function calculateLeaveDates() {
+  const tdInput = document.getElementById("leaveTravellingDate");
+  const rdInput = document.getElementById("leaveReportingDate");
+  if (!tdInput || tdInput.disabled) return;
+  const fromVal = document.getElementById("leaveFromDate")?.value;
+  const daysVal = parseFloat(document.getElementById("leaveNoOfDays")?.value || "1");
+
+  if (fromVal) {
+    const leaveDate = new Date(fromVal + "T00:00:00");
+    const travellingDate = new Date(leaveDate);
+    travellingDate.setDate(leaveDate.getDate() - 1);
+    tdInput.value = travellingDate.toISOString().split("T")[0];
+
+    if (!isNaN(daysVal) && daysVal > 0) {
+      const reportingDate = new Date(leaveDate);
+      reportingDate.setDate(leaveDate.getDate() + Math.ceil(daysVal));
+      rdInput.value = reportingDate.toISOString().split("T")[0];
+    }
+  }
+}
+
+function resetLeaveForm() {
+  document.getElementById("leaveFromDate").value = new Date().toISOString().split("T")[0];
+  document.getElementById("leaveNoOfDays").value = "1";
+  document.getElementById("oldLeaveFrom").value = "";
+  document.getElementById("oldNoOfDays").value = "";
+  store.selectedLeaveType = "L";
+  renderLeaveTypeGrid();
+  checkLeaveDisableLogic();
+  calculateLeaveDates();
+}
+
+function buildSailorLeaveRanges(sailorId) {
+  const availability = store.availability || {};
+  const dateList = [];
+
+  Object.keys(availability).forEach(month => {
+    const days = availability[month];
+    if (!days || typeof days !== 'object') return;
+    Object.keys(days).forEach(day => {
+      const statuses = days[day];
+      if (statuses && statuses[sailorId]) {
+        const dateStr = `${month}-${String(day).padStart(2, '0')}`;
+        dateList.push({ date: dateStr, status: statuses[sailorId] });
+      }
+    });
+  });
+
+  dateList.sort((a,b) => a.date.localeCompare(b.date));
+
+  const grouped = [];
+  if (dateList.length > 0) {
+    let curStart = dateList[0].date;
+    let curEnd = dateList[0].date;
+    let curStatus = dateList[0].status;
+
+    for (let i = 1; i < dateList.length; i++) {
+      const rec = dateList[i];
+      const prevD = new Date(curEnd + "T00:00:00");
+      const nextD = new Date(rec.date + "T00:00:00");
+      const diffDays = Math.round((nextD - prevD) / 86400000);
+
+      if (diffDays === 1 && rec.status === curStatus) {
+        curEnd = rec.date;
+      } else {
+        const sDateObj = new Date(curStart + "T00:00:00");
+        const eDateObj = new Date(curEnd + "T00:00:00");
+        const days = Math.round((eDateObj - sDateObj) / 86400000) + 1;
+        grouped.push({ start: curStart, end: curEnd, status: curStatus, days });
+        curStart = rec.date;
+        curEnd = rec.date;
+        curStatus = rec.status;
+      }
+    }
+    const sDateObj = new Date(curStart + "T00:00:00");
+    const eDateObj = new Date(curEnd + "T00:00:00");
+    const days = Math.round((eDateObj - sDateObj) / 86400000) + 1;
+    grouped.push({ start: curStart, end: curEnd, status: curStatus, days });
+  }
+
+  return grouped.reverse();
+}
+
+function renderSailorLeaveHistory(sailorId) {
+  const tbody = document.getElementById("leaveHistoryTableBody");
+  const countBadge = document.getElementById("leaveHistoryCountBadge");
+  if (!tbody) return;
+
+  const ranges = buildSailorLeaveRanges(sailorId).filter(r => !['T/D', 'R/D'].includes(r.status));
+  if (countBadge) countBadge.textContent = ranges.length;
+
+  if (ranges.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" class="p-4 text-center text-slate-400 italic">No history found for this sailor</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = ranges.map(r => {
+    const sObj = new Date(r.start + "T00:00:00");
+    const eObj = new Date(r.end + "T00:00:00");
+    const sMonth = sObj.toLocaleDateString('en-US', { month: 'short' });
+    const sDay = String(sObj.getDate()).padStart(2, '0');
+    const eDay = String(eObj.getDate()).padStart(2, '0');
+    const periodStr = r.days > 1 ? `${sMonth} ${sDay}-${eDay} (${r.days}d)` : `${sMonth} ${sDay}`;
+
+    let badgeCls = "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300";
+    if (['L', 'DL'].includes(r.status)) badgeCls = "bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60";
+    else if (['WE'].includes(r.status)) badgeCls = "bg-teal-100 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800/60";
+    else if (['SIQ', 'SICK', 'S/R', 'MED', 'M/C', 'NGH', 'SL', 'ADM', 'R'].includes(r.status)) badgeCls = "bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60";
+
+    return `
+      <tr class="hover:bg-slate-50 dark:hover:bg-[#0e1e38] transition-colors">
+        <td class="p-2 font-mono font-bold text-slate-800 dark:text-slate-200 text-xs">${escapeHtml(periodStr)}</td>
+        <td class="p-2 text-center">
+          <span class="px-2 py-0.5 rounded text-[10px] font-bold ${badgeCls}">${escapeHtml(r.status)}</span>
+        </td>
+        <td class="p-2 text-center space-x-1 whitespace-nowrap">
+          <button type="button" onclick="editSailorLeaveRecord('${r.start}', ${r.days}, '${r.status}')" class="p-1.5 text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:bg-teal-50 dark:hover:bg-teal-950/40 rounded-lg transition-colors cursor-pointer" title="Edit">
+            <i class="fa-solid fa-pen-to-square"></i>
+          </button>
+          <button type="button" onclick="deleteSailorLeaveRecord('${r.start}', '${r.end}')" class="p-1.5 text-rose-500 hover:text-rose-700 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer" title="Delete">
+            <i class="fa-solid fa-trash-can"></i>
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function editSailorLeaveRecord(start, days, type) {
+  const fromInput = document.getElementById("leaveFromDate");
+  const daysInput = document.getElementById("leaveNoOfDays");
+  const oldFrom = document.getElementById("oldLeaveFrom");
+  const oldDays = document.getElementById("oldNoOfDays");
+
+  if (fromInput) fromInput.value = start;
+  if (daysInput) daysInput.value = days;
+  if (oldFrom) oldFrom.value = start;
+  if (oldDays) oldDays.value = days;
+
+  store.selectedLeaveType = type;
+  renderLeaveTypeGrid();
+
+  // Smart V/In vs V/Out auto-detect
+  const prevDate = new Date(start + "T00:00:00");
+  prevDate.setDate(prevDate.getDate() - 1);
+  const prevM = prevDate.toISOString().slice(0, 7);
+  const prevD = prevDate.getDate();
+  const prevStatus = store.availability?.[prevM]?.[prevD]?.[store.selectedLeaveSailorId];
+
+  const radios = document.querySelectorAll('input[name="victualing_status"]');
+  if (['L', 'DL'].includes(type)) {
+    radios.forEach(r => {
+      r.checked = (prevStatus === 'T/D') ? (r.value === 'V/In') : (r.value === 'V/Out');
+    });
+  } else {
+    radios.forEach(r => { r.checked = (r.value === 'V/In'); });
+  }
+
+  checkLeaveDisableLogic();
+  calculateLeaveDates();
+
+  document.getElementById("sailorLeaveEntryForm")?.scrollIntoView({ behavior: "smooth" });
+  showToast("Record loaded for editing. Click Save to update.", "info");
+}
+
+async function deleteSailorLeaveRecord(start, end) {
+  const sailorId = store.selectedLeaveSailorId;
+  if (!sailorId) return;
+
+  if (!confirm(`Are you sure you want to delete leave record from ${start} to ${end}?`)) {
+    return;
+  }
+
+  const startD = new Date(start + "T00:00:00");
+  const endD = new Date(end + "T00:00:00");
+  const updates = {};
+
+  const curr = new Date(startD);
+  while (curr <= endD) {
+    const m = curr.toISOString().slice(0, 7);
+    const d = curr.getDate();
+    updates[`availability/${m}/${d}/${sailorId}`] = null;
+    curr.setDate(curr.getDate() + 1);
+  }
+
+  // Clear prev T/D if any
+  const prevDay = new Date(startD);
+  prevDay.setDate(prevDay.getDate() - 1);
+  const pM = prevDay.toISOString().slice(0, 7);
+  const pD = prevDay.getDate();
+  if (store.availability?.[pM]?.[pD]?.[sailorId] === 'T/D') {
+    updates[`availability/${pM}/${pD}/${sailorId}`] = null;
+  }
+
+  // Clear next R/D if any
+  const nextDay = new Date(endD);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const nM = nextDay.toISOString().slice(0, 7);
+  const nD = nextDay.getDate();
+  if (store.availability?.[nM]?.[nD]?.[sailorId] === 'R/D') {
+    updates[`availability/${nM}/${nD}/${sailorId}`] = null;
+  }
+
+  try {
+    if (typeof sailorsDB !== "undefined") {
+      await sailorsDB.ref().update(updates);
+    }
+    // Optimistic local cache update
+    Object.keys(updates).forEach(path => {
+      const parts = path.split("/");
+      if (parts.length === 4 && parts[0] === "availability") {
+        const [, m, d, sid] = parts;
+        if (store.availability?.[m]?.[d]) {
+          delete store.availability[m][d][sid];
+        }
+      }
+    });
+
+    showToast("Leave record deleted successfully!", "success");
+    selectSailorForLeave(sailorId);
+  } catch (err) {
+    console.warn("Direct Firebase delete failed, using server API:", err);
+    try {
+      const res = await fetch("api.php?action=delete_sailor_leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sailor_id: sailorId, range_start: start, range_end: end })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Leave record deleted successfully!", "success");
+        selectSailorForLeave(sailorId);
+      } else {
+        showToast("Error deleting: " + (data.error || "Unknown error"), "error");
+      }
+    } catch (apiErr) {
+      showToast("Error connecting to server: " + apiErr.message, "error");
+    }
+  }
+}
+
+async function handleSaveSailorLeave(e) {
+  e.preventDefault();
+  const sailorId = store.selectedLeaveSailorId;
+  if (!sailorId) {
+    showToast("Please select a sailor first", "warning");
+    return;
+  }
+
+  const fromVal = document.getElementById("leaveFromDate")?.value;
+  const daysVal = parseFloat(document.getElementById("leaveNoOfDays")?.value || "1");
+  const leaveType = store.selectedLeaveType || "L";
+  const vStatus = document.querySelector('input[name="victualing_status"]:checked')?.value || "V/In";
+  const tdVal = document.getElementById("leaveTravellingDate")?.value;
+  const rdVal = document.getElementById("leaveReportingDate")?.value;
+  const oldFrom = document.getElementById("oldLeaveFrom")?.value;
+  const oldDays = parseFloat(document.getElementById("oldNoOfDays")?.value || "0");
+
+  if (!fromVal || isNaN(daysVal) || daysVal <= 0) {
+    showToast("Please enter valid From Date and Number of Days", "warning");
+    return;
+  }
+
+  const btn = document.getElementById("btnSaveSailorLeave");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<span class="animate-spin inline-block mr-1">⏳</span> Saving...`;
+  }
+
+  const updates = {};
+
+  // 1. If editing, clear old range
+  if (oldFrom && oldDays > 0) {
+    const oldStart = new Date(oldFrom + "T00:00:00");
+    const oldLoop = (oldDays < 1) ? 1 : Math.ceil(oldDays);
+    for (let i = 0; i < oldLoop; i++) {
+      const c = new Date(oldStart);
+      c.setDate(c.getDate() + i);
+      updates[`availability/${c.toISOString().slice(0,7)}/${c.getDate()}/${sailorId}`] = null;
+    }
+    const oldTd = new Date(oldStart);
+    oldTd.setDate(oldTd.getDate() - 1);
+    updates[`availability/${oldTd.toISOString().slice(0,7)}/${oldTd.getDate()}/${sailorId}`] = null;
+    const oldRd = new Date(oldStart);
+    oldRd.setDate(oldRd.getDate() + oldLoop);
+    updates[`availability/${oldRd.toISOString().slice(0,7)}/${oldRd.getDate()}/${sailorId}`] = null;
+  }
+
+  // 2. Add new range
+  const startDate = new Date(fromVal + "T00:00:00");
+  const loopDays = (leaveType === "HD") ? 1 : Math.ceil(daysVal);
+  for (let i = 0; i < loopDays; i++) {
+    const c = new Date(startDate);
+    c.setDate(c.getDate() + i);
+    const m = c.toISOString().slice(0, 7);
+    const d = c.getDate();
+    updates[`availability/${m}/${d}/${sailorId}`] = (leaveType === "X") ? null : leaveType;
+  }
+
+  const excluded = ['SIQ', 'SICK', 'S/R', 'MED', 'M/C', 'NGH', 'SL', 'ADM', 'HD', 'WE', 'R', 'X'];
+  if (vStatus === "V/In" && !excluded.includes(leaveType)) {
+    if (tdVal) {
+      const tD = new Date(tdVal + "T00:00:00");
+      updates[`availability/${tD.toISOString().slice(0,7)}/${tD.getDate()}/${sailorId}`] = "T/D";
+    }
+    if (rdVal) {
+      const rD = new Date(rdVal + "T00:00:00");
+      updates[`availability/${rD.toISOString().slice(0,7)}/${rD.getDate()}/${sailorId}`] = "R/D";
+    }
+  }
+
+  try {
+    if (typeof sailorsDB !== "undefined") {
+      await sailorsDB.ref().update(updates);
+      if (vStatus) {
+        await sailorsDB.ref(`sailors/${sailorId}/victualing_type`).set(vStatus);
+      }
+    }
+
+    // Apply optimistic updates to local store.availability
+    store.availability = store.availability || {};
+    Object.keys(updates).forEach(path => {
+      const parts = path.split("/");
+      if (parts.length === 4 && parts[0] === "availability") {
+        const [, m, d, sid] = parts;
+        store.availability[m] = store.availability[m] || {};
+        store.availability[m][d] = store.availability[m][d] || {};
+        if (updates[path] === null) {
+          delete store.availability[m][d][sid];
+        } else {
+          store.availability[m][d][sid] = updates[path];
+        }
+      }
+    });
+
+    // Update victualing type in local sailor store
+    const sailorObj = (store.sailors || []).find(s => s.id === sailorId || s._fbKey === sailorId);
+    if (sailorObj) sailorObj.victualing_type = vStatus;
+
+    showToast("Leave record saved successfully!", "success");
+    resetLeaveForm();
+    selectSailorForLeave(sailorId);
+  } catch (err) {
+    console.warn("Direct Firebase write failed, falling back to server API:", err);
+    try {
+      const res = await fetch("api.php?action=save_sailor_leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sailor_id: sailorId,
+          leave_type: leaveType,
+          victualing_status: vStatus,
+          leave_from: fromVal,
+          no_of_days: daysVal,
+          travelling_date: tdVal,
+          reporting_date: rdVal,
+          old_leave_from: oldFrom,
+          old_no_of_days: oldDays
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast("Leave record saved successfully via server!", "success");
+        resetLeaveForm();
+        selectSailorForLeave(sailorId);
+      } else {
+        showToast("Failed to save: " + (data.error || "Unknown error"), "error");
+      }
+    } catch (apiErr) {
+      showToast("Network error saving record: " + apiErr.message, "error");
+    }
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<span>💾</span> Save Record`;
+    }
+  }
+}
+
+function changeLeaveCalMonth(delta) {
+  store.leaveCalCurrentDate = store.leaveCalCurrentDate || new Date();
+  store.leaveCalCurrentDate.setMonth(store.leaveCalCurrentDate.getMonth() + delta);
+  renderSailorLeaveCalendar();
+}
+
+function renderSailorLeaveCalendar() {
+  const label = document.getElementById("leaveCalMonthLabel");
+  const grid = document.getElementById("leaveCalGrid");
+  if (!grid || !label) return;
+
+  const dt = store.leaveCalCurrentDate || new Date();
+  const year = dt.getFullYear();
+  const month = dt.getMonth();
+
+  label.textContent = dt.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  grid.innerHTML = "";
+
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  for (let i = 0; i < firstDay; i++) {
+    grid.innerHTML += `<div></div>`;
+  }
+
+  const availability = store.availability || {};
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthAvail = availability[monthKey] || {};
+  const sailorId = store.selectedLeaveSailorId;
+
+  const ranges = sailorId ? buildSailorLeaveRanges(sailorId) : [];
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const status = sailorId ? (monthAvail[day]?.[sailorId] || monthAvail[String(day)]?.[sailorId]) : null;
+    let bgCls = "bg-slate-100 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700";
+
+    if (status) {
+      if (['L', 'DL'].includes(status)) bgCls = "bg-indigo-600 text-white font-bold shadow-xs";
+      else if (['WE'].includes(status)) bgCls = "bg-teal-600 text-white font-bold shadow-xs";
+      else if (['SIQ', 'SL', 'ADM', 'R', 'S/R', 'SICK', 'MED'].includes(status)) bgCls = "bg-rose-600 text-white font-bold shadow-xs";
+      else if (['T/D', 'R/D'].includes(status)) bgCls = "bg-cyan-600 text-white font-bold shadow-xs";
+      else bgCls = "bg-slate-500 text-white";
+    }
+
+    const dateStr = `${monthKey}-${String(day).padStart(2, '0')}`;
+    const titleAttr = status ? `title="${escapeHtml(status)} on ${dateStr}"` : `title="${dateStr}"`;
+
+    grid.innerHTML += `
+      <div ${titleAttr} onclick="onCalendarDayClick('${dateStr}', '${status || ''}')" class="h-8 w-8 flex items-center justify-center rounded-xl cursor-pointer transition-all mx-auto text-xs font-semibold ${bgCls}">
+        ${day}
+      </div>
+    `;
+  }
+}
+
+function onCalendarDayClick(dateStr, status) {
+  if (!status) {
+    document.getElementById("leaveFromDate").value = dateStr;
+    document.getElementById("leaveNoOfDays").value = "1";
+    calculateLeaveDates();
+    return;
+  }
+  const ranges = buildSailorLeaveRanges(store.selectedLeaveSailorId);
+  const found = ranges.find(r => dateStr >= r.start && dateStr <= r.end);
+  if (found) {
+    editSailorLeaveRecord(found.start, found.days, found.status);
+  }
+}
+
+function setRdTodayDate() {
+  const rdInput = document.getElementById("rdReportDateInput");
+  if (rdInput) {
+    rdInput.value = new Date().toISOString().split("T")[0];
+    findReportingSailors();
+  }
+}
+
+function findReportingSailors() {
+  const rdInput = document.getElementById("rdReportDateInput");
+  if (!rdInput || !rdInput.value) {
+    showToast("Please choose a date to search reporting sailors", "warning");
+    return;
+  }
+
+  const reportDate = rdInput.value;
+  const dObj = new Date(reportDate + "T00:00:00");
+  const monthKey = reportDate.slice(0, 7);
+  const dayKey = dObj.getDate();
+
+  const availability = store.availability || {};
+  const dayData = availability[monthKey]?.[dayKey] || availability[monthKey]?.[String(dayKey)] || {};
+
+  const reportingSailors = [];
+
+  Object.keys(dayData).forEach(sId => {
+    if (dayData[sId] === "R/D") {
+      const sailor = (store.sailors || []).find(s => s.id === sId || s._fbKey === sId);
+      if (sailor) {
+        let durationStr = "-";
+        if (sailor.join_date) {
+          try {
+            const jDate = new Date(sailor.join_date + "T00:00:00");
+            const now = new Date();
+            let years = now.getFullYear() - jDate.getFullYear();
+            let months = now.getMonth() - jDate.getMonth();
+            if (months < 0) { years--; months += 12; }
+            durationStr = `${String(years).padStart(2, '0')}Y - ${String(months).padStart(2, '0')}M`;
+          } catch(e) {}
+        }
+
+        reportingSailors.push({
+          id: sId,
+          offNo: sailor.offNo || sailor.off_no || "-",
+          name: sailor.name || "Unknown",
+          rank: sailor.rank || "-",
+          trade: sailor.trade || "N/A",
+          victualing: sailor.victualing_type || "V/In",
+          contact: sailor.tp || sailor.contact || sailor.phone || sailor.mobile || sailor.nok_tp || "-",
+          duration: durationStr,
+          address: sailor.address || "-",
+          policeStation: sailor.police_station || "-",
+          nok: sailor.nok || sailor.next_of_kin || "-",
+          specialSkills: sailor.special_skills || sailor.special_skill || "NO"
+        });
+      }
+    }
+  });
+
+  store.currentReportingSailors = reportingSailors;
+
+  // Populate Trades in modal filter
+  const tradeSelect = document.getElementById("rdFilterTrade");
+  if (tradeSelect) {
+    const trades = Array.from(new Set(reportingSailors.map(s => s.trade).filter(Boolean))).sort();
+    tradeSelect.innerHTML = `<option value="ALL">All Trades (${reportingSailors.length})</option>` +
+      trades.map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)}</option>`).join("");
+  }
+
+  const modalDate = document.getElementById("rdModalDateSpan");
+  if (modalDate) modalDate.textContent = reportDate;
+
+  filterReportingSailorsTable();
+
+  const modal = document.getElementById("reportingSailorsModal");
+  if (modal) modal.classList.remove("hidden");
+}
+
+function filterReportingSailorsTable() {
+  const tbody = document.getElementById("reportingSailorsTableBody");
+  const countEl = document.getElementById("rdDisplayCount");
+  if (!tbody) return;
+
+  const tradeVal = document.getElementById("rdFilterTrade")?.value || "ALL";
+  const searchVal = (document.getElementById("rdFilterSearch")?.value || "").toLowerCase().trim();
+
+  const list = (store.currentReportingSailors || []).filter(s => {
+    const matchTrade = (tradeVal === "ALL" || s.trade === tradeVal);
+    const matchSearch = !searchVal ||
+      s.name.toLowerCase().includes(searchVal) ||
+      s.offNo.toLowerCase().includes(searchVal) ||
+      s.address.toLowerCase().includes(searchVal) ||
+      s.specialSkills.toLowerCase().includes(searchVal);
+    return matchTrade && matchSearch;
+  });
+
+  if (countEl) countEl.textContent = list.length;
+
+  if (list.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-400 italic">No reporting sailors found for this date and filter.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map(s => {
+    return `
+      <tr class="hover:bg-slate-50 dark:hover:bg-[#0e1e38] transition-colors border-b border-slate-100 dark:border-slate-800">
+        <td class="p-3">
+          <span class="font-bold text-slate-900 dark:text-white">${escapeHtml(s.rank)}</span>
+          <span class="font-semibold text-slate-700 dark:text-slate-300 ml-1">${escapeHtml(s.name)}</span>
+        </td>
+        <td class="p-3 text-center font-mono font-bold text-teal-600 dark:text-teal-400">${escapeHtml(s.offNo)}</td>
+        <td class="p-3 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">${escapeHtml(s.trade)}</span></td>
+        <td class="p-3 text-center text-xs font-semibold ${s.victualing === 'V/In' ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-600 dark:text-rose-400'}">${escapeHtml(s.victualing)}</td>
+        <td class="p-3 text-center font-mono text-xs text-slate-600 dark:text-slate-400">${escapeHtml(s.contact)}</td>
+        <td class="p-3 text-center font-mono text-xs text-slate-500">${escapeHtml(s.duration)}</td>
+        <td class="p-3 text-center">
+          <button type="button" onclick="selectReportingSailor('${escapeHtml(s.id)}')" class="px-2.5 py-1 rounded-lg text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white transition-all cursor-pointer">
+            Select
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function selectReportingSailor(sailorId) {
+  closeReportingSailorsModal();
+  selectSailorForLeave(sailorId);
+}
+
+function closeReportingSailorsModal() {
+  const modal = document.getElementById("reportingSailorsModal");
+  if (modal) modal.classList.add("hidden");
 }
 
 function setSailorDirectoryViewMode(mode) {
@@ -24078,13 +25229,13 @@ function updateSailorSortIcons() {
 function filterDirectoryTrade(trade) {
   store.directoryTradeFilter = trade;
   document.querySelectorAll(".dir-trade-btn").forEach((btn) => {
-    btn.classList.remove("bg-slate-900", "text-white", "font-bold");
+    btn.classList.remove("bg-slate-900", "text-white", "font-bold", "active");
     btn.classList.add("bg-slate-100", "text-slate-600", "font-medium", "hover:bg-slate-200");
   });
   const activeBtn = document.getElementById("dir-trade-" + trade);
   if (activeBtn) {
     activeBtn.classList.remove("bg-slate-100", "text-slate-600", "font-medium", "hover:bg-slate-200");
-    activeBtn.classList.add("bg-slate-900", "text-white", "font-bold");
+    activeBtn.classList.add("bg-slate-900", "text-white", "font-bold", "active");
   }
   renderSailorsView();
 }
@@ -24525,8 +25676,8 @@ function renderSailorsView() {
                               ${avatarHtml}
                           </div>
                           <div class="min-w-0">
-                              <p class="font-bold text-xs text-slate-900 truncate hover:text-teal-600 cursor-pointer" onclick="openSailorProfile('${sId}')">${s.name || "-"}</p>
-                              <p class="text-[10px] text-slate-500 font-semibold">${s.rank || "-"}</p>
+                              <p class="font-bold text-xs text-slate-900 dark:text-white truncate hover:text-teal-600 dark:hover:text-teal-400 cursor-pointer" onclick="openSailorProfile('${sId}')">${s.name || "-"}</p>
+                              <p class="text-[10px] text-slate-500 dark:text-slate-400 font-semibold">${s.rank || "-"}</p>
                           </div>
                       </div>
                   </td>`;
@@ -24537,44 +25688,44 @@ function renderSailorsView() {
                       <span class="inline-block px-2 py-0.5 rounded text-xs font-extrabold bg-slate-900 text-white">${s.trade || "-"}</span>
                   </td>`;
               case "city":
-                return `<td class="py-3 px-4 text-xs text-slate-600 font-medium whitespace-nowrap">${cleanCity}</td>`;
+                return `<td class="py-3 px-4 text-xs text-slate-600 dark:text-slate-300 font-medium whitespace-nowrap">${cleanCity}</td>`;
               case "status":
                 return `<td class="py-3 px-4 whitespace-nowrap">${statusBadge}</td>`;
               case "perf":
                 return `
                   <td class="py-3 px-4 whitespace-nowrap">
                       <div class="flex flex-col items-start gap-1">
-                          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 text-amber-700 border border-amber-300 shadow-xs">
+                          <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-amber-50 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60 shadow-xs">
                               ⭐ ${s.perf.toFixed(2)}
                           </span>
                           <div class="flex items-center gap-1 text-[10px] font-bold">
-                              <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d Eval</span>
-                              <span class="text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d Non-eval</span>
+                              <span class="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/60" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d Eval</span>
+                              <span class="text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d Non-eval</span>
                           </div>
                       </div>
                   </td>`;
               case "skills":
                 return `
-                  <td class="py-3 px-4 text-xs text-slate-500 truncate max-w-[180px]" title="${skillText.replace(/"/g, '&quot;')}">
-                      ${skillSnippet !== "—" ? `<span class="text-slate-700">🛠️ ${skillSnippet}</span>` : '<span class="text-slate-300">—</span>'}
+                  <td class="py-3 px-4 text-xs text-slate-500 dark:text-slate-400 truncate max-w-[180px]" title="${skillText.replace(/"/g, '&quot;')}">
+                      ${skillSnippet !== "—" ? `<span class="text-slate-700 dark:text-slate-200">🛠️ ${skillSnippet}</span>` : '<span class="text-slate-300 dark:text-slate-600">—</span>'}
                   </td>`;
               case "zone":
-                return `<td class="py-3 px-4 text-xs font-semibold text-slate-700 whitespace-nowrap">${s.assignedZone}</td>`;
+                return `<td class="py-3 px-4 text-xs font-semibold text-slate-700 dark:text-slate-300 whitespace-nowrap">${s.assignedZone}</td>`;
               case "actions":
                 return `
-                  <td class="py-3 px-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white group-hover:bg-slate-50 transition-colors shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)]">
+                  <td class="py-3 px-4 text-center whitespace-nowrap sticky right-0 z-10 bg-white dark:bg-[#0a1526] group-hover:bg-slate-50 dark:group-hover:bg-[#11223f] transition-colors shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.08)] dark:shadow-[-4px_0_8px_-2px_rgba(0,0,0,0.4)]">
                       <div class="flex items-center justify-center">
-                          <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 bg-slate-100 hover:bg-teal-50 hover:text-teal-700 border border-slate-200 transition-all shadow-xs cursor-pointer">
+                          <button onclick="openSailorProfile('${sId}')" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-teal-900/50 hover:text-teal-700 dark:hover:text-teal-300 border border-slate-200 dark:border-slate-700 transition-all shadow-xs cursor-pointer">
                               <span>👤</span> Profile
                           </button>
                       </div>
                   </td>`;
               default:
-                return `<td class="py-3 px-4 text-xs text-slate-600">—</td>`;
+                return `<td class="py-3 px-4 text-xs text-slate-600 dark:text-slate-400">—</td>`;
             }
           }).join("");
 
-          return `<tr class="hover:bg-slate-50/90 transition-colors group">${rowCells}</tr>`;
+          return `<tr class="hover:bg-slate-50/90 dark:hover:bg-[#0e1e38] transition-colors group border-b border-slate-100 dark:border-slate-800/60">${rowCells}</tr>`;
         }).join("");
       }
     }
@@ -24608,7 +25759,7 @@ function renderSailorsView() {
           const tradeClass = tradeColors[s.trade] || "bg-slate-600";
 
           return `
-          <div onclick="openSailorProfile('${sId}')" class="bg-white rounded-2xl shadow-md border border-slate-200/80 p-4 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between">
+          <div onclick="openSailorProfile('${sId}')" class="bg-white dark:bg-[#0a1526] rounded-2xl shadow-md dark:shadow-xl border border-slate-200/80 dark:border-slate-800 p-4 hover:shadow-lg dark:hover:border-teal-500/40 hover:-translate-y-1 transition-all duration-200 cursor-pointer flex flex-col justify-between">
               <div class="flex items-start gap-3">
                   <div class="relative flex-shrink-0">
                       ${avatarHtml}
@@ -24617,18 +25768,18 @@ function renderSailorsView() {
                       </span>
                   </div>
                   <div class="min-w-0 flex-1">
-                      <p class="font-bold text-slate-800 text-sm truncate">${s.name}</p>
-                      <p class="text-xs text-slate-500 font-semibold truncate mt-0.5">${s.rank}</p>
-                      <p class="text-[10px] text-slate-400 mono mt-0.5">${s.offNo}</p>
+                      <p class="font-bold text-slate-800 dark:text-white text-sm truncate">${s.name}</p>
+                      <p class="text-xs text-slate-500 dark:text-slate-400 font-semibold truncate mt-0.5">${s.rank}</p>
+                      <p class="text-[10px] text-slate-400 dark:text-slate-500 mono mt-0.5">${s.offNo}</p>
                   </div>
               </div>
 
-              <div class="border-t border-slate-100 pt-3 mt-4 flex items-center justify-between gap-1 flex-wrap">
+              <div class="border-t border-slate-100 dark:border-slate-800 pt-3 mt-4 flex items-center justify-between gap-1 flex-wrap">
                   ${statusBadge}
                   <div class="flex items-center gap-1.5 text-[10px] font-bold">
-                      <span class="text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200" title="Performance score">⭐ ${s.perf.toFixed(2)}</span>
-                      <span class="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d</span>
-                      <span class="text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d</span>
+                      <span class="text-teal-700 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/50 px-1.5 py-0.5 rounded border border-teal-200 dark:border-teal-800/60" title="Performance score">⭐ ${s.perf.toFixed(2)}</span>
+                      <span class="text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800/60" title="Evaluated Days">✓ ${evalStats.evaluatedDays}d</span>
+                      <span class="text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-700" title="Non-Evaluated Days">⏳ ${evalStats.pendingDays}d</span>
                   </div>
               </div>
           </div>

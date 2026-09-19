@@ -62,7 +62,7 @@
     console.log('   DB#1 (Sailors):', sailorsFirebaseConfig.projectId);
     console.log('   DB#2 (Ops):', opsFirebaseConfig.projectId);
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Sinhala:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@500;600;700;800;900&family=Outfit:wght@500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+Sinhala:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --body-bg: #f4f6fa;
@@ -88,18 +88,18 @@
         }
 
         html.dark {
-            --body-bg: #070d18;
-            --card-bg: #0f1d35;
+            --body-bg: #060c18;
+            --card-bg: #0a1526;
             --text-primary: #f8fafc;
             --text-secondary: #94a3b8;
-            --border-color: rgba(255,255,255,0.09);
-            --header-bg: #050a12;
-            --input-bg: #13233f;
-            --input-text: #ffffff;
-            --input-border: rgba(20, 184, 166, 0.25);
+            --border-color: rgba(255,255,255,0.08);
+            --header-bg: #050b14;
+            --input-bg: #060e1a;
+            --input-text: #f8fafc;
+            --input-border: rgba(148, 163, 184, 0.22);
             --card-sub-bg: rgba(255,255,255,0.03);
-            --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
-            --shadow-card: 0 4px 18px -2px rgba(0, 0, 0, 0.45);
+            --shadow-subtle: 0 1px 3px 0 rgba(0, 0, 0, 0.4);
+            --shadow-card: 0 8px 24px -4px rgba(0, 0, 0, 0.6);
         }
 
         body {
@@ -108,17 +108,29 @@
             transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        html.dark body {
+            background: #060c18 !important;
+            background-image: radial-gradient(circle at 50% -10%, #0d1e38 0%, #070e1b 50%, #040811 100%) !important;
+            background-attachment: fixed !important;
+            color: var(--text-primary) !important;
+        }
+
+        /* Prevent hardcoded dark text from disappearing in dark mode */
+        html.dark [style*="color:#0a1628"],
+        html.dark [style*="color: #0a1628"],
+        html.dark [style*="color:#0f172a"],
+        html.dark [style*="color: #0f172a"],
+        html.dark [style*="color:#000"],
+        html.dark [style*="color: #000"] {
+            color: var(--text-primary) !important;
+        }
+
         /* Light & Dark Cards */
         .glass-card {
             background-color: var(--card-bg) !important;
             border-color: var(--border-color) !important;
             box-shadow: var(--shadow-card);
             transition: background-color 0.25s ease, border-color 0.25s ease;
-        }
-
-        html.dark body {
-            background-color: var(--body-bg) !important;
-            color: var(--text-primary) !important;
         }
 
         html.dark .bg-white,
@@ -139,7 +151,7 @@
         html.dark .bg-slate-50,
         html.dark .bg-slate-50/50,
         html.dark .bg-slate-50/80 {
-            background-color: #11223e !important;
+            background-color: #0d1a2d !important;
             border-color: var(--border-color) !important;
         }
 
@@ -229,7 +241,7 @@
 
         html.dark .bg-white/80,
         html.dark .bg-white/90 {
-            background-color: rgba(15, 29, 53, 0.85) !important;
+            background-color: rgba(10, 21, 38, 0.88) !important;
         }
         
         html.dark input, html.dark select, html.dark textarea {
@@ -243,7 +255,7 @@
         }
 
         html.dark table thead tr {
-            background-color: #11223e !important;
+            background-color: #070e1b !important;
             border-bottom: 1px solid var(--border-color) !important;
         }
 
@@ -252,7 +264,30 @@
         }
 
         html.dark table tbody tr:hover {
-            background-color: rgba(20, 184, 166, 0.06) !important;
+            background-color: rgba(20, 184, 166, 0.08) !important;
+        }
+
+        html.dark td.sticky, html.dark th.sticky {
+            background-color: #0a1526 !important;
+        }
+
+        html.dark .dir-trade-btn {
+            background-color: #0d1a2d !important;
+            color: #94a3b8 !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+        html.dark .dir-trade-btn:hover {
+            background-color: #152642 !important;
+            color: #ffffff !important;
+            border-color: rgba(20, 184, 166, 0.3) !important;
+        }
+        html.dark .dir-trade-btn.is-active,
+        html.dark .dir-trade-btn.active,
+        html.dark .dir-trade-btn.font-bold {
+            background-color: #0d9488 !important;
+            color: #ffffff !important;
+            border-color: #14b8a6 !important;
+            box-shadow: 0 2px 10px rgba(13, 148, 136, 0.4) !important;
         }
 
         html.dark .divide-slate-200 > *,
@@ -261,8 +296,8 @@
         }
         * { font-family: 'Inter', 'Noto Sans Sinhala', sans-serif; }
         select option {
-            background-color: #0a1628 !important;
-            color: #ffffff !important;
+            background-color: #081220 !important;
+            color: #f8fafc !important;
         }
         .mono { font-family: 'JetBrains Mono', monospace; }
         .sinhala { font-family: 'Noto Sans Sinhala', sans-serif; }
@@ -318,40 +353,49 @@
             background: linear-gradient(135deg, #e8f4f8 0%, #dbeafe 30%, #e0f2fe 60%, #f0fdf4 100%);
             min-height: 100vh;
         }
+        html.dark body {
+            background: #060c18 !important;
+            background-image: radial-gradient(circle at 50% -10%, #0d1e38 0%, #070e1b 50%, #040811 100%) !important;
+            background-attachment: fixed !important;
+        }
 
         /* ===== Naval Header Accents ===== */
         .nav-header {
-            background: linear-gradient(135deg, var(--navy-900) 0%, var(--navy-700) 60%, #1a3a6e 100%);
-            border-bottom: 2px solid var(--teal-primary);
+            background: linear-gradient(180deg, #071120 0%, #0a172c 65%, #081224 100%);
+            border-bottom: 1px solid rgba(20, 184, 166, 0.28);
         }
         .header-glow {
-            box-shadow: 0 4px 24px rgba(13, 148, 136, 0.3), 0 1px 0 rgba(212,160,23,0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 1px 0 rgba(255, 255, 255, 0.05);
         }
         .logo-badge {
-            background: linear-gradient(135deg, var(--teal-primary), var(--teal-light));
-            box-shadow: 0 0 16px rgba(13,148,136,0.5);
+            background: linear-gradient(135deg, #0d9488, #0891b2);
+            box-shadow: 0 0 16px rgba(13, 148, 136, 0.4);
         }
         .brand-tag {
-            font-size: 0.6rem;
-            letter-spacing: 0.15em;
+            font-size: 0.62rem;
+            letter-spacing: 0.12em;
             text-transform: uppercase;
-            color: var(--gold-light);
+            color: #94a3b8;
         }
 
         /* ===== Navigation Pills & Horizontal Scrolling ===== */
         .nav-pill {
-            transition: all 0.2s cubic-bezier(.4,0,.2,1);
+            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
             border-radius: 8px;
             flex-shrink: 0 !important;
             white-space: nowrap !important;
             user-select: none;
         }
-        .nav-pill:hover { background: rgba(13,148,136,0.25); color: #5eead4; }
+        .nav-pill:hover {
+            background: rgba(255, 255, 255, 0.09) !important;
+            color: #ffffff !important;
+        }
         .tab-active {
-            background: linear-gradient(135deg, rgba(13,148,136,0.35), rgba(20,184,166,0.2));
-            color: #2dd4bf !important;
-            box-shadow: 0 0 12px rgba(13,148,136,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
-            border-bottom: 2px solid var(--teal-light);
+            background: linear-gradient(135deg, #0f766e 0%, #0e7490 100%) !important;
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            border: 1px solid rgba(45, 212, 191, 0.45) !important;
+            box-shadow: 0 2px 10px rgba(14, 116, 144, 0.35) !important;
         }
         /* 2-Row layout for Desktop Navigation Tabs */
         #desktopMainNav {
@@ -359,31 +403,57 @@
             flex-direction: column !important;
             align-items: center !important;
             justify-content: center !important;
-            gap: 4px !important;
+            gap: 5px !important;
             user-select: none;
             overflow: visible !important;
             max-height: none !important;
             min-height: auto !important;
+            background: rgba(6, 12, 24, 0.8) !important;
+            backdrop-filter: blur(14px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.09) !important;
+            border-radius: 14px !important;
+            padding: 5px 8px !important;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
         }
         #desktopMainNav .nav-row {
             display: flex !important;
             flex-direction: row !important;
             align-items: center !important;
             justify-content: center !important;
-            gap: 4px !important;
-            flex-wrap: wrap !important;
+            gap: 5px !important;
+            flex-wrap: nowrap !important;
         }
         #desktopMainNav .nav-pill,
         #desktopMainNav button {
             display: inline-flex !important;
             align-items: center !important;
+            justify-content: center !important;
+            gap: 6px !important;
             flex-shrink: 0 !important;
             white-space: nowrap !important;
-            height: 28px !important;
-            padding: 2px 9px !important;
+            height: 27px !important;
+            padding: 2px 11px !important;
             font-size: 11.5px !important;
+            font-weight: 500 !important;
             border-radius: 7px !important;
             line-height: 1 !important;
+            border: 1px solid transparent !important;
+            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            color: #cbd5e1 !important;
+        }
+        #desktopMainNav .nav-pill:hover,
+        #desktopMainNav button:hover {
+            background: rgba(255, 255, 255, 0.08) !important;
+            color: #ffffff !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
+        }
+        #desktopMainNav .tab-active,
+        #desktopMainNav .nav-pill.tab-active {
+            background: linear-gradient(135deg, #0f766e 0%, #0e7490 100%) !important;
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            border: 1px solid rgba(45, 212, 191, 0.45) !important;
+            box-shadow: 0 2px 10px rgba(14, 116, 144, 0.35) !important;
         }
         .scrollbar-none::-webkit-scrollbar {
             display: none !important;
@@ -406,6 +476,14 @@
             box-shadow: 0 8px 32px rgba(15,32,64,0.08), 0 1px 0 rgba(255,255,255,0.9) inset;
         }
         .glass-card:hover { box-shadow: 0 16px 48px rgba(15,32,64,0.14), 0 1px 0 rgba(255,255,255,0.9) inset; }
+        html.dark .glass-card {
+            background: #0a1526 !important;
+            border: 1px solid rgba(255,255,255,0.08) !important;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.45), 0 1px 0 rgba(255,255,255,0.04) inset !important;
+        }
+        html.dark .glass-card:hover {
+            box-shadow: 0 16px 48px rgba(0,0,0,0.65), 0 1px 0 rgba(255,255,255,0.06) inset !important;
+        }
         .stat-card {
             background: linear-gradient(135deg, #fff 60%, rgba(220,252,255,0.6));
             border: 1px solid rgba(14,165,233,0.15);
@@ -414,6 +492,14 @@
             transition: all 0.25s cubic-bezier(.4,0,.2,1);
         }
         .stat-card:hover { transform: translateY(-3px); box-shadow: 0 12px 32px rgba(15,32,64,0.15); }
+        html.dark .stat-card {
+            background: linear-gradient(135deg, #0a1526 60%, #0e1e36) !important;
+            border: 1px solid rgba(20,184,166,0.2) !important;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+        }
+        html.dark .stat-card:hover {
+            box-shadow: 0 12px 32px rgba(0,0,0,0.7) !important;
+        }
         .card-hover:hover { transform: translateY(-4px); box-shadow: 0 12px 32px rgba(15,32,64,0.15); transition: all 0.25s; }
 
         /* ===== Sailor Drag Cards ===== */
@@ -747,8 +833,8 @@
             to   { opacity: 1; transform: translateY(0); }
         }
 
-        /* ===== Gold accent line for header ===== */
-        .gold-line { height: 2px; background: linear-gradient(90deg, transparent, var(--gold), var(--gold-light), var(--gold), transparent); }
+        /* ===== Refined Naval accent line for header ===== */
+        .gold-line { height: 1px; background: linear-gradient(90deg, transparent, rgba(20, 184, 166, 0.4), rgba(6, 182, 212, 0.3), transparent); }
         /* ===== Settings Tabs ===== */
         .settings-tab-btn { background: #f1f5f9; color: #64748b; transition: all 0.2s; }
         .settings-tab-btn:hover { background: #e2e8f0; color: #334155; }
@@ -758,7 +844,7 @@
     <!-- Google Identity Services (OAuth 2.0) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
-<body class="min-h-screen" style="background:linear-gradient(160deg,#e8f4f8 0%,#dbeafe 25%,#e0f2fe 55%,#ecfdf5 100%)">
+<body class="min-h-screen">
     <!-- ==================== PREMIUM NAVAL LOGIN SCREEN ==================== -->
     <div id="loginScreen" class="fixed inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-teal-950 z-50 flex items-center justify-center p-4">
         <div class="bg-white/10 backdrop-blur-2xl border border-white/20 rounded-3xl p-6 sm:p-8 w-full max-w-md shadow-2xl text-center space-y-4">
@@ -766,7 +852,7 @@
             <!-- Crest and Title -->
             <div class="flex flex-col items-center gap-3">
                 <div class="w-24 h-24 flex items-center justify-center filter drop-shadow-[0_10px_25px_rgba(20,184,166,0.4)]">
-                    <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
+                    <img src="logo-crest.png" alt="Navy Crest" class="w-full h-full object-contain">
                 </div>
                 <div>
                     <h2 class="text-xl font-black text-white tracking-wide">Civil Engineering Management System</h2>
@@ -890,67 +976,77 @@
         <div class="container mx-auto px-2.5 sm:px-4">
             <div class="flex items-center justify-between min-h-[48px] sm:min-h-[72px] py-1 gap-2">
 
-                <!-- Brand -->
-                <div class="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-                    <div class="w-7 h-7 sm:w-[52px] sm:h-[52px] rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center">
-                        <img src="logo.png" alt="Navy Crest" class="w-full h-full object-contain">
+                <!-- Executive Naval Brand Area -->
+                <div class="flex items-center gap-3.5 flex-shrink-0 cursor-pointer select-none group py-1 transition-all duration-200" onclick="switchView('dashboard')" title="CMSys Command Dashboard">
+                    <!-- Precision 3D Naval Crest Insignia -->
+                    <div class="relative w-11 h-11 sm:w-12 sm:h-12 flex-shrink-0 filter drop-shadow-[0_4px_14px_rgba(6,182,212,0.35)] group-hover:drop-shadow-[0_6px_22px_rgba(6,182,212,0.6)] transition-all duration-300 transform group-hover:scale-105">
+                        <img src="logo-crest.png" alt="CMSys Naval Insignia" class="w-full h-full object-contain">
                     </div>
-                    <div>
-                        <div class="flex items-center gap-1.5 sm:gap-2">
-                            <h1 class="text-xs sm:text-[15px] font-bold text-white tracking-wide flex items-center gap-1.5">
-                                CMSys 
-                                <span class="text-amber-300 font-black text-[9px] sm:text-[11px] bg-amber-500/25 px-2 py-0.5 rounded-full border border-amber-500/50 font-mono flex items-center gap-1 shadow-sm shadow-amber-950/60 animate-pulse">
-                                    🧪 BETA v5.25.21
+                    <!-- Authoritative Typographic Lockup -->
+                    <div class="flex flex-col justify-center">
+                        <div class="flex items-center gap-2">
+                            <span class="text-[19px] sm:text-[22px] font-black tracking-[-0.03em] leading-none select-none flex items-center" style="font-family:'Plus Jakarta Sans',sans-serif">
+                                <span class="text-white">CM</span><span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-300 via-cyan-300 to-sky-400 drop-shadow-[0_0_12px_rgba(6,182,212,0.35)]">Sys</span>
+                            </span>
+                            <span class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9.5px] font-mono font-semibold bg-cyan-950/50 text-cyan-300 border border-cyan-500/30 backdrop-blur-xs tracking-wide shadow-xs">
+                                <span class="relative flex h-1.5 w-1.5">
+                                    <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span class="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
                                 </span>
-                            </h1>
+                                v5.25.35
+                            </span>
                         </div>
-                        <p class="brand-tag leading-none hidden md:block">CE Management · Trincomalee</p>
+                        <div class="flex items-center gap-2 mt-1 leading-none whitespace-nowrap select-none">
+                            <span class="text-[9.5px] font-extrabold tracking-[0.22em] text-slate-300 uppercase">SLN DOCKYARD</span>
+                            <span class="w-1 h-1 rounded-full bg-cyan-400/60"></span>
+                            <span class="text-[9.5px] font-semibold tracking-[0.16em] text-slate-400 uppercase">TRINCOMALEE</span>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Navigation (Desktop) in 2 Clean Rows -->
-                <div class="hidden md:flex items-center justify-center min-w-0 flex-1 px-1">
-                    <nav id="desktopMainNav" class="bg-white/5 backdrop-blur rounded-xl p-1 border border-white/10 select-none">
+                <div class="hidden md:flex items-center justify-center min-w-0 flex-1 px-2">
+                    <nav id="desktopMainNav" class="bg-slate-950/75 backdrop-blur-md rounded-2xl p-1.5 border border-slate-800/80 select-none shadow-lg">
                         <!-- Row 1: Core Daily Operations -->
                         <div class="nav-row">
-                            <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill text-slate-300 tab-active">
-                                <span>📊 </span>Dashboard
+                            <button onclick="switchView('dashboard')" id="tab-dashboard" class="nav-pill text-slate-300 tab-active" title="Command Dashboard">
+                                <span>📊</span> Dashboard
                             </button>
-                            <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill text-slate-300">
-                                <span>📋 </span>Daily Details
+                            <button onclick="switchView('dailydetails')" id="tab-dailydetails" class="nav-pill text-slate-300" title="Daily Deployment & Details">
+                                <span>📋</span> Daily Details
                             </button>
-                            <button onclick="switchView('summary')" id="tab-summary" class="nav-pill text-slate-300">
-                                <span>📊 </span>Summary
+                            <button onclick="switchView('summary')" id="tab-summary" class="nav-pill text-slate-300" title="Operational Summary">
+                                <span>📈</span> Summary
                             </button>
-                            <button onclick="switchView('jobcards')" id="tab-jobcards" class="nav-pill text-slate-300">
-                                <span>📋 </span>Job Cards
+                            <button onclick="switchView('jobcards')" id="tab-jobcards" class="nav-pill text-slate-300" title="Job Cards Management">
+                                <span>🎫</span> Job Cards
                             </button>
-                            <button onclick="switchView('inventory')" id="tab-inventory" class="nav-pill text-slate-300">
-                                <span>📦 </span>Inventory
+                            <button onclick="switchView('inventory')" id="tab-inventory" class="nav-pill text-slate-300" title="Material & Inventory">
+                                <span>📦</span> Inventory
                             </button>
-                            <button onclick="switchView('estimates')" id="tab-estimates" class="nav-pill text-slate-300">
-                                <span>📐 </span>Estimates
+                            <button onclick="switchView('estimates')" id="tab-estimates" class="nav-pill text-slate-300" title="Estimates & Approvals">
+                                <span>📐</span> Estimates
                             </button>
                         </div>
                         <!-- Row 2: Management & Admin -->
                         <div class="nav-row">
-                            <button onclick="switchView('documents')" id="tab-documents" class="nav-pill text-slate-300">
-                                <span>📄 </span>Documents
+                            <button onclick="switchView('documents')" id="tab-documents" class="nav-pill text-slate-300" title="Documents & Letters">
+                                <span>📄</span> Documents
                             </button>
-                            <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill text-slate-300">
-                                <span>⚓ </span>Sailors
+                            <button onclick="switchView('sailors')" id="tab-sailors" class="nav-pill text-slate-300" title="Sailors Directory & Performance">
+                                <span>⚓</span> Sailors
                             </button>
-                            <button onclick="switchView('maintenance')" id="tab-maintenance" class="nav-pill text-slate-300">
-                                <span>📍 </span>Locations & LMD
+                            <button onclick="switchView('maintenance')" id="tab-maintenance" class="nav-pill text-slate-300" title="Locations & LMD">
+                                <span>📍</span> Locations & LMD
                             </button>
-                            <button onclick="switchView('reports')" id="tab-reports" class="nav-pill text-slate-300">
-                                <span>📈 </span>Reports
+                            <button onclick="switchView('reports')" id="tab-reports" class="nav-pill text-slate-300" title="Operational Reports">
+                                <span>📊</span> Reports
                             </button>
-                            <button onclick="switchView('projects')" id="tab-projects" class="nav-pill text-slate-300">
-                                <span>🏗️ </span>Projects
+                            <button onclick="switchView('projects')" id="tab-projects" class="nav-pill text-slate-300" title="Projects Hub">
+                                <span>🏗️</span> Projects
                             </button>
-                            <button onclick="openSettingsView()" id="tab-settings" class="nav-pill text-slate-300">
-                                <span>⚙️ </span>Settings
+                            <button onclick="openSettingsView()" id="tab-settings" class="nav-pill text-slate-300" title="System Settings">
+                                <span>⚙️</span> Settings
                             </button>
                         </div>
                     </nav>
@@ -964,16 +1060,15 @@
                     </a>
 
                     <!-- Dark Mode Toggle Button -->
-                    <button onclick="toggleDarkMode()" id="darkModeToggleBtn" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs sm:text-sm bg-slate-800/60 hover:bg-slate-700 text-slate-300 hover:text-white cursor-pointer transition-all shadow-sm border border-slate-700/40" title="Toggle Theme (Light / Dark)">
+                    <button onclick="toggleDarkMode()" id="darkModeToggleBtn" class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white cursor-pointer transition-all shadow-sm border border-slate-700/60" title="Toggle Theme (Light / Dark)">
                         🌙
                     </button>
 
-                    <button onclick="triggerPwaInstall()" id="installAppBtn" class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-xs sm:text-sm bg-teal-800/50 hover:bg-teal-700/50 text-teal-300 hover:text-white cursor-pointer transition-all shadow-sm border border-teal-700/30 hidden" title="📱 Install App on PC/Mobile">
+                    <button onclick="triggerPwaInstall()" id="installAppBtn" class="w-8 h-8 rounded-lg flex items-center justify-center text-xs sm:text-sm bg-teal-800/50 hover:bg-teal-700/50 text-teal-300 hover:text-white cursor-pointer transition-all shadow-sm border border-teal-700/30 hidden" title="📱 Install App on PC/Mobile">
                         📲
                     </button>
 
-                    <select id="zoneSelector" onchange="changeZone()" class="text-[11px] sm:text-xs rounded-lg px-2 py-1 sm:py-1.5 border border-teal-600/50 font-medium cursor-pointer max-w-[110px] xs:max-w-[140px] sm:max-w-[220px] text-ellipsis"
-                        style="background:rgba(13,148,136,0.18);color:#5eead4;">
+                    <select id="zoneSelector" onchange="changeZone()" class="text-[11px] rounded-xl px-2.5 py-1.5 border border-slate-700/80 hover:border-teal-500/50 font-bold cursor-pointer w-[125px] sm:w-[155px] md:w-[160px] truncate bg-slate-900/90 text-cyan-300 shadow-sm focus:outline-none focus:ring-1 focus:ring-teal-500 transition-all" title="Select Operational Zone">
                     </select>
                     <script>
                         (function() {
@@ -988,15 +1083,14 @@
                         })();
                     </script>
                     <div class="relative">
-                        <button onclick="toggleProfileDropdown()" id="profileMenuBtn" class="w-7 h-7 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center text-[9px] sm:text-[10px] font-bold text-white shadow-lg cursor-pointer hover:scale-105 active:scale-95 transition-all shrink-0"
-                            style="background:linear-gradient(135deg,#0d9488,#0891b2)" title="Profile Actions">OIC</button>
-                        <div id="profileDropdown" class="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-xl border border-slate-200 py-2 z-50 hidden">
-                            <div class="px-4 py-2 border-b border-slate-100 text-left">
+                        <button onclick="toggleProfileDropdown()" id="profileMenuBtn" class="w-8 h-8 sm:w-9 sm:h-9 rounded-full overflow-hidden flex items-center justify-center text-[10px] font-bold text-white shadow-md cursor-pointer hover:scale-105 active:scale-95 transition-all shrink-0 bg-slate-800 border border-slate-600/60" title="Profile Actions">OIC</button>
+                        <div id="profileDropdown" class="absolute right-0 mt-2 w-64 bg-slate-900 text-slate-100 rounded-xl shadow-2xl border border-slate-700/80 py-2 z-50 hidden">
+                            <div class="px-4 py-2 border-b border-slate-800 text-left">
                                 <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Active Profile</p>
-                                <p id="profileActiveName" class="text-xs font-bold text-slate-800 mt-0.5 truncate">Command / OIC</p>
-                                <p id="profileActiveRole" class="text-[10px] text-teal-600 font-semibold uppercase">System Administrator</p>
+                                <p id="profileActiveName" class="text-xs font-bold text-white mt-0.5 truncate">Command / OIC</p>
+                                <p id="profileActiveRole" class="text-[10px] text-cyan-400 font-semibold uppercase">System Administrator</p>
                             </div>
-                            <div class="max-h-60 overflow-y-auto divide-y divide-slate-50 text-left" id="profileOptionsList">
+                            <div class="max-h-60 overflow-y-auto divide-y divide-slate-800 text-left" id="profileOptionsList">
                                 <!-- Dynamic options loaded here -->
                             </div>
                         </div>
@@ -1008,40 +1102,65 @@
     </header>
 
     <!-- ===== Tactical Status Bar (Desktop Only) ===== -->
-    <div id="tacticalStatusBar" class="hidden md:block no-print" style="background:linear-gradient(90deg,#0a1628 0%,#152a55 50%,#0a1628 100%);border-bottom:1px solid rgba(13,148,136,0.3)">
-        <div class="container mx-auto px-2.5 sm:px-4 py-1 sm:py-1.5 flex flex-col md:flex-row items-center justify-between gap-1 sm:gap-2 text-xs">
-            <div class="flex items-center justify-between md:justify-start gap-2 sm:gap-4 text-slate-400 w-full md:w-auto text-[10px] sm:text-xs">
-                <span class="mono flex items-center gap-1">📅 <span id="currentDate" class="text-teal-300"></span></span>
-                <span class="mono flex items-center gap-1">🕐 <span id="currentTime" class="text-teal-300"></span></span>
-                <span id="onlineIndicator" class="flex items-center gap-1 font-bold text-[8px] sm:text-[9px] uppercase tracking-wider rounded-full px-1.5 py-0.5 border border-emerald-500/20 bg-emerald-500/10 text-emerald-400">
-                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+    <div id="tacticalStatusBar" class="hidden md:block no-print bg-[#060c18] border-b border-slate-800/80">
+        <div class="container mx-auto px-2.5 sm:px-4 py-1.5 flex flex-col md:flex-row items-center justify-between gap-1.5 text-xs">
+            <!-- Left: Precision Chrono & Status Cluster -->
+            <div class="flex items-center justify-between md:justify-start gap-2.5 text-slate-400 w-full md:w-auto text-[11px]">
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/70 border border-slate-800/70 text-slate-300">
+                    <span class="text-slate-400 text-xs">📅</span>
+                    <span id="currentDate" class="font-medium text-slate-200"></span>
+                </div>
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/70 border border-slate-800/70 text-cyan-300 font-mono">
+                    <span class="text-slate-400 text-xs">🕐</span>
+                    <span id="currentTime" class="font-bold text-cyan-300"></span>
+                </div>
+                <span id="onlineIndicator" class="inline-flex items-center gap-1.5 font-bold text-[9px] uppercase tracking-wider rounded-lg px-2.5 py-1 border border-emerald-500/25 bg-emerald-950/40 text-emerald-400 shadow-2xs">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]"></span>
                     <span>Online</span>
                 </span>
-                <span id="currentRootingBadge" class="flex items-center gap-1 font-bold text-[8px] sm:text-[9px] uppercase tracking-wider rounded-full px-1.5 py-0.5 border transition-all hidden">
+                <span id="currentRootingBadge" class="inline-flex items-center gap-1.5 font-bold text-[9px] uppercase tracking-wider rounded-lg px-2.5 py-1 border transition-all hidden">
                     <span id="currentRootingDot" class="w-1.5 h-1.5 rounded-full"></span>
                     <span id="currentRootingText"></span>
                 </span>
             </div>
-            <!-- Sleek Horizontal Metric Ribbon -->
-            <div class="flex items-center gap-1 sm:gap-1.5 overflow-x-auto w-full md:w-auto py-0.5 scrollbar-none justify-start md:justify-end">
-                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(5,150,105,0.2);color:#34d399;border:1px solid rgba(5,150,105,0.35)">
-                    ⚓ NET: <span id="netForce">24</span>
-                </span>
-                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(245,158,11,0.2);color:#fbbf24;border:1px solid rgba(245,158,11,0.35)">
-                    🔨 TASK: <span id="assignedCount">18</span>
-                </span>
-                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick="switchView('projects')" title="Out Projects, Other Bases & Housing Projects" style="background:rgba(147,51,234,0.2);color:#c084fc;border:1px solid rgba(147,51,234,0.35)">
-                    🏛️ DEPLOY: <span id="deployedCount">0</span>
-                </span>
-                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0 cursor-pointer hover:opacity-80 transition-opacity" onclick="switchView('nastatus')" title="N/A Sailors Status" style="background:rgba(239,68,68,0.2);color:#fca5a5;border:1px solid rgba(239,68,68,0.35)">
-                    ⚠️ N/A: <span id="todayNaCount">0</span>
-                </span>
-                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(59,130,246,0.2);color:#93c5fd;border:1px solid rgba(59,130,246,0.35)">
-                    ✅ AVAIL: <span id="availableCount">6</span>
-                </span>
-                <span class="px-2 py-0.5 rounded-full text-[9.5px] sm:text-[11px] font-bold whitespace-nowrap shrink-0" style="background:rgba(168,85,247,0.2);color:#d8b4fe;border:1px solid rgba(168,85,247,0.35)">
-                    👥 TEAM: <span id="zoneTeamCount">12</span>
-                </span>
+
+            <!-- Right: Command Telemetry Cluster -->
+            <div class="flex items-center gap-1.5 overflow-x-auto w-full md:w-auto py-0.5 scrollbar-none justify-start md:justify-end">
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 transition-all shadow-2xs" title="Total Active Force">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)] shrink-0"></span>
+                    <span class="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">NET</span>
+                    <span id="netForce" class="font-mono font-black text-[12px] text-emerald-400 tabular-nums ml-0.5">24</span>
+                </div>
+
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 transition-all shadow-2xs" title="Force on Active Tasks">
+                    <span class="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.8)] shrink-0"></span>
+                    <span class="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">TASK</span>
+                    <span id="assignedCount" class="font-mono font-black text-[12px] text-amber-300 tabular-nums ml-0.5">18</span>
+                </div>
+
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800/80 hover:border-purple-500/50 hover:bg-purple-950/20 cursor-pointer active:scale-95 transition-all shadow-2xs" onclick="switchView('projects')" title="Out Projects, Other Bases & Housing Projects (Click to View)">
+                    <span class="w-1.5 h-1.5 rounded-full bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.8)] shrink-0"></span>
+                    <span class="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">DEPLOY</span>
+                    <span id="deployedCount" class="font-mono font-black text-[12px] text-purple-300 tabular-nums ml-0.5">0</span>
+                </div>
+
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800/80 hover:border-rose-500/50 hover:bg-rose-950/20 cursor-pointer active:scale-95 transition-all shadow-2xs" onclick="switchView('nastatus')" title="N/A Sailors Status (Click to View)">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400 shadow-[0_0_6px_rgba(251,113,133,0.8)] shrink-0"></span>
+                    <span class="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">N/A</span>
+                    <span id="todayNaCount" class="font-mono font-black text-[12px] text-rose-300 tabular-nums ml-0.5">0</span>
+                </div>
+
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 transition-all shadow-2xs" title="Force Available for Deployment">
+                    <span class="w-1.5 h-1.5 rounded-full bg-teal-400 shadow-[0_0_6px_rgba(45,212,191,0.8)] shrink-0"></span>
+                    <span class="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">AVAIL</span>
+                    <span id="availableCount" class="font-mono font-black text-[12px] text-teal-300 tabular-nums ml-0.5">6</span>
+                </div>
+
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-900/80 border border-slate-800/80 hover:border-slate-700 transition-all shadow-2xs" title="Zone Fixed Team Size">
+                    <span class="w-1.5 h-1.5 rounded-full bg-sky-400 shadow-[0_0_6px_rgba(56,189,248,0.8)] shrink-0"></span>
+                    <span class="text-[9.5px] font-bold uppercase tracking-wider text-slate-400">TEAM</span>
+                    <span id="zoneTeamCount" class="font-mono font-black text-[12px] text-slate-200 tabular-nums ml-0.5">12</span>
+                </div>
             </div>
         </div>
     </div>
@@ -1600,8 +1719,8 @@
         <div id="view-jobcards" class="view-content hidden">
             <div class="flex items-center justify-between mb-6">
                 <div>
-                    <h2 class="text-2xl font-bold" style="color:#0a1628">Job Cards Management</h2>
-                    <p class="text-slate-500 text-sm">Track materials and labor • Send feedback links for completed jobs</p>
+                    <h2 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Job Cards Management</h2>
+                    <p class="text-slate-500 dark:text-slate-400 text-sm">Track materials and labor • Send feedback links for completed jobs</p>
                 </div>
                 <div class="flex gap-2 flex-wrap items-center">
                     <button id="btnToggleMergeJobCards" onclick="toggleJobCardMergeMode()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all">
@@ -1819,8 +1938,8 @@
             <!-- Main View Header -->
             <div class="flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
                 <div>
-                    <h2 class="text-2xl font-bold" style="color:#0a1628">Inventory & Material Management</h2>
-                    <p class="text-sm text-slate-500">Stock Balance, Materials Tracking, and Temporary Issue Book</p>
+                    <h2 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Inventory & Material Management</h2>
+                    <p class="text-sm text-slate-500 dark:text-slate-400">Stock Balance, Materials Tracking, and Temporary Issue Book</p>
                 </div>
                 <div class="flex gap-2 flex-wrap" id="invMainStockActions">
                     <button onclick="openBatchAssignBookNosModal()" class="bg-amber-700 hover:bg-amber-800 text-white px-3.5 py-2 rounded-lg text-xs font-semibold shadow-xs flex items-center gap-1" title="Batch assign Stock Book numbers by Category (e.g. BMS -> Book 01, Plumbing -> Book 02)">
@@ -2375,8 +2494,8 @@
         <div id="view-estimates" class="view-content hidden">
             <div class="flex items-center justify-between mb-6">
                 <div>
-                    <h2 class="text-2xl font-bold" style="color:#0a1628">Estimating & Approval</h2>
-                    <p class="text-slate-500">Material costs with availability • Labor requirements</p>
+                    <h2 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Estimating & Approval</h2>
+                    <p class="text-slate-500 dark:text-slate-400">Material costs with availability • Labor requirements</p>
                 </div>
                 <div class="flex gap-3">
                     <div class="flex gap-2">
@@ -2454,9 +2573,9 @@
                 <div>
                     <div class="flex items-center gap-2">
                         <span class="text-2xl">📍</span>
-                        <h2 class="text-2xl font-bold" style="color:#0a1628">Locations & Maintenance (LMD)</h2>
+                        <h2 class="text-2xl font-black text-slate-900 dark:text-white tracking-tight">Locations & Maintenance (LMD)</h2>
                     </div>
-                    <p class="text-slate-500 text-xs mt-0.5">Track all zone locations, recently attended jobs, and pending maintenance tasks</p>
+                    <p class="text-slate-500 dark:text-slate-400 text-xs mt-0.5">Track all zone locations, recently attended jobs, and pending maintenance tasks</p>
                 </div>
                 <div class="flex items-center gap-2 flex-wrap">
                     <button onclick="openZoneManager()" class="bg-slate-700 hover:bg-slate-800 text-white px-3.5 py-2 rounded-xl text-xs font-semibold shadow-sm transition-all flex items-center gap-1.5">
@@ -3372,16 +3491,19 @@
             <!-- Header with Sections Navigation -->
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 class="text-2xl font-bold flex items-center gap-2" style="color:#0a1628">
-                        <span class="text-teal-600">⚓</span> Sailor's Details
+                    <h2 class="text-2xl font-black flex items-center gap-2 text-slate-900 dark:text-white tracking-tight">
+                        <span class="text-teal-600 dark:text-teal-400">⚓</span> Sailor's Details
                     </h2>
                 </div>
-                <div class="flex items-center gap-2 bg-slate-100/80 p-1 rounded-2xl border border-slate-200/80">
-                    <button id="btnSailorsSecDetails" onclick="switchSailorSection('details')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white text-slate-800 shadow-sm border border-slate-200/70 transition-all">
+                <div class="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-900/90 p-1 rounded-xl border border-slate-200 dark:border-slate-800 flex-wrap">
+                    <button id="btnSailorsSecDetails" onclick="switchSailorSection('details')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white dark:bg-teal-600 text-slate-800 dark:text-white shadow-sm border border-slate-200/70 dark:border-teal-500/40 transition-all">
                         <span>📑</span> Section 1: Details
                     </button>
-                    <button id="btnSailorsSecPerf" onclick="switchSailorSection('performance')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-medium text-slate-500 hover:text-slate-800 transition-all">
+                    <button id="btnSailorsSecPerf" onclick="switchSailorSection('performance')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-all">
                         <span>📊</span> Section 2: Performance Analyser
+                    </button>
+                    <button id="btnSailorsSecLeave" onclick="switchSailorSection('leave')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-all">
+                        <span>🏥</span> Section 3: Leave & Sick Entry
                     </button>
                 </div>
             </div>
@@ -3389,36 +3511,36 @@
             <!-- Section 1: Details View Container -->
             <div id="sailorsSectionDetails" class="space-y-4">
                 <!-- Directory Controls Card -->
-                <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-4 space-y-3.5">
+                <div class="glass-card bg-white dark:bg-[#0a1526] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm dark:shadow-xl p-4 space-y-3.5">
                     <!-- Row 1: Search, View Toggle, Columns, Total -->
                     <div class="flex flex-wrap items-center justify-between gap-3">
                         <div class="flex-1 min-w-[280px] relative">
                             <span class="absolute left-3.5 top-2.5 text-slate-400 text-sm">🔍</span>
                             <input type="text" id="directorySailorSearch" placeholder="Search by Name, City, or Official Number..."
-                                class="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all"
+                                class="w-full pl-9 pr-4 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-sm bg-slate-50 dark:bg-[#060e1a] text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:bg-white dark:focus:bg-[#060e1a] focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none transition-all"
                                 oninput="renderSailorsView()">
                         </div>
 
                         <div class="flex items-center gap-2">
                             <!-- Table View vs Cards Grid Toggle -->
-                            <div class="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                            <div class="flex items-center bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
                                 <button id="btnViewTable" onclick="setSailorDirectoryViewMode('table')" class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold bg-teal-600 text-white shadow-sm transition-all">
                                     <span>📑</span> Table View
                                 </button>
-                                <button id="btnViewGrid" onclick="setSailorDirectoryViewMode('grid')" class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-200 transition-all">
+                                <button id="btnViewGrid" onclick="setSailorDirectoryViewMode('grid')" class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800 transition-all">
                                     <span>🎴</span> Cards Grid
                                 </button>
                             </div>
 
                             <!-- Columns Customizer Dropdown -->
                             <div class="relative">
-                                <button type="button" onclick="toggleSailorColumnMenu(event)" class="flex items-center gap-1.5 px-3 py-2 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 shadow-sm cursor-pointer">
+                                <button type="button" onclick="toggleSailorColumnMenu(event)" class="flex items-center gap-1.5 px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-sm cursor-pointer">
                                     <span>👁️</span> Columns <span class="text-[10px]">▾</span>
                                 </button>
-                                <div id="sailorColumnMenu" class="hidden absolute right-0 mt-2 w-72 bg-white border border-slate-200 rounded-2xl shadow-2xl p-4 z-40 space-y-3 text-xs">
-                                    <div class="flex items-center justify-between pb-2 border-b border-slate-100">
-                                        <span class="font-bold text-slate-800 flex items-center gap-1"><span>⚙️</span> Columns (තීරු සැකසීම)</span>
-                                        <button type="button" onclick="resetSailorColumns()" class="text-[11px] text-teal-600 hover:text-teal-800 font-bold cursor-pointer">↺ Reset</button>
+                                <div id="sailorColumnMenu" class="hidden absolute right-0 mt-2 w-72 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-4 z-40 space-y-3 text-xs text-slate-800 dark:text-slate-200">
+                                    <div class="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                                        <span class="font-bold text-slate-800 dark:text-white flex items-center gap-1"><span>⚙️</span> Columns (තීරු සැකසීම)</span>
+                                        <button type="button" onclick="resetSailorColumns()" class="text-[11px] text-teal-600 dark:text-teal-400 hover:text-teal-800 dark:hover:text-teal-300 font-bold cursor-pointer">↺ Reset</button>
                                     </div>
                                     <p class="text-[10px] text-slate-400">Select columns to display & reorder using ⬆️ ⬇️</p>
                                     <div id="sailorColumnList" class="space-y-1.5 max-h-64 overflow-y-auto pr-1">
@@ -3428,16 +3550,16 @@
                             </div>
 
                             <!-- Total Count Badge -->
-                            <span class="text-xs bg-teal-50 text-teal-700 font-bold px-4 py-2 rounded-xl border border-teal-200 whitespace-nowrap" id="directoryTotalCount">
+                            <span class="text-xs bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 font-bold px-4 py-2 rounded-xl border border-teal-200 dark:border-teal-800/80 whitespace-nowrap shadow-xs" id="directoryTotalCount">
                                 Total: 0 Sailors
                             </span>
                         </div>
                     </div>
 
                     <!-- Row 2: Trade Filter, City Filter, Special Skills Filter -->
-                    <div class="border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between gap-3">
+                    <div class="border-t border-slate-100 dark:border-slate-800/80 pt-3 flex flex-wrap items-center justify-between gap-3">
                         <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-xs font-bold text-slate-600 mr-1">Trade:</span>
+                            <span class="text-xs font-bold text-slate-600 dark:text-slate-400 mr-1">Trade:</span>
                             <div class="flex flex-wrap gap-1.5" id="directoryTradeFilters">
                                 <button onclick="filterDirectoryTrade('ALL')" class="dir-trade-btn px-2.5 py-1 text-xs rounded-lg font-bold bg-slate-900 text-white transition-all" id="dir-trade-ALL">ALL</button>
                                 <button onclick="filterDirectoryTrade('MA')" class="dir-trade-btn px-2.5 py-1 text-xs rounded-lg font-medium bg-slate-100 hover:bg-slate-200 text-slate-600 transition-all" id="dir-trade-MA">MA</button>
@@ -3453,21 +3575,21 @@
                         </div>
 
                         <div class="flex flex-wrap items-center gap-2">
-                            <select id="directoryCityFilter" onchange="renderSailorsView()" class="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-700 outline-none">
+                            <select id="directoryCityFilter" onchange="renderSailorsView()" class="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-[#060e1a] focus:bg-white dark:focus:bg-[#060e1a] focus:ring-2 focus:ring-teal-500 font-medium text-slate-700 dark:text-slate-200 outline-none">
                                 <option value="ALL">🏙️ All Cities / Hometowns</option>
                             </select>
 
-                            <select id="directorySkillFilter" onchange="renderSailorsView()" class="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-700 outline-none">
+                            <select id="directorySkillFilter" onchange="renderSailorsView()" class="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-[#060e1a] focus:bg-white dark:focus:bg-[#060e1a] focus:ring-2 focus:ring-teal-500 font-medium text-slate-700 dark:text-slate-200 outline-none">
                                 <option value="ALL">💡 All Special Skills</option>
                             </select>
                         </div>
                     </div>
 
                     <!-- Row 3: Score Range, Period, Status, Reset -->
-                    <div class="border-t border-slate-100 pt-3 flex flex-wrap items-center justify-between gap-3">
+                    <div class="border-t border-slate-100 dark:border-slate-800/80 pt-3 flex flex-wrap items-center justify-between gap-3">
                         <div class="flex flex-wrap items-center gap-2">
-                            <span class="text-xs font-bold text-slate-600">Score Range:</span>
-                            <select id="directoryScoreFilter" onchange="renderSailorsView()" class="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-700 outline-none">
+                            <span class="text-xs font-bold text-slate-600 dark:text-slate-400">Score Range:</span>
+                            <select id="directoryScoreFilter" onchange="renderSailorsView()" class="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-[#060e1a] focus:bg-white dark:focus:bg-[#060e1a] focus:ring-2 focus:ring-teal-500 font-medium text-slate-700 dark:text-slate-200 outline-none">
                                 <option value="ALL">⭐ All Performance Levels (1 - 10)</option>
                                 <option value="top">⭐ 9.0 - 10.0 (Outstanding)</option>
                                 <option value="good">⭐ 7.0 - 8.9 (Above Average / Good)</option>
@@ -3475,16 +3597,16 @@
                                 <option value="low">⚠️ Below 5.0 (Needs Attention)</option>
                             </select>
 
-                            <div class="flex items-center gap-1.5 text-xs text-slate-500 ml-2">
+                            <div class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 ml-2">
                                 <span class="font-medium">📅 Period (Opt):</span>
-                                <input type="date" id="directoryDateFrom" onchange="renderSailorsView()" class="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:bg-white outline-none">
+                                <input type="date" id="directoryDateFrom" onchange="renderSailorsView()" class="px-2 py-1 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-slate-50 dark:bg-[#060e1a] text-slate-800 dark:text-slate-200 focus:bg-white outline-none">
                                 <span>to</span>
-                                <input type="date" id="directoryDateTo" onchange="renderSailorsView()" class="px-2 py-1 border border-slate-200 rounded-lg text-xs bg-slate-50 focus:bg-white outline-none">
+                                <input type="date" id="directoryDateTo" onchange="renderSailorsView()" class="px-2 py-1 border border-slate-200 dark:border-slate-700 rounded-lg text-xs bg-slate-50 dark:bg-[#060e1a] text-slate-800 dark:text-slate-200 focus:bg-white outline-none">
                             </div>
                         </div>
 
                         <div class="flex items-center gap-2">
-                            <select id="directoryStatusDropdown" onchange="renderSailorsView()" class="px-3 py-1.5 border border-slate-200 rounded-xl text-xs bg-slate-50 focus:bg-white focus:ring-2 focus:ring-teal-500 font-medium text-slate-700 outline-none">
+                            <select id="directoryStatusDropdown" onchange="renderSailorsView()" class="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-slate-50 dark:bg-[#060e1a] focus:bg-white dark:focus:bg-[#060e1a] focus:ring-2 focus:ring-teal-500 font-medium text-slate-700 dark:text-slate-200 outline-none">
                                 <option value="ALL">All Statuses</option>
                                 <option value="AVAILABLE">✓ Available</option>
                                 <option value="BUSY">⚠️ Daily Task / Assigned</option>
@@ -3493,7 +3615,7 @@
                                 <option value="LONG_TERM">🏗️ Long Term Deployed</option>
                             </select>
 
-                            <button onclick="resetSailorFilters()" class="flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-all">
+                            <button onclick="resetSailorFilters()" class="flex items-center gap-1 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold transition-all">
                                 <span>🔄</span> Reset
                             </button>
                         </div>
@@ -3501,7 +3623,7 @@
                 </div>
 
                 <!-- Table View Container with Fixed Height, Always-Visible Scrollbars & Frozen Header/Actions -->
-                <div id="directorySailorsTableView" class="sailors-table-container bg-white rounded-2xl border border-slate-200/80 shadow-sm relative overflow-x-auto">
+                <div id="directorySailorsTableView" class="sailors-table-container bg-white dark:bg-[#0a1526] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm relative overflow-x-auto">
                     <table class="w-full text-left border-collapse min-w-[1150px]" id="sailorsMainTable">
                         <thead class="sticky top-0 z-30 shadow-md" id="directorySailorsTableHead">
                             <!-- Populated dynamically with customizable order, widths, and resizers -->
@@ -3521,6 +3643,285 @@
             <!-- Section 2: Performance Analyser Container -->
             <div id="sailorsSectionPerf" class="hidden space-y-6">
                 <!-- Analytics Dashboard rendered dynamically -->
+            </div>
+
+            <!-- ==================== Section 3: Leave & Sick Details ==================== -->
+            <style>
+            #sailorsSectionLeave .leave-top-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 1.25rem;
+                width: 100%;
+            }
+            @media (min-width: 768px) {
+                #sailorsSectionLeave .leave-top-grid {
+                    grid-template-columns: 1fr 1fr;
+                }
+            }
+            #sailorsSectionLeave .leave-main-grid {
+                display: grid;
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+                width: 100%;
+            }
+            @media (min-width: 1024px) {
+                #sailorsSectionLeave .leave-main-grid {
+                    grid-template-columns: minmax(0, 1.9fr) minmax(320px, 1fr);
+                }
+            }
+            </style>
+            <div id="sailorsSectionLeave" class="hidden space-y-6 max-w-full">
+                <!-- Top Control Bar (Search Sailor + Find Reporting Sailors) -->
+                <div class="leave-top-grid">
+                    <!-- Step 1: Find Sailor -->
+                    <div class="glass-card bg-white dark:bg-[#0a1526] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm dark:shadow-xl p-5 space-y-3.5 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                                <span class="text-teal-600 dark:text-teal-400"><i class="fa-solid fa-magnifying-glass"></i></span> STEP 1: FIND SAILOR
+                            </span>
+                            <div id="leaveSailorBadge" class="hidden items-center gap-2 px-3 py-1 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200 dark:border-teal-800/60 text-teal-800 dark:text-teal-300 text-xs font-bold shadow-2xs">
+                                <span id="leaveSailorBadgeRank"></span> <span id="leaveSailorBadgeName"></span>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <div class="relative flex-1 min-w-0">
+                                <span class="absolute left-3.5 top-3 text-slate-400 text-xs"><i class="fa-solid fa-anchor"></i></span>
+                                <input type="text" id="leaveSailorSearchInput" onkeyup="handleLeaveSailorSearchKey(event)" placeholder="Search by Off No (e.g. 76763) or Name..." class="w-full pl-9 pr-4 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs sm:text-sm bg-slate-50/50 dark:bg-[#060e1a] text-slate-900 dark:text-white placeholder-slate-400 focus:bg-white dark:focus:bg-[#060e1a] focus:ring-2 focus:ring-teal-500 outline-none transition-all">
+                                <div id="leaveSailorDropdown" class="hidden absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-[#0d1b30] border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-30 max-h-60 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800"></div>
+                            </div>
+                            <button type="button" onclick="executeLeaveSailorSearch()" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-teal-600 hover:bg-teal-500 text-white shadow-sm hover:shadow-teal-500/20 active:scale-95 transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap">
+                                <i class="fa-solid fa-magnifying-glass"></i> Search
+                            </button>
+                            <button type="button" onclick="clearLeaveSailorSearch()" class="px-4 py-2.5 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-all cursor-pointer whitespace-nowrap">
+                                Clear
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Find Reporting Sailors (Side B) -->
+                    <div class="glass-card bg-white dark:bg-[#0a1526] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm dark:shadow-xl p-5 space-y-3.5 min-w-0">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                                <span class="text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-calendar-day"></i></span> FIND REPORTING SAILORS (R/D)
+                            </span>
+                            <button type="button" onclick="setRdTodayDate()" class="text-xs font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer">Today</button>
+                        </div>
+                        <div class="flex items-center gap-2.5">
+                            <input type="date" id="rdReportDateInput" class="flex-1 px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs bg-slate-50/50 dark:bg-[#060e1a] text-slate-900 dark:text-white focus:bg-white dark:focus:bg-[#060e1a] focus:ring-2 focus:ring-teal-500 outline-none font-mono">
+                            <button type="button" onclick="findReportingSailors()" class="px-5 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm hover:shadow-emerald-500/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap">
+                                <i class="fa-solid fa-list-check"></i> Find R/D
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Status / Days in Base Banner -->
+                <div id="leaveStatusDaysBanner" class="glass-card bg-gradient-to-r from-emerald-50/80 via-teal-50/40 to-white dark:from-[#061820] dark:via-[#081f2c] dark:to-[#0a1526] p-5 rounded-2xl border border-emerald-200/90 dark:border-teal-800/60 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div class="space-y-1.5">
+                        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
+                            <span class="text-emerald-600 dark:text-emerald-400"><i class="fa-solid fa-house-chimney"></i></span> Current Status / Days in Base
+                        </h3>
+                        <div id="leaveStatusDynamicContent" class="flex items-center gap-3">
+                            <span class="text-sm text-slate-400 italic">Select a sailor above to calculate days in base and status.</span>
+                        </div>
+                    </div>
+                    <div class="text-[11px] text-slate-700 dark:text-slate-300 bg-slate-100/90 dark:bg-slate-800/80 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 max-w-md leading-relaxed shadow-2xs">
+                        <strong class="font-bold text-slate-900 dark:text-white">Note:</strong> Counts from last proper R/D or Join Date. <strong>DL, WE, HD & SIQ</strong> do NOT reset this counter. Deduct them manually.
+                    </div>
+                </div>
+
+                <!-- Main Layout: Left Form (approx 68%) + Right History/Calendar (approx 32%) -->
+                <div class="leave-main-grid">
+                    <!-- Left: Form -->
+                    <div class="glass-card bg-white dark:bg-[#0a1526] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm dark:shadow-xl p-5 sm:p-6 md:p-7 space-y-6 min-w-0">
+                        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/60 border border-teal-200/80 dark:border-teal-800/60 flex items-center justify-center text-teal-600 dark:text-teal-400 text-base">
+                                    <i class="fa-solid fa-file-signature"></i>
+                                </div>
+                                <div>
+                                    <h3 class="text-base sm:text-lg font-bold text-slate-900 dark:text-white leading-tight">
+                                        Step 2: Leave Entry for <span id="leaveSailorTitleSpan" class="text-teal-600 dark:text-teal-400 font-extrabold">—</span>
+                                    </h3>
+                                    <p class="text-xs text-slate-400 dark:text-slate-500">Configure naval victualing, leave type, and travel periods</p>
+                                </div>
+                            </div>
+                            <button type="button" onclick="resetLeaveForm()" class="px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white bg-slate-100 dark:bg-slate-800/70 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all cursor-pointer flex items-center gap-1.5">
+                                <i class="fa-solid fa-rotate-left"></i> Clear Form
+                            </button>
+                        </div>
+
+                        <form id="sailorLeaveEntryForm" onsubmit="handleSaveSailorLeave(event)" class="space-y-6">
+                            <input type="hidden" id="leaveSailorId">
+                            <input type="hidden" id="oldLeaveFrom">
+                            <input type="hidden" id="oldNoOfDays">
+
+                            <!-- Base Camp Victualing Category -->
+                            <div class="p-4 sm:p-5 rounded-2xl bg-slate-50/90 dark:bg-[#060e1a]/80 border border-slate-200/80 dark:border-slate-800/80 space-y-2.5">
+                                <label class="block text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                    Base Camp Victualing Category
+                                </label>
+                                <div class="flex flex-wrap items-center gap-6 text-xs font-bold text-slate-800 dark:text-slate-200 pt-1">
+                                    <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
+                                        <input type="radio" name="victualing_status" value="V/In" checked onchange="checkLeaveDisableLogic()" class="w-4 h-4 text-teal-600 focus:ring-teal-500">
+                                        <span class="font-medium text-slate-800 dark:text-slate-200">V/In (Stay in Base)</span>
+                                    </label>
+                                    <label class="inline-flex items-center gap-2.5 cursor-pointer select-none">
+                                        <input type="radio" name="victualing_status" value="V/Out" onchange="checkLeaveDisableLogic()" class="w-4 h-4 text-teal-600 focus:ring-teal-500">
+                                        <span class="font-medium text-slate-800 dark:text-slate-200">V/Out (Day scholar / Goes Home)</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Leave Type / Status Selector -->
+                            <div class="space-y-2.5">
+                                <label class="block text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                                    Leave Type / Status
+                                </label>
+                                <div id="leaveTypeGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs">
+                                    <!-- Populated dynamically with 13 semantic chips -->
+                                </div>
+                            </div>
+
+                            <!-- Date Grid: 4 columns on wide screens, 2 on tablet, 1 on mobile -->
+                            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                        From Date <span class="text-rose-500">*</span>
+                                    </label>
+                                    <input type="date" id="leaveFromDate" required onchange="calculateLeaveDates()" class="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-[#060e1a] text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none shadow-2xs font-mono">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                                        No of Days <span class="text-rose-500">*</span>
+                                    </label>
+                                    <input type="number" id="leaveNoOfDays" required min="0.5" step="0.5" value="1" oninput="calculateLeaveDates()" class="w-full px-3.5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-[#060e1a] text-slate-900 dark:text-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none shadow-2xs font-mono">
+                                </div>
+
+                                <div id="tdContainer">
+                                    <label class="block text-xs font-bold text-cyan-700 dark:text-cyan-400 mb-1.5 flex items-center justify-between">
+                                        <span>Travelling Date (T/D)</span>
+                                        <span class="text-[10px] font-normal text-cyan-600/80 dark:text-cyan-400/80">Day Before</span>
+                                    </label>
+                                    <input type="date" id="leaveTravellingDate" readonly class="w-full px-3.5 py-2.5 border border-cyan-300 dark:border-cyan-800/60 rounded-xl text-xs bg-cyan-50/70 dark:bg-cyan-950/40 text-cyan-950 dark:text-cyan-200 outline-none shadow-2xs font-mono cursor-not-allowed">
+                                    <p id="tdMsg" class="text-[10px] text-rose-500 dark:text-rose-400 hidden mt-1">Not applicable for V/Out or Medical/Short</p>
+                                </div>
+                                <div id="rdContainer">
+                                    <label class="block text-xs font-bold text-emerald-700 dark:text-emerald-400 mb-1.5 flex items-center justify-between">
+                                        <span>Reporting Date (R/D)</span>
+                                        <span class="text-[10px] font-normal text-emerald-600/80 dark:text-emerald-400/80">Day After</span>
+                                    </label>
+                                    <input type="date" id="leaveReportingDate" readonly class="w-full px-3.5 py-2.5 border border-emerald-300 dark:border-emerald-800/60 rounded-xl text-xs bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200 outline-none shadow-2xs font-mono cursor-not-allowed">
+                                    <p id="rdMsg" class="text-[10px] text-rose-500 dark:text-rose-400 hidden mt-1">Not applicable for V/Out or Medical/Short</p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-end gap-3 pt-5 border-t border-slate-100 dark:border-slate-800">
+                                <button type="submit" id="btnSaveSailorLeave" class="px-8 py-3 rounded-xl text-xs sm:text-sm font-bold bg-teal-600 hover:bg-teal-500 text-white shadow-md hover:shadow-teal-500/25 active:scale-95 transition-all flex items-center gap-2 cursor-pointer">
+                                    <i class="fa-solid fa-floppy-disk"></i>
+                                    <span>Save Record</span>
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Right: History & Calendar -->
+                    <div class="space-y-6 min-w-0">
+                        <!-- Recent History Card -->
+                        <div class="glass-card bg-white dark:bg-[#0a1526] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm dark:shadow-xl p-5 space-y-3.5">
+                            <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                                <h4 class="font-bold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <span class="text-teal-600 dark:text-teal-400"><i class="fa-solid fa-clock-rotate-left"></i></span> Recent History
+                                </h4>
+                                <span id="leaveHistoryCountBadge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">0</span>
+                            </div>
+                            <div class="max-h-60 overflow-y-auto custom-scrollbar">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <thead class="sticky top-0 bg-slate-50 dark:bg-[#070e1a] text-[10px] uppercase font-bold text-slate-400 border-b border-slate-100 dark:border-slate-800">
+                                        <tr>
+                                            <th class="p-2.5">PERIOD</th>
+                                            <th class="p-2.5 text-center">STS</th>
+                                            <th class="p-2.5 text-center">ACT</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="leaveHistoryTableBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                                        <tr><td colspan="3" class="p-5 text-center text-slate-400 italic">Select a sailor to view history</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Calendar Card -->
+                        <div class="glass-card bg-white dark:bg-[#0a1526] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm dark:shadow-xl p-5 space-y-4">
+                            <div class="flex items-center justify-between">
+                                <h4 class="font-bold text-xs uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                                    <span class="text-teal-600 dark:text-teal-400"><i class="fa-solid fa-calendar-days"></i></span> Calendar
+                                </h4>
+                                <div class="flex items-center gap-1.5">
+                                    <button type="button" onclick="changeLeaveCalMonth(-1)" class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs transition-colors cursor-pointer">
+                                        <i class="fa-solid fa-chevron-left"></i>
+                                    </button>
+                                    <span id="leaveCalMonthLabel" class="text-xs font-bold text-slate-800 dark:text-white px-2 min-w-[110px] text-center"></span>
+                                    <button type="button" onclick="changeLeaveCalMonth(1)" class="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center text-xs transition-colors cursor-pointer">
+                                        <i class="fa-solid fa-chevron-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 uppercase py-1 border-b border-slate-100 dark:border-slate-800">
+                                <div>Su</div><div>Mo</div><div>Tu</div><div>We</div><div>Th</div><div>Fr</div><div>Sa</div>
+                            </div>
+                            <div id="leaveCalGrid" class="grid grid-cols-7 gap-1 text-center text-xs pt-1"></div>
+                            <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-center gap-3 text-[10px] text-slate-500 dark:text-slate-400">
+                                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-indigo-600 inline-block"></span> Leave</span>
+                                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-teal-600 inline-block"></span> WE</span>
+                                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-rose-600 inline-block"></span> Med/Sick</span>
+                                <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan-500 inline-block"></span> T/D & R/D</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reporting Sailors Modal -->
+                <div id="reportingSailorsModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-3 sm:p-6 animate-fade-in">
+                    <div class="bg-white dark:bg-[#0a1526] border border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+                        <div class="p-4 sm:p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-[#070e1a]">
+                            <div>
+                                <h3 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                                    <span>📋</span> Reporting Sailors (R/D) on <span id="rdModalDateSpan" class="text-teal-500"></span>
+                                </h3>
+                                <p class="text-xs text-slate-400">Sailors scheduled to report to base on this date</p>
+                            </div>
+                            <button type="button" onclick="closeReportingSailorsModal()" class="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 flex items-center justify-center font-bold cursor-pointer">✕</button>
+                        </div>
+                        <div class="p-4 bg-slate-50/50 dark:bg-[#070e1a]/50 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center gap-3">
+                            <select id="rdFilterTrade" onchange="filterReportingSailorsTable()" class="px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-[#060e1a] text-slate-700 dark:text-slate-200 outline-none">
+                                <option value="ALL">All Trades</option>
+                            </select>
+                            <input type="text" id="rdFilterSearch" oninput="filterReportingSailorsTable()" placeholder="Search by name, off no, address, or skill..." class="flex-1 min-w-[200px] px-3 py-1.5 border border-slate-200 dark:border-slate-700 rounded-xl text-xs bg-white dark:bg-[#060e1a] text-slate-700 dark:text-slate-200 outline-none">
+                            <span class="text-xs font-bold text-slate-500">Found: <span id="rdDisplayCount" class="text-teal-500 font-black">0</span></span>
+                        </div>
+                        <div class="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                            <div class="overflow-x-auto">
+                                <table class="w-full text-left text-xs border-collapse">
+                                    <thead class="bg-slate-100 dark:bg-slate-900/90 text-slate-600 dark:text-slate-300 uppercase font-bold sticky top-0">
+                                        <tr>
+                                            <th class="p-3">Rank & Name</th>
+                                            <th class="p-3 text-center">Off No</th>
+                                            <th class="p-3 text-center">Trade</th>
+                                            <th class="p-3 text-center">Victualing</th>
+                                            <th class="p-3 text-center">Contact</th>
+                                            <th class="p-3 text-center">Duration</th>
+                                            <th class="p-3 text-center">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="reportingSailorsTableBody" class="divide-y divide-slate-100 dark:divide-slate-800">
+                                        <!-- Populated dynamically -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -6831,7 +7232,7 @@
                     <select id="locZone" required class="w-full px-3 py-2 border border-slate-300 rounded-lg">
                         <option value="A-Zone">A-Zone</option>
                         <option value="BC-Zone">BC-Zone</option>
-                        <option value="Carpentry-Shop">Carpentry Shop</option>
+                        <option value="Carpentry-Shop">Carpentary & Paint</option>
                         <option value="Welding-Shop">Welding Shop</option>
                     </select>
                 </div>
@@ -7827,7 +8228,7 @@
     })();
     </script>
 
-    <script src="app.js?v=5.25.29"></script>
+    <script src="app.js?v=5.25.35"></script>
     <!-- Firebase connection status indicator -->
     <script>
     // Show Firebase connection status in console on load
